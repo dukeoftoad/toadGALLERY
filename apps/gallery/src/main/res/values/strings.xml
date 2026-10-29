@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_launcher_name">toadGALLERY</string>
+
+    <string name="nav_photos">Photos</string>
+    <string name="nav_albums">Albums</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Shell state strings (screen-state system: issue #13) -->
+    <string name="state_photos_empty_title">Your gallery lives here</string>
+    <string name="state_photos_empty_body">Photos and videos on this device will appear in a single, clean timeline. Nothing is uploaded, nothing leaves your phone.</string>
+    <string name="state_albums_empty_title">No albums yet</string>
+    <string name="state_albums_empty_body">Albums group your media by folder. Grant access in the next step to see them.</string>
+    <string name="state_search_empty_title">Search your library</string>
+    <string name="state_search_empty_body">Advanced filters by date, album, type and more arrive with the search engine (roadmap Phase 5).</string>
+    <string name="state_settings_empty_title">Settings</string>
+    <string name="state_settings_empty_body">Appearance, privacy and storage preferences land as the product grows.</string>
+    <string name="state_permission_title">Access needed</string>
+    <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — the app has no network access at all.</string>
+    <string name="state_action_grant">Grant access</string>
+    <string name="state_shell_badge">Phase 2 shell — browsing arrives in Phase 3</string>
+</resources>

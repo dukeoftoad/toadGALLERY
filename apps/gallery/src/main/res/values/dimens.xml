@@ -1,0 +1,8 @@
+<resources>
+    <!-- Touch targets and spacing baseline (a11y: 48dp minimum targets, Phase 2 seed) -->
+    <dimen name="state_icon_size">72dp</dimen>
+    <dimen name="state_title_margin">16dp</dimen>
+    <dimen name="state_body_margin">8dp</dimen>
+    <dimen name="state_padding">32dp</dimen>
+    <dimen name="state_action_margin">24dp</dimen>
+</resources>

@@ -11,6 +11,8 @@ material = "1.13.0"
 compose-bom = "2024.12.01"
 # Compose-first image loader (per compose-migration.md)
 coil-compose = "2.7.0"
+# Privacy test suite (ADR-0014)
+junit = "4.13.2"
 # build
 app-build-compileSDKVersion = "36"
 app-build-targetSDK = "36"
@@ -32,6 +34,8 @@ compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview"
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
+# Privacy test suite (ADR-0014)
+junit = { module = "junit:junit", version.ref = "junit" }
 # NOTE: org.fossify:commons removed per ADR-0008 (no upstream code ports).
 
 [plugins]

@@ -523,6 +523,100 @@ other contributors and not enforceable as a quality gate. User directive 2026-10
 
 ---
 
+## ADR-0014 — Privacy build gates: manifest allow-list, network deny-list, and the privacy test suite (NEW, v2.2)
+
+**Status:** ACCEPTED; **Date:** 2026-10-29 · **Application phases:** 2 (exit criterion), all later phases; Phase 8 extension per ADR-0010 §7.
+
+**Context.** The product invariants are absolute: *no `INTERNET` permission in the core
+manifest*, no accounts, no cloud sync, no telemetry, no analytics, no ads
+(product-vision.md §"Non-negotiables"). Fossify Gallery demonstrates the posture is
+achievable for a full-featured gallery, but its enforcement is largely by convention
+(code review). Convention is not enforcement: a single transitive dependency (an
+analytics SDK, a "handy" HTTP client, a manifest-merging library) can silently add
+`INTERNET` or network-state permissions to the merged manifest, and nothing in a
+conventional build would notice. toadGALLERY needs the invariant to be *mechanical*:
+if the property ever breaks, the build must fail before any artifact exists.
+
+**Decision.**
+
+1. **Privacy is a build gate, not a convention.** Every variant's **merged manifest**
+   (the app manifest merged with every dependency contribution --- the exact XML
+   aapt2 packages) is audited by a Gradle task `privacyGate<Variant>` before
+   packaging. The tasks are wired into `assemble<Variant>` and `check`, and run as
+   **blocking** steps in CI (ADR-0013). A red gate is a red build.
+
+2. **Deny-list (absolute, any phase, any variant).** The network permission family is
+   never allowed: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`,
+   `CHANGE_WIFI_STATE`, `CHANGE_NETWORK_STATE`. A deny-list hit fails the build. The
+   list lives in `apps/gallery/build.gradle.kts` with a deliberately duplicated JVM
+   mirror in the test suite (`PrivacyPolicy.NETWORK_DENY_LIST`) so the two layers
+   fail independently.
+
+3. **Allow-list (policy-declared per variant).** Every permission in the merged
+   manifest must appear in `expectedPermissionsByVariant` --- and every entry in that
+   map must actually be declared. Both directions of drift fail. Phase 2 declares an
+   **empty** allow-list for `debug` and `release`. Phase 3 adds the `READ_MEDIA_*`
+   family (and `READ_MEDIA_VISUAL_USER_SELECTED`) explicitly, via roadmap review
+   recorded in the PR --- never silently. **One documented self-scoped allowance:**
+   the manifest merger auto-injects `<applicationId>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
+   (signature protection, scoped to this app, required by androidx for
+   `RECEIVER_NOT_EXPORTED` dynamic receivers). It is auto-allowed but named in every
+   gate report, so the allowance stays visible.
+
+4. **Cleartext traffic is never enabled.** `android:usesCleartextTraffic="true"` in
+   any merged manifest fails the gate.
+
+5. **Defense in depth --- the privacy test suite** (JVM unit tests, binding in CI):
+   - *Source-manifest layer* (`SourceManifestPrivacyTest`): deny-list, allow-list
+     equality, cleartext check against `src/main/AndroidManifest.xml`.
+   - *Build-script contract layer* (`BuildScriptPrivacyGateContractTest`): tripwires
+     asserting the gate tasks, the deny-list, and the assemble/check wiring still
+     exist --- weakening the gate breaks the test suite.
+   - *CI contract layer* (`CiWorkflowPrivacyTest`): the workflow must run
+     `privacyGateDebug` + `privacyGateRelease` and `testDebugUnitTest`, all without
+     `continue-on-error`, and upload the gate reports.
+   - *Source network-API ban* (`SourceNetworkApiBanTest`): `src/main` may not
+     reference HTTP client APIs (`HttpURLConnection`, `openConnection(`, OkHttp,
+     Retrofit, Volley, Ktor client, raw sockets) or the `INTERNET` permission
+     string. Code that would *want* the permission is caught before a dependency
+     ever pulls it in.
+
+6. **Auditability.** Each gate run writes a report
+   (`apps/gallery/build/privacy/privacy-gate-<variant>.txt`: variant, declared
+   permissions, allow-list, verdict, violations) which CI uploads as an artifact.
+
+7. **Phase 8 extension (hooks reserved, per ADR-0010 §7 and product-vision §"A
+   privacy audit").** The static gate above is the foundation; Phase 8 adds a runtime
+   zero-outbound-connections audit (network proxy around an instrumented/device run)
+   covering every shipped feature including AI. The deny/allow lists defined here are
+   the contract that runtime audit verifies end-to-end.
+
+**Consequences.**
+
+- Pro: The core product promise ("no `INTERNET` permission") is enforced by the build
+  itself; regression requires defeating multiple independent layers.
+- Pro: Dependency-introduced permissions are caught at merge time, with a report
+  naming exactly what appeared and in which variant.
+- Pro: The allow-list turns future permission additions (Phase 3 media access,
+  Phase 5/8 anything else) into deliberate, reviewable policy changes.
+- Con: A new transitive dependency can fail the build; the resolution path is
+  always *review and either remove the dependency or explicitly allow-list the
+  permission* --- there is no silent path.
+- Con: Two copies of the deny-list exist (Gradle + JVM test) and must stay in sync.
+  Mitigation: the contract tests make desync loud.
+- Con: The static ban list cannot see reflection-based network access. Accepted for
+  Phases 2-7; the Phase 8 runtime audit closes the residual gap.
+
+**Open questions.**
+
+- Should `android:allowBackup="true"` (current shell default) become `false` with
+  explicit `dataExtractionRules`? Deferred to Phase 3 when the app first holds real
+  user data (photo metadata, tags); the gate report will surface it as a reminder.
+- Should the gate also pin `<uses-feature>` declarations (e.g. reject
+  `android.hardware.camera` requirements)? Deferred; re-evaluate with Phase 3/6.
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -540,3 +634,4 @@ other contributors and not enforceable as a quality gate. User directive 2026-10
 | 0011 | Non-destructive edit pipeline format | ACCEPTED (policy) |
 | 0012 | Video editor scope and pipeline reuse | ACCEPTED (policy) |
 | 0013 | GitHub Actions as the build and CI environment | ACCEPTED |
+| 0014 | Privacy build gates: manifest allow-list, network deny-list, privacy test suite | ACCEPTED |

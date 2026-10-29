@@ -1,8 +1,9 @@
 name: CI
 
-# toadGALLERY CI --- ADR-0013
+# toadGALLERY CI --- ADR-0013 (canonical build env) + ADR-0014 (privacy gate)
 # Canonical build, lint, and test workflow. JDK 17 + Android SDK + Gradle.
 # No Flutter (ADR-0008). A green CI check is required to merge any PR.
+# The privacy gate (both variants) and the privacy test suite are BLOCKING.
 
 on:
   push:
@@ -61,16 +62,24 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      # ADR-0014: the privacy gate audits BOTH variants' merged manifests
+      # (app + every dependency contribution) and fails the build on any
+      # deny-list hit, allow-list drift, or cleartext traffic. Blocking --- a
+      # red gate is a red CI (ADR-0013).
+      - name: Privacy gate (ADR-0014) — merged-manifest permission audit
+        run: ./gradlew :apps:gallery:privacyGateDebug :apps:gallery:privacyGateRelease --no-daemon --stacktrace
+
       - name: Build debug APK
         run: ./gradlew :apps:gallery:assembleDebug --no-daemon --stacktrace
 
       - name: Run lint
         run: ./gradlew :apps:gallery:lintDebug --no-daemon --stacktrace
-        continue-on-error: true # lint failures are warnings until Phase 2 cleanup
+        # Binding since the Phase 2 exit: verified green locally (2026-10-29); ADR-0013.
 
+      # ADR-0014: the privacy test suite (source manifest, build-script and CI
+      # contract tests, network-API ban scan) runs here and is BINDING.
       - name: Run unit tests
         run: ./gradlew :apps:gallery:testDebugUnitTest --no-daemon --stacktrace
-        continue-on-error: true # no tests yet; becomes binding as tests land
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -78,6 +87,15 @@ jobs:
         with:
           name: gallery-debug-apk
           path: apps/gallery/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload privacy gate reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: privacy-gate-reports
+          path: apps/gallery/build/privacy/
           if-no-files-found: warn
           retention-days: 14
 

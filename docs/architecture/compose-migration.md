@@ -1,6 +1,6 @@
 # Compose Migration Tracker
 
-**Status:** Initial draft (Phase 2 setup) · **Date:** 2026-10-29 · **Governed by:** ADR-0009
+**Status:** Shell migration complete (PR #16); privacy gate + suite landed (ADR-0014, issue #20) · **Date:** 2026-10-29 · **Governed by:** ADR-0009
 
 This document tracks the migration of toadGALLERY's UI from the
 View-based + `org.fossify:commons` shell (built under the now-superseded

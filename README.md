@@ -8,12 +8,13 @@ respects your data like Fossify --- **built from scratch in Kotlin + Jetpack Com
 > depth, collections), and Fossify Gallery (privacy posture, offline-first). **No code
 > is ported from any upstream** (ADR-0008) --- only features, UI/UX, and designs. No
 > Flutter. No accounts, no cloud, no ads, no analytics. Core functionality works fully
-> offline. The core app manifest does not declare `INTERNET`.
+> offline. The core app manifest does not declare `INTERNET` --- and the build
+> **fails** if it ever does (privacy build gate, ADR-0014).
 
-**Status:** v2.2 revision (2026-10-29). Phase 0/1 complete. Phase 2 alpha shell built
-and now being migrated from View-based + `org.fossify:commons` to Compose-native + Material 3
-per ADR-0009 and [`docs/architecture/compose-migration.md`](docs/architecture/compose-migration.md).
-CI on GitHub Actions per ADR-0013.
+**Status:** v2.2 revision (2026-10-29). Phase 0/1 complete. Phase 2 Compose-native
+shell (0.2.x) built per ADR-0009 ([compose-migration.md](docs/architecture/compose-migration.md));
+privacy hardening enforced by the ADR-0014 build gate + test suite. CI on GitHub
+Actions per ADR-0013.
 
 ---
 
@@ -29,7 +30,9 @@ CI on GitHub Actions per ADR-0013.
 5. Ship **toadGALLERY Edit** as a separate APK, opened from the main Gallery via a
    versioned content-URI contract, updatable independently.
 6. Keep the product private and offline-first: no mandatory account, cloud service,
-   ads, analytics, or network access. No `INTERNET` permission in the core manifest.
+   ads, analytics, or network access. No `INTERNET` permission in the core manifest ---
+   enforced mechanically by the ADR-0014 privacy build gate (deny-listed network
+   permissions, per-variant allow-list, cleartext ban) and the privacy test suite.
 7. Protect originals by default. Non-destructive editing pipeline; recycle bin;
    PIN/biometric hidden vault.
 8. Use **GitHub Actions as the canonical build and CI environment**.
@@ -83,14 +86,18 @@ The canonical build is GitHub Actions (ADR-0013). To build locally you need:
 - Gradle 9.5.1 (project wrapper)
 
 ```bash
-./gradlew :apps:gallery:assembleDebug
+./gradlew :apps:gallery:privacyGateDebug :apps:gallery:privacyGateRelease  # ADR-0014 audit
+./gradlew :apps:gallery:assembleDebug          # runs the privacy gate first (wired in)
 ./gradlew :apps:gallery:lintDebug
-./gradlew :apps:gallery:testDebugUnitTest
+./gradlew :apps:gallery:testDebugUnitTest      # incl. the ADR-0014 privacy suite (binding)
 ```
 
 No Flutter SDK required. No Dart SDK required. The CI workflow at
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the source of truth for
-"does it build"; a green CI check is required to merge any PR.
+"does it build"; a green CI check is required to merge any PR. The privacy gate
+(both variants) and the privacy test suite are **blocking** CI steps (ADR-0014):
+any `INTERNET`/network permission that sneaks into a merged manifest --- including
+via a transitive dependency --- fails the build before an APK can exist.
 
 ## Upstream references (recorded 2026-10-29)
 
@@ -106,7 +113,7 @@ No Flutter SDK required. No Dart SDK required. The CI workflow at
 |---|---|---|
 | **0** | Align scope, establish baselines | **Exited** — [sign-off](docs/phase-0/sign-off.md) |
 | **1** | Source audit, integration design, contract prototype | **Delivered** — audits, matrix, ADRs, diagrams, license report; reframed as reference-only under ADR-0008 |
-| **2** | Product shell, visual foundation, privacy hardening, Compose toolchain, CI | **In progress** — alpha shell built; migrating to Compose; CI workflow added |
+| **2** | Product shell, visual foundation, privacy hardening, Compose toolchain, CI | **Exit-ready** — Compose-native shell 0.2.x ([compose-migration.md](docs/architecture/compose-migration.md)); CI as merge gate ([ci.yml](.github/workflows/ci.yml), ADR-0013); privacy gate + test suite enforced ([ADR-0014](docs/integration-decisions.md), [privacy-gate.md](docs/phase-2/privacy-gate.md)) |
 | 3 | Core media access, browsing, file ops, recycle bin, hidden vault | planned |
 | 4 | Aves-grade metadata layer (`androidx.exifinterface` + own IPTC/XMP wrappers) | planned |
 | 5 | MI-style organisational UX (Moments, Stories, opt-in auto-albums, semantic search, collage, slideshow) | planned |

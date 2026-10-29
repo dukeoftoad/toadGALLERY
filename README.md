@@ -10,10 +10,15 @@ respects your data like Fossify --- **built from scratch in Kotlin + Jetpack Com
 > Flutter. No accounts, no cloud, no ads, no analytics. Core functionality works fully
 > offline. The core app manifest does not declare `INTERNET`.
 
-**Status:** v2.2 revision (2026-10-29). Phase 0/1 complete. Phase 2 alpha shell built
-and now being migrated from View-based + `org.fossify:commons` to Compose-native + Material 3
-per ADR-0009 and [`docs/architecture/compose-migration.md`](docs/architecture/compose-migration.md).
-CI on GitHub Actions per ADR-0013.
+**Status:** v2.2 revision (2026-10-29). Phase 0/1 complete. Phase 2 shell is
+**Compose-native + Material 3** (ADR-0009; the View-based + `org.fossify:commons`
+shell and dependency are gone, see
+[`docs/architecture/compose-migration.md`](docs/architecture/compose-migration.md)).
+CI on GitHub Actions per ADR-0013, including a build-time **INTERNET-permission
+gate** and an instrumented **privacy egress suite** on an API 34 emulator
+([`docs/phase-2/privacy-gate.md`](docs/phase-2/privacy-gate.md), issue #20):
+the app is offline by construction --- no INTERNET permission means the OS
+blocks every socket.
 
 ---
 

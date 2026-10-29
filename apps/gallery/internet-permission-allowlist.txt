@@ -1,0 +1,23 @@
+# toadGALLERY INTERNET permission allowlist (issue #20, Phase 2 privacy gate)
+# ---------------------------------------------------------------------------
+# This file is consulted by the `gate<Variant>InternetPermission` Gradle task
+# (apps/gallery/build.gradle.kts) whenever the MERGED AndroidManifest of a
+# variant declares `android.permission.INTERNET`.
+#
+# The core gallery app is offline by construction: it must never hold the
+# INTERNET permission, because without it the OS blocks every socket the app
+# could open. Dependencies can silently inject <uses-permission> entries via
+# manifest merger; the gate turns that into a hard build failure.
+#
+# PROTOCOL — an entry may only be added when ALL of the following hold:
+#   1. A superseding or new ADR (docs/integration-decisions.md) authorizes
+#      network access for a specifically scoped feature.
+#   2. An open tracking issue documents the exact dependency or manifest
+#      source that injects the permission and why it cannot be avoided.
+#   3. The entry is one line: `android.permission.INTERNET` (no other
+#      permission is governed by this file).
+#
+# The file ships EMPTY. An empty file means: any appearance of INTERNET in
+# any merged variant manifest fails the build.
+#
+# See docs/phase-2/privacy-gate.md for the full enforcement model.

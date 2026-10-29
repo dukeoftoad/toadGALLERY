@@ -1,0 +1,30 @@
+[versions]
+kotlin = "2.3.10"
+gradlePlugins-agp = "9.2.1"
+# AndroidX
+androidx-appcompat = "1.7.1"
+androidx-fragment = "1.8.9"
+androidx-core = "1.17.0"
+androidx-constraintlayout = "2.2.1"
+# Material (bottom navigation, state views)
+material = "1.13.0"
+# Fossify lineage
+commons = "7.1.3"
+# build
+app-build-compileSDKVersion = "36"
+app-build-targetSDK = "36"
+app-build-minimumSDK = "26"
+app-build-javaVersion = "VERSION_17"
+app-build-kotlinJVMTarget = "17"
+
+[libraries]
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
+androidx-fragment = { module = "androidx.fragment:fragment-ktx", version.ref = "androidx-fragment" }
+androidx-core = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "androidx-constraintlayout" }
+material = { module = "com.google.android.material:material", version.ref = "material" }
+fossify-commons = { module = "org.fossify:commons", version.ref = "commons" }
+
+[plugins]
+android = { id = "com.android.application", version.ref = "gradlePlugins-agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

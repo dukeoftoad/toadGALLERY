@@ -1,0 +1,8 @@
+<resources>
+    <!-- toadGALLERY identity tokens (Phase 2 seed set — full token system: issue #11) -->
+    <color name="toad_green">#3E9B4F</color>
+    <color name="toad_green_dark">#2E7A3C</color>
+    <color name="toad_green_accent">#5DBF6E</color>
+    <color name="toad_green_bg">#EAF6EC</color>
+    <color name="state_icon_tint">#9AA6A0</color>
+</resources>

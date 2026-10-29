@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reusable screen-state view (roadmap Phase 2: empty / loading / denied / error system — issue #13).
+     Variants are configured programmatically in PlaceholderFragment until the design system freezes them. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="@dimen/state_padding">
+
+    <ImageView
+        android:id="@+id/state_icon"
+        android:layout_width="@dimen/state_icon_size"
+        android:layout_height="@dimen/state_icon_size"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_nav_photos"
+        app:tint="@color/state_icon_tint"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
+
+    <TextView
+        android:id="@+id/state_title"
+        style="@style/PlaceholderStateTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        tools:text="Your gallery lives here" />
+
+    <TextView
+        android:id="@+id/state_body"
+        style="@style/PlaceholderStateBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        tools:text="Photos and videos on this device will appear here." />
+
+    <Button
+        android:id="@+id/state_action"
+        style="?attr/borderlessButtonStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/state_action_margin"
+        android:minHeight="48dp"
+        android:text="@string/state_action_grant"
+        android:visibility="gone"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/state_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/state_action_margin"
+        android:text="@string/state_shell_badge"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:alpha="0.6"
+        tools:ignore="UnusedResources" />
+</LinearLayout>

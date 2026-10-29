@@ -31,12 +31,14 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platforms;android-36
-            build-tools;36.0.0
+      # GH-hosted runners ship the Android SDK + cmdline-tools; install the
+      # exact packages the project pins (compileSdk/targetSdk 36) via sdkmanager.
+      # (android-actions/setup-android v3 has no reliable `packages` input.)
+      - name: Set up Android SDK (platform 36, build-tools 36)
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --list_installed | grep -E "android-36|build-tools;36" || true
 
       - name: Cache Gradle
         uses: actions/cache@v4

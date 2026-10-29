@@ -42,6 +42,36 @@ class PrivacyPolicyTest {
         )
     }
 
+    /**
+     * Phase 3 (issue #25): the manifest must declare the granular READ_MEDIA_*
+     * family on API 33+ and the legacy READ_EXTERNAL_STORAGE fallback for
+     * pre-33. This is the *only* permission set the core app may hold besides
+     * the androidx-injected self-scoped dynamic-receiver permission. Asserting
+     * it explicitly proves Phase 3 actually landed and guards against a future
+     * accidental permission pruning.
+     */
+    @Test
+    fun `source manifest declares the Phase 3 media permission set`() {
+        val manifest = moduleFile("src/main/AndroidManifest.xml").readText()
+        listOf(
+            "android.permission.READ_MEDIA_IMAGES",
+            "android.permission.READ_MEDIA_VIDEO",
+            "android.permission.READ_EXTERNAL_STORAGE",
+        ).forEach { permission ->
+            assertTrue(
+                "Phase 3 manifest must declare '$permission' (issue #25); " +
+                    "found the source manifest missing it.",
+                manifest.contains(permission),
+            )
+        }
+        assertTrue(
+            "READ_EXTERNAL_STORAGE must be capped at maxSdkVersion=32 (legacy fallback only).",
+            Regex(
+                """<uses-permission[^>]*android:name\s*=\s*"android\.permission\.READ_EXTERNAL_STORAGE"[^>]*android:maxSdkVersion\s*=\s*"32""""
+            ).containsMatchIn(manifest),
+        )
+    }
+
     @Test
     fun `INTERNET allowlist is empty by default`() {
         val allowlist = moduleFile("internet-permission-allowlist.txt")

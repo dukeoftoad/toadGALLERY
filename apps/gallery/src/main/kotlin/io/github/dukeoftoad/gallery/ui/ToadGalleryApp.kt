@@ -29,6 +29,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 
 /**
@@ -103,11 +104,8 @@ fun ToadGalleryApp() {
                     .padding(innerPadding),
             ) {
                 composable(Destinations.PHOTOS) {
-                    StateScreen(
-                        iconRes = R.drawable.ic_nav_photos,
-                        titleRes = R.string.state_photos_empty_title,
-                        bodyRes = R.string.state_photos_empty_body,
-                    )
+                    // Phase 3 (issue #25): real MediaStore timeline replaces the placeholder.
+                    PhotosScreen()
                 }
                 composable(Destinations.ALBUMS) {
                     StateScreen(

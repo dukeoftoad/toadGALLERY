@@ -31,16 +31,23 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      # android-actions/setup-android installs cmdline-tools and puts sdkmanager on
-      # PATH (v3 has no reliable `packages` input --- pass packages explicitly below).
-      - name: Set up Android SDK (cmdline-tools)
-        uses: android-actions/setup-android@v3
-
+      # GH ubuntu runners ship a preinstalled Android SDK at $ANDROID_HOME
+      # (cmdline-tools included) but do not always put sdkmanager on PATH, and
+      # android-actions/setup-android@v3 is broken on current images (it runs the
+      # legacy `sdkmanager tools` package, which no longer exists). Resolve the
+      # binary directly and install only what the project pins.
       - name: Install Android SDK packages (platform 36, build-tools 36)
         run: |
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager --list_installed 2>/dev/null | grep -E "platforms;android-36|build-tools;36" || true
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SDK_MGR="$(command -v sdkmanager)"
+          else
+            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
+          fi
+          echo "Using sdkmanager: $SDK_MGR"
+          yes | "$SDK_MGR" --licenses > /dev/null || true
+          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
+          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
 
       - name: Cache Gradle
         uses: actions/cache@v4

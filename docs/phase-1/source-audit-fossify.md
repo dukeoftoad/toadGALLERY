@@ -1,5 +1,16 @@
 # Source Audit — Fossify Gallery (v1.14.1 @ `e9812299`)
 
+> **⚠️ REFRAMED 2026-10-29 by ADR-0008.**
+> This audit was originally produced as a "code inventory for porting"
+> under the now-superseded ADR-0001. Under ADR-0008 (features/UI/UX/
+> designs only --- no code ports), the audit is reinterpreted as a
+> **feature/UI/UX inventory for reimplementation inspiration**. The
+> factual content (what Fossify does, how it does it) is unchanged and
+> remains useful as a reference. The actionable consequence has
+> changed: we no longer "Keep" or "Adapt" Fossify code; we
+> **Reimplement** informed by what this audit documents. No
+> `org.fossify:commons` dependency. No skeleton reuse.
+
 **Auditor:** project lead bootstrap · **Date:** 2026-10-29 · **Method:** direct source reading of the
 pinned baseline (no assumptions from documentation). Companion: `source-audit-aves.md`.
 This audit feeds the integration matrix and the ADR updates; it is evidence, not opinion.

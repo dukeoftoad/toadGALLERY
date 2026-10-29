@@ -1,5 +1,22 @@
 # Dependency & License Compatibility Report — Phase 1
 
+> **⚠️ PARTIALLY SUPERSEDED 2026-10-29 by ADR-0008.**
+> This report was originally produced under ADR-0001 (Fossify-seed
+> strategy). Under ADR-0008 (features/UI/UX/designs only, no code
+> ports) the following dependencies are re-evaluated and slated for
+> removal in `docs/architecture/compose-migration.md`:
+> - `org.fossify:commons` (no longer needed; replace with AndroidX
+>   equivalents and our own Compose theme).
+> - `androidphotofilters` (naveensingh fork) --- was a release blocker
+>   pending POM verification; under ADR-0008 it is dropped entirely
+>   (the editor is reimplemented from scratch in Phase 6).
+> - `jxl-coder-glide` --- same: dropped or replaced with our own
+>   Compose-native JPEG XL decoder integration if needed.
+>
+> The remaining dependency screen (androidx.*, media3, Glide/Coil,
+> etc.) stands. The product license remains GPL-3.0 (voluntary per
+> ADR-0004 clarification).
+
 **Date:** 2026-10-29 · **Purpose:** roadmap Phase 1 deliverable: identify licensing and
 technical blockers **before substantial code is copied**. Not legal advice.
 Licenses below were read from the repositories/POM metadata at (or near) the pinned
@@ -7,9 +24,9 @@ baselines; anything not fully verified is explicitly flagged `VERIFY`.
 
 ## 1. Product license frame
 
-toadGALLERY ships as **GPL-3.0** (ADR-0004). Consequence for every dependency: it must be
-GPL-3.0-compatible (permissive licenses are; copyleft licenses other than GPL/AGPL are
-generally not). This report screens for that.
+toadGALLERY ships as **GPL-3.0** (ADR-0004, voluntary per ADR-0008 clarification).
+Consequence for every dependency: it must be GPL-3.0-compatible (permissive licenses are;
+copyleft licenses other than GPL/AGPL are generally not). This report screens for that.
 
 ## 2. Upstream base licenses (verified from files)
 

@@ -7,7 +7,8 @@ as upstream bases, with a separate installable **toadGALLERY Edit** extension.
 > Inspired by the clarity and simplicity of Xiaomi/Mi Gallery — without proprietary assets,
 > accounts, cloud services, ads, or analytics. Core functionality works fully offline.
 
-**Status:** `Phase 0 — Align scope and establish the baselines` *(planning)*
+**Status:** Phase 1 — Source audit & integration design **delivered** (Phase 0 exited;
+see [docs/phase-0/sign-off.md](docs/phase-0/sign-off.md)). Next: Phase 2 product shell.
 
 ---
 
@@ -25,18 +26,18 @@ as upstream bases, with a separate installable **toadGALLERY Edit** extension.
 
 See [`roadmap.md`](roadmap.md) for the full phased plan (Phases 0–9).
 
-## Project principles
+## How the two bases contribute (Phase 1 answer, evidence-based)
 
-1. **Audit before merging.** No repository merge happens before the Phase 0/1 audit.
-2. **One product experience.** Consistent navigation, design, terminology, permissions.
-3. **Architecture based on evidence.** Fossify is native Kotlin; Aves is primarily
-   Flutter/Dart. Aves UI code cannot be dropped into a Kotlin UI — the integration
-   method is decided from audit results, not assumptions.
-4. **Keep the editor separate.** Gallery and Edit are distinct apps with a documented,
-   secure integration contract.
-5. **Incremental, buildable changes.** A working build at every phase.
-6. **Preserve upstream history and license obligations.**
-7. **No feature is complete until tested.**
+| Base | Role in toadGALLERY |
+|---|---|
+| **Fossify Gallery** (Kotlin, GPL-3.0) | The product **skeleton**: browsing, viewer (Glide + subsampling + media3), favorites, file operations, editor code to extract — kept/adapted (ADR-0001) |
+| **Aves** (Flutter/Dart, BSD-3-Clause) | The **design & model reference**: URI-first media identity, three-date semantics, progressive metadata service, composable filter algebra, format taxonomy, offline-first service pattern — reimplemented in Kotlin (no Dart ships) |
+| Aves `exifinterface` fork (Apache-2.0) | The single **code-level adaptation** (native EXIF parser, attribution required) |
+
+Key evidence documents: [source audit: Fossify](docs/phase-1/source-audit-fossify.md) ·
+[source audit: Aves](docs/phase-1/source-audit-aves.md) ·
+[integration decisions (ADRs)](docs/integration-decisions.md) ·
+[feature matrix](docs/feature-matrix.md).
 
 ## Repository structure
 
@@ -45,69 +46,47 @@ toadGALLERY/
 ├── roadmap.md                  # Phased development roadmap (Phases 0–9)
 ├── LICENSE                     # GPL-3.0 (full text)
 ├── docs/
-│   ├── architecture/           # Module & data-flow diagrams (Phase 1)
-│   ├── feature-matrix.md       # Capability origin & status matrix (draft)
-│   ├── integration-decisions.md# Architecture decision records
-│   ├── licensing-and-attribution.md
-│   └── phase-0/
-│       ├── upstream-baselines.md  # Recorded commits, licenses, toolchains
-│       ├── build-notes.md         # Baseline build verification notes
-│       └── risk-register.md       # Initial risk register
+│   ├── architecture/           # module + data-flow diagrams, editor contract v1
+│   ├── phase-0/               # baselines, build notes, sign-off, risk register
+│   ├── phase-1/               # source audits, dependency/license report
+│   ├── feature-matrix.md      # capability origin & owner (audited)
+│   ├── integration-decisions.md# ADR-0001..0007 (accepted)
+│   └── licensing-and-attribution.md
 ├── apps/                       # (Phase 2+) gallery/ and edit-extension/
-└── shared/                     # (later phases) shared code, contracts
+└── shared/                     # (Phase 2+) media-contract, metadata, editor-contract, design-system
 ```
 
-The `apps/`, `shared/`, and `upstream/` layout from the roadmap is a **planning model** —
-the final arrangement is validated in Phase 0 and recorded in
-[`docs/integration-decisions.md`](docs/integration-decisions.md).
-Local upstream reference clones live outside the tree by default (gitignored).
-
-## Documentation index
-
-| Document | Purpose |
-|---|---|
-| [roadmap.md](roadmap.md) | Full product vision, principles, phases 0–9 |
-| [docs/phase-0/upstream-baselines.md](docs/phase-0/upstream-baselines.md) | **Exact upstream commits, licenses, toolchains** (Phase 0 record) |
-| [docs/phase-0/build-notes.md](docs/phase-0/build-notes.md) | Baseline build verification status & how to reproduce |
-| [docs/phase-0/risk-register.md](docs/phase-0/risk-register.md) | Initial risk register |
-| [docs/feature-matrix.md](docs/feature-matrix.md) | Feature overlap matrix (DRAFT — confirmed in Phase 1) |
-| [docs/integration-decisions.md](docs/integration-decisions.md) | Architecture decision records (ADR) |
-| [docs/licensing-and-attribution.md](docs/licensing-and-attribution.md) | License inventory & attribution obligations |
+`apps/` and `shared/` are **coming in Phase 2**; the validated module layout is
+[docs/architecture/module-diagram.md](docs/architecture/module-diagram.md).
 
 ## Upstream baselines (recorded 2026-10-29)
 
-| Project | Repository | Recorded commit | License |
+| Project | Recorded commit | License | Baseline build |
 |---|---|---|---|
-| Fossify Gallery | [`FossifyOrg/Gallery`](https://github.com/FossifyOrg/Gallery) | `e9812299b9d444b57072313cd2c3efd59c790f98` (v1.14.1) | GPL-3.0 |
-| Aves | [`deckerst/aves`](https://github.com/deckerst/aves) | `4f940ae48bd9364a0a532b84f283ec60755d9904` (v1.15.8+182, `develop`) | BSD-3-Clause |
-
-Details (SDK levels, dependency manifests, language breakdowns, reproduction commands):
-[docs/phase-0/upstream-baselines.md](docs/phase-0/upstream-baselines.md).
+| Fossify Gallery v1.14.1 | `e9812299b9d444b…` (`main`) | GPL-3.0 | **BUILT & VERIFIED** — `gallery-30-foss-debug.apk` (66 MB), see [build notes](docs/phase-0/build-notes.md) |
+| Aves 1.15.8+182 | `4f940ae48bd936…` (`develop`) | BSD-3-Clause | BLOCKED (audit-container disk); full recipe + cause chain documented — issue #2 |
 
 ## Roadmap at a glance
 
-| Phase | Focus |
-|---|---|
-| **0** | Align scope, establish baselines *(current)* |
-| 1 | Source audit and integration design |
-| 2 | Product shell and visual foundation |
-| 3 | Core media access and browsing |
-| 4 | Metadata, formats, and Aves-derived capabilities |
-| 5 | Advanced search and organization |
-| 6 | toadGALLERY Edit extension |
-| 7 | Trash, reliability, privacy, and accessibility |
-| 8 | Performance and compatibility |
-| 9 | Release readiness |
+| Phase | Focus | State |
+|---|---|---|
+| **0** | Align scope, establish baselines | **Exited** — [sign-off](docs/phase-0/sign-off.md) |
+| **1** | Source audit and integration design | **Delivered** — audits, matrix, ADRs, diagrams, license report |
+| **2** | Product shell and visual foundation | **Next** — installable dev APK, design tokens, navigation |
+| 3 | Core media access and browsing | planned (URI-first model per ADR-0006) |
+| 4 | Metadata, formats, and Aves-derived capabilities | planned |
+| 5 | Advanced search and organization | planned (filter algebra per audit) |
+| 6 | toadGALLERY Edit extension | contract spec ready ([v1](docs/architecture/editor-contract.md)) |
+| 7 | Trash, reliability, privacy, and accessibility | planned |
+| 8 | Performance and compatibility | planned |
+| 9 | Release readiness | planned |
 
-Track progress via the repository **milestones** (one per phase) and the **Phase 0 issues**.
+Progress is tracked in the repository **milestones** (one per phase) and **issues**.
 
 ## License
 
-**GPL-3.0** — see [LICENSE](LICENSE).
-
-toadGALLERY derives from GPL-3.0 licensed upstream work (Fossify Gallery, itself a fork
-of the Simple Gallery lineage). BSD-3-Clause code from Aves and Apache-2.0 code from its
-bundled modules may be incorporated with attribution; GPL-3.0 governs the combined work
-at distribution. License evidence and obligations are tracked in
-[docs/licensing-and-attribution.md](docs/licensing-and-attribution.md).
-This is engineering due diligence, not legal advice — final review is a Phase 9 gate.
+**GPL-3.0** — see [LICENSE](LICENSE). Derives from GPL-3.0 licensed upstream work
+(Fossify Gallery, itself a continuation of the Simple Gallery lineage). BSD-3-Clause
+material from Aves and Apache-2.0 modules enter only with preserved notices; each is
+recorded in [licensing-and-attribution.md](docs/licensing-and-attribution.md). This is
+engineering compliance tracking, not legal advice.

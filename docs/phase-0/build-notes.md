@@ -1,5 +1,16 @@
 # Phase 0 Build Notes — Upstream Baseline Verification
 
+> **⚠️ SUPERSEDED 2026-10-29 by ADR-0008 + ADR-0013.**
+> This document is retained as a historical record of the Phase 0/1
+> baseline-build work. Under ADR-0008 (features/UI/UX/designs only, no
+> code ports) the Fossify baseline build is no longer the seed of the
+> product, and the Aves baseline build is optional (not blocking).
+> Under ADR-0013 the canonical build environment is GitHub Actions
+> (`.github/workflows/ci.yml`), not the ad-hoc audit container
+> described here. Treat the build recipes below as historical context;
+> for the current build recipe see the CI workflow and
+> `docs/architecture/compose-migration.md`.
+
 **Status:** Fossify Gallery **BUILT & VERIFIED** · Aves **BLOCKED (environment disk capacity), cause fully diagnosed**
 **Verified on:** 2026-10-29 (UTC) · **Verifier:** toadGALLERY Phase 0/1 lead bootstrap
 

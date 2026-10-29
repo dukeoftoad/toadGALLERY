@@ -1,5 +1,15 @@
 # Phase 2 Shell Build Record — `apps/gallery` 0.1.0-alpha
 
+> **⚠️ SUPERSEDED 2026-10-29 by ADR-0008 + ADR-0009.**
+> This verification record covers the View-based + `org.fossify:commons`
+> shell built under the now-superseded ADR-0005. Under ADR-0009 the
+> shell is being migrated to Compose + Material 3 (see
+> `docs/architecture/compose-migration.md`). The shell still builds and
+> runs while the migration is in progress; the artifact size and
+> permissions posture below describe the *transitional* state, not the
+> target state. Once the migration is complete, this record is
+> historical only.
+
 **Built:** 2026-10-29 (UTC) · **Result: BUILD SUCCESSFUL** (`:apps:gallery:assembleDebug`, 28s incremental)
 
 ## Artifact

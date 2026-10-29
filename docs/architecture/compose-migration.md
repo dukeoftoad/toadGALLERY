@@ -34,11 +34,11 @@ Compose from day one. No big-bang rewrite.
 
 | Screen | Current (Phase 2 alpha) | Target | Scheduled phase | Status |
 |---|---|---|---|---|
-| `MainActivity` | View-based + `org.fossify:commons` BaseSimpleActivity | `ComponentActivity` + `setContent { toadGalleryApp() }` | 2 | pending |
-| `PlaceholderFragment` (Photos) | View-based Fragment + ViewBinding | Compose `PhotosScreen` composable | 2 | pending |
-| `PlaceholderFragment` (Albums) | View-based Fragment + ViewBinding | Compose `AlbumsScreen` composable | 2 | pending |
-| `PlaceholderFragment` (Search) | View-based Fragment + ViewBinding | Compose `SearchScreen` composable | 2 | pending |
-| `PlaceholderFragment` (Settings) | View-based Fragment + ViewBinding | Compose `SettingsScreen` composable (privacy section first, as Compose smoke test) | 2 | pending |
+| `MainActivity` | ~~View-based + `org.fossify:commons` BaseSimpleActivity~~ → rewritten | `ComponentActivity` + `setContent { toadGalleryApp() }` | 2 | **DONE (PR #16)** |
+| `PlaceholderFragment` (Photos) | ~~View-based Fragment~~ → deleted | Compose `StateScreen` composable | 2 | **DONE (PR #16)** |
+| `PlaceholderFragment` (Albums) | ~~View-based Fragment~~ → deleted | Compose `StateScreen` composable | 2 | **DONE (PR #16)** |
+| `PlaceholderFragment` (Search) | ~~View-based Fragment~~ → deleted | Compose `StateScreen` composable | 2 | **DONE (PR #16)** |
+| `PlaceholderFragment` (Settings) | ~~View-based Fragment~~ → deleted | Compose `StateScreen` composable | 2 | **DONE (PR #16)** |
 | Timeline / grid browse | (none in alpha shell) | Compose `LazyVerticalGrid` | 3 | not started |
 | Image viewer | (none) | Compose + custom pan/zoom | 3 | not started |
 | Video player | (none) | Compose + `androidx.media3` UI | 3 | not started |
@@ -60,33 +60,33 @@ Compose from day one. No big-bang rewrite.
 
 ## 3. Dependency changes
 
-| Dependency | Current (alpha shell) | Target | Notes |
+| Dependency | Before migration | Now | Notes |
 |---|---|---|---|
-| `org.fossify:commons` | present | **removed** | ADR-0008. Replace with AndroidX equivalents. |
-| `androidx.appcompat` | present | keep (transitively required by some AndroidX libs) | OK. |
-| `androidx.fragment` | present | keep until last Fragment-hosted Compose screen migrates; then evaluate removal | OK. |
-| `androidx.core` | present | keep | OK. |
-| `androidx.constraintlayout` | present | **removed** | Not needed in Compose. |
-| `com.google.android.material:material` | present | keep at version that ships Material 3 | Needed for legacy Material 2 views during migration; removed at end. |
-| `androidx.compose:compose-bom` | absent | **add** | ADR-0009. |
-| `androidx.compose.material3:material3` | absent | **add** | ADR-0009. |
-| `androidx.activity:activity-compose` | absent | **add** | ADR-0009. |
-| `androidx.navigation:navigation-compose` | absent | **add** | For the `NavHost`. |
-| `io.coil-kt:coil-compose` | absent | **add (candidate)** | Compose-first image loader; alternative to Glide. Decision in Phase 2. |
-| `androidx.exifinterface:exifinterface` | absent | **add** | ADR-0008. Replaces the planned Aves `exifinterface` fork port. |
+| `org.fossify:commons` | present | **REMOVED (PR #16)** | ADR-0008 satisfied. Replaced by `ComponentActivity` + Material 3 theme. |
+| `androidx.appcompat` | present | **REMOVED (PR #16)** | Not needed by `ComponentActivity`. |
+| `androidx.fragment` | present | **REMOVED (PR #16)** | No Fragments remain. |
+| `androidx.core` | present | **REMOVED (PR #16)** | Transitive via activity-compose; re-add when directly used. |
+| `androidx.constraintlayout` | present | **REMOVED (PR #16)** | Not needed in Compose. |
+| `com.google.android.material:material` | present | keep (1.13.0) | Provides `Theme.Material3.DayNight.NoActionBar` for the manifest. |
+| `androidx.compose:compose-bom` | absent | **ADDED (PR #16)** | ADR-0009. |
+| `androidx.compose.material3:material3` | absent | **ADDED (PR #16)** | ADR-0009. |
+| `androidx.activity:activity-compose` | absent | **ADDED (PR #16)** | ADR-0009. |
+| `androidx.navigation:navigation-compose` | absent | **ADDED (PR #16)** | For the `NavHost`. |
+| `io.coil-kt:coil-compose` | absent | **ADDED (PR #16)** | Compose-first image loader for Phase 3. |
+| `androidx.exifinterface:exifinterface` | absent | **ADDED (PR #16)** | ADR-0008: replaces the planned Aves `exifinterface` fork port. | |
 
 ## 4. File deletion schedule
 
 | File | When deleted | Reason |
 |---|---|---|
-| `apps/gallery/src/main/kotlin/io/github/dukeoftoad/gallery/PlaceholderFragment.kt` | Phase 2 (after Compose shell lands) | Replaced by Compose screen composables. |
-| `apps/gallery/src/main/kotlin/io/github/dukeoftoad/gallery/MainActivity.kt` | Phase 2 (rewritten in place) | Replaced by Compose `setContent` activity. |
-| `apps/gallery/src/main/res/layout/activity_main.xml` | Phase 2 (after Compose shell lands) | View-based layout no longer used. |
-| `apps/gallery/src/main/res/layout/fragment_state.xml` | Phase 2 | Same. |
-| `apps/gallery/src/main/res/menu/bottom_nav.xml` | Phase 2 | Compose `NavigationBar` replaces it. |
-| `apps/gallery/src/main/res/values/styles.xml` | End of migration (Phase 3+) | Material 2 theme entries. |
-| `apps/gallery/src/main/res/values/colors.xml` | End of migration (Phase 3+) | Material 2 color entries. |
-| `apps/gallery/src/main/res/values/dimens.xml` | End of migration (Phase 3+) | Replaced by Compose design tokens. |
+| `PlaceholderFragment.kt` | **PR #16** | Replaced by Compose `StateScreen` composables. |
+| `MainActivity.kt` | **PR #16** (rewritten in place) | Compose `setContent` activity; no longer extends `BaseSimpleActivity`. |
+| `res/layout/activity_main.xml` | **PR #16** | View-based layout no longer used. |
+| `res/layout/fragment_state.xml` | **PR #16** | Replaced by `StateScreen` composable. |
+| `res/menu/bottom_nav.xml` | **PR #16** | Compose `NavigationBar` replaces it. |
+| `res/values/styles.xml` | **PR #16** | Manifest theme now references `Theme.Material3.DayNight.NoActionBar` directly. |
+| `res/values/dimens.xml` | **PR #16** | Spacing now lives in Compose code; token system expands in issue #11. |
+| `res/values/colors.xml` | keep (trimmed in PR #16) | Brand tokens remain as the XML mirror of `ui/theme/Theme.kt` until issue #11 consolidates. | |
 
 ## 5. Open questions
 

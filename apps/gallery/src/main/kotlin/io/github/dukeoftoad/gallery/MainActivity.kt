@@ -1,55 +1,26 @@
 package io.github.dukeoftoad.gallery
 
 import android.os.Bundle
-import com.google.android.material.bottomnavigation.BottomNavigationView
-import org.fossify.commons.activities.BaseSimpleActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import io.github.dukeoftoad.gallery.ui.ToadGalleryApp
 
 /**
- * toadGALLERY product shell (roadmap Phase 2).
+ * toadGALLERY product shell (roadmap Phase 2, ADR-0009).
  *
- * Four top-level destinations (ADR-0005): Photos, Albums, Search, Settings.
- * The shell deliberately contains NO browsing logic: Phase 3 media access plugs
- * into the placeholder state system instead of being coupled to this skeleton.
+ * Compose-native single-activity shell: `setContent` hosts the Material 3 app with
+ * a `NavHost` for the four top-level destinations (Photos, Albums, Search, Settings).
+ * Replaces the superseded ADR-0005 View-based + `org.fossify:commons` shell
+ * (`BaseSimpleActivity` + Fragments + XML layouts).
  */
-class MainActivity : BaseSimpleActivity() {
-
-    private lateinit var bottomNav: BottomNavigationView
-
-    // commons base contract
-    override fun getAppIconIDs() = arrayListOf(R.mipmap.ic_launcher, R.mipmap.ic_launcher_round)
-    override fun getAppLauncherName() = getString(R.string.app_launcher_name)
-    override fun getRepositoryName() = "toadGALLERY"
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        bottomNav = findViewById(R.id.bottom_nav)
-
-        if (savedInstanceState == null) {
-            showFragment(Destination.PHOTOS)
-        }
-
-        bottomNav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_photos -> showFragment(Destination.PHOTOS)
-                R.id.nav_albums -> showFragment(Destination.ALBUMS)
-                R.id.nav_search -> showFragment(Destination.SEARCH)
-                R.id.nav_settings -> showFragment(Destination.SETTINGS)
-            }
-            true
+        enableEdgeToEdge()
+        setContent {
+            ToadGalleryApp()
         }
     }
-
-    private fun showFragment(destination: Destination) {
-        val tag = destination.name
-        var fragment = supportFragmentManager.findFragmentByTag(tag)
-        if (fragment == null) {
-            fragment = PlaceholderFragment.newInstance(destination)
-        }
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fragment_container, fragment, tag)
-            .commitNow()
-    }
-
-    enum class Destination { PHOTOS, ALBUMS, SEARCH, SETTINGS }
 }

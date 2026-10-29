@@ -2,21 +2,15 @@
 kotlin = "2.3.10"
 gradlePlugins-agp = "9.2.1"
 # AndroidX
-androidx-appcompat = "1.7.1"
-androidx-fragment = "1.8.9"
-androidx-core = "1.17.0"
-androidx-constraintlayout = "2.2.1"
 androidx-activity-compose = "1.10.1"
 androidx-navigation-compose = "2.8.5"
 androidx-exifinterface = "1.4.1"
-# Material (bottom navigation, state views)
+# Material (Theme.Material3.DayNight.NoActionBar manifest theme)
 material = "1.13.0"
 # Jetpack Compose (ADR-0009) --- BOM-pinned
 compose-bom = "2024.12.01"
-# Compose-first image loader (candidate to replace Glide per compose-migration.md)
+# Compose-first image loader (per compose-migration.md)
 coil-compose = "2.7.0"
-# Fossify lineage (transitional --- to be removed by compose-migration.md)
-commons = "7.1.3"
 # build
 app-build-compileSDKVersion = "36"
 app-build-targetSDK = "36"
@@ -25,10 +19,6 @@ app-build-javaVersion = "VERSION_17"
 app-build-kotlinJVMTarget = "17"
 
 [libraries]
-androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
-androidx-fragment = { module = "androidx.fragment:fragment-ktx", version.ref = "androidx-fragment" }
-androidx-core = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
-androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "androidx-constraintlayout" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "androidx-navigation-compose" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "androidx-exifinterface" }
@@ -42,8 +32,7 @@ compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview"
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
-# Transitional: fossify commons is removed by the compose migration tracker (ADR-0008/0009)
-fossify-commons = { module = "org.fossify:commons", version.ref = "commons" }
+# NOTE: org.fossify:commons removed per ADR-0008 (no upstream code ports).
 
 [plugins]
 android = { id = "com.android.application", version.ref = "gradlePlugins-agp" }

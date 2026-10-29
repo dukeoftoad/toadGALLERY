@@ -20,8 +20,8 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        versionCode = 3
-        versionName = "0.2.1-alpha"
+        versionCode = 4
+        versionName = "0.3.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 
@@ -162,6 +162,7 @@ dependencies {
     // Instrumented egress suite: runtime permission assert + socket-egress probe +
     // cold-launch/tab-walk; run in connectedDebugAndroidTest on the CI emulator.
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules) // GrantPermissionRule (Phase 3 media-permission pre-grant)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.junit) // @RunWith/Assert surface for the instrumented suite
     androidTestImplementation(platform(libs.compose.bom))
@@ -177,6 +178,9 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
+    // --- Phase 3: Lifecycle/ViewModel for the Photos timeline state holder (issue #25)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     debugImplementation(libs.compose.ui.tooling)
 
     // --- Image loading (Compose-first per compose-migration.md)

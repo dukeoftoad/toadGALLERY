@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -10,15 +11,15 @@ android {
     compileSdk = libs.versions.app.build.compileSDKVersion.get().toInt()
 
     defaultConfig {
-        applicationId = "io.github.dukeoftoad.gallery" // provisional — ADR-0005
+        applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0-alpha"
+        versionCode = 2
+        versionName = "0.2.0-alpha"
     }
 
     buildFeatures {
-        viewBinding = true
+        compose = true     // ADR-0009
     }
 
     buildTypes {
@@ -55,12 +56,23 @@ android {
 }
 
 dependencies {
-    // Fossify lineage: base activity, theme system, extensions (GPL-3.0, ADR-0005)
-    implementation(libs.fossify.commons)
-    // Explicit UI kit for the shell (commons brings the transitive set; pin the pieces we use directly)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.fragment)
-    implementation(libs.androidx.core)
-    implementation(libs.androidx.constraintlayout)
+    // --- Compose (ADR-0009) --- canonical UI toolkit for all screens
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.foundation)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigation.compose)
+    debugImplementation(libs.compose.ui.tooling)
+
+    // --- Image loading (Compose-first per compose-migration.md)
+    implementation(libs.coil.compose)
+
+    // --- Metadata (ADR-0008: androidx.exifinterface, NOT the Aves fork)
+    implementation(libs.androidx.exifinterface)
+
+    // --- Theme resource (Theme.Material3.DayNight.NoActionBar for the manifest)
     implementation(libs.material)
 }

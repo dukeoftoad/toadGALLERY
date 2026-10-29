@@ -1,92 +1,129 @@
 # toadGALLERY
 
-**A polished, private, offline-first Android gallery** — one coherent product, built on
-[Fossify Gallery](https://github.com/FossifyOrg/Gallery) and [Aves](https://github.com/deckerst/aves)
-as upstream bases, with a separate installable **toadGALLERY Edit** extension.
+**A single, private, offline-first Android gallery** that browses and organises like
+Mi Gallery, exposes metadata like Aves libre, edits like Mi Gallery's editor, and
+respects your data like Fossify --- **built from scratch in Kotlin + Jetpack Compose**.
 
-> Inspired by the clarity and simplicity of Xiaomi/Mi Gallery — without proprietary assets,
-> accounts, cloud services, ads, or analytics. Core functionality works fully offline.
+> Inspired by Mi Gallery (editor UX, organisational features), Aves libre (metadata
+> depth, collections), and Fossify Gallery (privacy posture, offline-first). **No code
+> is ported from any upstream** (ADR-0008) --- only features, UI/UX, and designs. No
+> Flutter. No accounts, no cloud, no ads, no analytics. Core functionality works fully
+> offline. The core app manifest does not declare `INTERNET`.
 
-**Status:** Phase 1 — Source audit & integration design **delivered** (Phase 0 exited;
-see [docs/phase-0/sign-off.md](docs/phase-0/sign-off.md)). Next: Phase 2 product shell.
+**Status:** v2.2 revision (2026-10-29). Phase 0/1 complete. Phase 2 alpha shell built
+and now being migrated from View-based + `org.fossify:commons` to Compose-native + Material 3
+per ADR-0009 and [`docs/architecture/compose-migration.md`](docs/architecture/compose-migration.md).
+CI on GitHub Actions per ADR-0013.
 
 ---
 
 ## Product goals
 
-- Build **one coherent product**, not two competing gallery apps merged together.
-- Use **Fossify Gallery** and **Aves** as upstream base branches and sources of
-  implementation, deliberately deciding how their code and features fit together.
-- Deliver a clean, fast, intuitive gallery with strong media browsing, metadata, search,
-  and safe file operations.
-- Ship **toadGALLERY Edit** as a separate APK that opens from the main Gallery app and
-  updates independently.
-- **Protect originals by default**; make destructive operations explicit.
-- Track licensing, attribution, testing, and upstream changes from day one.
+1. Build **one coherent product** called toadGALLERY, not two competing gallery apps.
+2. **Take features, UI/UX, and designs only** from Mi Gallery (proprietary, reference
+   only), Fossify Gallery (GPL-3.0, reference only), and Aves libre (BSD-3-Clause,
+   reference only). **No code is ported, adapted, or vendored from any upstream.**
+3. Build toadGALLERY **from scratch in Kotlin + Jetpack Compose**.
+4. Deliver a clean, fast, intuitive gallery with strong media browsing, deep metadata,
+   smart search, safe file operations, and a flagship editor.
+5. Ship **toadGALLERY Edit** as a separate APK, opened from the main Gallery via a
+   versioned content-URI contract, updatable independently.
+6. Keep the product private and offline-first: no mandatory account, cloud service,
+   ads, analytics, or network access. No `INTERNET` permission in the core manifest.
+7. Protect originals by default. Non-destructive editing pipeline; recycle bin;
+   PIN/biometric hidden vault.
+8. Use **GitHub Actions as the canonical build and CI environment**.
 
-See [`roadmap.md`](roadmap.md) for the full phased plan (Phases 0–9).
+See [`roadmap.md`](roadmap.md) for the full phased plan (Phases 0–11) and
+[`docs/product-vision.md`](docs/product-vision.md) for the authoritative north star.
 
-## How the two bases contribute (Phase 1 answer, evidence-based)
+## How the three references contribute (v2.2, ADR-0008)
 
-| Base | Role in toadGALLERY |
-|---|---|
-| **Fossify Gallery** (Kotlin, GPL-3.0) | The product **skeleton**: browsing, viewer (Glide + subsampling + media3), favorites, file operations, editor code to extract — kept/adapted (ADR-0001) |
-| **Aves** (Flutter/Dart, BSD-3-Clause) | The **design & model reference**: URI-first media identity, three-date semantics, progressive metadata service, composable filter algebra, format taxonomy, offline-first service pattern — reimplemented in Kotlin (no Dart ships) |
-| Aves `exifinterface` fork (Apache-2.0) | The single **code-level adaptation** (native EXIF parser, attribution required) |
+| Reference | Role in toadGALLERY | What we take | What we deliberately leave |
+|---|---|---|---|
+| **Mi Gallery** (proprietary) | UX/feature *reference* only | Editor tool layout, Moments/Stories/Auto-albums model, smart-search affordances, collage/slideshow UX, video trim flow | Any code, branding, icons, cloud services, online ML |
+| **Aves libre** (BSD-3-Clause) | UX/feature *reference* only | EXIF/IPTC/XMP patterns (reimplemented using `androidx.exifinterface`), tags/ratings/colour labels, collections, on-device map view, format taxonomy | Flutter/Dart UI, the `exifinterface` fork (use AndroidX directly), network tile providers |
+| **Fossify Gallery** (GPL-3.0) | UX/feature *reference* only | Privacy posture, offline-first behavior, broad gallery shape | `org.fossify:commons`, any code skeleton, path-keyed Room schema, View-based UI obligation |
+| **Jetpack Compose + Material 3** (Apache-2.0) | Canonical UI toolkit | Declarative UI, Material 3 + dynamic color, animation primitives, Compose Canvas | (none — this is the chosen toolkit) |
 
-Key evidence documents: [source audit: Fossify](docs/phase-1/source-audit-fossify.md) ·
+Key documents: [product vision](docs/product-vision.md) ·
+[source audit: Fossify](docs/phase-1/source-audit-fossify.md) ·
 [source audit: Aves](docs/phase-1/source-audit-aves.md) ·
-[integration decisions (ADRs)](docs/integration-decisions.md) ·
-[feature matrix](docs/feature-matrix.md).
+[integration decisions (ADRs 0001–0013)](docs/integration-decisions.md) ·
+[feature matrix](docs/feature-matrix.md) ·
+[Compose migration tracker](docs/architecture/compose-migration.md).
 
 ## Repository structure
 
 ```text
 toadGALLERY/
-├── roadmap.md                  # Phased development roadmap (Phases 0–9)
-├── LICENSE                     # GPL-3.0 (full text)
+├── .github/workflows/ci.yml     # CI: build + lint + test (ADR-0013)
+├── roadmap.md                   # Phased development roadmap (Phases 0–11)
+├── LICENSE                      # GPL-3.0 (voluntary per ADR-0004/0008)
 ├── docs/
-│   ├── architecture/           # module + data-flow diagrams, editor contract v1
-│   ├── phase-0/               # baselines, build notes, sign-off, risk register
-│   ├── phase-1/               # source audits, dependency/license report
-│   ├── feature-matrix.md      # capability origin & owner (audited)
-│   ├── integration-decisions.md# ADR-0001..0007 (accepted)
+│   ├── product-vision.md        # Authoritative north star
+│   ├── architecture/            # module + data-flow diagrams, editor contract, compose migration
+│   ├── phase-0/                 # baselines, build notes (historical), sign-off, risk register
+│   ├── phase-1/                 # source audits (reference-only framing), dependency report
+│   ├── phase-2/                 # shell verification (transitional)
+│   ├── feature-matrix.md        # capability origin & owner (v2.2)
+│   ├── integration-decisions.md # ADR-0001..0013
 │   └── licensing-and-attribution.md
-├── apps/                       # (Phase 2+) gallery/ and edit-extension/
-└── shared/                     # (Phase 2+) media-contract, metadata, editor-contract, design-system
+├── apps/                        # gallery/ (Kotlin + Compose); edit-extension/ (Phase 6)
+├── shared/                      # (Phase 2+) media-contract, metadata, editor-contract, design-system, ml-models
+└── gradle/                      # wrapper, libs.versions.toml
 ```
 
-`apps/` and `shared/` are **coming in Phase 2**; the validated module layout is
-[docs/architecture/module-diagram.md](docs/architecture/module-diagram.md).
+## Build & CI
 
-## Upstream baselines (recorded 2026-10-29)
+The canonical build is GitHub Actions (ADR-0013). To build locally you need:
 
-| Project | Recorded commit | License | Baseline build |
+- JDK 17 (Temurin recommended)
+- Android SDK with `platforms;android-36` and `build-tools;36.0.0`
+- Gradle 9.5.1 (project wrapper)
+
+```bash
+./gradlew :apps:gallery:assembleDebug
+./gradlew :apps:gallery:lintDebug
+./gradlew :apps:gallery:testDebugUnitTest
+```
+
+No Flutter SDK required. No Dart SDK required. The CI workflow at
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the source of truth for
+"does it build"; a green CI check is required to merge any PR.
+
+## Upstream references (recorded 2026-10-29)
+
+| Project | Recorded commit | License | Role under ADR-0008 |
 |---|---|---|---|
-| Fossify Gallery v1.14.1 | `e9812299b9d444b…` (`main`) | GPL-3.0 | **BUILT & VERIFIED** — `gallery-30-foss-debug.apk` (66 MB), see [build notes](docs/phase-0/build-notes.md) |
-| Aves 1.15.8+182 | `4f940ae48bd936…` (`develop`) | BSD-3-Clause | BLOCKED (audit-container disk); full recipe + cause chain documented — issue #2 |
+| Fossify Gallery v1.14.1 | `e9812299b9d444b…` (`main`) | GPL-3.0 | Reference only (no code ported) |
+| Aves 1.15.8+182 | `4f940ae48bd936…` (`develop`) | BSD-3-Clause | Reference only (no code ported, including the `exifinterface` fork) |
+| Mi Gallery | (proprietary, no pinned commit) | Proprietary | UX/feature reference only (no code, no assets, no trademark) |
 
-## Roadmap at a glance
+## Roadmap at a glance (v2.2)
 
 | Phase | Focus | State |
 |---|---|---|
 | **0** | Align scope, establish baselines | **Exited** — [sign-off](docs/phase-0/sign-off.md) |
-| **1** | Source audit and integration design | **Delivered** — audits, matrix, ADRs, diagrams, license report |
-| **2** | Product shell and visual foundation | **In progress** — first APK built (0.1.0-alpha, [record](docs/phase-2/shell-verification.md)) |
-| 3 | Core media access and browsing | planned (URI-first model per ADR-0006) |
-| 4 | Metadata, formats, and Aves-derived capabilities | planned |
-| 5 | Advanced search and organization | planned (filter algebra per audit) |
-| 6 | toadGALLERY Edit extension | contract spec ready ([v1](docs/architecture/editor-contract.md)) |
-| 7 | Trash, reliability, privacy, and accessibility | planned |
-| 8 | Performance and compatibility | planned |
-| 9 | Release readiness | planned |
+| **1** | Source audit, integration design, contract prototype | **Delivered** — audits, matrix, ADRs, diagrams, license report; reframed as reference-only under ADR-0008 |
+| **2** | Product shell, visual foundation, privacy hardening, Compose toolchain, CI | **In progress** — alpha shell built; migrating to Compose; CI workflow added |
+| 3 | Core media access, browsing, file ops, recycle bin, hidden vault | planned |
+| 4 | Aves-grade metadata layer (`androidx.exifinterface` + own IPTC/XMP wrappers) | planned |
+| 5 | MI-style organisational UX (Moments, Stories, opt-in auto-albums, semantic search, collage, slideshow) | planned |
+| 6 | toadGALLERY Edit v1: core adjustments + non-destructive pipeline | contract spec ready ([v1](docs/architecture/editor-contract.md)) |
+| 7 | toadGALLERY Edit v2: filters and annotations | planned |
+| 8 | toadGALLERY Edit v3: on-device AI features (magic erase, sky replace, bokeh, opt-in face retouch) | planned (ADR-0010) |
+| 9 | Lightweight video editor (trim, mute, slow-mo, frame extract, GIF/WebP) | planned (ADR-0012) |
+| 10 | Performance, compatibility, accessibility, reliability hardening | planned |
+| 11 | Release readiness (F-Droid metadata, FOSS review, signing, v1.0 cut) | planned |
 
 Progress is tracked in the repository **milestones** (one per phase) and **issues**.
 
 ## License
 
-**GPL-3.0** — see [LICENSE](LICENSE). Derives from GPL-3.0 licensed upstream work
-(Fossify Gallery, itself a continuation of the Simple Gallery lineage). BSD-3-Clause
-material from Aves and Apache-2.0 modules enter only with preserved notices; each is
-recorded in [licensing-and-attribution.md](docs/licensing-and-attribution.md). This is
-engineering compliance tracking, not legal advice.
+**GPL-3.0** — see [LICENSE](LICENSE). Per ADR-0004 (clarified by ADR-0008), this is a
+**voluntary** choice that aligns with the FOSS/gallery community ethos; the product
+derives from no upstream code. Third-party dependencies (AndroidX, Compose, media3,
+Coil, `androidx.exifinterface`) are Apache-2.0 and attributed per their terms in
+[licensing-and-attribution.md](docs/licensing-and-attribution.md). This is engineering
+compliance tracking, not legal advice.

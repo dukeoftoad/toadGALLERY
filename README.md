@@ -72,7 +72,7 @@ toadGALLERY/
 |---|---|---|
 | **0** | Align scope, establish baselines | **Exited** — [sign-off](docs/phase-0/sign-off.md) |
 | **1** | Source audit and integration design | **Delivered** — audits, matrix, ADRs, diagrams, license report |
-| **2** | Product shell and visual foundation | **Next** — installable dev APK, design tokens, navigation |
+| **2** | Product shell and visual foundation | **In progress** — first APK built (0.1.0-alpha, [record](docs/phase-2/shell-verification.md)) |
 | 3 | Core media access and browsing | planned (URI-first model per ADR-0006) |
 | 4 | Metadata, formats, and Aves-derived capabilities | planned |
 | 5 | Advanced search and organization | planned (filter algebra per audit) |

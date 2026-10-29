@@ -1,22 +1,16 @@
 # Architecture Documentation
 
-**Status:** Placeholder (planned for Phase 1) · **Created:** 2026-10-29
+**Status:** Phase 1 deliverables present · **Last updated:** 2026-10-29
 
-This directory will hold the product's architecture artifacts once the Phase 1 source
-audit selects the integration approach (see
-[`../integration-decisions.md`](../integration-decisions.md), ADR-0001).
+| Document | Contents |
+|---|---|
+| [`module-diagram.md`](module-diagram.md) | Module layout (`apps/`, `shared/*`), external dependencies, upstream relations (Mermaid) |
+| [`data-flow.md`](data-flow.md) | Browsing/grid, progressive metadata, file-ops/trash, Gallery↔Edit round trip, date semantics (Mermaid) |
+| [`editor-contract.md`](editor-contract.md) | Versioned Gallery ↔ Edit intent contract v1 (ADR-0007 spec) |
 
-Planned contents:
+Sources of authority for anything not yet here: the [ADRs](../integration-decisions.md)
+(decisions), the [feature matrix](../feature-matrix.md) (capability ownership), and the
+[Phase 1 audits](../phase-1/) (evidence).
 
-- **Module diagram** — main app, editor app, shared contracts (`apps/gallery`,
-  `apps/edit-extension`, `shared/*`), and where upstream-derived code lives.
-- **Data-flow diagram** — MediaStore/content-URI access boundary, thumbnail pipeline,
-  metadata extraction (off-main-thread), trash/recovery flow, and editor round-trip.
-- **Editor integration contract** — versioned intent/content-URI protocol between
-  toadGALLERY and toadGALLERY Edit (ADR-0002), including failure modes (missing,
-  outdated, unsupported format).
-- **Navigation map** — Photos / Albums / Search / Settings, favorites and trash
-  placement, selection behavior across screens (Phase 2).
-
-Until Phase 1 produces the audit evidence, the authoritative integration material lives
-in the feature matrix and the ADRs.
+Deferred contents (added in later phases): storage migration notes (Phase 3), metadata
+service internals (Phase 4), search index design (Phase 5), editor pipeline (Phase 6).

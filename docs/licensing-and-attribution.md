@@ -44,9 +44,11 @@ GPL-3.0 licensed work, so the combined work must be GPL-3.0 at distribution.
 4. **Per-file provenance:** any file copied or adapted from an upstream records
    origin + commit + license in the table below (§5) at the moment of the copy.
 5. **Dependency licenses:** every binary dependency of shipped code gets a license
-   check before first release (Phase 9 gate). Known GPL-relevant notes today: Glide
-   (Apache-2.0/BSD-style, OK), media3 (Apache-2.0, OK), Room (Apache-2.0, OK),
-   Glide decoder forks (must be checked individually in Phase 1 audit).
+   check before first release (Phase 9 gate). The Phase 1 direct-dependency screen
+   found **no GPL-3.0 incompatibility**; two items are flagged for POM verification
+   (androidphotofilters fork, jxl-coder-glide) and one option is explicitly not
+   adopted (libmpv) — see
+   [`phase-1/dependency-license-compatibility.md`](phase-1/dependency-license-compatibility.md).
 
 ## 4. What is deliberately NOT allowed in this repo
 

@@ -81,8 +81,8 @@ third-party editor intents; 40+ translations via fastlane metadata.
 | Flutter SDK | 3.47.8 (bundled via `flutter_wrapper`) |
 | Dart SDK | `>=3.13.7 <4.0.0` |
 | Java toolchain | JDK 21 (Temurin/Adoptium, Gradle toolchain provisioning) |
-| compileSdk | **37** |
-| minSdk / targetSdk | Delegated to Flutter defaults (`flutter.minSdkVersion` / `flutter.targetSdkVersion`) — **resolve and record during the baseline build** |
+| compileSdk | **37 upstream** — **36 is the newest publicly installable platform** (verified 2026-10-29); smoke build patched to 36 |
+| minSdk / targetSdk | Flutter 3.47.8 defaults: **minSdk 24, targetSdk 36** (resolved from `FlutterExtension.kt` of the bundled SDK — see build-notes.md) |
 
 ### In-repo workspace plugins (13)
 
@@ -137,8 +137,12 @@ Build verification commands and their expected outputs are tracked in
 
 ## 5. What remains open in Phase 0
 
-- [ ] Independent clean-environment builds of both upstreams (see `build-notes.md`)
-- [ ] Resolve Aves `flutter.minSdkVersion` / `targetSdkVersion` concrete values at build time
-- [ ] Confirm the proposed Android range and Android 16 test checklist
-- [ ] Dependency license inventory beyond the root licenses (both dependency graphs)
-- [ ] Confirm must-have scope / deferrals from roadmap §6
+All items closed at the Phase 0 sign-off (2026-10-29) except the Aves on-hardware build:
+
+- [x] Baseline builds — Fossify **built & verified**; Aves **blocker fully documented** (roadmap accepts "built or blockers documented") — `build-notes.md`
+- [x] Aves `minSdk`/`targetSdk` resolved (Flutter 3.47.8 defaults: 24 / 36)
+- [x] Proposed Android range **confirmed**: minSdk 26, target/compile 36 — rationale in `sign-off.md`
+- [x] Android 16 behavior checklist confirmed — `sign-off.md` §3
+- [x] Dependency license screening (direct deps) — `../phase-1/dependency-license-compatibility.md`
+- [x] Must-have scope & deferrals adopted as binding (roadmap §6) — `sign-off.md` §1
+- [ ] Aves APK build on adequate hardware/CI — **GitHub issue #2** (tracked; does not block Phase 1+)

@@ -18,5 +18,5 @@
     <string name="state_permission_title">Access needed</string>
     <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — the app has no network access at all.</string>
     <string name="state_action_grant">Grant access</string>
-    <string name="state_shell_badge">Phase 2 shell — browsing arrives in Phase 3</string>
+    <string name="state_shell_badge">Phase 3 — on-device timeline</string>
 </resources>

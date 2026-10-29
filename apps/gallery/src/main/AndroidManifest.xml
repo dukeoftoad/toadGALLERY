@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Phase 2 shell: NO permissions. Media permissions arrive with Phase 3 browsing,
-         requested contextually. Nothing in the shell needs network or storage. -->
+    <!-- Phase 3: media access for the Photos timeline (issue #25).
+         API 33+ uses the granular READ_MEDIA_* permissions; pre-33 falls back
+         to READ_EXTERNAL_STORAGE capped at maxSdkVersion=32. ACCESS_MEDIA_LOCATION
+         is deferred to Phase 4 (metadata layer). No INTERNET, ever (ADR-0014). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <application
         android:allowBackup="true"

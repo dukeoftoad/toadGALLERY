@@ -2,7 +2,7 @@ package io.github.dukeoftoad.gallery.ui.theme
 
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
-import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -88,11 +88,11 @@ object ToadShapes {
 
     /** The Material 3 `Shapes` wiring built from the token radii. */
     val material: Shapes = Shapes(
-        extraSmall = CornerSize(extraSmall),
-        small = CornerSize(small),
-        medium = CornerSize(medium),
-        large = CornerSize(large),
-        extraLarge = CornerSize(extraLarge),
+        extraSmall = RoundedCornerShape(extraSmall),
+        small = RoundedCornerShape(small),
+        medium = RoundedCornerShape(medium),
+        large = RoundedCornerShape(large),
+        extraLarge = RoundedCornerShape(extraLarge),
     )
 }
 

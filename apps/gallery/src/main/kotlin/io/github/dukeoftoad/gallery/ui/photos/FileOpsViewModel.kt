@@ -258,13 +258,38 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
         startBatch(FileOpKind.MOVE, selection.items) { ops.move(it.uri, targetRef) }
     }
 
-    /** Permanently deletes the selection (after the confirm dialog). */
+    /**
+     * Deletes the selection (after the confirm dialog) --- to the recycle
+     * bin on API 30+ (issue #31), permanently on API 29 (no MediaStore
+     * trash protocol exists below R; that device tier keeps the #30 v1
+     * behavior).
+     *
+     * Trash path: ONE `createTrashRequest` covers the whole batch, and even
+     * app-owned rows complete through the launcher (silently), so this is
+     * a consent round trip, not a batch run. On RESULT_OK the rows are
+     * already trashed; the snackbar narrates the count and the MediaStore
+     * observer refreshes the timeline.
+     */
     fun requestDelete() {
         @Suppress("NewApi")
         val ops = fileOps ?: return
         val selection = _state.value as? FileOpsUiState.Selection ?: return
-        @Suppress("NewApi")
-        startBatch(FileOpKind.DELETE, selection.items) { ops.delete(it) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            pendingConsent = PendingConsent(
+                kind = FileOpKind.DELETE,
+                trash = true,
+                deleteRetry = selection.items,
+            )
+            @Suppress("NewApi")
+            _events.tryEmit(
+                FileOpsEvent.RequestConsent(
+                    ops.createTrashConsentRequest(selection.items.map { it.uri }),
+                ),
+            )
+        } else {
+            @Suppress("NewApi")
+            startBatch(FileOpKind.DELETE, selection.items) { ops.delete(it) }
+        }
     }
 
     /** Cancels the active batch (progress dialog button); keeps the prefix. */
@@ -306,6 +331,17 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         when (pending.kind) {
+            FileOpKind.DELETE if pending.trash -> {
+                // Issue #31: the trash request already performed the move on
+                // RESULT_OK --- narrate and leave selection (nothing to retry).
+                _events.tryEmit(
+                    FileOpsEvent.ShowSnackbar(
+                        messageRes = R.plurals.trash_moved,
+                        pluralCount = pending.deleteRetry.size,
+                    ),
+                )
+                _state.value = FileOpsUiState.Idle
+            }
             FileOpKind.RENAME -> pending.rename?.let { request ->
                 renameRequest = request
                 @Suppress("NewApi")
@@ -742,6 +778,13 @@ private data class RenameRequest(
 private data class PendingConsent(
     val kind: FileOpKind,
     val rename: RenameRequest? = null,
+    /**
+     * DELETE-as-trash (issue #31, API 30+): the launched request IS the
+     * trash op --- on RESULT_OK the rows are already trashed, there is no
+     * retry batch. `deleteRetry` still carries the selection for the
+     * snackbar count.
+     */
+    val trash: Boolean = false,
     /** DELETE retry: exactly the items whose delete was consent-blocked. */
     val deleteRetry: List<MediaItem> = emptyList(),
     /** DELETE: successes that landed before the prompt (reported on decline). */

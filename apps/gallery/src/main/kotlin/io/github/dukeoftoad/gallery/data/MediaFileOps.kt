@@ -259,13 +259,11 @@ class MediaFileOps(private val resolver: ContentResolver) {
     }
 
     /**
-     * Deletes [item] permanently (v1: no recycle bin yet).
+     * Deletes [item] permanently; trash removal (issue #31) is a
+     * consent-request flow, not a resolver op (see [DeleteMode.TO_TRASH]).
      *
-     * [DeleteMode.TO_TRASH] is refused loudly --- it arrives with the
-     * recycle bin (issue #31), which will set `IS_TRASH = 1` here instead.
-     * Until then no caller can silently trade trash semantics for permanent
-     * deletion. Another app's item surfaces as [FileOpOutcome.NeedsConsent]
-     * (one delete-consent request covers the whole batch; see class KDoc).
+     * Another app's item surfaces as [FileOpOutcome.NeedsConsent] (one
+     * delete-consent request covers the whole batch; see class KDoc).
      */
     suspend fun delete(item: MediaItem, mode: DeleteMode = DeleteMode.PERMANENT): FileOpResult =
         delete(item.uri, mode)
@@ -274,7 +272,9 @@ class MediaFileOps(private val resolver: ContentResolver) {
     suspend fun delete(uri: Uri, mode: DeleteMode = DeleteMode.PERMANENT): FileOpResult =
         withContext(Dispatchers.IO) {
             check(mode == DeleteMode.PERMANENT) {
-                "DeleteMode.TO_TRASH is not implemented yet --- it arrives with the recycle bin (#31)."
+                "DeleteMode.TO_TRASH is consent-based (issue #31): build the request via " +
+                    "createTrashConsentRequest and launch it --- there is no direct " +
+                    "resolver op for trashing another app's row."
             }
             try {
                 val removed = resolver.delete(uri, null, null)
@@ -343,6 +343,28 @@ class MediaFileOps(private val resolver: ContentResolver) {
     @RequiresApi(Build.VERSION_CODES.R)
     fun createWriteConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
         MediaStore.createWriteRequest(resolver, uris).intentSender
+
+    /**
+     * Builds one system "move these items to trash?" request covering
+     * [uris] (`MediaStore.createTrashRequest`, trash = true). Even
+     * app-owned rows complete through the same launcher --- owned ones
+     * resolve instantly without a dialog --- so the trash flow is ALWAYS
+     * launcher-driven (issue #31); there is deliberately no direct
+     * "set IS_TRASHED" op here.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    fun createTrashConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
+        MediaStore.createTrashRequest(resolver, uris, /* trash = */ true).intentSender
+
+    /**
+     * Builds the inverse of [createTrashConsentRequest]: a "restore these
+     * items?" request (`createTrashRequest`, trash = false) that flips
+     * `IS_TRASHED` back to 0 and returns the rows to the normal collection
+     * (issue #31 Trash screen).
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    fun createRestoreConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
+        MediaStore.createTrashRequest(resolver, uris, /* trash = */ false).intentSender
 
     /**
      * Builds one system "delete these items?" request covering [uris]

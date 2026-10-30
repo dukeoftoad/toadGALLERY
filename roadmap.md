@@ -309,10 +309,10 @@ the start.
 > aspect-aware staggered grid + video/GIF overlays (#33, #34), paging
 > follow-ups: invalidation, append load-states, idempotent re-entry (#38),
 > screen-state system (#13), system Photo Picker path (#27), file operations
-> (#30), full-screen media viewer with in-app video playback (#50). Next in
-> flight: recycle bin (#31) and hidden vault (#32), which build on the #30
-> operations layer; viewer pinch-zoom deferred from #50. CI runs compile +
-> JVM tests only (ADR-0016).
+> (#30), full-screen media viewer with in-app video playback (#50), recycle
+> bin over MediaStore's system trash (#31). Next in flight: hidden vault
+> (#32); viewer pinch-zoom deferred from #50. CI runs compile + JVM tests
+> with lint as a hard gate (ADR-0016, #52).
 
 #### Tasks
 

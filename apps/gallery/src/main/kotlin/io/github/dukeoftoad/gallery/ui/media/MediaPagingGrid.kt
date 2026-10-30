@@ -49,7 +49,7 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  * all once the append settles (the item stays composed but empty --- the
  * cheapest correct behavior for a conditional footer).
  *
- * ## Selection mode (issue #30)
+ * ## Selection mode (issue #30) and viewer taps (issue #50)
  * The optional selection parameters add the Photos-tab multi-select UI
  * (long-press enters, tap toggles) WITHOUT touching [MediaThumb]: cells in
  * selection mode wrap the thumb in a `combinedClickable` box that overlays a
@@ -60,6 +60,12 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  * (state, app bar, undo) are owned by `PhotosScreen`/`FileOpsViewModel`
  * outside this shared grid. Selection keys are `uri.toString()` values,
  * matching the grid's LazyGrid keys one-to-one.
+ *
+ * Since issue #50 the tap callback is `onItemTap: (index, item) -> Unit` ---
+ * the index is the slot inside `LazyPagingItems` (snapshot positions, which
+ * is exactly what `itemSnapshotList` maps back to), so the Photos screen can
+ * hand the shell the tap-time window + position for the full-screen viewer
+ * while selection mode keeps toggling membership. Long-press is unchanged.
  *
  * Privacy: mirrors [MediaGrid] --- every thumbnail decodes from a local
  * content URI. Coil 2.x ships its HTTP fetcher inside the default
@@ -77,7 +83,7 @@ fun MediaPagingGrid(
     columns: Int = 3,
     selectionActive: Boolean = false,
     selectedKeys: Set<String> = emptySet(),
-    onItemTap: ((MediaItem) -> Unit)? = null,
+    onItemTap: ((index: Int, item: MediaItem) -> Unit)? = null,
     onItemLongPress: ((MediaItem) -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
 ) {
@@ -98,6 +104,7 @@ fun MediaPagingGrid(
                     // where file ops are hidden); the overlay chrome appears
                     // only while a selection is active.
                     SelectableMediaCell(
+                        index = index,
                         item = item,
                         selected = item.uri.toString() in selectedKeys,
                         overlayVisible = selectionActive,
@@ -135,15 +142,16 @@ fun MediaPagingGrid(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SelectableMediaCell(
+    index: Int,
     item: MediaItem,
     selected: Boolean,
     overlayVisible: Boolean,
-    onItemTap: (MediaItem) -> Unit,
+    onItemTap: (Int, MediaItem) -> Unit,
     onItemLongPress: (MediaItem) -> Unit,
 ) {
     Box(
         modifier = Modifier.combinedClickable(
-            onClick = { onItemTap(item) },
+            onClick = { onItemTap(index, item) },
             onLongClick = { onItemLongPress(item) },
         ),
     ) {

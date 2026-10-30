@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaGrid
@@ -52,6 +53,7 @@ import io.github.dukeoftoad.gallery.ui.media.MediaGrid
 fun AlbumDetailScreen(
     bucketId: Long,
     onBack: () -> Unit,
+    onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
 ) {
     // The Application is process-scoped; capturing it for the ViewModel
     // factory is the standard Android pattern (outlives the composition).
@@ -116,6 +118,13 @@ fun AlbumDetailScreen(
                     MediaGrid(
                         items = s.items,
                         modifier = Modifier.padding(innerPadding),
+                        onItemTap = { index, _ ->
+                            // Issue #50: same shell hand-off as the Photos
+                            // timeline --- the bucket list is already fully
+                            // materialized, so its index is the viewer's
+                            // start page directly.
+                            onOpenViewer(s.items, index)
+                        },
                     )
                 }
             }

@@ -8,6 +8,18 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- Full-screen media viewer (#50 — PR #51): tapping a grid cell on the Photos
+  timeline or in album detail (outside selection mode) now opens the viewer —
+  black edge-to-edge canvas with hidden system bars, a `HorizontalPager` over
+  the tap-time window, photos full-fit via Coil, and in-app video playback
+  through media3 ExoPlayer 1.11.1 (local content URIs only; roadmap L608).
+  Chrome bar with back action + "n of m" counter; honest playback-error copy
+  when the device codec can't decode the file; video grid cells that fail
+  frame extraction (`getFrameAtTime` NULL on some device codecs) now show an
+  `ic_video_fallback` poster instead of a blank cell. Window hand-off via a
+  shell-scoped `ViewerViewModel` (the #27 pattern); JVM tests pin the
+  `ViewerWindow` clamping contract. Pinch-zoom/pan and animated GIF playback
+  are deferred (see issue #50).
 - File operations on the Photos timeline (#30 — PR #48): rename (extension
   preserved), in-place copy (` (copy)` naming with collision numbering),
   move (copy→delete with per-item results), delete (permanent v1, explicit

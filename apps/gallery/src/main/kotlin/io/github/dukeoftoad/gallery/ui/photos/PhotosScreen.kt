@@ -140,6 +140,7 @@ import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
 fun PhotosScreen(
     viewModel: PhotosViewModel = viewModel(),
     fileOpsViewModel: FileOpsViewModel = viewModel(),
+    onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
 ) {
     val state by viewModel.state.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
@@ -259,6 +260,7 @@ fun PhotosScreen(
                     fileOpsViewModel = fileOpsViewModel,
                     fileOpsState = fileOpsState,
                     snackbarHostState = snackbarHostState,
+                    onOpenViewer = onOpenViewer,
                 )
             }
         }
@@ -281,6 +283,7 @@ private fun PhotosTimeline(
     fileOpsViewModel: FileOpsViewModel,
     fileOpsState: FileOpsUiState,
     snackbarHostState: SnackbarHostState,
+    onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
 ) {
     val selection = fileOpsState as? FileOpsUiState.Selection
     val running = fileOpsState as? FileOpsUiState.Running
@@ -319,6 +322,7 @@ private fun PhotosTimeline(
                         fileOpsViewModel = fileOpsViewModel,
                         selectionActive = true,
                         selectedKeys = selection.items.mapTo(HashSet()) { it.uri.toString() },
+                        onOpenViewer = onOpenViewer,
                     )
                 }
                 FileOpsSelectionActions(
@@ -338,13 +342,15 @@ private fun PhotosTimeline(
                 )
             }
         } else {
-            // Plain timeline: identical to the pre-#30 render (cells still
-            // carry long-press to enter selection; the overlay stays hidden).
+            // Plain timeline: cells still carry long-press to enter selection
+            // (the overlay stays hidden) and tap now opens the full-screen
+            // viewer (issue #50) --- the pre-#50 plain tap was a no-op.
             PhotosGrid(
                 lazyItems = lazyItems,
                 fileOpsViewModel = fileOpsViewModel,
                 selectionActive = false,
                 selectedKeys = emptySet(),
+                onOpenViewer = onOpenViewer,
             )
         }
         SnackbarHost(
@@ -402,6 +408,13 @@ private fun PhotosTimeline(
 /**
  * The timeline grid call, shared by plain and selection layouts so the
  * `photos_state_grid` tag, footer and selection wiring cannot diverge.
+ *
+ * Tap semantics (issue #50): while a selection is active a tap toggles the
+ * item's membership (issue #30 behavior, unchanged); on the plain timeline a
+ * tap opens the full-screen viewer, handed the tap-time window (the loaded
+ * snapshot filtered of placeholder nulls) plus the tapped position. The
+ * index is recomputed against the filtered list so the viewer starts on the
+ * tapped item regardless of placeholder slots.
  */
 @Composable
 private fun PhotosGrid(
@@ -409,13 +422,21 @@ private fun PhotosGrid(
     fileOpsViewModel: FileOpsViewModel,
     selectionActive: Boolean,
     selectedKeys: Set<String>,
+    onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
 ) {
     MediaPagingGrid(
         items = lazyItems,
         modifier = Modifier.testTag("photos_state_grid"),
         selectionActive = selectionActive,
         selectedKeys = selectedKeys,
-        onItemTap = { item -> fileOpsViewModel.onItemTapped(item) },
+        onItemTap = { index, item ->
+            if (selectionActive) {
+                fileOpsViewModel.onItemTapped(item)
+            } else {
+                val window = lazyItems.itemSnapshotList.filterNotNull()
+                onOpenViewer(window, window.indexOf(item))
+            }
+        },
         onItemLongPress = { item -> fileOpsViewModel.onItemLongPressed(item) },
         footer = {
             // Append load state (issue #38, finding 2): the refresh states

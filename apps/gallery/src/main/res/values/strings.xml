@@ -46,4 +46,12 @@
          next to this line). -->
     <string name="state_append_loading">Loading more…</string>
     <string name="state_append_error_title">Couldn\'t load more.</string>
+
+    <!-- issue #13 -->
+    <!-- Screen-state system (docs/architecture/screen-states.md): denial-state
+         Settings deep-link caption + action, unsupported-file state title.
+         Existing state_* strings above are frozen and reused unchanged. -->
+    <string name="state_action_open_settings">Open Settings</string>
+    <string name="state_permission_settings_hint">If the access request no longer appears, Android has silenced it after repeated denials. Use Settings to grant photo &amp; video access instead.</string>
+    <string name="state_unsupported_title">This file type isn\'t supported yet</string>
 </resources>

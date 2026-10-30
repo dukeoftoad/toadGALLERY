@@ -70,11 +70,11 @@ class DesignTokensTest {
 
     @Test
     fun `material shapes are wired with the token radii`() {
-        assertEquals(ToadShapes.extraSmall, ToadShapes.material.extraSmall.size)
-        assertEquals(ToadShapes.small, ToadShapes.material.small.size)
-        assertEquals(ToadShapes.medium, ToadShapes.material.medium.size)
-        assertEquals(ToadShapes.large, ToadShapes.material.large.size)
-        assertEquals(ToadShapes.extraLarge, ToadShapes.material.extraLarge.size)
+        assertEquals(ToadShapes.extraSmall, ToadShapes.material.extraSmall.topStart.size)
+        assertEquals(ToadShapes.small, ToadShapes.material.small.topStart.size)
+        assertEquals(ToadShapes.medium, ToadShapes.material.medium.topStart.size)
+        assertEquals(ToadShapes.large, ToadShapes.material.large.topStart.size)
+        assertEquals(ToadShapes.extraLarge, ToadShapes.material.extraLarge.topStart.size)
     }
 
     @Test

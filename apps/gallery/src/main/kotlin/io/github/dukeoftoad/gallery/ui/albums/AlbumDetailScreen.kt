@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -15,14 +14,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.ui.StateScreen
+import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaGrid
 
 /**
@@ -33,6 +33,19 @@ import io.github.dukeoftoad.gallery.ui.media.MediaGrid
  * the shared `MediaGrid` filtered to the bucket's contents. Entered only
  * after the Albums tab loaded with granted access; a mid-session revoke
  * surfaces as an empty grid (defensive query in the ViewModel).
+ *
+ * States render through the shared screen-state components (issue #13):
+ *  - Loading -> [LoadingState] tagged `album_detail_state_loading`, wrapped in
+ *    an inset-padded `Box` so the spinner centers below the top app bar
+ *    (same geometry as the pre-#13 inline spinner)
+ *  - Ready + empty -> the frozen `StateScreen` empty layout, wrapped in a Box
+ *    tagged `album_detail_state_empty` (StateScreen is frozen and carries no
+ *    tag parameter; the wrapper supplies the test surface, issue #38.7)
+ *
+ * No error branch yet: the ViewModel defensively maps query failures to an
+ * empty bucket. A later slice should add `AlbumDetailState.Error` and render
+ * `ErrorState` with the `album_detail_state_error` tag reserved in
+ * docs/architecture/screen-states.md.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,20 +90,28 @@ fun AlbumDetailScreen(
     ) { innerPadding ->
         when (val s = state) {
             is AlbumDetailState.Loading -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center,
+                // Keep the shared spinner inside the app-bar inset (the same
+                // geometry the pre-#13 inline layout had); LoadingState itself
+                // fills the constraints it receives.
+                modifier = Modifier.padding(innerPadding),
             ) {
-                CircularProgressIndicator()
+                LoadingState(tag = "album_detail_state_loading")
             }
             is AlbumDetailState.Ready -> {
                 if (s.items.isEmpty()) {
-                    StateScreen(
-                        iconRes = R.drawable.ic_nav_albums,
-                        titleRes = R.string.album_detail_fallback_title,
-                        bodyRes = R.string.album_detail_empty_body,
-                    )
+                    // StateScreen is frozen without a tag parameter, so the
+                    // stable per-screen tag rides on a wrapper Box (#38.7).
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("album_detail_state_empty"),
+                    ) {
+                        StateScreen(
+                            iconRes = R.drawable.ic_nav_albums,
+                            titleRes = R.string.album_detail_fallback_title,
+                            bodyRes = R.string.album_detail_empty_body,
+                        )
+                    }
                 } else {
                     MediaGrid(
                         items = s.items,

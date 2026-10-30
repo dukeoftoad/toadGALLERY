@@ -194,7 +194,13 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Current `DISPLAY_NAME` of [item]; null when the row is gone (below Q: null). */
+    /**
+     * Current `DISPLAY_NAME` of [item]; null when the row is gone (below Q:
+     * null --- [fileOps] is only constructed on Q+).
+     */
+    // Lint cannot see the null-guard: fileOps is null below API 29, so the
+    // @RequiresApi(Q) callee is only reached on Q+ devices.
+    @Suppress("NewApi")
     suspend fun displayNameOf(item: MediaItem): String? = fileOps?.displayNameOf(item.uri)
 
     // ------------------------------------------------------------------

@@ -8,6 +8,20 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- Viewer pinch-zoom, pan and animated GIFs (#50 follow-ups): photo pages zoom
+  to 5x around the pinch centroid, pan with Fit-letterbox clamping (the photo
+  never leaves the screen; zooming out re-centers), and double-tap toggles
+  2.5x-at-the-tap-point / reset. While a photo is zoomed the pager's swipe
+  locks until the user zooms back out (documented v1 trade-off); leaving a
+  page resets its zoom. A custom pointer-count-split detector
+  (`ViewerGestures`) replaces stock `detectTransformGestures`, which would
+  consume single-finger drags and starve the pager at 1x. GIF items animate
+  in the viewer only, through a per-request `decoderFactory`
+  (`ImageDecoderDecoder` on API 28+, `GifDecoder` on 26/27, via the new
+  decoder-only `coil-gif` dependency — no INTERNET permission, privacy gate
+  unaffected); the grid keeps static first frames (#33/#34 behavior pinned).
+  18 JVM tests pin the transform math (clamping invariants, double-tap
+  anchoring, reset).
 - Hidden vault storage + unlock UI (#32, slice 2/2, on the ADR-0017 core): the
   vault is now a complete feature. `VaultStore` (pure JVM) keeps the sealed PIN
   record, a sealed hand-rolled index (`VaultIndex`, strict parsing, escaped

@@ -14,10 +14,11 @@ package io.github.dukeoftoad.gallery.data
  * MediaStore column must degrade to the square-cell fallback, never collapse
  * a grid cell to zero height.
  *
- * The ratio is clamped to `[0.5f, 2.0f]` (roughly 1:2 through 2:1): an extreme
- * panorama would otherwise stretch one cell across its entire staggered
- * column and destroy the layout's visual rhythm. The bounds cap every cell
- * at twice as tall as it is wide, and vice versa.
+ * The ratio is clamped to `[0.5f, 2.0f]` (roughly 1:2 through 2:1): without
+ * it, an extremely tall capture would stretch one cell across its entire
+ * staggered column, while an extreme panorama would collapse to a sliver
+ * band --- either extreme destroys the layout's visual rhythm. The bounds
+ * cap every cell at twice as tall as it is wide, and vice versa.
  */
 fun displayAspectRatioOf(width: Int, height: Int): Float =
     if (width <= 0 || height <= 0) {

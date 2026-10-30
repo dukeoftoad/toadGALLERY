@@ -34,12 +34,12 @@ class MediaGeometryTest {
     }
 
     @Test
-    fun `extreme panorama clamps to the lower bound`() {
+    fun `extremely tall capture clamps to the lower bound`() {
         assertRatio(0.5f, 100, 1000)
     }
 
     @Test
-    fun `extreme sliver clamps to the upper bound`() {
+    fun `extremely wide panorama clamps to the upper bound`() {
         assertRatio(2f, 1000, 100)
     }
 

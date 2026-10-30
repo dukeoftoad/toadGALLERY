@@ -16,10 +16,11 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  *
  * Aspect-ratio-aware since issue #34: `LazyVerticalStaggeredGrid` sizes each
  * cell from the item's clamped MediaStore dimensions instead of forcing
- * uniform squares, so portrait shots take taller cells, panoramas wider ones,
- * and each column packs independently. The video-duration overlay and the GIF
- * badge (issue #33) live inside [MediaThumb], not here. Staggering applies to
- * media grids only --- album folder covers on the Albums tab stay square.
+ * uniform squares, so portrait shots take taller cells, wide panoramas
+ * shorter ones, and each column packs independently. The video-duration
+ * overlay and the GIF badge (issue #33) live inside [MediaThumb], not here.
+ * Staggering applies to media grids only --- album folder covers on the
+ * Albums tab stay square.
  *
  * Keys on `uri.toString()` so recomposition and recycling survive position
  * changes. Thumbnails load via Coil `AsyncImage` over content URIs

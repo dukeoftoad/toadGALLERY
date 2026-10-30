@@ -23,6 +23,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -33,7 +34,10 @@ import androidx.navigation.navArgument
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
 import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
+import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
+import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
+import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 
 /**
@@ -52,6 +56,13 @@ object Destinations {
 
     /** Route pattern for the album detail sub-screen (issue #29). */
     const val ALBUM_DETAIL = "album/{bucketId}"
+
+    /**
+     * Sub-screen for the system-Photo-Picker selection (issue #27). Not
+     * top-level on purpose: the bottom bar hides here (sub-page UX like
+     * album detail) and the route is reachable only from the Settings tab.
+     */
+    const val PICKED = "picked"
 
     fun albumDetail(bucketId: Long): String = "album/$bucketId"
 
@@ -76,6 +87,10 @@ private val bottomNavItems = listOf(
 fun ToadGalleryApp() {
     ToadGalleryTheme {
         val navController = rememberNavController()
+        // Issue #27: the picked-photos set is shared between the Settings tab
+        // (picker entry point + live count) and the `picked` sub-screen, so it
+        // lives in ONE activity-scoped ViewModel instead of nav arguments.
+        val pickedViewModel: PickedPhotosViewModel = viewModel()
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
 
@@ -151,10 +166,19 @@ fun ToadGalleryApp() {
                     )
                 }
                 composable(Destinations.SETTINGS) {
-                    StateScreen(
-                        iconRes = R.drawable.ic_nav_settings,
-                        titleRes = R.string.state_settings_empty_title,
-                        bodyRes = R.string.state_settings_empty_body,
+                    // Issue #27: the real Settings screen (Photo Picker toggle,
+                    // pick entry point, fallback copy) replaces the placeholder.
+                    SettingsScreen(
+                        pickedViewModel = pickedViewModel,
+                        onBrowsePicked = { navController.navigate(Destinations.PICKED) },
+                    )
+                }
+                composable(Destinations.PICKED) {
+                    // Issue #27: sub-screen over the shared picked set; the
+                    // shell hides the bottom bar (non-topLevel route).
+                    PickedPhotosScreen(
+                        pickedViewModel = pickedViewModel,
+                        onBack = { navController.popBackStack() },
                     )
                 }
             }

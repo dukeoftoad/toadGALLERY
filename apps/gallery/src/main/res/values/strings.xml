@@ -54,4 +54,20 @@
     <string name="state_action_open_settings">Open Settings</string>
     <string name="state_permission_settings_hint">If the access request no longer appears, Android has silenced it after repeated denials. Use Settings to grant photo &amp; video access instead.</string>
     <string name="state_unsupported_title">This file type isn\'t supported yet</string>
+
+    <!-- issue #27 -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_access">Media access</string>
+    <string name="settings_use_photo_picker">Use system Photo Picker</string>
+    <string name="settings_use_photo_picker_body">Browse only the photos and videos you select with the Android system Photo Picker. You grant no library-wide access, and nothing ever leaves this device.</string>
+    <string name="settings_photo_picker_pre33_body">The system Photo Picker needs Android 13 or newer. On this device your library loads through the usual access flow instead.</string>
+    <string name="settings_pick_photos">Pick photos to browse</string>
+    <string name="settings_browse_picked">Browse picked photos</string>
+    <string name="picked_title">Picked photos</string>
+    <string name="state_picked_empty_title">No picked photos yet</string>
+    <string name="state_picked_empty_body">Pick a selection from Settings and browse it here without granting full library access.</string>
+    <plurals name="settings_picked_count">
+        <item quantity="one">%1$d photo picked</item>
+        <item quantity="other">%1$d photos picked</item>
+    </plurals>
 </resources>

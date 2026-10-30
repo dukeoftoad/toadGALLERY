@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -52,6 +53,14 @@ import io.github.dukeoftoad.gallery.data.displayAspectRatio
  * the build-time merged-manifest gate and `PrivacyEgressTest` --- so no
  * thumbnail can ever touch the network.
  *
+ * Decode-failure fallback (issue #50): on some devices the platform
+ * retriever cannot extract a frame from certain video codecs (on-device
+ * logcat 2026-10-30 shows `getFrameAtTime: videoFrame is a NULL pointer`),
+ * which makes the video request fail and the cell render as blank pixels
+ * under its duration chip. Video cells therefore carry the
+ * `ic_video_fallback` poster as the error painter --- the plate + play
+ * triangle also doubles as the viewer's playback-error icon.
+ *
  * The parallel paging slice (Phase 3) ships its own grid composable over
  * `LazyPagingItems`; it swaps its inline cell for this composable at
  * integration time, so both grids render identical cells.
@@ -68,6 +77,11 @@ fun MediaThumb(item: MediaItem, modifier: Modifier = Modifier) {
             },
             modifier = Modifier.matchParentSize(),
             contentScale = ContentScale.Crop,
+            error = if (item.isVideo) {
+                painterResource(R.drawable.ic_video_fallback)
+            } else {
+                null
+            },
         )
         if (item.isVideo && item.durationMs > 0) {
             ThumbBadge(

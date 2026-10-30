@@ -122,4 +122,10 @@
     <string name="file_ops_consent_denied">Permission was needed and declined — nothing more was changed.</string>
     <string name="file_ops_undo_action">Undo</string>
     <string name="file_ops_undo_failed">Couldn\'t undo — your items were left as they are now.</string>
+
+    <!-- Full-screen media viewer (issue #50) -->
+    <string name="viewer_counter">%1$d of %2$d</string>
+    <string name="viewer_video_error_title">Can\'t play this video</string>
+    <string name="viewer_video_error_body">This device\'s video decoder can\'t handle the file — it may use an unsupported codec. The file itself is untouched.</string>
+    <string name="cd_viewer_photo">Full-screen photo</string>
 </resources>

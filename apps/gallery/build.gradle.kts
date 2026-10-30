@@ -201,6 +201,13 @@ dependencies {
     // --- Metadata (ADR-0008: androidx.exifinterface, NOT the Aves fork)
     implementation(libs.androidx.exifinterface)
 
+    // --- In-app video playback for the full-screen viewer (issue #50):
+    // ExoPlayer + the views-based PlayerView surface. Local content URIs
+    // only (ADR-0006); media3 declares no INTERNET permission, so the
+    // merged-manifest privacy gate (ADR-0014) is unaffected.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+
     // --- Theme resource (Theme.Material3.DayNight.NoActionBar for the manifest)
     implementation(libs.material)
 }

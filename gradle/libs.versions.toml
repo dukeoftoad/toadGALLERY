@@ -15,6 +15,8 @@ material = "1.13.0"
 compose-bom = "2024.12.01"
 # Compose-first image loader (per compose-migration.md)
 coil-compose = "2.7.0"
+# In-app video playback for the viewer (issue #50; roadmap L608 sanctions media3)
+media3 = "1.11.1"
 # Testing (issue #20 privacy suite)
 junit = "4.13.2"
 androidx-test-runner = "1.6.2"
@@ -52,6 +54,10 @@ compose-material-icons-core = { module = "androidx.compose.material:material-ico
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
 # Video frame decoding for thumbnails (issue #33)
 coil-video = { module = "io.coil-kt:coil-video", version.ref = "coil-compose" }
+# In-app video playback for the full-screen viewer (issue #50): local content
+# URIs only --- media3 declares no INTERNET permission, the ADR-0014 gate holds
+media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
+media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
 # NOTE: org.fossify:commons removed per ADR-0008 (no upstream code ports).
 # Testing (issue #20 privacy suite) --- compose test artifacts via compose-bom
 junit = { module = "junit:junit", version.ref = "junit" }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -43,6 +44,16 @@ import java.net.SocketException
  * empty timeline, which still asserts `state_photos_empty_title`. The
  * `GrantPermissionRule` below pre-grants the Phase 3 media permission set so
  * the cold-launch assertion sees the granted path, not the permission rationale.
+ *
+ * State test-tags (issue #38, finding 7): every user-visible Photos state
+ * is wrapped with a stable `Modifier.testTag` in `PhotosScreen` ---
+ * `photos_state_permission` / `photos_state_error` / `photos_state_empty` /
+ * `photos_state_grid` --- so "reached the state" is provable independently
+ * of the user-visible copy. The tab walk keeps its text-based `waitUntil`s
+ * (behavioral proof: the copy IS what the user reads) and layers a
+ * tag-based wait on top (state proof): the granted path must surface
+ * `photos_state_empty` on this media-less image (or `photos_state_grid`
+ * whenever the image grows media).
  */
 @RunWith(AndroidJUnit4::class)
 class PrivacyEgressTest {
@@ -121,6 +132,15 @@ class PrivacyEgressTest {
         // exceed a 10 s budget (PR #36 CI runs #13/#15) while byte-identical
         // walked-path code passed elsewhere (PR #37 runs #14/#16): budget
         // variance, not a code regression. Hence a 30 s budget here.
+        // State proof first, decoupled from copy (issue #38, finding 7): the
+        // granted path must reach a Ready sub-state --- the empty-library
+        // state on this media-less image, or the grid once media exists.
+        composeRule.waitUntil(30_000) {
+            composeRule.onAllNodesWithTag("photos_state_empty").fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithTag("photos_state_grid").fetchSemanticsNodes().isNotEmpty()
+        }
+        // Behavioral proof on top: the empty state must show the user-facing
+        // copy, not just any composed node under the tag.
         composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText(activity.getString(R.string.state_photos_empty_title))
                 .fetchSemanticsNodes().isNotEmpty()
@@ -134,9 +154,18 @@ class PrivacyEgressTest {
         composeRule.onNodeWithText(activity.getString(R.string.nav_photos)).performClick()
         composeRule.waitForIdle()
 
-        // Returning to Photos re-enters the same refresh chain (re-entry
-        // republishes Loading -> Ready with a fresh Pager generation); wait
-        // again with the same cold-start budget as above.
+        // Returning to Photos re-collects the SAME stream: since the issue
+        // #38 idempotence fix, `onPermissionGranted()` early-returns while
+        // the state is Ready, so re-entry no longer republishes Loading ->
+        // Ready with a fresh Pager generation --- the `cachedIn` flow is
+        // re-collected and the settled empty state returns from cache. The
+        // same state-then-copy waits stay as the regression tripwire (the tag
+        // wait also tolerates a hypothetical media-seeded image, which would
+        // surface the grid instead of the empty state).
+        composeRule.waitUntil(30_000) {
+            composeRule.onAllNodesWithTag("photos_state_empty").fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithTag("photos_state_grid").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText(activity.getString(R.string.state_photos_empty_title))
                 .fetchSemanticsNodes().isNotEmpty()

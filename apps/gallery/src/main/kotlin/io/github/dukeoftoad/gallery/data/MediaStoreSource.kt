@@ -3,9 +3,12 @@ package io.github.dukeoftoad.gallery.data
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
+import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 
@@ -23,7 +26,9 @@ import androidx.annotation.RequiresApi
  *
  * Privacy (ADR-0014 / ADR-0010): this class only reads local content URIs.
  * It does not, and cannot, perform any network access --- the app holds no
- * INTERNET permission and Coil is wired without its network artifact.
+ * INTERNET permission, so the OS refuses every socket the process could
+ * open (kernel-enforced; see `PrivacyEgressTest`). Nothing here depends on
+ * image-loader packaging for that guarantee.
  */
 class MediaStoreSource(private val context: Context) {
 
@@ -223,14 +228,17 @@ class MediaStoreSource(private val context: Context) {
         try { getColumnIndexOrThrow(name) } catch (_: IllegalArgumentException) { -1 }
 
     // ------------------------------------------------------------------
-    // Paging 3 (issue #28): windowed timeline queries.
+    // Paging 3 (issue #28): windowed timeline queries; issue #38 adds the
+    // timeline change observer that drives generational invalidation.
     //
     // Additive, self-contained region --- the snapshot methods above are
     // untouched. This is the data half of the incremental timeline:
     // [WindowPagingSource] calls [queryTimelineWindow] per page on API 30+;
     // older devices keep the full [queryTimeline] snapshot behind the same
-    // pager. The row mapping below is kept small and inline on purpose (see
-    // its KDoc for the grid-UX extension plan).
+    // pager. The observer pair at the bottom hands MediaStore change
+    // notifications to the ViewModel, which debounces them into
+    // `PagingSource.invalidate()` calls. The row mapping below is kept small
+    // and inline on purpose (see its KDoc for the grid-UX extension plan).
     // ------------------------------------------------------------------
 
     /**
@@ -380,6 +388,70 @@ class MediaStoreSource(private val context: Context) {
                 }
             }
         return out
+    }
+
+    /**
+     * Registers an observer for timeline changes (issue #38, finding 1) and
+     * returns it so the owner can unregister later. API 30+ only, like the
+     * windowed protocol it serves; below 30 the memoized snapshot cannot
+     * drift mid-generation, so those devices keep the documented snapshot
+     * behavior (see the owner, `PhotosViewModel`, for the gating).
+     *
+     * ## Why the unified Files collection + `notifyForDescendants = true`
+     * MediaProvider reports row writes on the per-type collection URIs
+     * (`images/media`, `video/media`) --- descendants of the unified
+     * `MediaStore.Files` URI that [queryTimelineWindow] reads. Observing
+     * the Files root WITHOUT descendant notification would miss nearly
+     * every real write (camera shot, download, delete), so the observer is
+     * registered for the whole subtree.
+     *
+     * ## Why the callback must invalidate, never append
+     * LIMIT/OFFSET windows are positional: after any insert/delete above
+     * the current position, the offsets of later windows no longer tile the
+     * new dataset, so an appended "next window" could re-emit an item the
+     * grid already shows --- a duplicate `uri.toString()` LazyGrid key,
+     * which foundation lazy grids throw on. The callback exists to drive
+     * `PagingSource.invalidate()`: invalidation ends the generation and the
+     * Pager builds a fresh source whose refresh re-anchors via
+     * `getRefreshKey`, so every window of the new generation is computed
+     * against one consistent dataset. (The owner debounces the
+     * notifications because observers fire per changed row during
+     * device-wide media scans.)
+     *
+     * @param onChange invoked on the main looper (the observer's Handler)
+     *  whenever MediaStore changes; must be cheap and non-blocking.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    fun registerTimelineObserver(onChange: () -> Unit): ContentObserver {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                // `selfChange` is always false for observers of another
+                // process's notifications; ignore it and always signal.
+                onChange()
+            }
+        }
+        context.contentResolver.registerContentObserver(
+            // The same unified collection [queryTimelineWindow] reads
+            // (`content://media/external/files`), so the observer sees every
+            // write the windows could drift against. MediaStore.Files is
+            // API 29+, hence the R contract above.
+            MediaStore.Files.getContentUri("external"),
+            // notifyForDescendants: see the KDoc --- per-type write URIs are
+            // descendants of the Files root this timeline queries.
+            true,
+            observer,
+        )
+        return observer
+    }
+
+    /**
+     * Unregisters an observer previously returned by
+     * [registerTimelineObserver]. Safe to call from teardown paths
+     * (`ViewModel.onCleared`); re-unregistering an already-released
+     * observer is a framework no-op.
+     */
+    fun unregisterTimelineObserver(observer: ContentObserver) {
+        context.contentResolver.unregisterContentObserver(observer)
     }
 }
 

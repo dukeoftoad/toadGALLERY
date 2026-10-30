@@ -13,16 +13,15 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,12 +32,22 @@ import coil.compose.AsyncImage
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.ui.StateScreen
+import io.github.dukeoftoad.gallery.ui.media.LoadingState
+import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
 import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
 
 /**
  * Albums tab (Phase 3, issue #29).
  *
- * Same three-state model as Photos (Loading / PermissionNeeded / Ready).
+ * Same three-state model as Photos (Loading / PermissionNeeded / Ready),
+ * rendered through the shared screen-state components (issue #13):
+ *  - Loading -> [LoadingState] tagged `albums_state_loading`
+ *  - PermissionNeeded -> [MediaPermissionState] (shared denial tag
+ *    `state_permission_denied`, Settings deep-link built in)
+ *  - Ready + empty -> the frozen `StateScreen` empty layout, wrapped in a Box
+ *    tagged `albums_state_empty` (StateScreen itself is frozen and carries no
+ *    tag parameter; the wrapper supplies the test surface, issue #38.7)
+ *
  * `Ready` renders a two-column grid of folder cards: cover thumbnail (newest
  * item in the bucket, URI-first per ADR-0006), folder name, item count.
  * Tapping a card navigates to the album detail view (`AlbumDetailScreen`),
@@ -62,21 +71,23 @@ fun AlbumsScreen(
     }
 
     when (val s = state) {
-        is AlbumsState.Loading -> Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
-        }
-        is AlbumsState.PermissionNeeded ->
-            io.github.dukeoftoad.gallery.ui.media.MediaPermissionState(onGrant = requester::launch)
+        is AlbumsState.Loading -> LoadingState(tag = "albums_state_loading")
+        is AlbumsState.PermissionNeeded -> MediaPermissionState(onGrant = requester::launch)
         is AlbumsState.Ready -> {
             if (s.albums.isEmpty()) {
-                StateScreen(
-                    iconRes = R.drawable.ic_nav_albums,
-                    titleRes = R.string.state_albums_empty_title,
-                    bodyRes = R.string.state_albums_empty_body,
-                )
+                // StateScreen is frozen without a tag parameter, so the stable
+                // per-screen tag rides on a wrapper Box (issue #38.7).
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("albums_state_empty"),
+                ) {
+                    StateScreen(
+                        iconRes = R.drawable.ic_nav_albums,
+                        titleRes = R.string.state_albums_empty_title,
+                        bodyRes = R.string.state_albums_empty_body,
+                    )
+                }
             } else {
                 AlbumGrid(albums = s.albums, onOpenAlbum = onOpenAlbum)
             }

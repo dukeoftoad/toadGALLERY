@@ -70,4 +70,56 @@
         <item quantity="one">%1$d photo picked</item>
         <item quantity="other">%1$d photos picked</item>
     </plurals>
+
+    <!-- issue #30 -->
+    <!-- File operations (docs/architecture/file-ops.md): selection-mode app bar,
+         rename/delete/move dialogs, batch progress, undo snackbars. Only ever
+         shown on Android 10+ (API 29); below that the app is read-only and
+         the whole block stays out of practice there by design. -->
+    <plurals name="file_ops_selection_count">
+        <item quantity="one">%1$d item selected</item>
+        <item quantity="other">%1$d items selected</item>
+    </plurals>
+    <string name="cd_file_ops_exit_selection">Exit selection</string>
+    <string name="file_ops_action_rename">Rename</string>
+    <string name="file_ops_action_copy">Copy</string>
+    <string name="file_ops_action_move">Move</string>
+    <string name="file_ops_action_delete">Delete</string>
+    <string name="file_ops_action_cancel">Cancel</string>
+    <string name="file_ops_rename_title">Rename</string>
+    <string name="file_ops_rename_label">Name</string>
+    <string name="file_ops_rename_invalid">Enter a name that isn\'t empty and has no / or \\</string>
+    <plurals name="file_ops_delete_confirm_title">
+        <item quantity="one">Delete this item permanently?</item>
+        <item quantity="other">Delete these %1$d items permanently?</item>
+    </plurals>
+    <string name="file_ops_delete_confirm_body">Deletion is permanent. toadGALLERY has no recycle bin yet — this can\'t be undone.</string>
+    <string name="file_ops_delete_confirm_yes">Delete</string>
+    <string name="file_ops_move_title">Move to album</string>
+    <string name="file_ops_progress_rename">Renaming %1$d of %2$d…</string>
+    <string name="file_ops_progress_copy">Copying %1$d of %2$d…</string>
+    <string name="file_ops_progress_move">Moving %1$d of %2$d…</string>
+    <string name="file_ops_progress_delete">Deleting %1$d of %2$d…</string>
+    <string name="file_ops_done_rename">Renamed</string>
+    <plurals name="file_ops_done_copy">
+        <item quantity="one">Copied %1$d item</item>
+        <item quantity="other">Copied %1$d items</item>
+    </plurals>
+    <plurals name="file_ops_done_move">
+        <item quantity="one">Moved %1$d item</item>
+        <item quantity="other">Moved %1$d items</item>
+    </plurals>
+    <plurals name="file_ops_done_delete">
+        <item quantity="one">Deleted %1$d item</item>
+        <item quantity="other">Deleted %1$d items</item>
+    </plurals>
+    <string name="file_ops_cancelled_batch">Stopped — %1$d of %2$d items processed</string>
+    <plurals name="file_ops_failed">
+        <item quantity="one">%1$d item couldn\'t be changed</item>
+        <item quantity="other">%1$d items couldn\'t be changed</item>
+    </plurals>
+    <string name="file_ops_move_partial">Some items were copied but couldn\'t be removed from their original album.</string>
+    <string name="file_ops_consent_denied">Permission was needed and declined — nothing more was changed.</string>
+    <string name="file_ops_undo_action">Undo</string>
+    <string name="file_ops_undo_failed">Couldn\'t undo — your items were left as they are now.</string>
 </resources>

@@ -4,7 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentValues
 import android.net.Uri
 import android.os.Build
-import android.os.RecoverableSecurityException
+import android.app.RecoverableSecurityException
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import java.io.IOException

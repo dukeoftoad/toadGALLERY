@@ -20,10 +20,11 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        // 0.3.3-alpha: staggered grid + indicators (issues #33, #34), riding on the
-        // Paging 3 slice that landed first as 0.3.2-alpha / versionCode 6 (issue #28)
-        versionCode = 7
-        versionName = "0.3.3-alpha"
+        // 0.4.0-alpha: file operations (issue #30) --- rename/copy/move/delete
+        // with consent recovery, undo, batch progress --- riding on the grid-UX
+        // slice 0.3.3-alpha / versionCode 7 (issues #33/#34, on top of #28's paging)
+        versionCode = 8
+        versionName = "0.4.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 

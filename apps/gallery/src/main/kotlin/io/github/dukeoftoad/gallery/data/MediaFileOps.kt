@@ -326,7 +326,7 @@ class MediaFileOps(private val resolver: ContentResolver) {
     }
 
     // ------------------------------------------------------------------
-    // Consent (recovery) request builders --- API 29+, IntentSender out
+    // Consent (recovery) request builders --- API 30+ (R), IntentSender out
     // ------------------------------------------------------------------
 
     /**
@@ -334,7 +334,13 @@ class MediaFileOps(private val resolver: ContentResolver) {
      * (`MediaStore.createWriteRequest`); the UI launches the returned
      * [android.content.IntentSender] via
      * `StartIntentSenderForResult` and retries the op on `RESULT_OK`.
+     *
+     * R+ per lint: the `createWriteRequest` overload resolved in the
+     * SDK-36 jar reports API 30. The class is Q; the ViewModel guards the
+     * reachable call sites (see `FileOpsViewModel`, `@Suppress("NewApi")`
+     * on the fileOps invariant).
      */
+    @RequiresApi(Build.VERSION_CODES.R)
     fun createWriteConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
         MediaStore.createWriteRequest(resolver, uris).intentSender
 
@@ -344,6 +350,7 @@ class MediaFileOps(private val resolver: ContentResolver) {
      * for the launch/retry flow. One request per batch, one dialog per
      * request --- never one dialog per item.
      */
+    @RequiresApi(Build.VERSION_CODES.R)
     fun createDeleteConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
         MediaStore.createDeleteRequest(resolver, uris).intentSender
 

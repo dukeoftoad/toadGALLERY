@@ -213,10 +213,15 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
      * extension to restore (see `MediaFileOps.rename`).
      */
     fun requestRename(newName: String) {
+        // fileOps is non-null only on Q+ (see the fileOps property) --- every
+        // @Suppress("NewApi") in this class rests on that runtime invariant,
+        // which lint cannot follow through the nullable-field elvis pattern.
+        @Suppress("NewApi")
         val ops = fileOps ?: return
         val selection = _state.value as? FileOpsUiState.Selection ?: return
         val item = selection.items.singleOrNull() ?: return
         viewModelScope.launch {
+            @Suppress("NewApi")
             val oldName = ops.displayNameOf(item.uri)
             if (oldName == null) {
                 _events.tryEmit(FileOpsEvent.ShowSnackbar(
@@ -229,29 +234,36 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
             // another op from the same selection in the meantime.
             if (_state.value !is FileOpsUiState.Selection) return@launch
             renameRequest = RenameRequest(item = item, newName = newName, oldName = oldName)
+            @Suppress("NewApi")
             startBatch(FileOpKind.RENAME, listOf(item)) { ops.rename(it.uri, newName) }
         }
     }
 
     /** Duplicates every selected item in place (no dialog needed). */
     fun requestCopy() {
+        @Suppress("NewApi")
         val ops = fileOps ?: return
         val selection = _state.value as? FileOpsUiState.Selection ?: return
+        @Suppress("NewApi")
         startBatch(FileOpKind.COPY, selection.items) { ops.copy(it, targetAlbum = null) }
     }
 
     /** Moves every selected item into [target] (album picker choice). */
     fun requestMove(target: Album) {
+        @Suppress("NewApi")
         val ops = fileOps ?: return
         val selection = _state.value as? FileOpsUiState.Selection ?: return
         val targetRef = AlbumRef(bucketId = target.bucketId, bucketName = target.bucketName)
+        @Suppress("NewApi")
         startBatch(FileOpKind.MOVE, selection.items) { ops.move(it.uri, targetRef) }
     }
 
     /** Permanently deletes the selection (after the confirm dialog). */
     fun requestDelete() {
+        @Suppress("NewApi")
         val ops = fileOps ?: return
         val selection = _state.value as? FileOpsUiState.Selection ?: return
+        @Suppress("NewApi")
         startBatch(FileOpKind.DELETE, selection.items) { ops.delete(it) }
     }
 
@@ -267,6 +279,7 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
      * "permission declined" line.
      */
     fun onConsentResult(granted: Boolean) {
+        @Suppress("NewApi")
         val ops = fileOps ?: return
         val pending = pendingConsent ?: return
         pendingConsent = null
@@ -295,17 +308,18 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
         when (pending.kind) {
             FileOpKind.RENAME -> pending.rename?.let { request ->
                 renameRequest = request
+                @Suppress("NewApi")
                 startBatch(FileOpKind.RENAME, listOf(request.item), retry = true) {
                     ops.rename(it.uri, request.newName)
                 }
             }
-            FileOpKind.DELETE -> startBatch(
+            FileOpKind.DELETE -> @Suppress("NewApi") startBatch(
                 kind = FileOpKind.DELETE,
                 items = pending.deleteRetry,
                 retry = true,
                 alreadySucceeded = pending.deleteAlreadyDone,
             ) { ops.delete(it.uri) }
-            FileOpKind.MOVE -> startBatch(
+            FileOpKind.MOVE -> @Suppress("NewApi") startBatch(
                 kind = FileOpKind.MOVE,
                 items = pending.moveRetry.map { it.original },
                 retry = true,
@@ -323,6 +337,7 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
      * instead of pretending nothing happened.
      */
     fun performUndo(payload: UndoPayload?) {
+        @Suppress("NewApi")
         val ops = fileOps ?: return
         if (payload == null) return
         viewModelScope.launch {
@@ -331,15 +346,16 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                 is UndoPayload.Rename -> {
                     // The old name's typed-extension strip + original
                     // extension restore make this the exact inverse rename.
+                    @Suppress("NewApi")
                     if (ops.rename(payload.item.uri, payload.oldName).outcome != FileOpOutcome.Success) {
                         failures++
                     }
                 }
-                is UndoPayload.Copies -> ops.runBatch(
+                is UndoPayload.Copies -> @Suppress("NewApi") ops.runBatch(
                     items = payload.createdUris,
                     onResult = { _, result -> if (result.outcome != FileOpOutcome.Success) failures++ },
                 ) { uri -> ops.delete(uri) } // app-owned: no consent needed
-                is UndoPayload.Moves -> ops.runBatch(
+                is UndoPayload.Moves -> @Suppress("NewApi") ops.runBatch(
                     items = payload.entries,
                     onResult = { _, result -> if (result.outcome != FileOpOutcome.Success) failures++ },
                 ) { entry -> ops.move(entry.createdUri, entry.sourceAlbum) }
@@ -378,6 +394,7 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = FileOpsUiState.Running(kind = kind, done = 0, total = items.size)
         runJob = viewModelScope.launch {
             try {
+                @Suppress("NewApi")
                 ops.runBatch(
                     items = items,
                     onResult = { _, result -> results += result },
@@ -477,6 +494,7 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                             pendingConsent = PendingConsent(kind = FileOpKind.RENAME, rename = req)
                             _events.tryEmit(
                                 FileOpsEvent.RequestConsent(
+                                    @Suppress("NewApi")
                                     ops.createWriteConsentRequest(listOf(req.item.uri)),
                                 ),
                             )
@@ -538,6 +556,7 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                     )
                     _events.tryEmit(
                         FileOpsEvent.RequestConsent(
+                            @Suppress("NewApi")
                             ops.createDeleteConsentRequest(consentAnchors.map { it.original.uri }),
                         ),
                     )
@@ -573,6 +592,7 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                     )
                     _events.tryEmit(
                         FileOpsEvent.RequestConsent(
+                            @Suppress("NewApi")
                             ops.createDeleteConsentRequest(consentItems.map { it.uri }),
                         ),
                     )

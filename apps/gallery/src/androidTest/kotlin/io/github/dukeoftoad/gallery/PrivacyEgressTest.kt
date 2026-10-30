@@ -112,9 +112,16 @@ class PrivacyEgressTest {
 
         // Cold launch lands on the Photos empty state (media access pre-granted
         // above; the emulator image has no photos so the timeline is empty).
-        // The granted path is async: permission callback -> ViewModel IO query ->
-        // Ready state -> recomposition. waitUntil bridges that async chain.
-        composeRule.waitUntil(10_000) {
+        // The granted path is async and, since the Paging 3 slice (issue #28),
+        // spans the full initial refresh chain: permission callback ->
+        // ViewModel Ready(pager) -> collectAsLazyPagingItems -> initial Paging
+        // refresh -> window-0 MediaStore query -> empty terminal page ->
+        // load-state settle -> empty state composes. On a cold CI emulator
+        // (KVM, freshly-booted, cold MediaProvider) that chain was observed to
+        // exceed a 10 s budget (PR #36 CI runs #13/#15) while byte-identical
+        // walked-path code passed elsewhere (PR #37 runs #14/#16): budget
+        // variance, not a code regression. Hence a 30 s budget here.
+        composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText(activity.getString(R.string.state_photos_empty_title))
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -127,8 +134,10 @@ class PrivacyEgressTest {
         composeRule.onNodeWithText(activity.getString(R.string.nav_photos)).performClick()
         composeRule.waitForIdle()
 
-        // Returning to Photos re-enters the same async chain; wait again.
-        composeRule.waitUntil(10_000) {
+        // Returning to Photos re-enters the same refresh chain (re-entry
+        // republishes Loading -> Ready with a fresh Pager generation); wait
+        // again with the same cold-start budget as above.
+        composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText(activity.getString(R.string.state_photos_empty_title))
                 .fetchSemanticsNodes().isNotEmpty()
         }

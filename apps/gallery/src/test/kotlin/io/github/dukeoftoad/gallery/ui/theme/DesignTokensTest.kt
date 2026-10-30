@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,11 +71,14 @@ class DesignTokensTest {
 
     @Test
     fun `material shapes are wired with the token radii`() {
-        assertEquals(ToadShapes.extraSmall, ToadShapes.material.extraSmall.topStart.size)
-        assertEquals(ToadShapes.small, ToadShapes.material.small.topStart.size)
-        assertEquals(ToadShapes.medium, ToadShapes.material.medium.topStart.size)
-        assertEquals(ToadShapes.large, ToadShapes.material.large.topStart.size)
-        assertEquals(ToadShapes.extraLarge, ToadShapes.material.extraLarge.topStart.size)
+        // Compare against independently-built RoundedCornerShape corner
+        // sizes: proves each material3 slot got the token radius without
+        // reaching into CornerSize internals.
+        assertEquals(RoundedCornerShape(ToadShapes.extraSmall).topStart, ToadShapes.material.extraSmall.topStart)
+        assertEquals(RoundedCornerShape(ToadShapes.small).topStart, ToadShapes.material.small.topStart)
+        assertEquals(RoundedCornerShape(ToadShapes.medium).topStart, ToadShapes.material.medium.topStart)
+        assertEquals(RoundedCornerShape(ToadShapes.large).topStart, ToadShapes.material.large.topStart)
+        assertEquals(RoundedCornerShape(ToadShapes.extraLarge).topStart, ToadShapes.material.extraLarge.topStart)
     }
 
     @Test

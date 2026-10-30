@@ -258,8 +258,8 @@ const val COPY_NAME_MAX_TRIES = 50
  */
 fun copyDisplayName(
     sourceDisplayName: String,
-    taken: (String) -> Boolean,
     maxTries: Int = COPY_NAME_MAX_TRIES,
+    taken: (String) -> Boolean,
 ): String {
     val extension = extensionOf(sourceDisplayName)
     val stem = baseNameOf(sourceDisplayName).ifEmpty { "copy" } + " (copy)"

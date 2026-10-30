@@ -623,12 +623,10 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    private companion object {
-        /** One event per batch phase; 16 coalesces bursts without blocking tryEmit. */
-        const val EVENT_BUFFER_CAPACITY = 16
-    }
-
     companion object {
+        /** One event per batch phase; 16 coalesces bursts without blocking tryEmit. */
+        private const val EVENT_BUFFER_CAPACITY = 16
+
         /**
          * Batches over [PROGRESS_DIALOG_THRESHOLD] items show the cancellable
          * progress dialog ("Moving 3 of 12…"); smaller batches (and the

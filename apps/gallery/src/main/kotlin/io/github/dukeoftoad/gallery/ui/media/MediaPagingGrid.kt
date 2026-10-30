@@ -1,11 +1,26 @@
 package io.github.dukeoftoad.gallery.ui.media
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
@@ -13,7 +28,7 @@ import io.github.dukeoftoad.gallery.data.MediaItem
 
 /**
  * The paged staggered media grid for the Photos timeline (Phase 3, issues
- * #28 + #34; append-state footer since #38).
+ * #28 + #34; append-state footer since #38; selection mode since #30).
  *
  * Same visual contract as [MediaGrid] --- aspect-aware staggered cells via
  * [MediaThumb] (which also carries the video-duration overlay and the GIF
@@ -34,6 +49,18 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  * all once the append settles (the item stays composed but empty --- the
  * cheapest correct behavior for a conditional footer).
  *
+ * ## Selection mode (issue #30)
+ * The optional selection parameters add the Photos-tab multi-select UI
+ * (long-press enters, tap toggles) WITHOUT touching [MediaThumb]: cells in
+ * selection mode wrap the thumb in a `combinedClickable` box that overlays a
+ * checkmark badge (`file_ops_cell_check`, present on every cell so the mode
+ * is visible before anything is picked) and a primary-color scrim on
+ * selected cells. All defaults keep the non-selecting call sites rendering
+ * exactly what they rendered before this slice; selection semantics
+ * (state, app bar, undo) are owned by `PhotosScreen`/`FileOpsViewModel`
+ * outside this shared grid. Selection keys are `uri.toString()` values,
+ * matching the grid's LazyGrid keys one-to-one.
+ *
  * Privacy: mirrors [MediaGrid] --- every thumbnail decodes from a local
  * content URI. Coil 2.x ships its HTTP fetcher inside the default
  * `coil-compose` registry (there is no separate network artifact to exclude
@@ -48,6 +75,10 @@ fun MediaPagingGrid(
     items: LazyPagingItems<MediaItem>,
     modifier: Modifier = Modifier,
     columns: Int = 3,
+    selectionActive: Boolean = false,
+    selectedKeys: Set<String> = emptySet(),
+    onItemTap: ((MediaItem) -> Unit)? = null,
+    onItemLongPress: ((MediaItem) -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
 ) {
     LazyVerticalStaggeredGrid(
@@ -60,7 +91,24 @@ fun MediaPagingGrid(
             count = items.itemCount,
             key = items.itemKey { it.uri.toString() },
         ) { index ->
-            items[index]?.let { MediaThumb(item = it) }
+            items[index]?.let { item ->
+                if (onItemTap != null && onItemLongPress != null) {
+                    // Interactive cell: long-press enters selection even in
+                    // the plain timeline (the ViewModel no-ops below API 29,
+                    // where file ops are hidden); the overlay chrome appears
+                    // only while a selection is active.
+                    SelectableMediaCell(
+                        item = item,
+                        selected = item.uri.toString() in selectedKeys,
+                        overlayVisible = selectionActive,
+                        onItemTap = onItemTap,
+                        onItemLongPress = onItemLongPress,
+                    )
+                } else {
+                    // Byte-identical to the pre-#30 render (and to MediaGrid).
+                    MediaThumb(item = item)
+                }
+            }
         }
         // Append-state footer slot (issue #38): the caller decides what (if
         // anything) each append LoadState renders; a null footer keeps the
@@ -68,5 +116,84 @@ fun MediaPagingGrid(
         footer?.let { footerContent ->
             item(key = "paging_footer") { footerContent() }
         }
+    }
+}
+
+/**
+ * One interactive grid cell (issue #30): [MediaThumb] wrapped in
+ * tap/long-press handling plus the selection chrome, kept OUT of
+ * [MediaThumb] so the shared thumbnail composable stays selection-free
+ * (other grids reuse it unchanged).
+ *
+ * - long-press enters selection (or is a no-op while already selecting or
+ *   below API 29 --- the ViewModel decides);
+ * - tap toggles membership while selecting;
+ * - the check badge shows on EVERY cell while selection is active so the
+ *   mode is self-evident; picked cells add a primary-color scrim
+ *   (Mi-Gallery-style visual anchoring).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SelectableMediaCell(
+    item: MediaItem,
+    selected: Boolean,
+    overlayVisible: Boolean,
+    onItemTap: (MediaItem) -> Unit,
+    onItemLongPress: (MediaItem) -> Unit,
+) {
+    Box(
+        modifier = Modifier.combinedClickable(
+            onClick = { onItemTap(item) },
+            onLongClick = { onItemLongPress(item) },
+        ),
+    ) {
+        MediaThumb(item = item)
+        if (overlayVisible) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
+                )
+            }
+            SelectionCheck(
+                selected = selected,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
+    }
+}
+
+/**
+ * The scrim-chip checkmark badge of the selection overlay (issue #30):
+ * same scrim idiom as [MediaThumb]'s badges (dark rounded chip), with the
+ * check in the theme's primary color when the cell is picked and dimmed
+ * white otherwise. Decorative by design --- the selection count in the app
+ * bar carries the state for accessibility.
+ */
+@Composable
+private fun SelectionCheck(
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .padding(4.dp)
+            .testTag("file_ops_cell_check")
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.55f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null, // decorative; the app-bar count is the state
+            tint = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                Color.White.copy(alpha = 0.7f)
+            },
+            modifier = Modifier.size(18.dp),
+        )
     }
 }

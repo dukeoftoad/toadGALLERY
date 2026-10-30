@@ -4,10 +4,12 @@
 choice. Decisions are never edited in place after acceptance — a superseding ADR is added.
 Statuses: `PROPOSED` (awaiting phase evidence) → `ACCEPTED` (evidence supports it) → `SUPERSEDED`.
 
-**Latest revision:** 2026-10-29 — ADR-0008 supersedes ADR-0001 (features/UI/UX/designs only,
-no code ports, no `org.fossify:commons`); ADR-0009 supersedes ADR-0005 (Jetpack Compose, not
-View-based); ADR-0010/0011/0012 introduced (on-device AI, non-destructive pipeline, video
-editor); ADR-0013 introduced (GitHub Actions as the build environment).
+**Latest revision:** 2026-10-30 — ADR-0015 introduced (Paging 3 for the incremental media
+timeline, issue #28). Previously (2026-10-29): ADR-0008 supersedes ADR-0001 (features/UI/UX/
+designs only, no code ports, no `org.fossify:commons`); ADR-0009 supersedes ADR-0005 (Jetpack
+Compose, not View-based); ADR-0010/0011/0012 introduced (on-device AI, non-destructive
+pipeline, video editor); ADR-0013 introduced (GitHub Actions as the build environment);
+ADR-0014 introduced (offline-by-construction privacy build gates).
 
 ---
 
@@ -599,6 +601,98 @@ not appear in the INTERNET allowlist protocol, and the gate is unaffected.
 
 ---
 
+## ADR-0015 — Paging 3 for the incremental media timeline (issue #28)
+
+**Status:** ACCEPTED · **Date:** 2026-10-30 · **Application phase:** 3 (Photos timeline;
+staggered-grid unification follows at grid-UX integration).
+
+**Context.** The Phase 3 Photos slice (issue #25) loads the timeline with a single
+MediaStore cursor walk: `queryTimeline()` materializes *every* image and video row
+into a `List<MediaItem>` before the first thumbnail can render. On a 10k+ item
+library that means (a) first paint waits for the full cursor walk, and (b) the
+entire row set (plus every `Uri` allocation) sits in memory for the whole session.
+Issue #25 explicitly deferred this ("Paging 3 deferred to a later Phase 3 slice");
+issue #28 is that slice. A gallery is a canonical incremental list: newest-first,
+locally anchored, with a known stable total order available from the provider —
+exactly the shape Paging 3 serves.
+
+**Decision.**
+
+1. **Paging 3, `paging-runtime` + `paging-compose` 3.3.2.** The `Pager` flow feeds
+   `collectAsLazyPagingItems`; the grid renders `itemCount` slots and appends more
+   windows as the user scrolls. The screen keeps the three-state shell from
+   issue #25 (`Loading` / `PermissionNeeded` / `Ready`) — permission decisions
+   still drive the shell — and layers the paging `LoadState` *inside* `Ready`:
+   refresh-loading (spinner), refresh-error (error copy + `retry()`), empty
+   terminal page (the unchanged empty state), else the grid. Empty vs error vs
+   clean is therefore a load-state concern, not a shell concern.
+
+2. **Generic `WindowPagingSource<T>` (`data/WindowPagingSource.kt`).** A positional
+   source over *window* callbacks (`suspend (offset, limit) -> List<T>`): keys are
+   offsets, a short window signals end-of-list, failures surface as
+   `LoadResult.Error` (retryable), and `getRefreshKey` re-anchors one page above
+   the viewport. It carries no Android types, so the window math is unit-tested on
+   the JVM (`WindowPagingSourceTest`, 8 tests) without Robolectric — genericity is
+   what keeps the test dependency-free, not an aesthetic choice.
+
+3. **API 30+ — native MediaStore windows.** `queryTimelineWindow(offset, limit)`
+   issues ONE Bundle-argument query per page over the unified `MediaStore.Files`
+   collection (images + videos in one table under scoped storage), filtered to
+   image/video `media_type`, with `QUERY_ARG_LIMIT`/`QUERY_ARG_OFFSET` and the raw
+   `QUERY_ARG_SQL_SELECTION`/`QUERY_ARG_SQL_SORT_ORDER` bundle keys. The sort is
+   `date_added DESC, _id DESC` — the `_id` tiebreak is REQUIRED: rows sharing one
+   `date_added` second would otherwise be free to reorder across window
+   boundaries, silently skipping or duplicating items between pages.
+
+4. **Below API 30 — memoized snapshot fallback.** The Bundle query protocol is
+   only guaranteed from R; pre-30 devices keep `queryTimeline()` (the issue #25
+   path): one full snapshot per `PagingSource` generation, memoized on first load,
+   sliced in-memory (`drop`/`take`) with the identical window contract. Same
+   shell, same window math, old memory profile.
+
+5. **`pageSize == initialLoadSize == 60`, placeholders disabled.** `initialLoadSize`
+   defaults to `pageSize * 3`; a larger first window would make the second window's
+   `prevKey` point into the middle of the first, so a prepend (fast upward scroll)
+   would re-emit rows the grid already shows. Equal sizes keep windows aligned.
+   Placeholders are off because the windowed protocol has no cheap total count
+   (it would cost a `COUNT(*)` per page) and nothing in the UI consumes
+   placeholder slots.
+
+**Consequences.**
+
+- Pro: First paint waits for one 60-row window, not the whole library; scroll
+  appends further windows incrementally, off the main thread.
+- Pro: Two new androidx artifacts (`paging-runtime`, `paging-compose`) are pure-JVM
+  libraries with no network surface; the manifest is untouched and the ADR-0014
+  INTERNET gate stays green (verified: `assembleDebug` privacy gate).
+- Pro: The generic source keeps all paging math in plain JVM tests; no new test
+  infrastructure (no Robolectric) was added for it.
+- Con: Pre-30 devices keep the old startup/memory profile (full snapshot). This
+  is bounded by the platform API, not by a code path we can fix; revisit only if
+  a lower-cost window mechanism ever appears pre-R.
+- Con: Two grid composables now exist (`MediaGrid` for snapshot paths — album
+  detail, albums covers — and `MediaPagingGrid` for the paged timeline), each with
+  its own thumbnail cell. The parallel grid-UX slice introduces the shared
+  aspect-aware `MediaThumb`; a follow-up integration swaps it into both grids
+  (and unifies the staggered layout, issue #34) — `PagingThumb` is isolated in a
+  private composable precisely so that swap stays mechanical.
+- Deliberately NOT included: `RemoteMediator` and `PagingSource.Key` jumping —
+  both exist for network/page-token sources; offline MediaStore windows have no
+  pages to mediate and the viewport-anchor re-anchoring already covers
+  invalidation. Timeline auto-refresh on MediaStore change notifications is a
+  later Phase 3 slice (invalidate + re-anchor is already wired).
+
+**Open questions.**
+
+- Is 60 the right window size for scroll jank on low-end devices (window queries
+  are provider-side LIMIT/OFFSET, so cost per window is roughly constant)?
+  Revisit with the Phase 10 performance pass once the staggered grid lands.
+- Pre-30 snapshot re-query on invalidation is a full re-walk; acceptable while
+  those devices are a shrinking minority, but note it when the vault/recycle
+  bin slices start invalidating deliberately.
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -617,3 +711,4 @@ not appear in the INTERNET allowlist protocol, and the gate is unaffected.
 | 0012 | Video editor scope and pipeline reuse | ACCEPTED (policy) |
 | 0013 | GitHub Actions as the build and CI environment | ACCEPTED |
 | 0014 | Privacy build gates: offline-by-construction | ACCEPTED |
+| 0015 | Paging 3 for the incremental media timeline (issue #28) | ACCEPTED |

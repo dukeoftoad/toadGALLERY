@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -26,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,8 @@ import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.trash.TrashUiState
 import io.github.dukeoftoad.gallery.ui.trash.TrashViewModel
+import io.github.dukeoftoad.gallery.ui.vault.VaultUiState
+import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
 
 /**
  * The Settings tab (issue #27: first real content on this screen).
@@ -69,12 +74,23 @@ import io.github.dukeoftoad.gallery.ui.trash.TrashViewModel
  * the `trash` sub-screen via [onOpenTrash]. Below API 30 the entry renders
  * as inert copy: no MediaStore trash protocol exists there (the Photos
  * delete flow stays permanent, see `FileOpsViewModel.requestDelete`).
+ *
+ * Hidden vault entry (issue #32, ADR-0017): mirrors the recycle-bin row and
+ * opens the `vault` sub-screen via [onOpenVault]. The status line comes
+ * from the SHELL-scoped [vaultViewModel] (the shared session, not a
+ * screen-scoped holder): "not set up" / "Locked" / item count + size. The
+ * count appears only while the vault is UNLOCKED --- a locked vault leaks
+ * no size or count here, by design. Below Android 10 (API 29) there is no
+ * consent protocol for the move/delete legs, so the entry renders as inert
+ * copy (the same shape as the recycle bin below R).
  */
 @Composable
 fun SettingsScreen(
     pickedViewModel: PickedPhotosViewModel,
     onBrowsePicked: () -> Unit,
     onOpenTrash: () -> Unit,
+    vaultViewModel: VaultViewModel,
+    onOpenVault: () -> Unit,
 ) {
     val settingsViewModel: SettingsViewModel = viewModel()
     val usePhotoPicker by settingsViewModel.usePhotoPicker.collectAsState()
@@ -82,6 +98,7 @@ fun SettingsScreen(
     val trashViewModel: TrashViewModel = viewModel()
     val trashState by trashViewModel.state.collectAsState()
     LaunchedEffect(Unit) { trashViewModel.refresh() }
+    val vaultState by vaultViewModel.state.collectAsState()
 
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(),
@@ -222,6 +239,70 @@ fun SettingsScreen(
         } else {
             Text(
                 text = stringResource(R.string.settings_recycle_bin_pre_r_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.settings_vault_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .clickable(onClick = onOpenVault)
+                    .testTag("settings_vault_entry")
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_vault),
+                    contentDescription = null, // decorative; the row title carries meaning
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(end = 16.dp)
+                        .size(24.dp),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_vault_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    // The status line never leaks counts while locked (see
+                    // the screen KDoc); Resolving is a sub-second first frame.
+                    val vaultSubtitle = when (val vault = vaultState) {
+                        VaultUiState.NotConfigured ->
+                            stringResource(R.string.vault_settings_not_configured)
+                        VaultUiState.Locked ->
+                            stringResource(R.string.vault_settings_locked)
+                        is VaultUiState.Unlocked -> pluralStringResource(
+                            R.plurals.vault_header_items,
+                            vault.entries.size,
+                            vault.entries.size,
+                        ) + "  ·  " + DataSizeFormats.formatBytes(
+                            vault.entries.sumOf { it.sizeBytes },
+                        )
+                        else -> null
+                    }
+                    if (vaultSubtitle != null) {
+                        Text(
+                            text = vaultSubtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        } else {
+            Text(
+                text = stringResource(R.string.settings_vault_pre_q_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),

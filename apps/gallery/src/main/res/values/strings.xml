@@ -168,4 +168,76 @@
     <!-- Settings: recycle bin entry (issue #31) -->
     <string name="settings_recycle_bin_title">Recycle bin</string>
     <string name="settings_recycle_bin_pre_r_body">Available on Android 11 and above.</string>
+
+    <!-- Vault section, issue #32 -->
+    <!-- Hidden vault (ADR-0017): media sealed in an app-private store under an
+         AndroidKeyStore key, listed only after a PIN unlock, auto-locked when
+         the app goes to the background. Everything is on-device only; the app
+         holds no INTERNET permission, so no vault byte can ever leave the
+         device. -->
+    <string name="settings_vault_title">Hidden vault</string>
+    <string name="settings_vault_pre_q_body">Available on Android 10 and above.</string>
+    <string name="vault_settings_not_configured">Set up a PIN to start hiding media here.</string>
+    <string name="vault_settings_locked">Locked — opens with your PIN.</string>
+    <string name="vault_title">Hidden vault</string>
+    <string name="vault_unsupported_title">Hidden vault needs Android 10</string>
+    <string name="vault_unsupported_body">This Android version can\'t remove media from the gallery after sealing it, so the vault stays closed here.</string>
+    <string name="vault_setup_body">The vault keeps photos and videos encrypted on this device only. There is no cloud backup and no recovery: if you forget the PIN, or the device is reset or lost, the vault can never be opened again.</string>
+    <string name="vault_setup_pin_label">PIN</string>
+    <string name="vault_setup_confirm_label">Confirm PIN</string>
+    <string name="vault_setup_action">Create vault</string>
+    <string name="vault_setup_short">Use at least 4 digits.</string>
+    <string name="vault_setup_mismatch">The PINs don\'t match.</string>
+    <string name="vault_created">Vault created.</string>
+    <string name="vault_locked_body">Enter the vault PIN. It stays unlocked while toadGALLERY is open and locks again when the app goes to the background.</string>
+    <string name="vault_unlock_pin_label">PIN</string>
+    <string name="vault_unlock_action">Unlock</string>
+    <string name="vault_unlock_wrong">Wrong PIN. Try again.</string>
+    <string name="vault_error_generic">Something went wrong. Nothing was changed.</string>
+    <string name="vault_empty_title">The vault is empty</string>
+    <string name="vault_empty_body">Use Move to vault from the photo timeline to store media here, encrypted. It leaves your gallery and is only reachable through this screen.</string>
+    <string name="vault_action_restore">Restore</string>
+    <string name="vault_action_delete">Delete</string>
+    <string name="vault_delete_confirm_title">Delete from the vault?</string>
+    <string name="vault_delete_confirm_body">%1$s will be deleted from the vault permanently. This can\'t be undone.</string>
+    <string name="vault_progress_restore">Restoring to the gallery…</string>
+    <string name="vault_progress_delete">Deleting from the vault…</string>
+    <plurals name="vault_header_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <plurals name="vault_restored">
+        <item quantity="one">Restored %1$d item to the gallery</item>
+        <item quantity="other">Restored %1$d items to the gallery</item>
+    </plurals>
+    <plurals name="vault_deleted">
+        <item quantity="one">Deleted %1$d item from the vault</item>
+        <item quantity="other">Deleted %1$d items from the vault</item>
+    </plurals>
+    <string name="vault_restore_failed">Couldn\'t restore — the vault copy is untouched.</string>
+    <string name="vault_restore_kept_copy">Restored to the gallery, but the vault copy couldn\'t be removed.</string>
+    <string name="vault_delete_failed">Couldn\'t delete — the vault is unchanged.</string>
+
+    <!-- Vault: move-to-vault from the Photos selection (issue #32). The delete
+         leg rides the file-ops consent protocol, so this block is only ever
+         reachable on Android 10+ where selection exists at all. -->
+    <string name="vault_cd_move_action">Move to vault</string>
+    <plurals name="vault_move_confirm_title">
+        <item quantity="one">Move this item to the vault?</item>
+        <item quantity="other">Move these %1$d items to the vault?</item>
+    </plurals>
+    <string name="vault_move_confirm_body">The media is copied into the encrypted vault and the originals are removed from your gallery. From then on they\'re only reachable through the vault PIN.</string>
+    <string name="vault_move_confirm_yes">Move</string>
+    <string name="vault_progress_move">Moving %1$d of %2$d to the vault…</string>
+    <plurals name="vault_moved">
+        <item quantity="one">Moved %1$d item to the vault</item>
+        <item quantity="other">Moved %1$d items to the vault</item>
+    </plurals>
+    <plurals name="vault_move_failed">
+        <item quantity="one">%1$d item couldn\'t be moved</item>
+        <item quantity="other">%1$d items couldn\'t be moved</item>
+    </plurals>
+    <string name="vault_move_not_removed">The copies are in the vault, but the originals couldn\'t be removed from the gallery.</string>
+    <string name="vault_move_cancelled">Stopped — %1$d of %2$d items processed.</string>
+    <string name="vault_consent_denied">Permission was needed and declined — nothing more was changed.</string>
 </resources>

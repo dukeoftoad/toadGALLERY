@@ -8,6 +8,25 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- Hidden vault storage + unlock UI (#32, slice 2/2, on the ADR-0017 core): the
+  vault is now a complete feature. `VaultStore` (pure JVM) keeps the sealed PIN
+  record, a sealed hand-rolled index (`VaultIndex`, strict parsing, escaped
+  display names) and id-named sealed blobs under app-private storage — blob
+  first, index second (crash orphans are reclaimed by the unlock sweep, never a
+  dangling index entry); small files go through tmp+rename atomic writes.
+  `AndroidVaultKeys` supplies the non-exportable AES-256-GCM AndroidKeyStore key
+  (StrongBox when the device has it, TEE fallback). Setup/unlock run PBKDF2 on
+  `Dispatchers.Default`; the unlock session is in-memory only and auto-locks on
+  background (`ON_STOP`, shell lifecycle observer). "Move to vault" appears in
+  the Photos selection app bar once the vault is configured: bytes are streamed
+  through the sealing cipher, then the originals are removed through the #30
+  consent machinery (one `createDeleteRequest` per batch); restore is the
+  inverse pending-insert flow, deleting the blob only after the row publishes.
+  The new `vault` sub-screen (Settings entry, status line leaks nothing while
+  locked) offers setup with the no-recovery trade-off stated verbatim, unlock,
+  restore, and confirmed permanent delete. 39 new JVM tests pin the store
+  (round-trip, tamper/truncation, orphan sweep, wipe, wrong-key rejection) and
+  the index format.
 - Vault crypto core (#32, ADR-0017): pure-JVM `VaultCrypto` — PBKDF2-HMAC-SHA256
   PIN digests (210k rounds, constant-time verify, wipable `CharArray` input) and
   AES-256-GCM sealing (`IV(12) || ciphertext || tag(128)`, fresh IV per seal) with

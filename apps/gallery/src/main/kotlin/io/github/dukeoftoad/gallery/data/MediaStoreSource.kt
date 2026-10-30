@@ -1,9 +1,13 @@
 package io.github.dukeoftoad.gallery.data
 
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 
 /**
  * Reads the on-device media timeline (Phase 3, issues #25 and #29).
@@ -12,8 +16,10 @@ import android.provider.MediaStore
  * surfaced as a content `Uri`. No filesystem paths ever leave this class.
  *
  * v1 scope: cursor walks over `MediaStore.Images.Media` + `MediaStore.Video.Media`
- * (timeline, bucket aggregation, per-bucket detail). Paging 3, async source,
- * and Moments grouping are explicit later-Phase-3 follow-ups.
+ * (timeline, bucket aggregation, per-bucket detail). The Phase 3 paging data
+ * layer (windowed timeline queries, issue #28) lives in a dedicated region at
+ * the bottom of this class; the UI-side incremental timeline and Moments
+ * grouping are explicit later-Phase-3 follow-ups.
  *
  * Privacy (ADR-0014 / ADR-0010): this class only reads local content URIs.
  * It does not, and cannot, perform any network access --- the app holds no
@@ -187,6 +193,148 @@ class MediaStoreSource(private val context: Context) {
 
     private fun android.database.Cursor.getColumnIndexOrNull(name: String): Int =
         try { getColumnIndexOrThrow(name) } catch (_: IllegalArgumentException) { -1 }
+
+    // ------------------------------------------------------------------
+    // Paging 3 (issue #28): windowed timeline queries.
+    //
+    // Additive, self-contained region --- the snapshot methods above are
+    // untouched. This is the data half of the incremental timeline:
+    // [WindowPagingSource] calls [queryTimelineWindow] per page on API 30+;
+    // older devices keep the full [queryTimeline] snapshot behind the same
+    // pager. The row mapping below is kept small and inline on purpose (see
+    // its KDoc for the grid-UX extension plan).
+    // ------------------------------------------------------------------
+
+    /**
+     * Whether this device can serve the timeline in windows (issue #28).
+     *
+     * The Bundle-argument query protocol --- `QUERY_ARG_LIMIT` /
+     * `QUERY_ARG_OFFSET` over the unified `MediaStore.Files` collection ---
+     * is only guaranteed from API 30 (R). Earlier releases either lack the
+     * unified Files view of images+videos or do not reliably honor the
+     * paging arguments, so they stay on the full-snapshot timeline.
+     */
+    fun supportsWindowedQueries(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
+    /**
+     * Returns the timeline window `[offset, offset + limit)`, newest first
+     * (issue #28). This is the window backend of [WindowPagingSource] on
+     * API 30+; the caller must check [supportsWindowedQueries] first ---
+     * pre-30 devices page over the full [queryTimeline] snapshot instead.
+     *
+     * Unlike the snapshot path, this is a SINGLE query over the unified
+     * `MediaStore.Files` collection (images and videos share one table
+     * under scoped storage), filtered to image/video `media_type` --- no
+     * client-side merge, so the offset arithmetic is exact.
+     *
+     * ## Window stability: the `_id` tiebreak is REQUIRED
+     * The sort order is `date_added DESC, _id DESC`. Many rows share one
+     * `date_added` second (burst shots, screenshots), and a window boundary
+     * can fall between them; without a total order the provider would be
+     * free to reorder tied rows between windows, silently skipping or
+     * duplicating items across pages. The tiebreak pins every window to
+     * the same sequence.
+     *
+     * ## Sort / paging arguments
+     * Passed via the Bundle-args `ContentResolver.query` overload with
+     * `QUERY_ARG_LIMIT` + `QUERY_ARG_OFFSET` and the raw
+     * `QUERY_ARG_SQL_SORT_ORDER` escape hatch (spelling the total order out
+     * instead of relying on how a provider composes `QUERY_ARG_SORT_COLUMNS`
+     * + `QUERY_ARG_SORT_DIRECTION`). All three keys live on [ContentResolver]
+     * --- the `MediaStore.QUERY_ARG_*` names do not exist in the API, so
+     * the ContentResolver constants are used directly. MediaProvider's
+     * defaults exclude pending and trashed rows, which is what a gallery
+     * wants to show anyway.
+     *
+     * ## URI shape
+     * Rows surface as `images/<id>` / `video/<id>` content URIs rather than
+     * the queried `files/<id>` form: the Files row id IS the per-type
+     * collection id (one table), so windowed items are byte-identical to
+     * the snapshot path's --- same LazyGrid keys, same Coil cache entries
+     * --- and ADR-0006 still holds (content URIs anchored by `_id`, no
+     * filesystem paths).
+     *
+     * ## Grid-UX track integration note
+     * The parallel grid-UX track extends `MediaItem` with `width`,
+     * `height` and `durationMs` as trailing default-valued constructor
+     * params, and this window's projection/mapping will be extended at
+     * integration time: add `WIDTH`/`HEIGHT`/`DURATION` to the projection
+     * and one read per field to the inline row mapping below. Everything
+     * row-related lives in this method precisely so that change stays
+     * mechanical and conflict-free.
+     *
+     * @param offset zero-based window start in the ordered timeline; Paging
+     *  keys are always `>= 0` (see [WindowPagingSource]).
+     * @param limit requested window size; must be positive (Paging 3 load
+     *  sizes always are).
+     */
+    @RequiresApi(Build.VERSION_CODES.R) // static contract for lint; the
+    // check() below is the runtime tripwire for unguarded callers
+    fun queryTimelineWindow(offset: Int, limit: Int): List<MediaItem> {
+        check(supportsWindowedQueries()) {
+            "Windowed MediaStore queries need API 30+; use queryTimeline() on older devices."
+        }
+        val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+        )
+        val queryArgs = Bundle().apply {
+            // The bundle form of the media-type selection: images + videos
+            // only, straight from the files table's own constants.
+            putString(
+                ContentResolver.QUERY_ARG_SQL_SELECTION,
+                "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (" +
+                    "${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, " +
+                    "${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})",
+            )
+            putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+            putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+            // Stable total order; the _id tiebreak is REQUIRED for window
+            // alignment (see method KDoc).
+            putString(
+                ContentResolver.QUERY_ARG_SQL_SORT_ORDER,
+                "date_added DESC, _id DESC",
+            )
+        }
+        val out = ArrayList<MediaItem>(limit.coerceIn(1, 256))
+        context.contentResolver
+            .query(collection, projection, queryArgs, null)
+            ?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val mimeCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.MIME_TYPE)
+                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+                val typeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val isVideo = cursor.getInt(typeCol) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                    val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else null
+                    out += MediaItem(
+                        id = id,
+                        // Canonical per-type URI (== the snapshot path's), not
+                        // files/<id>: see the method KDoc "URI shape" section.
+                        uri = ContentUris.withAppendedId(
+                            if (isVideo) {
+                                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                            } else {
+                                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                            },
+                            id,
+                        ),
+                        // Same null-mime fallback as queryCollection: some
+                        // HEIC/RAW rows carry no MIME_TYPE, so derive the
+                        // generic image/video mimetype from media_type.
+                        mimeType = mime ?: if (isVideo) "video/*" else "image/*",
+                        dateAddedSec = cursor.getLong(dateCol),
+                        isVideo = isVideo,
+                    )
+                }
+            }
+        return out
+    }
 }
 
 /**

@@ -182,6 +182,9 @@ dependencies {
     // --- Phase 3: Lifecycle/ViewModel for the Photos timeline state holder (issue #25)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // --- Phase 3: Paging 3 --- windowed timeline loads + LazyPagingItems grid (issue #28)
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
     debugImplementation(libs.compose.ui.tooling)
 
     // --- Image loading (Compose-first per compose-migration.md)

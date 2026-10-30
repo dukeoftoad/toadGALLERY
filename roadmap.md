@@ -308,10 +308,11 @@ the start.
 > flow (#25), Albums tab (#29), Paging 3 incremental timeline (#28),
 > aspect-aware staggered grid + video/GIF overlays (#33, #34), paging
 > follow-ups: invalidation, append load-states, idempotent re-entry (#38),
-> screen-state system (#13), system Photo Picker path (#27). Next in
-> flight: file operations (#30), then recycle bin (#31) and hidden vault
-> (#32), which build on the #30 operations layer. CI runs compile + JVM
-> tests only (ADR-0016).
+> screen-state system (#13), system Photo Picker path (#27), file operations
+> (#30), full-screen media viewer with in-app video playback (#50). Next in
+> flight: recycle bin (#31) and hidden vault (#32), which build on the #30
+> operations layer; viewer pinch-zoom deferred from #50. CI runs compile +
+> JVM tests only (ADR-0016).
 
 #### Tasks
 

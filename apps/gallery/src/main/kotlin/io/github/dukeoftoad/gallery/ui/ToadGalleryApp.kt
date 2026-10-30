@@ -32,6 +32,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
 import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
@@ -39,6 +40,8 @@ import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
+import io.github.dukeoftoad.gallery.ui.viewer.ViewerScreen
+import io.github.dukeoftoad.gallery.ui.viewer.ViewerViewModel
 
 /**
  * toadGALLERY product shell (roadmap Phase 2, ADR-0009; Phase 3 wiring #25/#29).
@@ -63,6 +66,14 @@ object Destinations {
      * album detail) and the route is reachable only from the Settings tab.
      */
     const val PICKED = "picked"
+
+    /**
+     * Full-screen media viewer (issue #50). Not top-level (the bottom bar
+     * hides) and argument-free by design: the tap-time window lives in the
+     * shell-scoped [ViewerViewModel], the same hand-off the picked-photos
+     * set uses --- a list of content URIs is far too large for nav args.
+     */
+    const val VIEWER = "viewer"
 
     fun albumDetail(bucketId: Long): String = "album/$bucketId"
 
@@ -91,6 +102,15 @@ fun ToadGalleryApp() {
         // (picker entry point + live count) and the `picked` sub-screen, so it
         // lives in ONE activity-scoped ViewModel instead of nav arguments.
         val pickedViewModel: PickedPhotosViewModel = viewModel()
+        // Issue #50: the viewer window uses the same shell-scoped hand-off.
+        // Grid screens call viewerViewModel.open(window, index) and navigate;
+        // ViewerScreen reads the same instance. viewModel() at the shell
+        // level scopes to the ACTIVITY, so both sides see one object.
+        val viewerViewModel: ViewerViewModel = viewModel()
+        val openViewer: (window: List<MediaItem>, index: Int) -> Unit = { window, index ->
+            viewerViewModel.open(window, index)
+            navController.navigate(Destinations.VIEWER)
+        }
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
 
@@ -136,7 +156,7 @@ fun ToadGalleryApp() {
             ) {
                 composable(Destinations.PHOTOS) {
                     // Phase 3 (issue #25): real MediaStore timeline replaces the placeholder.
-                    PhotosScreen()
+                    PhotosScreen(onOpenViewer = openViewer)
                 }
                 composable(Destinations.ALBUMS) {
                     // Phase 3 (issue #29): real folder grid replaces the placeholder.
@@ -155,6 +175,7 @@ fun ToadGalleryApp() {
                         AlbumDetailScreen(
                             bucketId = bucketId,
                             onBack = { navController.popBackStack() },
+                            onOpenViewer = openViewer,
                         )
                     }
                 }
@@ -178,6 +199,14 @@ fun ToadGalleryApp() {
                     // shell hides the bottom bar (non-topLevel route).
                     PickedPhotosScreen(
                         pickedViewModel = pickedViewModel,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Destinations.VIEWER) {
+                    // Issue #50: full-screen viewer over the tap-time window;
+                    // the SAME shell-scoped instance the grid screens wrote to.
+                    ViewerScreen(
+                        viewModel = viewerViewModel,
                         onBack = { navController.popBackStack() },
                     )
                 }

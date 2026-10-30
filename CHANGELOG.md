@@ -8,6 +8,13 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- Vault crypto core (#32, ADR-0017): pure-JVM `VaultCrypto` — PBKDF2-HMAC-SHA256
+  PIN digests (210k rounds, constant-time verify, wipable `CharArray` input) and
+  AES-256-GCM sealing (`IV(12) || ciphertext || tag(128)`, fresh IV per seal) with
+  streaming seal/open for vault media beyond heap size; key delivered through the
+  `VaultKeyProvider` seam (production: non-exportable AndroidKeyStore key, later
+  slice). 13 JVM tests pin round-trip, wrong-key/tamper/truncation rejection, IV
+  uniqueness and a 5 MiB streaming round-trip.
 - Recycle bin (#31): deletion on the Photos timeline now routes to
   MediaStore's system trash on API 30+ (`createTrashRequest` consent flow,
   one request per batch; rows stay recoverable ~30 days with system-managed

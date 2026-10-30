@@ -10,9 +10,17 @@ import android.net.Uri
  * path. The `dateAddedSec` value drives the timeline ordering (newest first);
  * the Phase 5 "Moments" grouping will layer on top of this same value.
  *
- * `isVideo` is the only type signal v1 needs (video duration overlay and GIF
- * play indicators arrive in a later Phase 3 slice). Mimetype is preserved for
- * the future viewer and for Coil's decoder dispatch.
+ * The grid UX slice (issues #33 and #34) adds the metadata those features need:
+ * pixel `width`/`height` drive the aspect-ratio-aware staggered grid cell
+ * sizing (#34), and `durationMs` drives the video duration overlay (#33).
+ * GIFs are detected purely from the mimetype --- `mimeType == "image/gif"`
+ * (see [isGif]) --- for the play indicator; the mimetype is otherwise
+ * preserved for the future viewer and for Coil's decoder dispatch.
+ *
+ * The three new values are trailing properties with `0` defaults, which means
+ * "unknown": MediaStore rows can lack the underlying columns, callers may
+ * construct items without them, and the UI treats `0` dimensions as a
+ * square-aspect fallback and `0` duration as "no overlay".
  */
 data class MediaItem(
     val id: Long,
@@ -20,4 +28,19 @@ data class MediaItem(
     val mimeType: String,
     val dateAddedSec: Long,
     val isVideo: Boolean,
-)
+    /** Pixel width from MediaStore; `0` means "unknown". */
+    val width: Int = 0,
+    /** Pixel height from MediaStore; `0` means "unknown". */
+    val height: Int = 0,
+    /** Video duration in milliseconds from MediaStore; `0` means "unknown". */
+    val durationMs: Long = 0,
+) {
+    /**
+     * Whether this item is an animated GIF, for the play indicator
+     * (issue #33). A case-insensitive mimetype compare is enough --- no
+     * MediaStore round-trip, and a computed `get()` keeps it out of
+     * `copy`/`equals` identity.
+     */
+    val isGif: Boolean
+        get() = mimeType.equals("image/gif", ignoreCase = true)
+}

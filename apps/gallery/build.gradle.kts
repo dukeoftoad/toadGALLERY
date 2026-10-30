@@ -20,8 +20,10 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        versionCode = 5
-        versionName = "0.3.1-alpha"
+        // 0.3.3-alpha: staggered grid + indicators (issues #33, #34), riding on the
+        // Paging 3 slice that landed first as 0.3.2-alpha / versionCode 6 (issue #28)
+        versionCode = 7
+        versionName = "0.3.3-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 
@@ -182,10 +184,18 @@ dependencies {
     // --- Phase 3: Lifecycle/ViewModel for the Photos timeline state holder (issue #25)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // --- Phase 3: Paging 3 --- windowed timeline loads + LazyPagingItems grid (issue #28)
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
     debugImplementation(libs.compose.ui.tooling)
 
     // --- Image loading (Compose-first per compose-migration.md)
     implementation(libs.coil.compose)
+    // On-device video frame decoding for thumbnails (issue #33): a pure
+    // decoder artifact, no network code (ADR-0014). Coil 2.x has no decoder
+    // auto-discovery, so VideoFrameDecoder is registered explicitly via the
+    // app's ImageLoaderFactory (ToadGalleryApplication).
+    implementation(libs.coil.video)
 
     // --- Metadata (ADR-0008: androidx.exifinterface, NOT the Aves fork)
     implementation(libs.androidx.exifinterface)

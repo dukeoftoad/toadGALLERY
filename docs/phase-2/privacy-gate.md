@@ -57,11 +57,15 @@ since this change:
    `SingleArtifact.MERGED_MANIFEST` wiring are still present in the build
    script --- so the enforcement model cannot be silently deleted.
 
-### Layer 3 --- Instrumented egress suite (emulator, CI)
+### Layer 3 --- Instrumented egress suite (manual, on-device)
 
 `PrivacyEgressTest` ([src/androidTest](../../apps/gallery/src/androidTest/kotlin/io/github/dukeoftoad/gallery/PrivacyEgressTest.kt))
-runs on the CI emulator (AOSP API 34 image, `connected-privacy` job in
-[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)):
+is a **manual release gate**: run on a physical device before every tagged
+release with `./gradlew :apps:gallery:connectedDebugAndroidTest`. Until
+2026-10-30 it also ran on the CI emulator; that job was removed because the
+hosted runners expose no KVM (pure software emulation made the job slow and
+probabilistically red at APK install, before any test executed) --- ADR-0016.
+It still proves, on a real system image:
 
 1. **Runtime permission assert** --- the app uid holds no INTERNET permission
    on a real system image.
@@ -96,10 +100,10 @@ requiring the same scrutiny as an ADR change.
 
 * CI `build` job (assemble + lint + unit tests):
   `https://github.com/dukeoftoad/toadGALLERY/actions/workflows/ci.yml`
-* CI `connected-privacy` job (instrumented suite on the API 34 emulator):
-  same workflow, second job. Both jobs are required to be green for a merge
-  (ADR-0013); `connected-privacy` has `needs: build` so the emulator is only
-  paid for when the compile is already green.
+* Manual instrumented run (physical device, before each tagged release):
+  `./gradlew :apps:gallery:connectedDebugAndroidTest` --- Layer 3 evidence.
+  CI does not run emulator jobs (ADR-0016); the binding CI signal is the
+  Layer 1 + Layer 2 gate inside `build`.
 * Local negative-path check (performed 2026-10-29, see issue #20 for the
   transcript): temporarily declaring INTERNET in the source manifest makes
   `assembleDebug` fail with `PRIVACY GATE FAILED`; removing it restores the

@@ -312,12 +312,13 @@ the start.
 > (#30), full-screen media viewer with in-app video playback (#50), recycle
 > bin over MediaStore's system trash (#31), hidden vault complete: crypto
 > core + sealed store + PIN setup/unlock + move-to-vault + restore +
-> auto-lock (#32, ADR-0017). In flight on a side branch: viewer
-> pinch-zoom/pan + double-tap + animated GIF decode (deferred from #50).
-> With those, the Phase 3 deliverable set (end-to-end browsing and basic
-> media operations, recycle bin, hidden vault, failure-mode tests) is
-> complete; biometric unlock binding is a documented follow-up. CI runs
-> compile + JVM tests with lint as a hard gate (ADR-0016, #52).
+> auto-lock (#32, ADR-0017), and the deferred-from-#50 viewer follow-ups:
+> pinch-zoom/pan with clamped bounds, double-tap zoom and animated GIF
+> decode. The Phase 3 deliverable set (end-to-end browsing and basic media
+> operations, recycle bin, hidden vault, failure-mode tests) is complete;
+> biometric unlock binding and vault item thumbnails are documented
+> follow-ups. CI runs compile + JVM tests with lint as a hard gate
+> (ADR-0016, #52).
 
 #### Tasks
 

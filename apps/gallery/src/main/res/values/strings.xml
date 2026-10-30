@@ -38,4 +38,12 @@
     <string name="cd_media_thumb_image">Photo</string>
     <string name="cd_media_thumb_video">Video</string>
     <string name="cd_media_thumb_gif">GIF</string>
+
+    <!-- issue #38 -->
+    <!-- Append-load footer of the paged Photos timeline (finding 2): progress
+         while the next window appends; honest copy when an append fails (the
+         retry affordance is the existing state_action_retry button rendered
+         next to this line). -->
+    <string name="state_append_loading">Loading more…</string>
+    <string name="state_append_error_title">Couldn\'t load more.</string>
 </resources>

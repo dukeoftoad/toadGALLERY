@@ -18,8 +18,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ui.theme.ToadSizing
+import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
 
 /**
  * The shared unsupported-file screen state (screen-state system: issue #13).
@@ -44,6 +45,14 @@ import io.github.dukeoftoad.gallery.R
  * Test surface (issue #38.7): [tag] is applied to the root `Column` when
  * non-null; the default is no tag. Future call sites pass a stable per-screen
  * tag (e.g. `viewer_state_unsupported`).
+ *
+ * Token adoption (issue #11, docs/architecture/design-tokens.md): every gap
+ * comes from [ToadSpacing], the decorative glyph from [ToadSizing].stateIcon,
+ * and the type roles from the theme-provided ToadTypography — the frozen
+ * screen-state layout (72dp icon, `headlineSmall`/`bodyMedium` copy) is
+ * reproduced exactly, so the token migration shifts nothing visually. There
+ * are no interactive affordances on this state, so the 48dp touch-target
+ * floor needs no extra wiring here.
  */
 @Composable
 fun UnsupportedFileState(
@@ -53,7 +62,7 @@ fun UnsupportedFileState(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp)
+            .padding(ToadSpacing.xxxl)
             .then(if (tag != null) Modifier.testTag(tag) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -62,14 +71,14 @@ fun UnsupportedFileState(
             imageVector = Icons.Filled.Clear,
             contentDescription = null, // decorative
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(ToadSizing.stateIcon),
         )
         Text(
             text = stringResource(R.string.state_unsupported_title),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xl),
         )
         if (fileName != null) {
             Text(
@@ -81,14 +90,14 @@ fun UnsupportedFileState(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = ToadSpacing.md),
             )
         }
         Text(
             text = stringResource(R.string.state_shell_badge),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = 24.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xxl),
         )
     }
 }

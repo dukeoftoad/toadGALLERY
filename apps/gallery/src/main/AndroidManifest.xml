@@ -11,7 +11,10 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Phase 3 grid UX (issue #33): the Application registers Coil's
+         VideoFrameDecoder for video thumbnails; see ToadGalleryApplication. -->
     <application
+        android:name=".ToadGalleryApplication"
         android:allowBackup="true"
         android:appCategory="image"
         android:icon="@mipmap/ic_launcher"

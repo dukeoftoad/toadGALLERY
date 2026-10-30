@@ -188,8 +188,10 @@ dependencies {
 
     // --- Image loading (Compose-first per compose-migration.md)
     implementation(libs.coil.compose)
-    // Video thumbnails decode locally via MediaMetadataRetriever (issue #33);
-    // purely an on-device decoder artifact --- no network code (ADR-0014).
+    // On-device video frame decoding for thumbnails (issue #33): a pure
+    // decoder artifact, no network code (ADR-0014). Coil 2.x has no decoder
+    // auto-discovery, so VideoFrameDecoder is registered explicitly via the
+    // app's ImageLoaderFactory (ToadGalleryApplication).
     implementation(libs.coil.video)
 
     // --- Metadata (ADR-0008: androidx.exifinterface, NOT the Aves fork)

@@ -43,9 +43,14 @@ import io.github.dukeoftoad.gallery.data.displayAspectRatio
  * decorative --- grid cells are the primary browsing surface, and the media
  * type is exactly what the overlays communicate visually.
  *
- * Privacy (ADR-0006 / ADR-0014): the model is a local content URI. Coil is
- * wired without its network artifact, so nothing can be fetched remotely, and
- * `coil-video` (`VideoFrameDecoder`) decodes video frames purely on-device.
+ * Privacy (ADR-0006 / ADR-0014): the model is a local content URI.
+ * `VideoFrameDecoder` (from `coil-video`) decodes video frames purely
+ * on-device via `MediaMetadataRetriever`; because Coil 2.x has no decoder
+ * auto-discovery, it is registered explicitly via the app's
+ * `ImageLoaderFactory` (`ToadGalleryApplication`). The offline guarantee
+ * rests on the app never holding the INTERNET permission --- enforced by
+ * the build-time merged-manifest gate and `PrivacyEgressTest` --- so no
+ * thumbnail can ever touch the network.
  *
  * The parallel paging slice (Phase 3) ships its own grid composable over
  * `LazyPagingItems`; it swaps its inline cell for this composable at

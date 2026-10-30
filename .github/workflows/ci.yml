@@ -142,9 +142,12 @@ jobs:
       #
       # Retry (observed on main, runs #12 and #18): the APK install-commit
       # can die with 'Broken pipe (32)' --- a transient package-manager/adb
-      # failure on hosted KVM runners, before any test runs. One retry on the
-      # same booted emulator absorbs it without another ~7-minute emulator
-      # boot. Deterministic test failures fail both attempts and stay red.
+      # failure on hosted KVM runners, before any test runs. The retry logic
+      # lives in .github/scripts/emulator-privacy-suite.sh: one rerun on the
+      # same booted emulator, no second ~7-minute emulator boot; deterministic
+      # test failures fail both attempts and stay red. It is a file because
+      # the 'script' input goes through sh -c "..." wrapping --- inline double
+      # quotes corrupt the command line (run #19).
       - name: Run instrumented privacy suite on emulator (API 34)
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -153,23 +156,7 @@ jobs:
           target: default
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           disable-animations: true
-          script: |
-            attempt=1
-            max_attempts=2
-            while true; do
-              if ./gradlew :apps:gallery:connectedDebugAndroidTest --no-daemon --stacktrace; then
-                echo "connectedDebugAndroidTest: PASSED (attempt $attempt/$max_attempts)"
-                exit 0
-              fi
-              status=$?
-              if [ "$attempt" -ge "$max_attempts" ]; then
-                echo "connectedDebugAndroidTest: FAILED (attempt $attempt/$max_attempts, exit $status)"
-                exit 1
-              fi
-              echo "attempt $attempt/$max_attempts failed (exit $status); transient emulator/adb install flakes are known on hosted runners --- retrying on the same booted emulator"
-              attempt=$((attempt + 1))
-              sleep 15
-            done
+          script: bash .github/scripts/emulator-privacy-suite.sh
 
       - name: Upload connected test reports
         uses: actions/upload-artifact@v4

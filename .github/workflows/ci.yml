@@ -103,7 +103,7 @@ jobs:
   connected-privacy:
     name: Instrumented privacy suite (emulator)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     needs: build # only pay for an emulator when the assemble/lint/test job is green
 
     steps:
@@ -139,6 +139,15 @@ jobs:
       # AOSP ('default') image: closest to the privacy posture we ship for.
       # ubuntu-latest runners expose /dev/kvm, so this boots with hardware
       # acceleration. Suite: apps/gallery/src/androidTest (issue #20).
+      #
+      # Retry (observed on main, runs #12 and #18): the APK install-commit
+      # can die with 'Broken pipe (32)' --- a transient package-manager/adb
+      # failure on hosted KVM runners, before any test runs. The retry logic
+      # lives in .github/scripts/emulator-privacy-suite.sh: one rerun on the
+      # same booted emulator, no second ~7-minute emulator boot; deterministic
+      # test failures fail both attempts and stay red. It is a file because
+      # the 'script' input goes through sh -c "..." wrapping --- inline double
+      # quotes corrupt the command line (run #19).
       - name: Run instrumented privacy suite on emulator (API 34)
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -147,7 +156,7 @@ jobs:
           target: default
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           disable-animations: true
-          script: ./gradlew :apps:gallery:connectedDebugAndroidTest --no-daemon --stacktrace
+          script: bash .github/scripts/emulator-privacy-suite.sh
 
       - name: Upload connected test reports
         uses: actions/upload-artifact@v4

@@ -154,7 +154,10 @@ jobs:
           api-level: 34
           arch: x86_64
           target: default
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          # -partition-size 4096: default /data filled up on runs #26/#28 ---
+          # a leaked install session stalled install-write with a
+          # PackageManagerInternal.freeStorage NPE before any test ran.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -partition-size 4096
           disable-animations: true
           script: bash .github/scripts/emulator-privacy-suite.sh
 

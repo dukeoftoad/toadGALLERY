@@ -197,6 +197,14 @@ dependencies {
     // auto-discovery, so VideoFrameDecoder is registered explicitly via the
     // app's ImageLoaderFactory (ToadGalleryApplication).
     implementation(libs.coil.video)
+    // Animated GIF decoding for the full-screen viewer (issue #50 follow-up):
+    // like coil-video, a pure on-device decoder artifact with no network code
+    // (ADR-0014) --- coil-gif declares no INTERNET permission, so the
+    // merged-manifest privacy gate is unaffected. It is NOT registered on the
+    // app-wide loader (ToadGalleryApplication stays as-is): the viewer asks
+    // for it per request (ViewerScreen's decoderFactory), so the grid keeps
+    // decoding static GIF first frames (issues #33/#34).
+    implementation(libs.coil.gif)
 
     // --- Metadata (ADR-0008: androidx.exifinterface, NOT the Aves fork)
     implementation(libs.androidx.exifinterface)

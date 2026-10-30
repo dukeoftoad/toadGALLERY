@@ -3,15 +3,19 @@
 > **⚠️ PARTIALLY SUPERSEDED 2026-10-29 by ADR-0008.**
 > This report was originally produced under ADR-0001 (Fossify-seed
 > strategy). Under ADR-0008 (features/UI/UX/designs only, no code
-> ports) the following dependencies are re-evaluated and slated for
-> removal in `docs/architecture/compose-migration.md`:
+> ports) the following dependencies were re-evaluated; per issue #21
+> (2026-10-30) the two Fossify-derived libraries below are **DROPPED**
+> from the plan entirely (rationale in §3; blockers cleared in §5):
 > - `org.fossify:commons` (no longer needed; replace with AndroidX
->   equivalents and our own Compose theme).
-> - `androidphotofilters` (naveensingh fork) --- was a release blocker
->   pending POM verification; under ADR-0008 it is dropped entirely
->   (the editor is reimplemented from scratch in Phase 6).
-> - `jxl-coder-glide` --- same: dropped or replaced with our own
->   Compose-native JPEG XL decoder integration if needed.
+>   equivalents and our own Compose theme) — removed; tracked in
+>   `docs/architecture/compose-migration.md`.
+> - `androidphotofilters` (naveensingh fork) --- **DROPPED** (issue #21).
+>   Was a release blocker pending POM verification; under ADR-0008 it is
+>   removed from the plan entirely — a Fossify-derived editor dependency,
+>   and the editor is reimplemented from scratch in Phase 6.
+> - `jxl-coder-glide` --- **DROPPED** (issue #21). A Fossify-derived JPEG XL
+>   decoder, removed from the plan entirely; JPEG XL support, if ever
+>   needed, is re-evaluated fresh under the features-only stance.
 >
 > The remaining dependency screen (androidx.*, media3, Glide/Coil,
 > etc.) stands. The product license remains GPL-3.0 (voluntary per
@@ -53,8 +57,8 @@ copyleft licenses other than GPL/AGPL are generally not). This report screens fo
 | android-gif-drawable 1.2.31 | Apache-2.0 | Yes | |
 | penfeizhou animation (APNG/aWebP/AVIF) 3.0.5 | Apache-2.0 | Yes | |
 | zjupure WebpDecoder (Glide) | Apache-2.0 (libwebp BSD) | Yes | `VERIFY` POM |
-| awxkee jxl-coder-glide 2.6.1 | Apache-2.0? | Yes if confirmed | `VERIFY` — JPEG XL coder wraps libjxl (BSD) |
-| androidphotofilters (naveensingh) | `VERIFY` | ? | JitPack build of a GitHub fork; upstream license is Apache-2.0 by origin but the fork POM must be checked. **Release blocker until verified.** |
+| awxkee jxl-coder-glide 2.6.1 | Apache-2.0? | n/a — **DROPPED** | **DROPPED per ADR-0008 (issue #21).** Fossify-derived JPEG XL decoder, removed from the plan entirely; JPEG XL support, if ever needed, is re-evaluated fresh under the features-only stance. (Historical: `VERIFY` — wraps libjxl, BSD; POM never verified, no longer needs to be.) |
+| androidphotofilters (naveensingh) | `VERIFY` | n/a — **DROPPED** | **DROPPED per ADR-0008 (issue #21).** Fossify-derived editor dependency, removed from the plan entirely; the editor is reimplemented from scratch in Phase 6. (Historical: JitPack build of a GitHub fork, upstream Apache-2.0 by origin; fork POM was never verified — no longer a blocker.) |
 | androidsvg-aar 1.4 | Apache-2.0 | Yes | |
 | okhttp/okio (transitively via commons) | Apache-2.0 | Yes | verify no runtime network use |
 
@@ -72,10 +76,13 @@ copyleft licenses other than GPL/AGPL are generally not). This report screens fo
 ## 5. Compatibility verdict
 
 - **No GPL-3.0 incompatibility found** among the dependencies we intend to keep or adapt.
-- Two **release blockers** flagged pending verification (must be resolved before Phase 9):
-  1. `androidphotofilters` (naveensingh fork via JitPack) — verify fork POM license;
-     if unclear, replace the small filter set before first release.
-  2. `jxl-coder-glide` — verify Apache-2.0 claim from its POM.
+- Former **release blockers** — **resolved 2026-10-30 (issue #21): both dependencies are
+  DROPPED per ADR-0008**, so neither needs POM verification nor blocks release:
+  1. `androidphotofilters` (naveensingh fork via JitPack) — **DROPPED**: Fossify-derived
+     editor dependency; the editor is reimplemented from scratch in Phase 6.
+  2. `jxl-coder-glide` — **DROPPED**: Fossify-derived JPEG XL decoder; JPEG XL support,
+     if ever needed, is re-evaluated fresh under the features-only stance.
+  The dependency screen now carries **no open release blockers**.
 - The `libmpv` option is documented as "not adopted" so it cannot silently enter a build.
 - Full transitive closure will be generated mechanically from the Gradle lockfile
   (`dependencies`/`lockfile` output) at Phase 9 release packaging; this report screens

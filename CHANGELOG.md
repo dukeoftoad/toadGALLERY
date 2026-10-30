@@ -4,13 +4,32 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [Unreleased]
+## [0.4.0-alpha] — unreleased on main (versionCode 8)
+
+### Added
+
+- File operations on the Photos timeline (#30 — PR #48): rename (extension
+  preserved), in-place copy (` (copy)` naming with collision numbering),
+  move (copy→delete with per-item results), delete (permanent v1, explicit
+  confirmation); long-press multi-select with a selection app bar, album
+  picker, undo snackbars for rename/copy/move, cancellable >5-item batch
+  progress, and one aggregated `createWriteRequest`/`createDeleteRequest`
+  consent dialog for entries the app does not own (API 29+; ops hidden on
+  older APIs). MediaStore-only, URI-first (ADR-0006); `DeleteMode.TO_TRASH`
+  seam reserved for the recycle bin (#31).
+- Design tokens & theme (#11 — PR #47): spacing/shape/elevation/motion/
+  touch-target token system, full 15-role M3 typography, explicit light+dark
+  fallback palettes (MI-inspired warm grays + single green accent, WCAG AA
+  pairs computed), dynamic color kept on API 31+, edge-to-edge, and the four
+  state components migrated to tokens. JVM test pins the scale invariants.
 
 ### Changed
 
-- CI no longer runs emulator-based instrumented tests at all: the workflow is
-  compile + lint + JVM unit tests only (ADR-0016). The instrumented privacy
-  egress suite stays in `src/androidTest` as a manual on-device release gate.
+- CI runs compile + JVM unit tests only — no emulator-based tests (ADR-0016,
+  PR #45); the instrumented privacy suite is a manual on-device release gate.
+- Docs (#21, #22 — PR #46): `androidphotofilters` and `jxl-coder-glide`
+  marked DROPPED per ADR-0008; risk register updated (R-10 downgraded, R-14
+  closed, R-16/R-17/R-18 added).
 
 ## [0.3.3-alpha] — unreleased on main (versionCode 7)
 

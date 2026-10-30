@@ -262,11 +262,13 @@ fun copyDisplayName(
     taken: (String) -> Boolean,
 ): String {
     val extension = extensionOf(sourceDisplayName)
-    val stem = baseNameOf(sourceDisplayName).ifEmpty { "copy" } + " (copy)"
-    var candidate = composeName(stem, extension)
+    val base = baseNameOf(sourceDisplayName).ifEmpty { "copy" }
+    var candidate = composeName("$base (copy)", extension)
     for (n in 2..maxTries.coerceAtLeast(2)) {
         if (!taken(candidate)) return candidate
-        candidate = composeName("$stem $n", extension)
+        // Numbered slots keep the KDoc format "name (copy 2).ext" --- the
+        // counter lives inside the parentheses, not after them.
+        candidate = composeName("$base (copy $n)", extension)
     }
     return candidate
 }

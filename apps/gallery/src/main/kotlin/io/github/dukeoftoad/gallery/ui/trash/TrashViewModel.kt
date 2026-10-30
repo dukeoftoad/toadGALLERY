@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.ui.trash
 import android.app.Application
 import android.content.IntentSender
 import android.os.Build
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -46,10 +47,15 @@ sealed interface TrashUiState {
 sealed interface TrashEvent {
     data class RequestConsent(val intentSender: IntentSender) : TrashEvent
 
-    /** [pluralCount] >= 0 renders [messageRes] as a plural; else plain. */
-    data class ShowSnackbar(
+    /** Plain snackbar line. */
+    data class ShowMessage(
         @StringRes val messageRes: Int,
-        val pluralCount: Int = -1,
+    ) : TrashEvent
+
+    /** Plural snackbar line ([count] drives both the grammar and the value). */
+    data class ShowPlural(
+        @PluralsRes val messageRes: Int,
+        val count: Int,
     ) : TrashEvent
 }
 
@@ -161,18 +167,15 @@ class TrashViewModel(app: Application) : AndroidViewModel(app) {
         val action = pendingAction ?: return
         pendingAction = null
         if (!granted) {
-            _events.tryEmit(TrashEvent.ShowSnackbar(R.string.trash_consent_denied))
+            _events.tryEmit(TrashEvent.ShowMessage(R.string.trash_consent_denied))
             return
         }
         _events.tryEmit(
-            TrashEvent.ShowSnackbar(
-                messageRes = if (action.restore) {
-                    R.plurals.trash_restored
-                } else {
-                    R.plurals.trash_deleted_forever
-                },
-                pluralCount = action.items.size,
-            ),
+            if (action.restore) {
+                TrashEvent.ShowPlural(R.plurals.trash_restored, action.items.size)
+            } else {
+                TrashEvent.ShowPlural(R.plurals.trash_deleted_forever, action.items.size)
+            },
         )
         refresh()
     }

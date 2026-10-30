@@ -97,19 +97,16 @@ fun TrashScreen(
                 is TrashEvent.RequestConsent -> consentLauncher.launch(
                     IntentSenderRequest.Builder(event.intentSender).build(),
                 )
-                is TrashEvent.ShowSnackbar -> {
-                    val message = if (event.pluralCount >= 0) {
-                        context.resources.getQuantityString(
-                            event.messageRes, event.pluralCount, event.pluralCount,
-                        )
-                    } else {
-                        context.getString(event.messageRes)
-                    }
-                    snackbarHostState.showSnackbar(
-                        message = message,
-                        duration = SnackbarDuration.Short,
-                    )
-                }
+                is TrashEvent.ShowMessage -> snackbarHostState.showSnackbar(
+                    message = context.getString(event.messageRes),
+                    duration = SnackbarDuration.Short,
+                )
+                is TrashEvent.ShowPlural -> snackbarHostState.showSnackbar(
+                    message = context.resources.getQuantityString(
+                        event.messageRes, event.count, event.count,
+                    ),
+                    duration = SnackbarDuration.Short,
+                )
             }
         }
     }

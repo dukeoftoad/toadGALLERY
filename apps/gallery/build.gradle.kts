@@ -186,6 +186,9 @@ dependencies {
 
     // --- Image loading (Compose-first per compose-migration.md)
     implementation(libs.coil.compose)
+    // Video thumbnails decode locally via MediaMetadataRetriever (issue #33);
+    // purely an on-device decoder artifact --- no network code (ADR-0014).
+    implementation(libs.coil.video)
 
     // --- Metadata (ADR-0008: androidx.exifinterface, NOT the Aves fork)
     implementation(libs.androidx.exifinterface)

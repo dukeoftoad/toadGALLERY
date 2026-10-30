@@ -149,13 +149,29 @@ class MediaStoreSource(private val context: Context) {
         selectionArgs: Array<String>? = null,
         onRow: ((String?) -> Unit)? = null,
     ): List<MediaItem> {
+        // Pixel dimensions (both collections) feed the aspect-ratio-aware
+        // staggered grid (issue #34); the duration column (Video collection
+        // only) feeds the duration overlay (issue #33).
+        //
+        // "width"/"height" are plain MediaStore string columns, available far
+        // below the API 29 `MediaColumns` aliases and honored by both
+        // collections because they share the same underlying files table;
+        // "duration" has been a `Video.VideoColumns` column since API 1. All
+        // reads go through `getColumnIndexOrNull`, so a missing column simply
+        // yields 0 ("unknown") instead of failing.
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.DATE_ADDED,
             MediaStore.MediaColumns.BUCKET_ID,
             MediaStore.MediaColumns.BUCKET_DISPLAY_NAME,
-        )
+            MediaStore.Images.ImageColumns.WIDTH,
+            MediaStore.Images.ImageColumns.HEIGHT,
+        ) + if (isVideo) {
+            arrayOf(MediaStore.Video.VideoColumns.DURATION)
+        } else {
+            emptyArray<String>()
+        }
         val out = ArrayList<MediaItem>(128)
         // `_ID` is required; MIME_TYPE may be null for some HEIC/RAW captures
         // so we fall back to the generic image/video mimetype.
@@ -167,6 +183,15 @@ class MediaStoreSource(private val context: Context) {
                 val mimeCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.MIME_TYPE)
                 val dateCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
                 val nameCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+                val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
+                val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
+                // Only the Video collection projects the duration column; -1
+                // keeps every image row at durationMs = 0 ("unknown").
+                val durationCol = if (isVideo) {
+                    cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                } else {
+                    -1
+                }
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else null
@@ -179,6 +204,9 @@ class MediaStoreSource(private val context: Context) {
                         mimeType = mime ?: fallbackMime,
                         dateAddedSec = dateAdded,
                         isVideo = isVideo,
+                        width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
+                        height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
+                        durationMs = if (durationCol >= 0) cursor.getLong(durationCol) else 0L,
                     )
                 }
             }

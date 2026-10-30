@@ -45,6 +45,8 @@ compose-foundation = { module = "androidx.compose.foundation:foundation" }
 # Back-arrow icon for the album detail top bar (BOM-pinned, issue #29)
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
+# Video frame decoding for thumbnails (issue #33)
+coil-video = { module = "io.coil-kt:coil-video", version.ref = "coil-compose" }
 # NOTE: org.fossify:commons removed per ADR-0008 (no upstream code ports).
 # Testing (issue #20 privacy suite) --- compose test artifacts via compose-bom
 junit = { module = "junit:junit", version.ref = "junit" }

@@ -13,6 +13,17 @@ import io.github.dukeoftoad.gallery.ui.ToadGalleryApp
  * a `NavHost` for the four top-level destinations (Photos, Albums, Search, Settings).
  * Replaces the superseded ADR-0005 View-based + `org.fossify:commons` shell
  * (`BaseSimpleActivity` + Fragments + XML layouts).
+ *
+ * Edge-to-edge contract (issue #11, docs/architecture/design-tokens.md §4):
+ * [enableEdgeToEdge] runs before content attaches, so the very first frame
+ * already draws behind transparent system bars --- no scrim flash and no
+ * post-attach relayout ("no layout jumps"). It also transparents the
+ * navigation bar, disables nav-bar contrast enforcement on API 29+, and stops
+ * fitting system windows. Inset consumption happens exactly once, in Compose:
+ * the Material 3 `Scaffold` in `ToadGalleryApp` turns `contentWindowInsets`
+ * into `innerPadding` for the `NavHost`, so screens and the full-screen
+ * states (permission, loading, error, unsupported) center inside inset-paid
+ * geometry and never pad themselves against the status bar.
  */
 class MainActivity : ComponentActivity() {
 

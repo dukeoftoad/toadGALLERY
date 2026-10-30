@@ -21,8 +21,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ui.theme.ToadSizing
+import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
 
 /**
  * Stable semantics tag carried by [MediaPermissionState]'s root by default
@@ -58,6 +59,15 @@ const val PERMISSION_DENIED_TAG = "state_permission_denied"
  * Compatibility: existing call sites that only pass `onGrant` (e.g.
  * `MediaPermissionState(onGrant = requester::launch)` in PhotosScreen) keep
  * compiling — [tag] defaults to null.
+ *
+ * Token adoption (issue #11, docs/architecture/design-tokens.md): every gap
+ * comes from [ToadSpacing], the decorative glyph from [ToadSizing].stateIcon,
+ * and the type roles from the theme-provided ToadTypography — reproducing the
+ * frozen screen-state layout exactly (72dp icon, `headlineSmall`/
+ * `bodyMedium` copy), so the token migration shifts nothing visually. Both
+ * [TextButton] affordances clear the 48dp touch-target floor without visual
+ * growth: the theme provides `LocalMinimumInteractiveComponentSize` from
+ * `ToadTouchTarget.minimum`.
  */
 @Composable
 fun MediaPermissionState(
@@ -71,7 +81,7 @@ fun MediaPermissionState(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp)
+            .padding(ToadSpacing.xxxl)
             .testTag(tag ?: PERMISSION_DENIED_TAG),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -80,14 +90,14 @@ fun MediaPermissionState(
             painter = painterResource(R.drawable.ic_nav_photos),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(ToadSizing.stateIcon),
         )
         Text(
             text = stringResource(R.string.state_permission_title),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xl),
         )
         Text(
             text = stringResource(R.string.state_permission_body),
@@ -96,11 +106,11 @@ fun MediaPermissionState(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp),
+                .padding(top = ToadSpacing.md),
         )
         TextButton(
             onClick = onGrant,
-            modifier = Modifier.padding(top = 24.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xxl),
         ) {
             Text(stringResource(R.string.state_action_grant))
         }
@@ -113,7 +123,7 @@ fun MediaPermissionState(
                     )
                 )
             },
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = ToadSpacing.md),
         ) {
             Text(stringResource(R.string.state_action_open_settings))
         }
@@ -124,13 +134,13 @@ fun MediaPermissionState(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp),
+                .padding(top = ToadSpacing.md),
         )
         Text(
             text = stringResource(R.string.state_shell_badge),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = 24.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xxl),
         )
     }
 }

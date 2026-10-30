@@ -19,4 +19,13 @@
     <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — the app has no network access at all.</string>
     <string name="state_action_grant">Grant access</string>
     <string name="state_shell_badge">Phase 3 — on-device timeline</string>
+
+    <!-- Albums (issue #29) -->
+    <plurals name="album_item_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="album_detail_fallback_title">Album</string>
+    <string name="album_detail_empty_body">This folder has no media.</string>
+    <string name="cd_back">Back</string>
 </resources>

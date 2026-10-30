@@ -523,6 +523,82 @@ other contributors and not enforceable as a quality gate. User directive 2026-10
 
 ---
 
+## ADR-0014 — Privacy build gates: offline-by-construction (NEW, v2.2)
+
+**Status:** ACCEPTED; **Date:** 2026-10-29 · **Application phases:** 2 (exit criterion), all later phases; runtime audit extended in Phase 8 per ADR-0010 §7.
+
+**Context.** The product invariants are absolute: no `INTERNET` permission in the
+core manifest, no accounts, no cloud sync, no telemetry, no analytics, no ads
+(`docs/product-vision.md`). Convention (code review) cannot enforce this: a single
+transitive dependency can inject `<uses-permission android:name="android.permission.INTERNET"/>`
+via manifest merger, and the source manifest proves nothing about what actually ships.
+toadGALLERY needs the invariant to be *mechanical*: without `INTERNET` the OS itself
+refuses every socket the app process could open — no code path, dependency, or future
+on-device-AI feature can phone home. That is strictly stronger than any behavioural
+promise or proxy-based egress sniffing, because it is enforced by the kernel.
+
+**Decision.** The offline guarantee is enforced in three independent layers,
+all landed with issue #20 (PR #23) and extended for Phase 3 media access
+(issue #25, PR #26). Full enforcement model: `docs/phase-2/privacy-gate.md`.
+
+1. **Layer 1 — build-time merged-manifest gate (Gradle).**
+   `InternetPermissionGateTask` (`apps/gallery/build.gradle.kts`) registers one
+   `gate<Variant>InternetPermission` task per variant. Input is
+   `SingleArtifact.MERGED_MANIFEST` — the merged manifest AGP produces from our
+   manifest plus every dependency's manifest, i.e. the file that ships in the APK.
+   If it declares `android.permission.INTERNET` without an explicit, justified
+   entry in `apps/gallery/internet-permission-allowlist.txt`, the build fails.
+   The allowlist **ships empty**; an entry requires a superseding/new ADR plus an
+   open tracking issue (protocol in the file header). The gate is anchored on
+   `assemble<Variant>` / `bundle<Variant>` / `check`, so no CI run can produce
+   an APK that was not audited (ADR-0013).
+
+2. **Layer 2 — JVM policy tests (`PrivacyPolicyTest`, binding in
+   `testDebugUnitTest`).** Asserts the source manifest never declares INTERNET,
+   the allowlist ships with zero active entries, the gate stays wired into the
+   build (regression tripwires), and — since Phase 3 — that the manifest declares
+   the media permission family (`READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`,
+   `READ_EXTERNAL_STORAGE` capped at `maxSdkVersion=32`), proving the Phase 3
+   permission posture landed and guarding against accidental pruning.
+
+3. **Layer 3 — instrumented egress suite (`PrivacyEgressTest`, CI emulator,
+   API 34).** Runtime proof on a real system image: the app uid holds no INTERNET
+   ( PackageManager check), an active TCP connect to a public resolver is refused
+   by the OS (SecurityException / EACCES), and the core flows (cold launch, all
+   four tabs) walk without crash. The media permissions are pre-granted via
+   `GrantPermissionRule` since Phase 3 so the walk exercises the granted path;
+   the INTERNET refusal is independent of that rule.
+
+**Media permissions are NOT network permissions.** Phase 3 (ADR-0006
+URI-first browsing) added `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / legacy
+`READ_EXTERNAL_STORAGE`. These grant on-device MediaStore reads only; they do
+not appear in the INTERNET allowlist protocol, and the gate is unaffected.
+`ACCESS_MEDIA_LOCATION` stays out of scope until the Phase 4 metadata layer.
+
+**Consequences.**
+
+- Pro: The core promise ("no network access") is enforced by the build and the
+  kernel, not by convention; regression requires defeating three layers.
+- Pro: Dependency-injected INTERNET is caught at merge time with an actionable
+  failure message (which dependency to hunt via `./gradlew :apps:gallery:dependencies`).
+- Pro: The instrumented suite proves the guarantee end-to-end on every PR (CI
+  emulator job).
+- Con: Emulator CI is the slowest job and can be runner-flaky (KVM availability).
+  Mitigation: the Build+lint+test job is independent; gate + JVM suite run there.
+- Con: The static gate cannot see reflection-based egress — but without INTERNET
+  the OS blocks those sockets too, which is exactly what Layer 3 asserts.
+
+**Open questions.**
+
+- Should the gate broaden beyond INTERNET to a network-family deny-list
+  (`ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, …)? Deferred: no current
+  dependency injects them; revisit if one ever does.
+- Should `android:allowBackup="true"` become `false` + explicit
+  `dataExtractionRules`? Deferred to Phase 3/4 when the app first holds real
+  user data (tags, vault).
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -540,3 +616,4 @@ other contributors and not enforceable as a quality gate. User directive 2026-10
 | 0011 | Non-destructive edit pipeline format | ACCEPTED (policy) |
 | 0012 | Video editor scope and pipeline reuse | ACCEPTED (policy) |
 | 0013 | GitHub Actions as the build and CI environment | ACCEPTED |
+| 0014 | Privacy build gates: offline-by-construction | ACCEPTED |

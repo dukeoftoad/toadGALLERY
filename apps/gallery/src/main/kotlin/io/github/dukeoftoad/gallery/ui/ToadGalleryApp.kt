@@ -24,27 +24,39 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
+import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 
 /**
- * toadGALLERY product shell (roadmap Phase 2, ADR-0009).
+ * toadGALLERY product shell (roadmap Phase 2, ADR-0009; Phase 3 wiring #25/#29).
  *
  * Four top-level destinations: Photos, Albums, Search, Settings (inherited from the
- * superseded ADR-0005; carried forward in ADR-0009). The shell deliberately contains
- * NO browsing logic: Phase 3 media access plugs into the state-screen system instead
- * of being coupled to this skeleton.
+ * superseded ADR-0005; carried forward in ADR-0009). The bottom navigation bar is
+ * visible ONLY on top-level routes; sub-screens such as the album detail view
+ * replace it with their own top app bar (Mi-Gallery-style sub-page UX).
  */
 object Destinations {
     const val PHOTOS = "photos"
     const val ALBUMS = "albums"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
+
+    /** Route pattern for the album detail sub-screen (issue #29). */
+    const val ALBUM_DETAIL = "album/{bucketId}"
+
+    fun albumDetail(bucketId: Long): String = "album/$bucketId"
+
+    /** Routes that show the bottom navigation bar. */
+    val topLevel = setOf(PHOTOS, ALBUMS, SEARCH, SETTINGS)
 }
 
 private data class TopLevelDestination(
@@ -69,29 +81,33 @@ fun ToadGalleryApp() {
 
         Scaffold(
             bottomBar = {
-                NavigationBar {
-                    bottomNavItems.forEach { destination ->
-                        NavigationBarItem(
-                            selected = currentRoute == destination.route,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    // Single top-level back stack: tapping the same tab
-                                    // does not stack screens; Up returns to Photos.
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                // Sub-screens (album detail) hide the bottom bar: they carry their
+                // own top app bar with an Up action instead (issue #29).
+                if (currentRoute in Destinations.topLevel) {
+                    NavigationBar {
+                        bottomNavItems.forEach { destination ->
+                            NavigationBarItem(
+                                selected = currentRoute == destination.route,
+                                onClick = {
+                                    navController.navigate(destination.route) {
+                                        // Single top-level back stack: tapping the same tab
+                                        // does not stack screens; Up returns to Photos.
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(destination.iconRes),
-                                    contentDescription = null, // decorative; label carries meaning
-                                )
-                            },
-                            label = { Text(stringResource(destination.labelRes)) },
-                        )
+                                },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(destination.iconRes),
+                                        contentDescription = null, // decorative; label carries meaning
+                                    )
+                                },
+                                label = { Text(stringResource(destination.labelRes)) },
+                            )
+                        }
                     }
                 }
             },
@@ -108,11 +124,24 @@ fun ToadGalleryApp() {
                     PhotosScreen()
                 }
                 composable(Destinations.ALBUMS) {
-                    StateScreen(
-                        iconRes = R.drawable.ic_nav_albums,
-                        titleRes = R.string.state_albums_empty_title,
-                        bodyRes = R.string.state_albums_empty_body,
+                    // Phase 3 (issue #29): real folder grid replaces the placeholder.
+                    AlbumsScreen(
+                        onOpenAlbum = { bucketId ->
+                            navController.navigate(Destinations.albumDetail(bucketId))
+                        }
                     )
+                }
+                composable(
+                    route = Destinations.ALBUM_DETAIL,
+                    arguments = listOf(navArgument("bucketId") { type = NavType.LongType }),
+                ) { backStackEntry ->
+                    val bucketId = backStackEntry.arguments?.getLong("bucketId")
+                    if (bucketId != null && bucketId != 0L) {
+                        AlbumDetailScreen(
+                            bucketId = bucketId,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
                 composable(Destinations.SEARCH) {
                     StateScreen(

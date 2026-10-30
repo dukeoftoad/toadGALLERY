@@ -20,8 +20,8 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        versionCode = 4
-        versionName = "0.3.0-alpha"
+        versionCode = 5
+        versionName = "0.3.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 
@@ -176,6 +176,7 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.foundation)
+    implementation(libs.compose.material.icons.core) // TopAppBar icons (issue #29)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     // --- Phase 3: Lifecycle/ViewModel for the Photos timeline state holder (issue #25)

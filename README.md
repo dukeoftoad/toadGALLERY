@@ -111,8 +111,8 @@ No Flutter SDK required. No Dart SDK required. The CI workflow at
 |---|---|---|
 | **0** | Align scope, establish baselines | **Exited** — [sign-off](docs/phase-0/sign-off.md) |
 | **1** | Source audit, integration design, contract prototype | **Delivered** — audits, matrix, ADRs, diagrams, license report; reframed as reference-only under ADR-0008 |
-| **2** | Product shell, visual foundation, privacy hardening, Compose toolchain, CI | **In progress** — alpha shell built; migrating to Compose; CI workflow added |
-| 3 | Core media access, browsing, file ops, recycle bin, hidden vault | planned |
+| **2** | Product shell, visual foundation, privacy hardening, Compose toolchain, CI | **Exited** — Compose-native shell 0.2.x ([compose-migration.md](docs/architecture/compose-migration.md)); CI as merge gate (ADR-0013); privacy gates + test suites enforced ([ADR-0014](docs/integration-decisions.md), [privacy-gate.md](docs/phase-2/privacy-gate.md)) |
+| 3 | Core media access, browsing, file ops, recycle bin, hidden vault | **In progress** — photo timeline merged ([#26](https://github.com/dukeoftoad/toadGALLERY/pull/26)); albums + detail view ([#29](https://github.com/dukeoftoad/toadGALLERY/issues/29)) |
 | 4 | Aves-grade metadata layer (`androidx.exifinterface` + own IPTC/XMP wrappers) | planned |
 | 5 | MI-style organisational UX (Moments, Stories, opt-in auto-albums, semantic search, collage, slideshow) | planned |
 | 6 | toadGALLERY Edit v1: core adjustments + non-destructive pipeline | contract spec ready ([v1](docs/architecture/editor-contract.md)) |

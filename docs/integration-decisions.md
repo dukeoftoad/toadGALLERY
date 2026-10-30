@@ -795,6 +795,72 @@ the job was zero.
 
 ---
 
+## ADR-0017 — Hidden vault crypto: Keystore AES-256-GCM + PBKDF2 PIN (issue #32)
+
+**Status:** ACCEPTED · **Date:** 2026-10-30 · **Application phase:** 3 (vault core
+landed; UI/biometric slice follows).
+
+**Context.** The hidden vault moves sensitive media out of the main timeline
+into an app-private, at-rest-encrypted store (issue #32; ADR-0010 forbids any
+sync). The store must survive the app process, resist a casual device
+inspection, and unlock with a PIN and/or biometrics. Android gives three
+plausible shapes: (a) media bytes in app-internal storage encrypted under an
+AndroidKeyStore key, unlocked by a PIN; (b) a SQLCipher-style whole-store
+cipher; (c) Keystore with per-file keys wrapped by a user-derived key. Videos
+(common vault content) can exceed available heap, which rules out any design
+that buffers whole files.
+
+**Decision.**
+
+1. **Two independent secrets.** The PIN never encrypts anything: it is
+   verified against a PBKDF2-HMAC-SHA256 digest (`PBKDF2WithHmacSHA256`,
+   210,000 rounds, 16-byte random salt, 32-byte output, constant-time
+   compare). Media bytes are sealed under an AES-256-GCM key that lives
+   **inside AndroidKeyStore** (`AES/GCM/NoPadding`, non-exportable,
+   StrongBox when available) --- losing the PIN lockout never touches key
+   material, and the key never exists outside TEE/StrongBox.
+2. **Blob format:** `IV(12) || ciphertext || GCM tag(128)`, fresh random IV
+   per seal (re-encrypting the same file yields different bytes). Small
+   payloads (PIN record, vault metadata) use the byte-array pair; media
+   files use the streaming pair (`CipherOutputStream` / `CipherInputStream`)
+   so a 100 MiB video never enters the heap. The GCM tag authenticates the
+   whole stream; a truncated or tampered file fails on the final read and
+   the caller must treat that as "blob rejected", never partial content.
+3. **Key seam.** `VaultCrypto` (pure `javax.crypto`, zero Android imports)
+   takes its key through `VaultKeyProvider` --- production supplies the
+   Keystore key, tests supply a locally generated one. That seam is what
+   lets the JVM suite exercise the exact production ciphers on every push
+   (ADR-0016) without an emulator.
+4. **Move-to-vault protocol** (next slice): copy the content-URI bytes
+   through the streaming seal into app-private storage, then remove the
+   MediaStore row (`createDeleteRequest` consent for rows the app does not
+   own). Copy-then-delete is the crash-safe order; a crash between the two
+   leaves an orphaned sealed blob that the vault reclaims on its next
+   integrity sweep. Restore is the inverse: unseal to a new MediaStore row,
+   then delete the sealed blob.
+5. **Unlock state is in-memory only** (issue #32 checkbox): the unlocked
+   flag lives in the activity-scoped ViewModel, cleared on
+   `ON_STOP`/background (auto-lock); nothing about the unlock persists.
+
+**Consequences.**
+
+- Pro: at-rest confidentiality does not depend on app-private storage being
+  unreadable by other apps --- the ciphertext stands alone (defense in depth
+  over plain app-internal files).
+- Pro: the whole core is JVM-testable (round-trip, wrong-key, tamper,
+  truncation, IV uniqueness, streaming 5 MiB) --- landed with the ADR.
+- Con: PBKDF2 at 210k rounds costs ~0.1--0.3 s per unlock on the main
+  thread budget --- the UI slice must run verification off the main thread
+  (coroutine `Dispatchers.Default`), never on composition.
+- Con: Keystore key loss (factory reset, untrusted re-provision) makes the
+  vault permanently unopenable. This is the documented product trade-off:
+  no cloud, no recovery (ADR-0010); the vault setup flow must state it.
+- Deferred: biometric-bound crypto objects (`setUserAuthenticationRequired` +
+  `CryptoObject`) --- v1 uses BiometricPrompt as the session gate over the
+  same PIN-verified session; hardware-binding is a follow-up decision.
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -815,3 +881,4 @@ the job was zero.
 | 0014 | Privacy build gates: offline-by-construction | ACCEPTED |
 | 0015 | Paging 3 for the incremental media timeline (issue #28) | ACCEPTED |
 | 0016 | CI scope: compile + JVM tests; instrumented tests on physical devices | ACCEPTED |
+| 0017 | Hidden vault crypto: Keystore AES-256-GCM + PBKDF2 PIN (issue #32) | ACCEPTED |

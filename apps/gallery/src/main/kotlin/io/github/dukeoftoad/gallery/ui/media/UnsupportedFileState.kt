@@ -78,7 +78,7 @@ fun UnsupportedFileState(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
-                overflow = TextOverflow.Middle,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),

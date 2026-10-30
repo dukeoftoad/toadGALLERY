@@ -103,7 +103,7 @@ jobs:
   connected-privacy:
     name: Instrumented privacy suite (emulator)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50 # 3 install attempts + device reboots under TCG (no KVM on these runners)
     needs: build # only pay for an emulator when the assemble/lint/test job is green
 
     steps:

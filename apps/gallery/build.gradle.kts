@@ -20,8 +20,10 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        versionCode = 5
-        versionName = "0.3.1-alpha"
+        // staggered grid + indicators (issues #33, #34)
+        // rides after the paging slice, which lands first as 0.3.2-alpha / versionCode 6
+        versionCode = 7
+        versionName = "0.3.3-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 

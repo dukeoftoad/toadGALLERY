@@ -35,12 +35,14 @@ import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
  * Three runtime states derived from the user's permission decision:
  *  - PermissionNeeded: the offline-friendly rationale + Grant button
  *  - Loading: a single centered spinner while the MediaStore cursor walks
- *  - Ready: a 3-column grid of square thumbnails via Coil
+ *  - Ready: the shared aspect-aware staggered media grid (`MediaGrid`/
+ *    `MediaThumb`) via Coil
  *
  * The permission request and the grid are shared with the Albums tab
  * (`ui/media/MediaPermissions.kt`, `ui/media/MediaGrid.kt`, issue #29);
- * later Phase 3 slices (staggered grid, overlays, paging, viewer entry)
- * layer on the shared pieces.
+ * the grid staggers cells by aspect ratio and carries the video duration
+ * overlay and GIF badge (issues #33/#34); the remaining Phase 3 slices
+ * (paging, viewer entry) layer on the shared pieces.
  *
  * Privacy: every image is a local content URI (ADR-0006). Coil is wired
  * without its network artifact, so even if a URI somehow resolved to a

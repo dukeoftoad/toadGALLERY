@@ -28,4 +28,10 @@
     <string name="album_detail_fallback_title">Album</string>
     <string name="album_detail_empty_body">This folder has no media.</string>
     <string name="cd_back">Back</string>
+
+    <!-- Grid UX: staggered media cells with video duration overlay and GIF badge (issues #33, #34) -->
+    <string name="media_badge_gif">GIF</string>
+    <string name="cd_media_thumb_image">Photo</string>
+    <string name="cd_media_thumb_video">Video</string>
+    <string name="cd_media_thumb_gif">GIF</string>
 </resources>

@@ -8,6 +8,16 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- Recycle bin (#31): deletion on the Photos timeline now routes to
+  MediaStore's system trash on API 30+ (`createTrashRequest` consent flow,
+  one request per batch; rows stay recoverable ~30 days with system-managed
+  auto-purge), while Android 10 keeps the permanent-delete path (no trash
+  protocol exists below R). New `trash` sub-screen reached from a Settings
+  entry (live item count + total size, `DataSizeFormats`): restore or
+  delete-permanently any selection, or empty everything — each via one
+  consent request, narrated with honest snackbars. `TO_TRASH` seam from #30
+  is now the delete default; JVM tests pin the size formatter; lint is a
+  hard CI gate (see Changed).
 - Full-screen media viewer (#50 — PR #51): tapping a grid cell on the Photos
   timeline or in album detail (outside selection mode) now opens the viewer —
   black edge-to-edge canvas with hidden system bars, a `HorizontalPager` over
@@ -37,6 +47,10 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Changed
 
+- Lint is a hard CI gate (#52): the 19 pre-existing NewApi errors from the
+  file-ops slice are resolved (documented `@Suppress("NewApi")` on the
+  Q-guard invariant; `@RequiresApi(R)` on the consent builders) and
+  `continue-on-error` removed from the lint step.
 - CI runs compile + JVM unit tests only — no emulator-based tests (ADR-0016,
   PR #45); the instrumented privacy suite is a manual on-device release gate.
 - Docs (#21, #22 — PR #46): `androidphotofilters` and `jxl-coder-glide`

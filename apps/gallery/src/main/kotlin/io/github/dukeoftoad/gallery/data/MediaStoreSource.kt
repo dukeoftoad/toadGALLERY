@@ -228,6 +228,98 @@ class MediaStoreSource(private val context: Context) {
         try { getColumnIndexOrThrow(name) } catch (_: IllegalArgumentException) { -1 }
 
     // ------------------------------------------------------------------
+    // Recycle bin (issue #31): trashed-items query, API 30+ (R).
+    //
+    // The trash store IS MediaStore's own: rows with `IS_TRASHED = 1`.
+    // Trashing/restore goes through `MediaStore.createTrashRequest`
+    // (consent-launcher flow, see `MediaFileOps`); this side only READS
+    // the trash content for the Settings entry (count + size) and the
+    // Trash screen. The system auto-purges trashed rows after ~30 days,
+    // which is the issue's retention window --- no app-side scheduler.
+    // ------------------------------------------------------------------
+
+    /** One read of the trash store: rows + aggregate size for the UI. */
+    data class TrashContent(
+        val items: List<MediaItem>,
+        val totalBytes: Long,
+    )
+
+    /**
+     * Reads every trashed image/video, newest-first, plus the summed
+     * `SIZE` of the rows (Settings shows count + total size; issue #31).
+     *
+     * Single query over the unified `MediaStore.Files` collection (R+):
+     * images and videos share one table under scoped storage, so no
+     * client-side merge is needed. Trashed rows are EXCLUDED from the
+     * default media collection, hence the `QUERY_ARG_MATCH_TRASHED =
+     * MATCH_INCLUDE` bundle flag --- without it the provider filters them
+     * out before the selection ever applies. The `media_type` filter keeps
+     * the result to images/videos (the Files table also holds downloads
+     * and documents, which are not gallery trash).
+     *
+     * Callers must be on API 30+ (`IS_TRASHED` and the match-trashed
+     * protocol are R); the Trash UI renders an Unsupported state below R.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    fun queryTrashed(): TrashContent {
+        val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val bundle = Bundle().apply {
+            putInt(
+                ContentResolver.QUERY_ARG_MATCH_TRASHED,
+                ContentResolver.MATCH_INCLUDE,
+            )
+        }
+        val selection =
+            "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
+                "(${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, " +
+                "${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO}) AND " +
+                "${MediaStore.MediaColumns.IS_TRASHED} = 1"
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.Images.ImageColumns.WIDTH,
+            MediaStore.Images.ImageColumns.HEIGHT,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.Video.VideoColumns.DURATION,
+        )
+        val items = ArrayList<MediaItem>(64)
+        var totalBytes = 0L
+        context.contentResolver
+            .query(collection, projection, bundle, null)
+            ?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val mediaTypeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                val mimeCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.MIME_TYPE)
+                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+                val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
+                val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
+                val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                val durationCol = cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    totalBytes += if (sizeCol >= 0) cursor.getLong(sizeCol) else 0L
+                    items += MediaItem(
+                        id = id,
+                        uri = ContentUris.withAppendedId(collection, id),
+                        mimeType = cursor.getString(mimeCol) ?: "application/octet-stream",
+                        dateAddedSec = cursor.getLong(dateCol),
+                        isVideo = cursor.getInt(mediaTypeCol) ==
+                            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO,
+                        width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
+                        height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
+                        durationMs = if (durationCol >= 0) cursor.getLong(durationCol) else 0L,
+                    )
+                }
+            }
+        return TrashContent(
+            items = items.sortedByDescending { it.dateAddedSec },
+            totalBytes = totalBytes,
+        )
+    }
+
+    // ------------------------------------------------------------------
     // Paging 3 (issue #28): windowed timeline queries; issue #38 adds the
     // timeline change observer that drives generational invalidation.
     //

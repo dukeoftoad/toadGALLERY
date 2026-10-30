@@ -90,10 +90,10 @@
     <string name="file_ops_rename_label">Name</string>
     <string name="file_ops_rename_invalid">Enter a name that isn\'t empty and has no / or \\</string>
     <plurals name="file_ops_delete_confirm_title">
-        <item quantity="one">Delete this item permanently?</item>
-        <item quantity="other">Delete these %1$d items permanently?</item>
+        <item quantity="one">Delete this item?</item>
+        <item quantity="other">Delete these %1$d items?</item>
     </plurals>
-    <string name="file_ops_delete_confirm_body">Deletion is permanent. toadGALLERY has no recycle bin yet — this can\'t be undone.</string>
+    <string name="file_ops_delete_confirm_body">Items move to the recycle bin (Android 11+), where they stay for about 30 days. On Android 10 and below, deletion is permanent.</string>
     <string name="file_ops_delete_confirm_yes">Delete</string>
     <string name="file_ops_move_title">Move to album</string>
     <string name="file_ops_progress_rename">Renaming %1$d of %2$d…</string>
@@ -128,4 +128,44 @@
     <string name="viewer_video_error_title">Can\'t play this video</string>
     <string name="viewer_video_error_body">This device\'s video decoder can\'t handle the file — it may use an unsupported codec. The file itself is untouched.</string>
     <string name="cd_viewer_photo">Full-screen photo</string>
+
+    <!-- Recycle bin (issue #31) -->
+    <string name="trash_title">Recycle bin</string>
+    <string name="trash_empty_title">Nothing here</string>
+    <string name="trash_empty_body">Items you delete are kept here for about 30 days before being removed for good. Restore them any time from this screen.</string>
+    <string name="trash_error_title">Couldn\'t load the recycle bin</string>
+    <string name="trash_error_body">Something went wrong while reading trashed items. Nothing was changed — your media is safe.</string>
+    <string name="trash_unsupported_title">Recycle bin needs Android 11</string>
+    <string name="trash_unsupported_body">This Android version has no system trash toadGALLERY can use. Deletion is permanent on this device.</string>
+    <string name="trash_action_restore">Restore</string>
+    <string name="trash_action_delete">Delete</string>
+    <string name="trash_action_delete_all">Delete all</string>
+    <string name="trash_action_empty">Empty</string>
+    <string name="trash_consent_denied">Permission was needed and declined — nothing was changed.</string>
+    <plurals name="trash_header_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <plurals name="trash_moved">
+        <item quantity="one">Moved %1$d item to the recycle bin</item>
+        <item quantity="other">Moved %1$d items to the recycle bin</item>
+    </plurals>
+    <plurals name="trash_restored">
+        <item quantity="one">Restored %1$d item</item>
+        <item quantity="other">Restored %1$d items</item>
+    </plurals>
+    <plurals name="trash_deleted_forever">
+        <item quantity="one">Deleted %1$d item permanently</item>
+        <item quantity="other">Deleted %1$d items permanently</item>
+    </plurals>
+    <plurals name="trash_delete_confirm_items">
+        <item quantity="one">%1$d item will be deleted permanently.</item>
+        <item quantity="other">%1$d items will be deleted permanently.</item>
+    </plurals>
+    <string name="trash_delete_confirm_body">This can\'t be undone.</string>
+    <string name="trash_empty_confirm_title">Empty the recycle bin?</string>
+
+    <!-- Settings: recycle bin entry (issue #31) -->
+    <string name="settings_recycle_bin_title">Recycle bin</string>
+    <string name="settings_recycle_bin_pre_r_body">Available on Android 11 and above.</string>
 </resources>

@@ -40,6 +40,7 @@ import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
+import io.github.dukeoftoad.gallery.ui.trash.TrashScreen
 import io.github.dukeoftoad.gallery.ui.viewer.ViewerScreen
 import io.github.dukeoftoad.gallery.ui.viewer.ViewerViewModel
 
@@ -74,6 +75,13 @@ object Destinations {
      * set uses --- a list of content URIs is far too large for nav args.
      */
     const val VIEWER = "viewer"
+
+    /**
+     * Recycle bin sub-screen (issue #31). Not top-level (sub-page UX);
+     * reached from the Settings entry. The trash store is MediaStore's
+     * own `IS_TRASHED` rows (API 30+), so the screen needs no arguments.
+     */
+    const val TRASH = "trash"
 
     fun albumDetail(bucketId: Long): String = "album/$bucketId"
 
@@ -192,6 +200,7 @@ fun ToadGalleryApp() {
                     SettingsScreen(
                         pickedViewModel = pickedViewModel,
                         onBrowsePicked = { navController.navigate(Destinations.PICKED) },
+                        onOpenTrash = { navController.navigate(Destinations.TRASH) },
                     )
                 }
                 composable(Destinations.PICKED) {
@@ -207,6 +216,12 @@ fun ToadGalleryApp() {
                     // the SAME shell-scoped instance the grid screens wrote to.
                     ViewerScreen(
                         viewModel = viewerViewModel,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Destinations.TRASH) {
+                    // Issue #31: recycle bin over MediaStore's IS_TRASHED rows.
+                    TrashScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }

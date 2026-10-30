@@ -10,6 +10,7 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.MediaFileOps
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow

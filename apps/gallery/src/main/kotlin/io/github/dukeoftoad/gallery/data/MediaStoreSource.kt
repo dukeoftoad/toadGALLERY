@@ -264,10 +264,14 @@ class MediaStoreSource(private val context: Context) {
     fun queryTrashed(): TrashContent {
         val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val bundle = Bundle().apply {
-            putInt(
-                ContentResolver.QUERY_ARG_MATCH_TRASHED,
-                ContentResolver.MATCH_INCLUDE,
-            )
+            // Trashed rows are EXCLUDED by the provider's default match
+            // policy, so the query must ask for them explicitly. The
+            // match-trashed key/value pair is not exposed as SDK constants
+            // in this compile SDK (same situation as the MediaStore
+            // QUERY_ARG_* names --- see queryTimelineWindow's KDoc); the
+            // pair below is the AOSP API-30 contract: the bundle key is
+            // "android:query-arg-match-trashed" and MATCH_INCLUDE = 4.
+            putInt("android:query-arg-match-trashed", 4 /* MATCH_INCLUDE */)
         }
         val selection =
             "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
@@ -300,13 +304,25 @@ class MediaStoreSource(private val context: Context) {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     totalBytes += if (sizeCol >= 0) cursor.getLong(sizeCol) else 0L
+                    val isVideo = cursor.getInt(mediaTypeCol) ==
+                        MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
                     items += MediaItem(
                         id = id,
-                        uri = ContentUris.withAppendedId(collection, id),
+                        // Canonical per-type URI (images/<id>, video/<id>),
+                        // the same shape the snapshot and window paths use:
+                        // identical LazyGrid keys + Coil cache entries, and
+                        // ADR-0006 content URIs anchored by _id.
+                        uri = ContentUris.withAppendedId(
+                            if (isVideo) {
+                                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                            } else {
+                                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                            },
+                            id,
+                        ),
                         mimeType = cursor.getString(mimeCol) ?: "application/octet-stream",
                         dateAddedSec = cursor.getLong(dateCol),
-                        isVideo = cursor.getInt(mediaTypeCol) ==
-                            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO,
+                        isVideo = isVideo,
                         width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
                         height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
                         durationMs = if (durationCol >= 0) cursor.getLong(durationCol) else 0L,

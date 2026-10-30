@@ -5,11 +5,13 @@ choice. Decisions are never edited in place after acceptance — a superseding A
 Statuses: `PROPOSED` (awaiting phase evidence) → `ACCEPTED` (evidence supports it) → `SUPERSEDED`.
 
 **Latest revision:** 2026-10-30 — ADR-0015 introduced (Paging 3 for the incremental media
-timeline, issue #28). Previously (2026-10-29): ADR-0008 supersedes ADR-0001 (features/UI/UX/
-designs only, no code ports, no `org.fossify:commons`); ADR-0009 supersedes ADR-0005 (Jetpack
-Compose, not View-based); ADR-0010/0011/0012 introduced (on-device AI, non-destructive
-pipeline, video editor); ADR-0013 introduced (GitHub Actions as the build environment);
-ADR-0014 introduced (offline-by-construction privacy build gates).
+timeline, issue #28), then amended in the PR #36 review pass: Paging refresh keys snap to
+the window lattice (initialLoadSize == pageSize contract). Previously (2026-10-29):
+ADR-0008 supersedes ADR-0001 (features/UI/UX/designs only, no code ports, no
+`org.fossify:commons`); ADR-0009 supersedes ADR-0005 (Jetpack Compose, not View-based);
+ADR-0010/0011/0012 introduced (on-device AI, non-destructive pipeline, video editor);
+ADR-0013 introduced (GitHub Actions as the build environment); ADR-0014 introduced
+(offline-by-construction privacy build gates).
 
 ---
 
@@ -630,10 +632,13 @@ exactly the shape Paging 3 serves.
 2. **Generic `WindowPagingSource<T>` (`data/WindowPagingSource.kt`).** A positional
    source over *window* callbacks (`suspend (offset, limit) -> List<T>`): keys are
    offsets, a short window signals end-of-list, failures surface as
-   `LoadResult.Error` (retryable), and `getRefreshKey` re-anchors one page above
-   the viewport. It carries no Android types, so the window math is unit-tested on
-   the JVM (`WindowPagingSourceTest`, 8 tests) without Robolectric — genericity is
-   what keeps the test dependency-free, not an aesthetic choice.
+   `LoadResult.Error` (retryable), and `getRefreshKey` re-lands the user in the
+   window they were reading by snapping the last accessed position to the window
+   lattice — floor to a window start, which keeps refresh chains aligned (safe
+   under the `initialLoadSize == pageSize` contract). It carries no Android
+   types, so the window math is unit-tested on the JVM (`WindowPagingSourceTest`,
+   9 tests) without Robolectric — genericity is what keeps the test
+   dependency-free, not an aesthetic choice.
 
 3. **API 30+ — native MediaStore windows.** `queryTimelineWindow(offset, limit)`
    issues ONE Bundle-argument query per page over the unified `MediaStore.Files`
@@ -662,9 +667,11 @@ exactly the shape Paging 3 serves.
 
 - Pro: First paint waits for one 60-row window, not the whole library; scroll
   appends further windows incrementally, off the main thread.
-- Pro: Two new androidx artifacts (`paging-runtime`, `paging-compose`) are pure-JVM
-  libraries with no network surface; the manifest is untouched and the ADR-0014
-  INTERNET gate stays green (verified: `assembleDebug` privacy gate).
+- Pro: Two new androidx artifacts (`paging-runtime`, `paging-compose`) add no
+  network surface — the paging math lives in the pure-JVM `paging-common`
+  underneath, and the two wrappers are ordinary Android AARs; the manifest is
+  untouched and the ADR-0014 INTERNET gate stays green (verified: `assembleDebug`
+  privacy gate).
 - Pro: The generic source keeps all paging math in plain JVM tests; no new test
   infrastructure (no Robolectric) was added for it.
 - Con: Pre-30 devices keep the old startup/memory profile (full snapshot). This
@@ -676,11 +683,12 @@ exactly the shape Paging 3 serves.
   aspect-aware `MediaThumb`; a follow-up integration swaps it into both grids
   (and unifies the staggered layout, issue #34) — `PagingThumb` is isolated in a
   private composable precisely so that swap stays mechanical.
-- Deliberately NOT included: `RemoteMediator` and `PagingSource.Key` jumping —
-  both exist for network/page-token sources; offline MediaStore windows have no
-  pages to mediate and the viewport-anchor re-anchoring already covers
-  invalidation. Timeline auto-refresh on MediaStore change notifications is a
-  later Phase 3 slice (invalidate + re-anchor is already wired).
+- Deliberately NOT included: `RemoteMediator` and Paging key-jumping
+  (`jumpThreshold`) — both exist for network/page-token sources; offline
+  MediaStore windows have no pages to mediate, and lattice-snapped re-anchoring
+  already covers invalidation. Timeline auto-refresh on MediaStore change
+  notifications is a later Phase 3 slice (invalidate + re-anchor is already
+  wired).
 
 **Open questions.**
 

@@ -101,11 +101,35 @@ class WindowPagingSource<T : Any>(
     }
 
     /**
-     * After a refresh (permission re-grant, timeline invalidation), re-lands
-     * the user where they were: one page above the last accessed position,
-     * clamped at the head. Without an anchor (first ever load) the timeline
-     * restarts at `0`.
+     * Picks the window a post-invalidation refresh restarts from, re-landing
+     * the user in the window they were reading: the last accessed position is
+     * **snapped to the window lattice** --- floored to the start of its own
+     * window --- so the refreshed generation's prepend/append chains stay
+     * aligned with the window boundaries and can never re-emit an
+     * already-loaded range.
+     *
+     * Snapping is required, not cosmetic: window keys are always multiples
+     * of `pageSize` (the `initialLoadSize == pageSize` contract in the class
+     * KDoc pins that), so a mid-window key such as the naive
+     * `anchor - pageSize` would start a chain whose clamped `prevKey` steps
+     * walk back unaligned and eventually load a window overlapping an
+     * already-present one --- the same item at two LazyGrid indices, i.e.
+     * duplicate `itemKey`s, which foundation lazy grids throw on.
+     *
+     * Without an anchor the timeline restarts at the head --- and permission
+     * re-grants land here too: a re-grant builds a fresh `Pager` and a fresh
+     * collector, so its first refresh has no anchor and no history.
+     * Anchored refreshes only arise from explicit invalidation flows (the
+     * MediaStore change observer is a later Phase 3 slice).
      */
-    override fun getRefreshKey(state: PagingState<Int, T>): Int =
-        state.anchorPosition?.let { anchor -> maxOf(0, anchor - state.config.pageSize) } ?: 0
+    override fun getRefreshKey(state: PagingState<Int, T>): Int {
+        val anchor = state.anchorPosition ?: return 0
+        val step = state.config.pageSize
+        // Snap to the window lattice. Window keys are always multiples of
+        // `step` (initialLoadSize == pageSize is a hard contract of this
+        // source), so a mid-window key would load a chain of windows that
+        // OVERLAP previously loaded ranges — the same item at two LazyGrid
+        // indices, i.e. duplicate keys, which foundation lazy grids throw on.
+        return (anchor / step) * step
+    }
 }

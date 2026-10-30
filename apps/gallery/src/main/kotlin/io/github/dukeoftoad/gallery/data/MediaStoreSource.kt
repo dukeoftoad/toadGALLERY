@@ -213,6 +213,11 @@ class MediaStoreSource(private val context: Context) {
      * is only guaranteed from API 30 (R). Earlier releases either lack the
      * unified Files view of images+videos or do not reliably honor the
      * paging arguments, so they stay on the full-snapshot timeline.
+     *
+     * This doubles as [queryTimelineWindow]'s runtime tripwire, but call
+     * sites guarding that `@RequiresApi(R)` method must use a lexically
+     * lint-visible `Build.VERSION.SDK_INT >= Build.VERSION_CODES.R` check
+     * instead --- NewApi lint cannot see through this indirection.
      */
     fun supportsWindowedQueries(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.R

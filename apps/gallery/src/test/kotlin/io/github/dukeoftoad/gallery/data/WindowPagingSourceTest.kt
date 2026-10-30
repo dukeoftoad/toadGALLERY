@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.data
 import androidx.paging.PagingConfig
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -129,25 +130,59 @@ class WindowPagingSourceTest {
     }
 
     @Test
-    fun `getRefreshKey re-anchors one page above the accessed position`() {
-        val source = WindowPagingSource(slicingLoader())
-        val state = PagingState<Int, Int>(
-            pages = emptyList(),
-            anchorPosition = 120,
-            config = PagingConfig(pageSize = pageSize, enablePlaceholders = false),
-            leadingPlaceholderCount = 0,
+    fun `a cancelled load propagates CancellationException instead of becoming an Error`() {
+        val marker = CancellationException("load cancelled by Paging")
+        val source = WindowPagingSource<Int> { _, _ -> throw marker }
+        var rethrown: CancellationException? = null
+        // Catch INSIDE runBlocking: the identity of the escaping exception
+        // must be checked at the call site, without relying on how
+        // runBlocking itself propagates cancellation out of the coroutine.
+        runBlocking {
+            try {
+                source.load(
+                    PagingSource.LoadParams.Refresh(key = null, loadSize = pageSize, placeholdersEnabled = false),
+                )
+            } catch (cancellation: CancellationException) {
+                rethrown = cancellation
+            }
+        }
+        assertTrue(
+            "load() must rethrow the loader's CancellationException unwrapped for Paging's " +
+                "load cancellation, never convert it to a LoadResult.Error",
+            rethrown === marker,
         )
-        assertEquals(70, source.getRefreshKey(state))
     }
 
     @Test
-    fun `getRefreshKey returns 0 without an anchor and clamps near the top`() {
+    fun `getRefreshKey snaps the anchor to the window lattice`() {
+        val source = WindowPagingSource(slicingLoader())
+        fun stateAt(anchor: Int, size: Int) = PagingState<Int, Int>(
+            pages = emptyList(),
+            anchorPosition = anchor,
+            config = PagingConfig(pageSize = size, enablePlaceholders = false),
+            leadingPlaceholderCount = 0,
+        )
+        // 120 sits inside the 50-row window [100, 150): the refresh restarts
+        // at the window start 100 --- never at the mid-window 120 - 50 = 70
+        // the old `anchor - pageSize` arithmetic produced (a key like that
+        // makes the prepend chain overlap loaded ranges; duplicate grid keys).
+        assertEquals("120 floors to the start of its 50-row window", 100, source.getRefreshKey(stateAt(120, 50)))
+        // 130 inside a 60-row window --- the production page size: [120, 180).
+        assertEquals("130 floors to the start of its 60-row window", 120, source.getRefreshKey(stateAt(130, 60)))
+        // 59 sits inside the head window [0, 60): floor to the aligned head.
+        assertEquals("59 floors into the head window", 0, source.getRefreshKey(stateAt(59, 60)))
+        // An anchor exactly on a window start is already lattice-aligned.
+        assertEquals("0 is its own window's start", 0, source.getRefreshKey(stateAt(0, 50)))
+    }
+
+    @Test
+    fun `getRefreshKey returns 0 without an anchor and never below the head`() {
         val source = WindowPagingSource(slicingLoader())
         val config = PagingConfig(pageSize = pageSize, enablePlaceholders = false)
         val noAnchor = PagingState<Int, Int>(emptyList(), null, config, 0)
         assertEquals("no anchor: restart the timeline at the head", 0, source.getRefreshKey(noAnchor))
         val nearTop = PagingState<Int, Int>(emptyList(), 30, config, 0)
-        assertEquals("30 - 50 would be negative: clamped at 0", 0, source.getRefreshKey(nearTop))
+        assertEquals("30 floors into the head window [0, 50)", 0, source.getRefreshKey(nearTop))
         assertTrue("the refresh key is never negative", source.getRefreshKey(nearTop) >= 0)
     }
 }

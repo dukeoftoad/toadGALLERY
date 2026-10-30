@@ -4,7 +4,12 @@
 choice. Decisions are never edited in place after acceptance — a superseding ADR is added.
 Statuses: `PROPOSED` (awaiting phase evidence) → `ACCEPTED` (evidence supports it) → `SUPERSEDED`.
 
-**Latest revision:** 2026-10-30 — ADR-0015 introduced (Paging 3 for the incremental media
+**Latest revision:** 2026-10-31 — ADR-0015 amended by the issue #38 review follow-ups: MediaStore
+change notifications now drive a debounced `pagingSource.invalidate()` (a re-anchored generational
+refresh) instead of drifting appends, and the slice's Coil-packaging claim was corrected — Coil 2.x
+ships its HTTP fetcher in the default registry, so the offline guarantee rests on the ADR-0014
+INTERNET gate and `PrivacyEgressTest`, not on Coil's packaging (see the ADR-0015 revision note).
+Previously (2026-10-30): ADR-0015 introduced (Paging 3 for the incremental media
 timeline, issue #28), then amended in the PR #36 review pass: Paging refresh keys snap to
 the window lattice (initialLoadSize == pageSize contract). Previously (2026-10-29):
 ADR-0008 supersedes ADR-0001 (features/UI/UX/designs only, no code ports, no
@@ -678,11 +683,14 @@ exactly the shape Paging 3 serves.
   is bounded by the platform API, not by a code path we can fix; revisit only if
   a lower-cost window mechanism ever appears pre-R.
 - Con: Two grid composables now exist (`MediaGrid` for snapshot paths — album
-  detail, albums covers — and `MediaPagingGrid` for the paged timeline), each with
-  its own thumbnail cell. The parallel grid-UX slice introduces the shared
-  aspect-aware `MediaThumb`; a follow-up integration swaps it into both grids
-  (and unifies the staggered layout, issue #34) — `PagingThumb` is isolated in a
-  private composable precisely so that swap stays mechanical.
+  detail, albums covers — and `MediaPagingGrid` for the paged timeline). They do
+  NOT each carry their own thumbnail cell anymore: since the grid-UX integration
+  both delegate to the shared aspect-aware `MediaThumb` (video-duration overlay
+  and GIF badge included), cell, key and spacing visuals cannot diverge between
+  the snapshot and paged paths. (An earlier revision of this bullet described a
+  `PagingThumb` private composable kept isolated for a mechanical swap; the
+  integration instead unified on `MediaThumb` directly, which achieves the
+  same no-divergence goal with one less composable.)
 - Deliberately NOT included: `RemoteMediator` and Paging key-jumping
   (`jumpThreshold`) — both exist for network/page-token sources; offline
   MediaStore windows have no pages to mediate, and lattice-snapped re-anchoring
@@ -698,6 +706,36 @@ exactly the shape Paging 3 serves.
 - Pre-30 snapshot re-query on invalidation is a full re-walk; acceptable while
   those devices are a shrinking minority, but note it when the vault/recycle
   bin slices start invalidating deliberately.
+
+**Revision (2026-10-31, issue #38 review follow-ups).**
+
+- **Dataset drift is now mitigated by ContentObserver-driven invalidation.**
+  LIMIT/OFFSET windows are positional, so a MediaStore change between two
+  windows of the SAME generation (camera shot, download, delete) can make a
+  later window re-emit an item the grid already shows — duplicate
+  `uri.toString()` LazyGrid keys, which foundation lazy grids throw on. The
+  Photos timeline now registers a ContentObserver on the unified
+  `MediaStore.Files` collection (`notifyForDescendants = true`, because
+  MediaProvider reports row writes on the per-type `images/media` /
+  `video/media` descendant URIs) and, debounced 500 ms against per-row change
+  storms, calls `pagingSource.invalidate()`: the Pager builds a fresh
+  generation re-anchored by the lattice-snapped `getRefreshKey`, so every
+  window of the new generation is computed against one consistent dataset —
+  instead of appends that drift. The observer is API 30+ only, matching the
+  windowed protocol it serves; below 30 one memoized snapshot serves a whole
+  generation and cannot drift mid-generation, so those devices keep the
+  documented snapshot behavior (the open question above stands for them).
+  This is the "later Phase 3 slice" the *Deliberately NOT included* note
+  above anticipated.
+- **The slice's Coil packaging claim was corrected.** The earlier slice docs
+  said Coil is "wired without its network artifact". That is not an honest
+  guarantee: Coil 2.x ships the OkHttp/HTTP fetcher inside the default
+  `coil-compose` registry — there is no separate network artifact to exclude
+  until Coil 3 — so the loader could, in principle, issue HTTP requests. The
+  offline guarantee rests on the ADR-0014 INTERNET permission gate
+  (merged-manifest check at build time; the OS refuses every socket without
+  INTERNET) and on `PrivacyEgressTest` at runtime — not on Coil's packaging.
+  The code KDocs were reworded to claim exactly that.
 
 ---
 

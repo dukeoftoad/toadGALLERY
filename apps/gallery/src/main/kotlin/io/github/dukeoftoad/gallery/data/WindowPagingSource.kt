@@ -13,8 +13,8 @@ import kotlinx.coroutines.CancellationException
  * start of the timeline (newest item) and a load asks [windowLoader] for
  * the fixed window `[key, key + loadSize)`. Consecutive windows therefore
  * tile the list exactly, with no gaps and no overlaps, as long as the
- * loader honors the slice contract --- see [queryTimelineWindow] for the
- * MediaStore implementation that makes windows deterministic (a stable
+ * loader honors the slice contract --- see [MediaStoreSource.queryTimelineWindow]
+ * for the MediaStore implementation that makes windows deterministic (a stable
  * `date_added DESC, _id DESC` total order; without the `_id` tiebreak,
  * rows sharing one `date_added` second could reorder at a window boundary
  * and get skipped or duplicated between pages).

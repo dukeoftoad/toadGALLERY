@@ -7,6 +7,7 @@
 | [`module-diagram.md`](module-diagram.md) | Module layout (`apps/`, `shared/*`), external dependencies, upstream relations (Mermaid) |
 | [`data-flow.md`](data-flow.md) | Browsing/grid, progressive metadata, file-ops/trash, Gallery↔Edit round trip, date semantics (Mermaid) |
 | [`editor-contract.md`](editor-contract.md) | Versioned Gallery ↔ Edit intent contract v1 (ADR-0007 spec) |
+| [`file-ops.md`](file-ops.md) | File operations (issue #30): API matrix, consent recovery, move/undo semantics, the `DeleteMode.TO_TRASH` seam for #31, limitations |
 
 Sources of authority for anything not yet here: the [ADRs](../integration-decisions.md)
 (decisions), the [feature matrix](../feature-matrix.md) (capability ownership), and the

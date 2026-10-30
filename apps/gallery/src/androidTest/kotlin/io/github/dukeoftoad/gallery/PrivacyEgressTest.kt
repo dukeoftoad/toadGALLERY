@@ -24,8 +24,14 @@ import java.net.SocketException
  * Instrumented privacy suite (issue #20, Phase 2 exit criteria; extended for
  * Phase 3 media access in issue #25).
  *
+ * RUN MODE (ADR-0016, 2026-10-30): this suite is a MANUAL RELEASE GATE ---
+ * run it on a physical device before every tagged release:
+ *   ./gradlew :apps:gallery:connectedDebugAndroidTest
+ * CI no longer runs emulator jobs (no KVM on hosted runners made the CI
+ * emulator slow and probabilistically red before any test executed).
+ *
  * Proves the offline-by-construction guarantee at runtime, on a real Android
- * system image (CI emulator, API 34):
+ * system image (physical device; previously CI emulator, API 34):
  *
  *  1. `internetPermission_isNotGrantedAtRuntime` --- the app uid holds no
  *     INTERNET permission. Without it the OS itself refuses every socket the

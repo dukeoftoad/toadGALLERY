@@ -592,8 +592,14 @@ not appear in the INTERNET allowlist protocol, and the gate is unaffected.
   failure message (which dependency to hunt via `./gradlew :apps:gallery:dependencies`).
 - Pro: The instrumented suite proves the guarantee end-to-end on every PR (CI
   emulator job).
+  *Update 2026-10-30:* the suite moved out of CI and is now a manual
+  release-time gate on physical devices — ADR-0016. Layers 1–2 remain
+  binding on every push and PR.
 - Con: Emulator CI is the slowest job and can be runner-flaky (KVM availability).
   Mitigation: the Build+lint+test job is independent; gate + JVM suite run there.
+  *Update 2026-10-30:* resolved by removing the emulator job entirely (ADR-0016);
+  the runners had no KVM at all, making the job both slow and probabilistically
+  red before any test executed.
 - Con: The static gate cannot see reflection-based egress — but without INTERNET
   the OS blocks those sockets too, which is exactly what Layer 3 asserts.
 
@@ -739,6 +745,56 @@ exactly the shape Paging 3 serves.
 
 ---
 
+## ADR-0016 — CI scope: compile + JVM tests; instrumented tests run on physical devices (v2.2)
+
+**Status:** ACCEPTED · **Date:** 2026-10-30 · **Application phases:** all
+(amends ADR-0013; moves ADR-0014 Layer 3 out of CI).
+
+**Context.** ADR-0013 made GitHub Actions the build environment and
+ADR-0014 added an instrumented egress suite on a CI emulator (API 34,
+`connected-privacy` job). Three runs on 2026-10-30 (#26, #28, #33) failed
+*before any test executed*: the hosted `ubuntu-latest` runners expose no KVM
+(`-accel off`), so the emulator runs under pure software emulation (TCG).
+Boots take 7–15 minutes and the package-manager install-commit dies
+probabilistically with `Broken pipe (32)`; the follow-up attempt then hits a
+wedged `PackageManagerInternal.freeStorage` NPE. Retry logic, bigger
+`-partition-size`, verifier-off and device detox (PRs #39, #43) did not change
+the distribution — identical code went green on runs #29/#32 and red on #33.
+The failing runs produced zero test results, so the signal-to-cost ratio of
+the job was zero.
+
+**Decision.**
+
+1. CI runs exactly one job: `build` — `assembleDebug` + lint (non-binding) +
+   `testDebugUnitTest` (binding). The unit-test task includes the ADR-0014
+   Layer 1 + Layer 2 privacy gate (merged-manifest INTERNET gate +
+   `PrivacyPolicyTest`), so the offline-by-construction guarantee stays
+   mechanically enforced on every push and PR.
+2. The instrumented egress suite (`PrivacyEgressTest`) is **kept** in
+   `src/androidTest` as a manual, pre-release gate, run on a physical device:
+   `./gradlew :apps:gallery:connectedDebugAndroidTest`. A passing physical-
+   device run is recorded for every tagged release.
+3. No future workflow may reintroduce emulator jobs: hosted runners without
+   KVM cannot provide timely or deterministic instrumented feedback. If a
+   device farm or self-hosted KVM runner is ever added, supersede this ADR
+   explicitly.
+
+**Consequences.**
+
+- Pro: PR feedback in ~5 minutes instead of ~20; the emulator flake class is
+  deleted rather than mitigated; no probabilistic reds on main.
+- Pro: The privacy guarantee is unaffected — it is enforced by the build gate
+  and by the OS (no INTERNET ⇒ no sockets). Layer 3 only ever *demonstrated*
+  that enforcement at runtime.
+- Con: Runtime egress proof is no longer continuous; it moves to release time
+  on real hardware. Mitigation: Layers 1–2 tripwires fail the build on any
+  INTERNET appearance, which is the strongest signal Layer 3 had anyway.
+- Con: The cold-launch / tab-walk crash walk loses its automated net; crash
+  coverage relies on unit-tested state machines and manual release passes
+  until Phase 10 hardening.
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -758,3 +814,4 @@ exactly the shape Paging 3 serves.
 | 0013 | GitHub Actions as the build and CI environment | ACCEPTED |
 | 0014 | Privacy build gates: offline-by-construction | ACCEPTED |
 | 0015 | Paging 3 for the incremental media timeline (issue #28) | ACCEPTED |
+| 0016 | CI scope: compile + JVM tests; instrumented tests on physical devices | ACCEPTED |

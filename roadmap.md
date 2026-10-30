@@ -13,6 +13,15 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
+### v2.3 (2026-10-30) --- Phase 3 progress tracker; CI scope narrowed (ADR-0016)
+
+- The Phase 3 section now carries an explicit landed / in-flight progress
+  note so the next stages are visible in the roadmap itself.
+- ADR-0016: CI = compile + JVM unit tests only; the instrumented privacy
+  suite becomes a manual on-device release gate (amends ADR-0013; moves
+  ADR-0014 Layer 3 out of CI).
+- Repo `CHANGELOG.md` introduced, tracking releases from 0.1.0-alpha.
+
 ### v2.2 (2026-10-29) --- features/UI/UX/designs only; GitHub Actions CI
 
 Driven by two user directives on 2026-10-29:
@@ -294,6 +303,15 @@ green CI workflow.
 **Purpose:** Make the Gallery useful and dependable for everyday file
 operations, with safety nets (recycle bin, hidden vault) in place from
 the start.
+
+> **Progress (2026-10-30):** landed on main --- Photos timeline + permission
+> flow (#25), Albums tab (#29), Paging 3 incremental timeline (#28),
+> aspect-aware staggered grid + video/GIF overlays (#33, #34), paging
+> follow-ups: invalidation, append load-states, idempotent re-entry (#38),
+> screen-state system (#13), system Photo Picker path (#27). Next in
+> flight: file operations (#30), then recycle bin (#31) and hidden vault
+> (#32), which build on the #30 operations layer. CI runs compile + JVM
+> tests only (ADR-0016).
 
 #### Tasks
 

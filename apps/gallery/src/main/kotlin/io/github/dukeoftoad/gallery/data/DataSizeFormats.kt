@@ -22,17 +22,21 @@ object DataSizeFormats {
     private val units = arrayOf("B", "KB", "MB", "GB", "TB")
 
     /**
-     * Formats [bytes] with decimal units: integers at 100+ of the unit
-     * ("340 MB"), one decimal below that ("4.5 KB"), plain "0 B" for
-     * non-positive input. Never throws on absurd values; Long.MAX_VALUE
-     * lands in TB.
+     * Formats [bytes] with decimal units: plain integers for bytes
+     * ("999 B"), integers at 100+ of a unit ("340 MB"), one decimal below
+     * that ("4.5 KB"), plain "0 B" for non-positive input. Never throws on
+     * absurd values; Long.MAX_VALUE lands in TB.
      */
     fun formatBytes(bytes: Long): String {
         if (bytes <= 0) return "0 B"
         val digitGroups = (log10(bytes.toDouble()) / log10(1000.0)).toInt()
         val group = digitGroups.coerceAtMost(units.size - 1)
         val scaled = bytes / 1000.0.pow(group.toDouble())
-        val pattern = if (scaled >= 100) "%.0f %s" else "%.1f %s"
+        val pattern = when {
+            group == 0 -> "%.0f %s" // bytes: never "1.0 B"
+            scaled >= 100 -> "%.0f %s"
+            else -> "%.1f %s"
+        }
         return String.format(Locale.ROOT, pattern, scaled, units[group])
     }
 }

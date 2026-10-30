@@ -44,8 +44,9 @@ class DataSizeFormatsTest {
     @Test
     fun `huge values clamp at terabytes`() {
         assertEquals("1.0 TB", DataSizeFormats.formatBytes(1_000_000_000_000))
-        // Long.MAX_VALUE (~9.22e18) clamps into the last unit: ~9.2 million TB.
-        assertEquals("9223372.0 TB", DataSizeFormats.formatBytes(Long.MAX_VALUE))
+        // Long.MAX_VALUE (~9.22e18) clamps into the last unit; at 100+ the
+        // format drops the decimal: ~9.2 million TB.
+        assertEquals("9223372 TB", DataSizeFormats.formatBytes(Long.MAX_VALUE))
     }
 
     @Test

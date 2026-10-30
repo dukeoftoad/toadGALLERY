@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,12 @@ import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.MediaPagingGrid
 import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
 import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
+import io.github.dukeoftoad.gallery.ui.vault.VaultBusy
+import io.github.dukeoftoad.gallery.ui.vault.VaultBusyKind
+import io.github.dukeoftoad.gallery.ui.vault.VaultEvent
+import io.github.dukeoftoad.gallery.ui.vault.VaultUiState
+import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
+import io.github.dukeoftoad.gallery.ui.vault.isConfigured
 
 /**
  * Photos tab (Phase 3, issue #25; incremental paging since #28; review
@@ -122,6 +129,19 @@ import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
  *    there) --- long-press simply does nothing and the grid renders exactly
  *    as before this slice (documented in `docs/architecture/file-ops.md`).
  *
+ * ## Move to vault (issue #32, ADR-0017)
+ * The shell-scoped [vaultViewModel] (shared with the Settings entry and the
+ * `vault` sub-screen) adds a lock-icon action to the selection app bar,
+ * visible ONLY while the vault is configured. The confirmation dialog
+ * states exactly what happens: media is copied into the encrypted vault,
+ * the originals leave the gallery, and from then on they are only
+ * reachable through the vault. The move runs per item (seal bytes, then
+ * remove the row through the SAME consent machinery above); a blocked
+ * delete round-trips through this screen's vault consent launcher and
+ * [VaultViewModel.onConsentResult]. On Android 10, where no batch delete
+ * request exists, consent-blocked originals narrate as copied-but-not-
+ * removed instead of looping a dialog.
+ *
  * The permission request and the cell/grid visuals are shared with the
  * Albums tab (`ui/media/MediaPermissions.kt`, `ui/media/MediaGrid.kt` +
  * `ui/media/MediaPagingGrid.kt`, issue #29); both grids stagger cells by
@@ -140,10 +160,13 @@ import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
 fun PhotosScreen(
     viewModel: PhotosViewModel = viewModel(),
     fileOpsViewModel: FileOpsViewModel = viewModel(),
+    vaultViewModel: VaultViewModel,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
 ) {
     val state by viewModel.state.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
+    val vaultState by vaultViewModel.state.collectAsState()
+    val vaultBusy by vaultViewModel.busy.collectAsState()
 
     val requester = rememberMediaPermissionRequester(
         onResult = { granted ->
@@ -158,6 +181,39 @@ fun PhotosScreen(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
         fileOpsViewModel.onConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    // ---- Vault plumbing (issue #32): move narration + delete consent ----
+    // A separate launcher from the file-ops one: both consent flows can
+    // never be in flight together (a move clears the selection), but the
+    // result must route to the right ViewModel.
+    val vaultConsentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        vaultViewModel.onConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+    LaunchedEffect(Unit) {
+        vaultViewModel.events.collect { event ->
+            when (event) {
+                is VaultEvent.RequestConsent -> vaultConsentLauncher.launch(
+                    IntentSenderRequest.Builder(event.intentSender).build(),
+                )
+                is VaultEvent.ShowMessage -> snackbarHostState.showSnackbar(
+                    message = if (event.formatArgs.isEmpty()) {
+                        context.getString(event.messageRes)
+                    } else {
+                        context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+                    },
+                    duration = SnackbarDuration.Short,
+                )
+                is VaultEvent.ShowPlural -> snackbarHostState.showSnackbar(
+                    message = context.resources.getQuantityString(
+                        event.messageRes, event.count, event.count,
+                    ),
+                    duration = SnackbarDuration.Short,
+                )
+            }
+        }
     }
     LaunchedEffect(Unit) {
         fileOpsViewModel.events.collect { event ->
@@ -259,6 +315,9 @@ fun PhotosScreen(
                     lazyItems = lazyItems,
                     fileOpsViewModel = fileOpsViewModel,
                     fileOpsState = fileOpsState,
+                    vaultViewModel = vaultViewModel,
+                    vaultState = vaultState,
+                    vaultBusy = vaultBusy,
                     snackbarHostState = snackbarHostState,
                     onOpenViewer = onOpenViewer,
                 )
@@ -271,7 +330,8 @@ fun PhotosScreen(
  * The ready Photos timeline with its file-ops chrome (issue #30): the paged
  * grid, the selection app bar + actions while selecting, the undo snackbar
  * host, and the four file-ops dialogs (rename, delete confirmation, album
- * picker, batch progress).
+ * picker, batch progress). The vault chrome (issue #32) rides along: the
+ * move-to-vault confirmation and its cancellable progress dialog.
  *
  * Grid refreshing after ops is NOT done by hand: MediaStore writes fire the
  * existing ContentObserver -> paging invalidation (issue #38); see the
@@ -282,6 +342,9 @@ private fun PhotosTimeline(
     lazyItems: LazyPagingItems<MediaItem>,
     fileOpsViewModel: FileOpsViewModel,
     fileOpsState: FileOpsUiState,
+    vaultViewModel: VaultViewModel,
+    vaultState: VaultUiState,
+    vaultBusy: VaultBusy?,
     snackbarHostState: SnackbarHostState,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
 ) {
@@ -296,6 +359,7 @@ private fun PhotosTimeline(
     var deleteCount by remember { mutableStateOf(0) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showAlbumPicker by remember { mutableStateOf(false) }
+    var showVaultMoveConfirm by remember { mutableStateOf(false) }
     val albums by fileOpsViewModel.albums.collectAsState()
 
     // Prefill for the rename dialog: the current name minus its extension
@@ -315,6 +379,8 @@ private fun PhotosTimeline(
                 FileOpsSelectionBar(
                     count = selection.items.size,
                     onExit = fileOpsViewModel::exitSelection,
+                    showMoveToVault = vaultState.isConfigured,
+                    onMoveToVault = { showVaultMoveConfirm = true },
                 )
                 Box(modifier = Modifier.weight(1f)) {
                     PhotosGrid(
@@ -403,6 +469,34 @@ private fun PhotosTimeline(
             onCancel = fileOpsViewModel::cancelRunning,
         )
     }
+
+    // ---- Vault move dialogs (issue #32) ----
+
+    if (showVaultMoveConfirm && selection != null && selection.items.isNotEmpty()) {
+        VaultMoveDialog(
+            count = selection.items.size,
+            onConfirm = {
+                vaultViewModel.moveToVault(selection.items)
+                // The selection handed its items to the vault batch; leaving
+                // selection mode now keeps the app bar from acting on items
+                // that are about to leave the timeline.
+                fileOpsViewModel.exitSelection()
+                showVaultMoveConfirm = false
+            },
+            onDismiss = { showVaultMoveConfirm = false },
+        )
+    }
+    // Every move batch shows the dialog (even one item): sealing copies
+    // real media bytes, which dwarfs the rename/copy batches the file-ops
+    // threshold was sized for.
+    val vaultMoving = vaultBusy?.takeIf { it.kind == VaultBusyKind.MOVING }
+    if (vaultMoving != null) {
+        VaultMoveProgressDialog(
+            done = vaultMoving.done,
+            total = vaultMoving.total,
+            onCancel = vaultViewModel::cancelMove,
+        )
+    }
 }
 
 /**
@@ -477,15 +571,21 @@ private fun PhotosGrid(
 
 /**
  * Selection-mode top bar (issue #30): the live count (plurals like
- * `settings_picked_count`) plus an exit action. `windowInsets = 0`: the
- * shell Scaffold already consumed the status-bar inset, so a default
- * TopAppBar would double-pad.
+ * `settings_picked_count`) plus an exit action, and --- when the vault is
+ * configured --- the Move to vault lock action (issue #32) in the actions
+ * slot. An icon action there (not a fifth text button in the actions row)
+ * keeps the row's four labels fitting on small screens; the lock glyph
+ * reads as "vault" unaided, and the confirmation dialog explains fully.
+ * `windowInsets = 0`: the shell Scaffold already consumed the status-bar
+ * inset, so a default TopAppBar would double-pad.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FileOpsSelectionBar(
     count: Int,
     onExit: () -> Unit,
+    showMoveToVault: Boolean,
+    onMoveToVault: () -> Unit,
 ) {
     TopAppBar(
         title = {
@@ -497,6 +597,19 @@ private fun FileOpsSelectionBar(
                     imageVector = Icons.Filled.Close,
                     contentDescription = stringResource(R.string.cd_file_ops_exit_selection),
                 )
+            }
+        },
+        actions = {
+            if (showMoveToVault) {
+                IconButton(
+                    onClick = onMoveToVault,
+                    modifier = Modifier.testTag("vault_action_move"),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_vault),
+                        contentDescription = stringResource(R.string.vault_cd_move_action),
+                    )
+                }
             }
         },
         windowInsets = WindowInsets(0, 0, 0, 0),
@@ -761,5 +874,69 @@ private fun FileOpsProgressDialog(
         },
         title = { Text(stringResource(messageRes, done, total)) },
         modifier = Modifier.testTag("file_ops_progress"),
+    )
+}
+
+/**
+ * The move-to-vault confirmation (issue #32): states exactly what happens
+ * per ADR-0017 --- the media is sealed into the encrypted vault and the
+ * originals are removed from the gallery; from then on they are reachable
+ * only through the vault.
+ */
+@Composable
+private fun VaultMoveDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                modifier = Modifier.testTag("vault_move_confirm_yes"),
+            ) {
+                Text(stringResource(R.string.vault_move_confirm_yes))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.file_ops_action_cancel))
+            }
+        },
+        title = {
+            Text(
+                pluralStringResource(
+                    R.plurals.vault_move_confirm_title, count, count,
+                ),
+            )
+        },
+        text = { Text(stringResource(R.string.vault_move_confirm_body)) },
+        modifier = Modifier.testTag("vault_dialog_move"),
+    )
+}
+
+/**
+ * The cancellable move-to-vault progress dialog (issue #32): "Moving 3 of
+ * 12 to the vault…" over the vault ViewModel's busy progress, shown for
+ * every move batch (bytes are copied; see `PhotosTimeline`). Not
+ * dismissible by tapping outside --- cancelling is an explicit decision.
+ */
+@Composable
+private fun VaultMoveProgressDialog(
+    done: Int,
+    total: Int,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.file_ops_action_cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.vault_progress_move, done, total)) },
+        modifier = Modifier.testTag("vault_progress"),
     )
 }

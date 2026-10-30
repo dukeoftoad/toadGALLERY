@@ -16,6 +16,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,6 +24,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -41,6 +45,8 @@ import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 import io.github.dukeoftoad.gallery.ui.trash.TrashScreen
+import io.github.dukeoftoad.gallery.ui.vault.VaultScreen
+import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
 import io.github.dukeoftoad.gallery.ui.viewer.ViewerScreen
 import io.github.dukeoftoad.gallery.ui.viewer.ViewerViewModel
 
@@ -83,6 +89,15 @@ object Destinations {
      */
     const val TRASH = "trash"
 
+    /**
+     * Hidden vault sub-screen (issue #32, ADR-0017). Not top-level
+     * (sub-page UX); reached from the Settings entry. The vault's lock
+     * state lives in the shell-scoped `VaultViewModel` (the viewerViewModel
+     * hand-off), so the Photos move-to-vault flow and this screen share one
+     * auto-locked session --- nothing to pass through nav arguments.
+     */
+    const val VAULT = "vault"
+
     fun albumDetail(bucketId: Long): String = "album/$bucketId"
 
     /** Routes that show the bottom navigation bar. */
@@ -115,9 +130,29 @@ fun ToadGalleryApp() {
         // ViewerScreen reads the same instance. viewModel() at the shell
         // level scopes to the ACTIVITY, so both sides see one object.
         val viewerViewModel: ViewerViewModel = viewModel()
+        // Issue #32: the hidden vault's lock state is shared between the
+        // Settings entry (live status), the Photos move-to-vault flow and
+        // the `vault` sub-screen, so it lives in ONE activity-scoped
+        // ViewModel like the picked set and the viewer window above.
+        val vaultViewModel: VaultViewModel = viewModel()
         val openViewer: (window: List<MediaItem>, index: Int) -> Unit = { window, index ->
             viewerViewModel.open(window, index)
             navController.navigate(Destinations.VIEWER)
+        }
+        // Auto-lock (issue #32, ADR-0017): the unlocked vault session is
+        // in-memory only and clears when the ACTIVITY stops --- the observer
+        // lives here at the shell (the app-level ProcessLifecycleOwner would
+        // be an extra dependency; the activity lifecycle is the honest v1
+        // proxy for "the app went to the background").
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner, vaultViewModel) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) {
+                    vaultViewModel.onBackgrounded()
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
@@ -164,7 +199,10 @@ fun ToadGalleryApp() {
             ) {
                 composable(Destinations.PHOTOS) {
                     // Phase 3 (issue #25): real MediaStore timeline replaces the placeholder.
-                    PhotosScreen(onOpenViewer = openViewer)
+                    PhotosScreen(
+                        onOpenViewer = openViewer,
+                        vaultViewModel = vaultViewModel,
+                    )
                 }
                 composable(Destinations.ALBUMS) {
                     // Phase 3 (issue #29): real folder grid replaces the placeholder.
@@ -201,6 +239,8 @@ fun ToadGalleryApp() {
                         pickedViewModel = pickedViewModel,
                         onBrowsePicked = { navController.navigate(Destinations.PICKED) },
                         onOpenTrash = { navController.navigate(Destinations.TRASH) },
+                        vaultViewModel = vaultViewModel,
+                        onOpenVault = { navController.navigate(Destinations.VAULT) },
                     )
                 }
                 composable(Destinations.PICKED) {
@@ -222,6 +262,14 @@ fun ToadGalleryApp() {
                 composable(Destinations.TRASH) {
                     // Issue #31: recycle bin over MediaStore's IS_TRASHED rows.
                     TrashScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Destinations.VAULT) {
+                    // Issue #32: hidden vault over the SAME shell-scoped
+                    // session the Photos move-to-vault flow used.
+                    VaultScreen(
+                        viewModel = vaultViewModel,
                         onBack = { navController.popBackStack() },
                     )
                 }

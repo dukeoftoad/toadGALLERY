@@ -304,16 +304,20 @@ green CI workflow.
 operations, with safety nets (recycle bin, hidden vault) in place from
 the start.
 
-> **Progress (2026-10-30):** landed on main --- Photos timeline + permission
+> **Progress (2026-10-31):** landed on main --- Photos timeline + permission
 > flow (#25), Albums tab (#29), Paging 3 incremental timeline (#28),
 > aspect-aware staggered grid + video/GIF overlays (#33, #34), paging
 > follow-ups: invalidation, append load-states, idempotent re-entry (#38),
 > screen-state system (#13), system Photo Picker path (#27), file operations
 > (#30), full-screen media viewer with in-app video playback (#50), recycle
-> bin over MediaStore's system trash (#31), vault crypto core + ADR-0017
-> (#32). Next in flight: hidden-vault storage + unlock UI (#32, on the
-> ADR-0017 core); viewer pinch-zoom deferred from #50. CI runs compile +
-> JVM tests with lint as a hard gate (ADR-0016, #52).
+> bin over MediaStore's system trash (#31), hidden vault complete: crypto
+> core + sealed store + PIN setup/unlock + move-to-vault + restore +
+> auto-lock (#32, ADR-0017). In flight on a side branch: viewer
+> pinch-zoom/pan + double-tap + animated GIF decode (deferred from #50).
+> With those, the Phase 3 deliverable set (end-to-end browsing and basic
+> media operations, recycle bin, hidden vault, failure-mode tests) is
+> complete; biometric unlock binding is a documented follow-up. CI runs
+> compile + JVM tests with lint as a hard gate (ADR-0016, #52).
 
 #### Tasks
 

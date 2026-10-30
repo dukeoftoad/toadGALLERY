@@ -18,6 +18,10 @@
     <string name="state_permission_title">Access needed</string>
     <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — the app has no network access at all.</string>
     <string name="state_action_grant">Grant access</string>
+    <!-- Photos refresh-error state + retry action (Paging 3 load-state layering, issue #28) -->
+    <string name="state_photos_error_title">Couldn\'t load your library</string>
+    <string name="state_photos_error_body">Something went wrong while reading on-device media. Nothing was changed — your photos are safe.</string>
+    <string name="state_action_retry">Try again</string>
     <string name="state_shell_badge">Phase 3 — on-device timeline</string>
 
     <!-- Albums (issue #29) -->

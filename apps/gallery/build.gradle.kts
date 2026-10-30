@@ -20,8 +20,8 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        // staggered grid + indicators (issues #33, #34)
-        // rides after the paging slice, which lands first as 0.3.2-alpha / versionCode 6
+        // 0.3.3-alpha: staggered grid + indicators (issues #33, #34), riding on the
+        // Paging 3 slice that landed first as 0.3.2-alpha / versionCode 6 (issue #28)
         versionCode = 7
         versionName = "0.3.3-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
@@ -184,6 +184,9 @@ dependencies {
     // --- Phase 3: Lifecycle/ViewModel for the Photos timeline state holder (issue #25)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // --- Phase 3: Paging 3 --- windowed timeline loads + LazyPagingItems grid (issue #28)
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
     debugImplementation(libs.compose.ui.tooling)
 
     // --- Image loading (Compose-first per compose-migration.md)

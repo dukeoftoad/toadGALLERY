@@ -438,7 +438,7 @@ private fun VaultEntryRow(
             ),
             // Unspecified keeps the video plate's own two-tone look (the
             // viewer reuses the same drawable this way); photos tint normally.
-            tint = if (entry.isVideo) Color.Unspecified else LocalContentColor,
+            tint = if (entry.isVideo) Color.Unspecified else LocalContentColor.current,
             modifier = Modifier.size(24.dp),
         )
         Column(
@@ -517,7 +517,7 @@ private fun VaultActionButton(
             CircularProgressIndicator(
                 modifier = Modifier.size(18.dp),
                 strokeWidth = 2.dp,
-                color = LocalContentColor,
+                color = LocalContentColor.current,
             )
             Spacer(Modifier.width(8.dp))
         }

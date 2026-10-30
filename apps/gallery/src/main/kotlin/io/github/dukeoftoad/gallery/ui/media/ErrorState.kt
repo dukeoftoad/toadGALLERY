@@ -19,8 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ui.theme.ToadSizing
+import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
 
 /**
  * The shared error screen state with a retry action (screen-state system:
@@ -55,6 +56,15 @@ import io.github.dukeoftoad.gallery.R
  * Migration note: PhotosScreen's error branch keeps its inline `StateScreen`
  * call in this slice (frozen for concurrent work); it adopts this component
  * in a later slice (docs/architecture/screen-states.md §5).
+ *
+ * Token adoption (issue #11, docs/architecture/design-tokens.md): every gap
+ * comes from [ToadSpacing], the decorative glyph from [ToadSizing].stateIcon,
+ * and the type roles from the theme-provided ToadTypography — the frozen
+ * screen-state layout (72dp icon, `headlineSmall`/`bodyMedium` copy) is
+ * reproduced exactly, so the token migration shifts nothing visually. The
+ * retry [TextButton] clears the 48dp touch-target floor without visual
+ * growth: the theme provides `LocalMinimumInteractiveComponentSize` from
+ * `ToadTouchTarget.minimum`.
  */
 @Composable
 fun ErrorState(
@@ -67,7 +77,7 @@ fun ErrorState(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp)
+            .padding(ToadSpacing.xxxl)
             .then(if (tag != null) Modifier.testTag(tag) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -76,14 +86,14 @@ fun ErrorState(
             imageVector = Icons.Filled.Warning,
             contentDescription = null, // decorative
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(ToadSizing.stateIcon),
         )
         Text(
             text = stringResource(titleRes),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xl),
         )
         Text(
             text = stringResource(bodyRes),
@@ -92,11 +102,11 @@ fun ErrorState(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp),
+                .padding(top = ToadSpacing.md),
         )
         TextButton(
             onClick = onRetry,
-            modifier = Modifier.padding(top = 24.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xxl),
         ) {
             Text(stringResource(actionRes))
         }
@@ -104,7 +114,7 @@ fun ErrorState(
             text = stringResource(R.string.state_shell_badge),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = 24.dp),
+            modifier = Modifier.padding(top = ToadSpacing.xxl),
         )
     }
 }

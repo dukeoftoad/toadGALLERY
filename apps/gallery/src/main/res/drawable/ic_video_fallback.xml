@@ -2,7 +2,7 @@
 <!--
   Video poster fallback (issue #50): shown in grid cells whose video frame
   cannot be decoded on this device (MediaMetadataRetriever returns a NULL
-  frame for some codecs --- seen in on-device logcat 2026-10-30), and as the
+  frame for some codecs, seen in on-device logcat 2026-10-30), and as the
   viewer's playback-error icon. A dark rounded plate with a centered play
   triangle, tint-free so it works on any background.
 -->

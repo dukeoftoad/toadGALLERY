@@ -52,15 +52,18 @@ jobs:
       group: release
       cancel-in-progress: false
 
-    env:
-      # Fixed staging dir for the publishable artifact set, declared at job
-      # level so the always() artifact upload below can reference it even if
-      # an earlier step failed before anything was exported to GITHUB_ENV.
-      RELEASE_STAGE: ${{ runner.temp }}/release-staging
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Fixed staging dir for the publishable artifact set, exported to
+      # GITHUB_ENV from this first runnable step so the always() artifact
+      # upload below can reference it even if an earlier step failed.
+      # ($RUNNER_TEMP is a shell variable --- the `runner` context is NOT
+      # available in job-level `env` expressions, which is why this is a
+      # step, not a job env entry.)
+      - name: Resolve staging directory
+        run: echo "RELEASE_STAGE=$RUNNER_TEMP/release-staging" >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5

@@ -181,7 +181,14 @@ class MediaFileOps(private val resolver: ContentResolver) {
             val settled = ContentValues().apply {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
-            resolver.update(newUri, settled, null, null)
+            val published = resolver.update(newUri, settled, null, null)
+            if (published <= 0) {
+                // Same honesty rule as the vault restore: a 0-row publish is
+                // NOT a success. Surface it as an IO failure so the pending
+                // row is cleaned up below and the caller never reports a
+                // copy that stayed invisible in the gallery.
+                throw IOException("provider did not publish the pending copy ($published rows)")
+            }
             FileOpResult(FileOpOutcome.Success, createdUri = newUri)
         } catch (e: IOException) {
             // Never leak a half-written pending row (it is app-owned, so the

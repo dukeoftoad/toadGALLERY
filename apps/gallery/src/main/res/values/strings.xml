@@ -275,4 +275,36 @@
     <string name="vault_move_not_removed">The copies are in the vault, but the originals couldn\'t be removed from the gallery.</string>
     <string name="vault_move_cancelled">Stopped — %1$d of %2$d items processed.</string>
     <string name="vault_consent_denied">Permission was needed and declined — nothing more was changed.</string>
+
+    <!-- Vault biometric + thumbnails (#57/#58) -->
+    <!-- Biometric unlock binding (issue #57, ADR-0019): opt-in enrollment via
+         a Keystore key that demands a fresh fingerprint/face confirmation for
+         every unlock; the PIN stays the primary and fallback path. Biometric
+         data never leaves the device (the app never even reads it: the
+         system compares, the secure hardware authorizes). Thumbnails (issue
+         #58) are decrypted in memory only and relock with the vault. -->
+    <string name="vault_biometric_unlock_action">Unlock with biometrics</string>
+    <string name="vault_biometric_section_title">Biometric unlock</string>
+    <string name="vault_biometric_section_body">Optional. Unlock the vault with your fingerprint or face instead of the PIN. Your biometric data stays in this phone\'s secure hardware and never leaves the device. The PIN always keeps working.</string>
+    <string name="vault_biometric_prompt_title">Unlock the hidden vault</string>
+    <string name="vault_biometric_prompt_subtitle">Confirm it\'s you to open the vault</string>
+    <string name="vault_biometric_enabled">Biometric unlock enabled.</string>
+    <string name="vault_biometric_disabled">Biometric unlock turned off.</string>
+    <string name="vault_biometric_error">Biometric unlock didn\'t work. Use your PIN instead.</string>
+    <string name="vault_biometric_invalidated">Biometric unlock stopped working — your device\'s biometrics changed. Unlock with your PIN, then turn biometric unlock back on.</string>
+
+    <!-- Favorites + sorting (#66) -->
+    <!-- MediaStore IS_FAVORITE toggle (viewer heart action with the Q+ write
+         gate + R+ consent round-trip of the other file ops), the favorites
+         pseudo-album pinned on the Albums tab (sentinel bucket id, live
+         count), the heart overlay on favorited grid cells, and the
+         newest/oldest timeline sort menu. -->
+    <string name="albums_favorites_title">Favorites</string>
+    <string name="cd_sort_menu">Sort</string>
+    <string name="sort_newest_first">Newest first</string>
+    <string name="sort_oldest_first">Oldest first</string>
+    <string name="cd_viewer_action_favorite_add">Add to favorites</string>
+    <string name="cd_viewer_action_favorite_remove">Remove from favorites</string>
+    <string name="favorite_added">Added to favorites</string>
+    <string name="favorite_removed">Removed from favorites</string>
 </resources>

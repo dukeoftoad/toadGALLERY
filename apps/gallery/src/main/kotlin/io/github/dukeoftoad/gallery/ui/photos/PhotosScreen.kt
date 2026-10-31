@@ -61,6 +61,7 @@ import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.FileOpKind
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.RenameCheck
+import io.github.dukeoftoad.gallery.data.TimelineSort
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
 import io.github.dukeoftoad.gallery.ui.StateScreen
@@ -146,7 +147,16 @@ import io.github.dukeoftoad.gallery.ui.vault.isConfigured
  * Albums tab (`ui/media/MediaPermissions.kt`, `ui/media/MediaGrid.kt` +
  * `ui/media/MediaPagingGrid.kt`, issue #29); both grids stagger cells by
  * aspect ratio and carry the video duration overlay and GIF badge
- * (issues #33/#34, unified into the paging grid at integration).
+ * (issues #33/#34, unified into the paging grid at integration), and since
+ * issue #66 the shared `MediaThumb` also carries the favorites heart
+ * overlay on favorited cells.
+ *
+ * ## Timeline sorting (issue #66)
+ * The plain (non-selection) timeline gained a slim top app bar whose only
+ * action is [TimelineSortMenu]: Newest first / Oldest first, held as
+ * per-session ViewModel state. Changing it swaps in a fresh Paging
+ * generation (see `PhotosViewModel`); the bar disappears in selection mode
+ * exactly like the pre-#66 grid did, replaced by the count bar.
  *
  * Privacy: every image is a local content URI (ADR-0006). Coil 2.x ships
  * its HTTP fetcher inside the default `coil-compose` registry (there is no
@@ -164,6 +174,7 @@ fun PhotosScreen(
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
 ) {
     val state by viewModel.state.collectAsState()
+    val sort by viewModel.sort.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
     val vaultState by vaultViewModel.state.collectAsState()
     val vaultBusy by vaultViewModel.busy.collectAsState()
@@ -313,6 +324,8 @@ fun PhotosScreen(
                 }
                 else -> PhotosTimeline(
                     lazyItems = lazyItems,
+                    sort = sort,
+                    onSortChange = viewModel::onSortChange,
                     fileOpsViewModel = fileOpsViewModel,
                     fileOpsState = fileOpsState,
                     vaultViewModel = vaultViewModel,
@@ -331,7 +344,9 @@ fun PhotosScreen(
  * grid, the selection app bar + actions while selecting, the undo snackbar
  * host, and the four file-ops dialogs (rename, delete confirmation, album
  * picker, batch progress). The vault chrome (issue #32) rides along: the
- * move-to-vault confirmation and its cancellable progress dialog.
+ * move-to-vault confirmation and its cancellable progress dialog. Since
+ * issue #66 the plain timeline also carries the sort header bar
+ * ([PhotosHeaderBar] + [TimelineSortMenu]).
  *
  * Grid refreshing after ops is NOT done by hand: MediaStore writes fire the
  * existing ContentObserver -> paging invalidation (issue #38); see the
@@ -340,6 +355,8 @@ fun PhotosScreen(
 @Composable
 private fun PhotosTimeline(
     lazyItems: LazyPagingItems<MediaItem>,
+    sort: TimelineSort,
+    onSortChange: (TimelineSort) -> Unit,
     fileOpsViewModel: FileOpsViewModel,
     fileOpsState: FileOpsUiState,
     vaultViewModel: VaultViewModel,
@@ -408,16 +425,25 @@ private fun PhotosTimeline(
                 )
             }
         } else {
-            // Plain timeline: cells still carry long-press to enter selection
-            // (the overlay stays hidden) and tap now opens the full-screen
-            // viewer (issue #50) --- the pre-#50 plain tap was a no-op.
-            PhotosGrid(
-                lazyItems = lazyItems,
-                fileOpsViewModel = fileOpsViewModel,
-                selectionActive = false,
-                selectedKeys = emptySet(),
-                onOpenViewer = onOpenViewer,
-            )
+            // Plain timeline (issue #66: now under the sort header bar): cells
+            // still carry long-press to enter selection (the overlay stays
+            // hidden) and tap opens the full-screen viewer (issue #50) --- the
+            // pre-#50 plain tap was a no-op.
+            Column(modifier = Modifier.fillMaxSize()) {
+                PhotosHeaderBar(
+                    sort = sort,
+                    onSortChange = onSortChange,
+                )
+                Box(modifier = Modifier.weight(1f)) {
+                    PhotosGrid(
+                        lazyItems = lazyItems,
+                        fileOpsViewModel = fileOpsViewModel,
+                        selectionActive = false,
+                        selectedKeys = emptySet(),
+                        onOpenViewer = onOpenViewer,
+                    )
+                }
+            }
         }
         SnackbarHost(
             hostState = snackbarHostState,
@@ -497,6 +523,32 @@ private fun PhotosTimeline(
             onCancel = vaultViewModel::cancelMove,
         )
     }
+}
+
+/**
+ * The plain-timeline header bar (issue #66): the tab title plus the sort
+ * menu action. Slim by design --- the timeline's only header affordance
+ * before #66 was nothing, and the sort control needs an anchor.
+ * `windowInsets = 0` for the same reason [FileOpsSelectionBar] documents:
+ * the shell Scaffold already consumed the status-bar inset, so a default
+ * TopAppBar would double-pad.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PhotosHeaderBar(
+    sort: TimelineSort,
+    onSortChange: (TimelineSort) -> Unit,
+) {
+    TopAppBar(
+        title = { Text(stringResource(R.string.nav_photos)) },
+        actions = {
+            TimelineSortMenu(
+                current = sort,
+                onChange = onSortChange,
+            )
+        },
+        windowInsets = WindowInsets(0, 0, 0, 0),
+    )
 }
 
 /**

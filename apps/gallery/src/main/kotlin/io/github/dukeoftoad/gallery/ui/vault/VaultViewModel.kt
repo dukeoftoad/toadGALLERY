@@ -6,10 +6,14 @@ import android.net.Uri
 import android.os.Build
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.MediaItem
+import io.github.dukeoftoad.gallery.data.vault.VaultBiometricReadiness
+import io.github.dukeoftoad.gallery.data.vault.VaultBiometricSupport
 import io.github.dukeoftoad.gallery.data.vault.VaultIndexEntry
 import io.github.dukeoftoad.gallery.data.vault.VaultMoveOutcome
 import io.github.dukeoftoad.gallery.data.vault.VaultRepository
@@ -24,6 +28,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * Lock phases of the hidden vault (issue #32, ADR-0017).
@@ -102,6 +108,23 @@ sealed interface VaultEvent {
 }
 
 /**
+ * One-shot BiometricPrompt requests (issue #57, ADR-0019) --- a SEPARATE
+ * flow from [VaultEvent] on purpose: `PhotosScreen`'s event collector is an
+ * exhaustive `when`, and only the vault sub-screen can ever serve these
+ * (the prompt needs the vault's FragmentActivity front-and-center). The
+ * screen drives `VaultBiometrics` with the payload and reports back through
+ * [VaultViewModel.onBiometricUnlockResult]/[VaultViewModel.onBiometricEnrollResult].
+ */
+sealed interface VaultBiometricRequest {
+
+    /** The stored sealed session secret, ready for `VaultBiometrics.unlock`. */
+    data class Unlock(val sealedSecret: ByteArray) : VaultBiometricRequest
+
+    /** Run the opt-in enrollment round (`VaultBiometrics.enroll`). */
+    data object Enroll : VaultBiometricRequest
+}
+
+/**
  * Shell-scoped state holder for the hidden vault (issue #32, ADR-0017).
  *
  * Deliberately ONE activity-scoped ViewModel (created in `ToadGalleryApp`,
@@ -133,6 +156,26 @@ sealed interface VaultEvent {
  * [onConsentResult], which retries the deletes only (the sealed copies
  * already exist and are never re-sealed).
  *
+ * ## Biometric unlock (issue #57, ADR-0019)
+ * Opt-in binding: [biometrics] is the pure readiness state machine
+ * ([VaultBiometricSupport]); the prompt itself is device-only and lives in
+ * `VaultBiometrics` behind the screen, reached through the separate
+ * [biometricRequests] flow (NOT [VaultEvent] --- PhotosScreen's collector is
+ * an exhaustive `when` this slice must not break). A successful authorized
+ * decrypt of the stored 32-byte session secret opens the SAME in-memory
+ * session the PIN opens; auto-lock semantics are unchanged. An invalidated
+ * key (device biometrics changed) removes the dead binding and narrates the
+ * honest PIN-plus-re-enroll nudge.
+ *
+ * ## Thumbnails (issue #58)
+ * [thumbnails] holds decrypted, size-bounded, in-memory previews keyed by
+ * entry id, decoded on `Dispatchers.IO` under a 3-permit semaphore with a
+ * per-item `Throwable` catch (a failed/oversized blob degrades to the
+ * placeholder, never a crash, never a retry loop). ALL decrypted state ---
+ * thumbnails included --- clears on [onBackgrounded]; no plaintext vault
+ * media persists on disk (the video frame temp file is private-cache and
+ * deleted immediately; see `VaultThumbnailDecoder`).
+ *
  * ## API level
  * The repository's MediaStore methods are `@RequiresApi(Q)`; the state
  * machine never leaves [VaultUiState.Unsupported] below Q, so every call is
@@ -160,6 +203,30 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
     )
     val state: StateFlow<VaultUiState> = _state.asStateFlow()
 
+    /**
+     * Issue #57 (ADR-0019): the biometric readiness state machine
+     * ([VaultBiometricSupport] --- pure, JVM-tested). Resolved once at init
+     * (hardware can prompt + `biometric.binding` present) and updated by the
+     * enroll/disable/invalidated-key paths.
+     */
+    private val _biometrics = MutableStateFlow<VaultBiometricReadiness>(
+        VaultBiometricSupport.readiness(
+            hardwareCanPrompt = VaultBiometrics.canPrompt(app),
+            bindingEnrolled = false,
+        ),
+    )
+    val biometrics: StateFlow<VaultBiometricReadiness> = _biometrics.asStateFlow()
+
+    /**
+     * Issue #58: decrypted, size-bounded thumbnails for the unlocked list,
+     * keyed by entry id. IN MEMORY ONLY --- cleared wholesale on lock
+     * (auto-lock clears ALL decrypted state, thumbnails included). Entries
+     * with no entry here (decode failed / OOM / unsupported codec) render
+     * the placeholder plate --- honest degradation.
+     */
+    private val _thumbnails = MutableStateFlow<Map<Long, ImageBitmap>>(emptyMap())
+    val thumbnails: StateFlow<Map<Long, ImageBitmap>> = _thumbnails.asStateFlow()
+
     private val _busy = MutableStateFlow<VaultBusy?>(null)
     val busy: StateFlow<VaultBusy?> = _busy.asStateFlow()
 
@@ -174,11 +241,28 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
     )
     val events: SharedFlow<VaultEvent> = _events.asSharedFlow()
 
+    /**
+     * Issue #57: the BiometricPrompt requests (see [VaultBiometricRequest]
+     * for why this is not part of [events]). Only the vault screen collects
+     * it; small buffer, drop-oldest, like the event flow.
+     */
+    private val _biometricRequests = MutableSharedFlow<VaultBiometricRequest>(
+        extraBufferCapacity = EVENT_BUFFER_CAPACITY,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val biometricRequests: SharedFlow<VaultBiometricRequest> = _biometricRequests.asSharedFlow()
+
     /** The active move batch or its consent retry (one at a time); Cancel cancels it. */
     private var moveJob: Job? = null
 
     /** The delete-consent round awaiting its activity result; consumed once. */
     private var pendingConsent: PendingVaultConsent? = null
+
+    /** Bounds concurrent thumbnail decodes (issue #58: 2-4, IO-friendly). */
+    private val thumbnailGate = Semaphore(THUMBNAIL_CONCURRENCY)
+
+    /** Entry ids already attempted this session; prevents retry loops on failure. */
+    private val thumbnailAttempted = mutableSetOf<Long>()
 
     init {
         resolveConfiguration()
@@ -187,12 +271,19 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Reads the sealed PIN record and lands in [VaultUiState.NotConfigured]
      * or [VaultUiState.Locked]. A fresh (post-process-death) ViewModel always
-     * starts locked --- the unlock state is in-memory only by design.
+     * starts locked --- the unlock state is in-memory only by design. Also
+     * resolves the #57 biometric readiness (`biometric.binding` presence is
+     * read while it is already on disk).
      */
     private fun resolveConfiguration() {
         if (_state.value == VaultUiState.Unsupported) return
         viewModelScope.launch {
-            _state.value = if (repository.isConfigured()) {
+            val configured = repository.isConfigured()
+            _biometrics.value = VaultBiometricSupport.readiness(
+                hardwareCanPrompt = VaultBiometrics.canPrompt(getApplication()),
+                bindingEnrolled = configured && repository.hasBiometricBinding(),
+            )
+            _state.value = if (configured) {
                 VaultUiState.Locked
             } else {
                 VaultUiState.NotConfigured
@@ -218,7 +309,7 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 repository.setup(pin)
-                _state.value = VaultUiState.Unlocked(repository.loadEntriesAfterSweep())
+                enterUnlockedSession()
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_created))
             } catch (e: CancellationException) {
                 throw e
@@ -245,9 +336,7 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 if (repository.verifyPin(pin)) {
-                    // The ADR-0017 integrity sweep runs on unlock: crash
-                    // orphaned blobs are reclaimed before the listing shows.
-                    _state.value = VaultUiState.Unlocked(repository.loadEntriesAfterSweep())
+                    enterUnlockedSession()
                 } else {
                     _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_unlock_wrong))
                 }
@@ -263,15 +352,164 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * The shared unlock landing (PIN and biometric alike, issue #57): the
+     * ADR-0017 integrity sweep, the decrypted index, and the #58 thumbnail
+     * decode batch for the fresh listing.
+     */
+    private suspend fun enterUnlockedSession() {
+        val entries = repository.loadEntriesAfterSweep()
+        _state.value = VaultUiState.Unlocked(entries)
+        ensureThumbnails(entries)
+    }
+
+    // ------------------------------------------------------------------
+    // Biometric unlock binding (issue #57, ADR-0019)
+    // ------------------------------------------------------------------
+
+    /**
+     * Starts a biometric unlock round: loads the sealed session secret and
+     * hands it to the screen as [VaultBiometricRequest.Unlock] (the
+     * BiometricPrompt needs the FragmentActivity; the device-only crypto
+     * lives in `VaultBiometrics`). Requires Locked + an enrolled binding.
+     */
+    fun requestBiometricUnlock() {
+        if (_state.value != VaultUiState.Locked) return
+        val enrolled = (_biometrics.value as? VaultBiometricReadiness.Supported)?.bindingEnrolled
+            ?: return
+        if (!enrolled) return
+        viewModelScope.launch {
+            try {
+                val sealed = repository.loadBiometricBinding()
+                if (sealed == null) {
+                    // The file vanished since readiness resolved (e.g. the
+                    // invalidated-key cleanup on another surface): re-sync.
+                    refreshBiometricReadiness()
+                } else {
+                    _biometricRequests.tryEmit(VaultBiometricRequest.Unlock(sealed))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // A malformed/unreadable binding is a vault-state problem:
+                // generic error, the PIN path is untouched.
+                _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
+            }
+        }
+    }
+
+    /**
+     * The screen reports the BiometricPrompt round's outcome back here.
+     * `Authenticated` opens the SAME in-memory session the PIN path opens
+     * (auto-lock semantics unchanged --- ON_STOP clears it like any other);
+     * an invalidated key removes the dead binding and narrates the honest
+     * ADR-0019 fallback (PIN + re-enroll nudge). A user cancel stays quiet.
+     */
+    fun onBiometricUnlockResult(result: VaultBiometrics.UnlockResult) {
+        when (result) {
+            is VaultBiometrics.UnlockResult.Authenticated -> {
+                if (_state.value != VaultUiState.Locked) return
+                viewModelScope.launch {
+                    try {
+                        enterUnlockedSession()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
+                    }
+                }
+            }
+            is VaultBiometrics.UnlockResult.Failed -> when (result.failure) {
+                VaultBiometrics.Failure.CANCELLED -> Unit // the user opted out; stay quiet
+                VaultBiometrics.Failure.KEY_INVALIDATED -> viewModelScope.launch {
+                    runCatching { repository.removeBiometricBinding() }
+                    refreshBiometricReadiness()
+                    _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_invalidated))
+                }
+                VaultBiometrics.Failure.ERROR ->
+                    _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_error))
+            }
+        }
+    }
+
+    /**
+     * Starts the opt-in enrollment round (issue #57): the screen runs
+     * `VaultBiometrics.enroll` (fresh key + fresh session secret, sealed
+     * under a prompt-authorized cipher) and reports back via
+     * [onBiometricEnrollResult]. Requires an UNLOCKED session --- the
+     * toggle is a settings-style affordance on the vault list.
+     */
+    fun enableBiometricUnlock() {
+        if (_state.value !is VaultUiState.Unlocked) return
+        val supported = _biometrics.value as? VaultBiometricReadiness.Supported ?: return
+        if (supported.bindingEnrolled) return
+        _biometricRequests.tryEmit(VaultBiometricRequest.Enroll)
+    }
+
+    /** Persists (or narrates the failure of) a finished enrollment round. */
+    fun onBiometricEnrollResult(result: VaultBiometrics.EnrollResult) {
+        when (result) {
+            is VaultBiometrics.EnrollResult.Sealed -> viewModelScope.launch {
+                try {
+                    repository.saveBiometricBinding(result.sealedSecret)
+                    refreshBiometricReadiness()
+                    _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_enabled))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
+                }
+            }
+            is VaultBiometrics.EnrollResult.Failed -> when (result.failure) {
+                VaultBiometrics.Failure.CANCELLED -> Unit // opt-in declined; stay quiet
+                VaultBiometrics.Failure.KEY_INVALIDATED,
+                VaultBiometrics.Failure.ERROR,
+                -> _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_error))
+            }
+        }
+    }
+
+    /**
+     * Turns biometric unlock off (the settings toggle's off leg): removes
+     * the binding file. Requires the unlocked session (issue #57: disabling
+     * is a vault-settings op, not a locked-screen one).
+     */
+    fun disableBiometricUnlock() {
+        if (_state.value !is VaultUiState.Unlocked) return
+        val supported = _biometrics.value as? VaultBiometricReadiness.Supported ?: return
+        if (!supported.bindingEnrolled) return
+        viewModelScope.launch {
+            try {
+                repository.removeBiometricBinding()
+                refreshBiometricReadiness()
+                _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_disabled))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
+            }
+        }
+    }
+
+    /** Re-reads the binding presence and folds it into [biometrics]. */
+    private suspend fun refreshBiometricReadiness() {
+        val enrolled = repository.hasBiometricBinding()
+        val canPrompt = VaultBiometrics.canPrompt(getApplication())
+        _biometrics.value = VaultBiometricSupport.readiness(canPrompt, enrolled)
+    }
+
+    /**
      * Auto-lock (ADR-0017): the shell's `ON_STOP` lifecycle observer calls
      * this. Only the in-memory unlock clears --- sealed blobs and the PIN
      * record are untouched, and a running move batch finishes on its own
-     * (it is provider/file I/O that is crash-safe by ordering).
+     * (it is provider/file I/O that is crash-safe by ordering). Issue #58:
+     * ALL decrypted session state clears with it, thumbnails included.
      */
     fun onBackgrounded() {
         if (_state.value is VaultUiState.Unlocked) {
             _state.value = VaultUiState.Locked
         }
+        _thumbnails.value = emptyMap()
+        thumbnailAttempted.clear()
     }
 
     // ------------------------------------------------------------------
@@ -511,11 +749,54 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun reloadEntries() {
         val current = _state.value as? VaultUiState.Unlocked ?: return
         try {
-            _state.value = VaultUiState.Unlocked(repository.loadEntries())
+            val entries = repository.loadEntries()
+            _state.value = VaultUiState.Unlocked(entries)
+            // Prune thumbnails of deleted/restored entries, decode new ones.
+            val liveIds = entries.mapTo(mutableSetOf()) { it.id }
+            _thumbnails.value = _thumbnails.value.filterKeys { it in liveIds }
+            ensureThumbnails(entries)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             _state.value = current
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Thumbnails (issue #58; Dispatchers.IO under a small semaphore)
+    // ------------------------------------------------------------------
+
+    /**
+     * Kicks off the decode batch for every listed entry not yet attempted
+     * this session. Decodes run under [thumbnailGate] (bounded concurrency)
+     * off the main thread, one item at a time; a null result (failed / OOM /
+     * unsupported codec) simply never lands in [thumbnails], so the row
+     * keeps its placeholder --- no retry loop, no crash.
+     */
+    private fun ensureThumbnails(entries: List<VaultIndexEntry>) {
+        val todo = entries.filter { it.id !in _thumbnails.value && it.id !in thumbnailAttempted }
+        if (todo.isEmpty()) return
+        todo.forEach { thumbnailAttempted += it.id }
+        viewModelScope.launch {
+            // One stale-temp sweep per batch (crash leftovers from the video
+            // frame-extraction path; issue #58 hygiene).
+            runCatching { repository.cleanThumbnailTempFiles() }
+            for (entry in todo) {
+                if (_state.value !is VaultUiState.Unlocked) return@launch
+                thumbnailGate.withPermit {
+                    if (_state.value !is VaultUiState.Unlocked) return@withPermit
+                    val bitmap = try {
+                        repository.decodeThumbnail(entry)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        null
+                    }
+                    if (bitmap != null) {
+                        _thumbnails.value = _thumbnails.value + (entry.id to bitmap.asImageBitmap())
+                    }
+                }
+            }
         }
     }
 
@@ -532,6 +813,9 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
 
         /** The fill char for wiping PIN arrays (the VaultCrypto contract). */
         private const val PIN_WIPE_CHAR = ' '
+
+        /** Concurrent thumbnail decodes (issue #58: 2-4 keeps IO + heap sane). */
+        private const val THUMBNAIL_CONCURRENCY = 3
     }
 }
 

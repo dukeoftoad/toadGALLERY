@@ -20,11 +20,12 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        // 0.4.0-alpha continued: search tab v1 (#62), viewer operations +
-        // decoder fallback (#63/#65), album-detail file-ops parity (#64) on
-        // top of the 0.4.0-alpha slices at versionCode 8 (file ops #30,
-        // trash #31, vault #32, viewer #50 + follow-ups)
-        versionCode = 9
+        // 0.4.0-alpha continued: wave 1 (search #62, viewer ops + decoder
+        // fallback #63/#65, album-detail ops #64) and wave 2 (vault biometric
+        // binding + thumbnails #57/#58, favorites + sorting #66) on top of
+        // the versionCode-8 slices (file ops #30, trash #31, vault #32,
+        // viewer #50 + follow-ups)
+        versionCode = 10
         versionName = "0.4.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
@@ -247,6 +248,13 @@ dependencies {
     // --- Phase 3: Lifecycle/ViewModel for the Photos timeline state holder (issue #25)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // --- Vault biometric unlock binding (issue #57, ADR-0019): androidx
+    // BiometricPrompt + CryptoObject over a user-auth-bound AndroidKeyStore
+    // key. Pure on-device auth library: it declares USE_BIOMETRIC (a normal
+    // permission merged in from its manifest) but NOT INTERNET, so the
+    // ADR-0014 offline-by-construction gate is unaffected. Requires the
+    // activity to be a FragmentActivity (see MainActivity).
+    implementation(libs.androidx.biometric)
     // --- Phase 3: Paging 3 --- windowed timeline loads + LazyPagingItems grid (issue #28)
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)

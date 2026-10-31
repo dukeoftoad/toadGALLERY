@@ -4,7 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +42,16 @@ import io.github.dukeoftoad.gallery.data.displayAspectRatio
  * Both share the same scrim style: white `labelSmall` text over
  * `Color.Black.copy(alpha = 0.6f)`, `RoundedCornerShape(6.dp)`, tiny padding
  * and a 4.dp margin from the cell edge.
+ *
+ * Issue #66 adds a third indicator in the same scrim idiom: a small heart
+ * chip (bottom-start) on favorited cells, read purely from
+ * [MediaItem.isFavorite] --- additive and data-driven, so every grid that
+ * already renders this cell (Photos timeline, album detail, favorites
+ * pseudo-album, search results) gains the overlay with zero call-site
+ * changes. Bottom-start deliberately avoids the other three corners:
+ * bottom-end is the duration chip, top-end the GIF badge, and top-start is
+ * where the selection overlay's check badge sits (the grids' chrome, not
+ * this composable's).
  *
  * Accessibility: the thumbnail carries a semantic content description
  * ("Video"/"GIF"/"Photo" via `cd_media_thumb_*`) instead of staying
@@ -99,6 +113,42 @@ fun MediaThumb(item: MediaItem, modifier: Modifier = Modifier) {
                     .padding(4.dp),
             )
         }
+        if (item.isFavorite) {
+            FavoriteBadge(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The favorites heart chip of [MediaThumb] (issue #66): the same scrim
+ * idiom as [ThumbBadge] (60%-alpha black rounded chip) carrying the
+ * CORE-set `Icons.Filled.Favorite` instead of text. Decorative by design
+ * --- the viewer's favorite action is the narrated state surface; grid
+ * cells stay quiet for TalkBack (the media-type content description on the
+ * thumbnail itself remains the cell's announcement).
+ */
+@Composable
+private fun FavoriteBadge(
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .background(
+                color = Color.Black.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(6.dp),
+            )
+            .padding(horizontal = 3.dp, vertical = 2.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Favorite,
+            contentDescription = null, // decorative; the viewer toggle narrates state
+            tint = Color.White,
+            modifier = Modifier.size(13.dp),
+        )
     }
 }
 

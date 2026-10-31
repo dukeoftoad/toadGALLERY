@@ -13,6 +13,7 @@ import io.github.dukeoftoad.gallery.data.FileOpFailureReason
 import io.github.dukeoftoad.gallery.data.FileOpOutcome
 import io.github.dukeoftoad.gallery.data.MediaFileOps
 import io.github.dukeoftoad.gallery.data.MediaItem
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,24 @@ enum class VaultRestoreResult {
 }
 
 /**
+ * One structured diagnostics probe of the hidden vault (W1 --- the
+ * Settings > About > Diagnostics surface): the pure-JVM store's disk truth
+ * ([store], from [VaultStore.describeState]) plus whether the
+ * AndroidKeyStore media key exists ([keystoreKeyPresent], load-only ---
+ * the probe never generates). Plain values so the screen renders without
+ * Android types; nothing here decrypts content or exposes names.
+ */
+data class VaultDiagnostics(
+    /**
+     * The store's on-disk shape: root/pin/index/binding presence, blob
+     * count+bytes, writability.
+     */
+    val store: VaultStoreState,
+    /** The vault's AndroidKeyStore key exists (load-only probe; never generated). */
+    val keystoreKeyPresent: Boolean,
+)
+
+/**
  * The hidden vault's thin Android glue (issue #32, ADR-0017): the bridge
  * between the pure-JVM [VaultStore] (sealed files, temp-dir testable) and
  * MediaStore/[ContentResolver].
@@ -77,8 +96,9 @@ enum class VaultRestoreResult {
  * plaintext in, publish the row, and only THEN delete the sealed blob ---
  * a failure before publishing keeps the vault copy, so restore can never
  * lose media. Publication is confirmed by the `update()` row count: a
- * 0-row publish is treated as a failure (pending row cleaned up, vault
- * copy kept), never as success.
+ * 0-row publish is treated as a failure (WARN-logged for the on-device
+ * diagnostics story, W1) --- pending row cleaned up, vault copy kept,
+ * never as success.
  *
  * ## API level gating (mirrors the file-ops slice exactly)
  *  - [moveToVault]/[deleteOriginals]/[restore] are `@RequiresApi(Q)`:
@@ -89,6 +109,15 @@ enum class VaultRestoreResult {
  *    exists from API 30. On Q (29) a consent-blocked delete cannot be
  *    recovered through a batch request; the ViewModel narrates those items
  *    as sealed-but-not-removed instead of looping a dialog.
+ *
+ * ## Diagnostics (W1)
+ * Every operation logs its outcome to [DiagLog] under the shared
+ * "ToadVault" tag --- counts, booleans, entry ids and exception
+ * class+message ONLY; never PIN data, key material, display names, or the
+ * content URIs of vault items. The ring feeds the About screen;
+ * [diagnostics] is its structured leg, and the ViewModel adds one
+ * op-level WARN per swallowed exception so the two read together (op
+ * there, phase here).
  *
  * Privacy (ADR-0006/ADR-0010/ADR-0014): content URIs in, app-private
  * ciphertext out, no network permission exists in the app --- nothing here
@@ -130,19 +159,74 @@ class VaultRepository(context: Context) {
      * Creates the vault for [pin]. Runs on [Dispatchers.Default]: the 210k
      * PBKDF2 rounds are the expensive part (ADR-0017 --- never the main
      * thread); the tiny sealed writes ride along.
+     *
+     * W1 instrumentation: the pre-state summary from
+     * [VaultStore.describeState] is INFO-logged before the call (the exact
+     * shape that separated the versionCode-11 failure), the commit after;
+     * a failure WARN-logs the throwable and rethrows (cancellation
+     * rethrows unlogged --- it is not a failure).
      */
     suspend fun setup(pin: CharArray) {
-        withContext(Dispatchers.Default) { store.setup(pin) }
+        withContext(Dispatchers.Default) {
+            val pre = store.describeState()
+            DiagLog.i(
+                TAG,
+                "setup: pre-state root=${pre.rootExists} pin=${pre.pinPresent} " +
+                    "index=${pre.indexPresent} blobs=${pre.blobCount}",
+            )
+            try {
+                store.setup(pin)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                DiagLog.w(TAG, "setup: failed", e)
+                throw e
+            }
+            DiagLog.i(TAG, "setup: committed (pin+index)")
+        }
     }
 
     /**
      * Verifies [pin] against the stored record, off the main thread
      * (Dispatchers.Default, ADR-0017). Throws [VaultStoreException] when
      * the record is corrupt --- the UI must narrate that as an error, not
-     * as "wrong PIN".
+     * as "wrong PIN". W1: a wrong PIN logs a bare INFO mismatch line; a
+     * corrupt record WARN-logs the throwable before rethrowing.
      */
     suspend fun verifyPin(pin: CharArray): Boolean {
-        return withContext(Dispatchers.Default) { store.verifyPin(pin) }
+        return withContext(Dispatchers.Default) {
+            try {
+                val matches = store.verifyPin(pin)
+                if (!matches) {
+                    // No other detail on purpose --- never hint how close.
+                    DiagLog.i(TAG, "verify: mismatch")
+                }
+                matches
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A corrupt/unreadable record (VaultStoreException): WARN
+                // with the throwable; the ViewModel's op-level line pairs
+                // with this phase-level one.
+                DiagLog.w(TAG, "verify: record corrupt", e)
+                throw e
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Diagnostics (W1; read-only probe for the About screen)
+    // ------------------------------------------------------------------
+
+    /**
+     * One structured probe for the About > Diagnostics screen (W1): the
+     * store's disk truth plus the keystore key's presence. Dispatchers.IO
+     * like every other wrapper here; reads only --- nothing decrypts,
+     * nothing generates, and a keystore probe failure surfaces as
+     * `keystoreKeyPresent=false` rather than a crash.
+     */
+    suspend fun diagnostics(): VaultDiagnostics = withContext(Dispatchers.IO) {
+        VaultDiagnostics(store.describeState(), AndroidVaultKeys.probeExistingKey())
     }
 
     // ------------------------------------------------------------------
@@ -155,11 +239,15 @@ class VaultRepository(context: Context) {
 
     /**
      * The unlock entry point: runs the ADR-0017 integrity sweep (reclaiming
-     * crash-orphaned blobs), then returns the index.
+     * crash-orphaned blobs), then returns the index. W1: the swept count
+     * and the entry count are INFO-logged --- the unlock leg of the device
+     * story.
      */
     suspend fun loadEntriesAfterSweep(): List<VaultIndexEntry> = withContext(Dispatchers.IO) {
-        store.sweepOrphans()
-        store.entries()
+        val swept = store.sweepOrphans()
+        val entries = store.entries()
+        DiagLog.i(TAG, "unlock: swept=$swept entries=${entries.size}")
+        entries
     }
 
     /** Deletes one entry (sealed blob + index row) from the vault. */
@@ -220,7 +308,9 @@ class VaultRepository(context: Context) {
      * even on cancellation --- only a prefix arrives then), [onProgress]
      * fires `(0, total)` before the first item and `(completed, total)`
      * after each. Cancellation is checked between items; per-item failures
-     * never abort the batch.
+     * never abort the batch. W1: the completed batch logs one INFO line of
+     * outcome counts (a cancelled batch narrates its prefix in the UI
+     * instead; the counts here describe only completed batches).
      */
     @RequiresApi(Build.VERSION_CODES.Q)
     suspend fun moveToVault(
@@ -234,13 +324,27 @@ class VaultRepository(context: Context) {
             items.forEachIndexed { index, _ -> onResult(index, VaultMoveOutcome.FAILED) }
             return
         }
+        var moved = 0
+        var needsConsent = 0
+        var notRemoved = 0
+        var failed = 0
         onProgress(0, items.size)
         for ((index, item) in items.withIndex()) {
             coroutineContext.ensureActive()
             val outcome = moveOne(item)
+            when (outcome) {
+                VaultMoveOutcome.MOVED -> moved++
+                VaultMoveOutcome.NEEDS_CONSENT -> needsConsent++
+                VaultMoveOutcome.NOT_REMOVED -> notRemoved++
+                VaultMoveOutcome.FAILED -> failed++
+            }
             onResult(index, outcome)
             onProgress(index + 1, items.size)
         }
+        DiagLog.i(
+            TAG,
+            "move: moved=$moved needsConsent=$needsConsent notRemoved=$notRemoved failed=$failed",
+        )
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -325,6 +429,9 @@ class VaultRepository(context: Context) {
      * the app-owned pending row and keeps the vault copy, so restore never
      * loses media). `RELATIVE_PATH` is left unset on purpose: the provider
      * files the item into the collection's default top-level directory.
+     * W1: every outcome logs one line --- entry id + publish row count +
+     * result on the happy path, WARN with the throwable on failure (the
+     * entry id is the sealed blob's name, never the display name).
      */
     @RequiresApi(Build.VERSION_CODES.Q)
     suspend fun restore(entry: VaultIndexEntry): VaultRestoreResult =
@@ -345,39 +452,53 @@ class VaultRepository(context: Context) {
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val newUri = resolver.insert(collection, values)
-                ?: return@withContext VaultRestoreResult.FAILED
-            try {
+                ?: run {
+                    // The provider refused the insert outright: no pending
+                    // row exists yet and the vault copy is untouched.
+                    DiagLog.w(TAG, "restore: id=${entry.id} insert offered no row")
+                    return@withContext VaultRestoreResult.FAILED
+                }
+            val published: Int = try {
                 resolver.openOutputStream(newUri)?.use { output ->
                     store.restoreOut(entry, output)
                 } ?: throw IOException("provider offered no output stream for $newUri")
                 val settled = ContentValues().apply {
                     put(MediaStore.MediaColumns.IS_PENDING, 0)
                 }
-                val published = resolver.update(newUri, settled, null, null)
-                if (published <= 0) {
+                val publishedRows = resolver.update(newUri, settled, null, null)
+                if (publishedRows <= 0) {
                     // A 0-row update is NOT a publication: the provider
                     // refused (or the pending row vanished) while the bytes
                     // are already streamed. Treat it like any other failure
                     // --- delete the app-owned pending row and keep the
                     // vault copy (ADR-0017: never delete the sealed blob
                     // without confirmed publication).
+                    DiagLog.w(TAG, "restore: id=${entry.id} publish refused (rows=$publishedRows)")
                     throw IOException(
-                        "provider did not publish the pending row ($published rows updated)",
+                        "provider did not publish the pending row ($publishedRows rows updated)",
                     )
                 }
+                publishedRows
             } catch (e: CancellationException) {
                 runCatching { resolver.delete(newUri, null, null) }
                 throw e
             } catch (e: Exception) {
                 // Never leak a half-written pending row (app-owned, so the
                 // cleanup delete needs no consent); the vault copy stays.
+                DiagLog.w(TAG, "restore: id=${entry.id} failed", e)
                 runCatching { resolver.delete(newUri, null, null) }
                 return@withContext VaultRestoreResult.FAILED
             }
             // Published: the media is durably back in the gallery. Only now
             // remove the vault copy.
             val removed = runCatching { store.delete(entry) }.isSuccess
-            if (removed) VaultRestoreResult.RESTORED else VaultRestoreResult.RESTORED_KEPT_COPY
+            val result = if (removed) {
+                VaultRestoreResult.RESTORED
+            } else {
+                VaultRestoreResult.RESTORED_KEPT_COPY
+            }
+            DiagLog.i(TAG, "restore: id=${entry.id} published=$published result=$result")
+            result
         }
 
     // ------------------------------------------------------------------
@@ -406,6 +527,9 @@ class VaultRepository(context: Context) {
     }
 
     private companion object {
+        /** Diagnostics tag shared by the vault's Android seams (W1). */
+        const val TAG = "ToadVault"
+
         /** App-private directory under filesDir (never a public share). */
         const val VAULT_DIR_NAME = "vault"
 

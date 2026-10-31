@@ -12,8 +12,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.MediaItem
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.vault.VaultBiometricReadiness
 import io.github.dukeoftoad.gallery.data.vault.VaultBiometricSupport
+import io.github.dukeoftoad.gallery.data.vault.VaultDiagnostics
 import io.github.dukeoftoad.gallery.data.vault.VaultIndexEntry
 import io.github.dukeoftoad.gallery.data.vault.VaultLockGeneration
 import io.github.dukeoftoad.gallery.data.vault.VaultMoveOutcome
@@ -192,6 +194,16 @@ sealed interface VaultBiometricRequest {
  * AND session still unlocked --- IMMEDIATELY before it is published; a stale
  * bitmap is dropped, never published.
  *
+ * ## Diagnostics (W1)
+ * Every catch that swallows into a generic snackbar ALSO leaves one WARN
+ * in [DiagLog] (tag "ToadVault": the op name + throwable; the repository
+ * logs the phase leg of the same story, and the two lines read together),
+ * and the state transitions that make up the device story --- session
+ * unlocked, auto-locked, biometric enroll/unenroll --- one INFO line each.
+ * [probeDiagnostics] is the structured leg the About screen reads. The
+ * privacy contract is `DiagLog`'s (ADR-0014): op names, counts and
+ * exception class+message ONLY --- never PIN data or display names.
+ *
  * ## API level
  * The repository's MediaStore methods are `@RequiresApi(Q)`; the state
  * machine never leaves [VaultUiState.Unsupported] below Q, so every call is
@@ -333,7 +345,9 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
      * Creates the vault for [pin]. On success the session lands
      * [VaultUiState.Unlocked] directly --- the user just proved the PIN
      * twice --- after the ADR-0017 integrity sweep. [pin] is wiped in the
-     * `finally` block whatever the outcome.
+     * `finally` block whatever the outcome. W1: a failure WARN-logs the op
+     * + throwable to [DiagLog] before the generic snackbar (the repository
+     * logs the phase leg).
      */
     fun setup(pin: CharArray) {
         if (_state.value != VaultUiState.NotConfigured) return
@@ -347,7 +361,8 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_created))
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                DiagLog.w(TAG, "setup failed", e)
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
             } finally {
                 pin.fill(PIN_WIPE_CHAR)
@@ -360,7 +375,8 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
      * Verifies [pin] against the stored record; a wrong PIN is narrated
      * generically (no hint about how close it was). A corrupt record throws
      * inside the repository and surfaces as the generic error line --- that
-     * is a vault-state problem, never a "wrong PIN".
+     * is a vault-state problem, never a "wrong PIN". W1: the swallow
+     * WARN-logs the op + throwable to [DiagLog] first.
      */
     fun attemptUnlock(pin: CharArray) {
         if (_state.value != VaultUiState.Locked) return
@@ -376,7 +392,8 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                DiagLog.w(TAG, "unlock failed", e)
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
             } finally {
                 pin.fill(PIN_WIPE_CHAR)
@@ -398,8 +415,25 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
         lockGeneration.advance()
         val entries = repository.loadEntriesAfterSweep()
         _state.value = VaultUiState.Unlocked(entries)
+        DiagLog.i(TAG, "session: unlocked (entries=${entries.size})")
         ensureThumbnails(entries)
     }
+
+    // ------------------------------------------------------------------
+    // Diagnostics (W1; read-only probe for the About screen)
+    // ------------------------------------------------------------------
+
+    /**
+     * One structured diagnostics probe for the Settings > About >
+     * Diagnostics screen (W1): the vault's disk truth plus the keystore
+     * key's presence, delegated to [VaultRepository.diagnostics] (the IO
+     * hop lives there; this is a read-only probe --- nothing decrypts,
+     * nothing generates). Public on purpose: the About screen reaches this
+     * shell-scoped ViewModel directly, exactly like the Settings status
+     * row does. Safe from any screen state, including Locked and
+     * Unsupported.
+     */
+    suspend fun probeDiagnostics(): VaultDiagnostics = repository.diagnostics()
 
     // ------------------------------------------------------------------
     // Biometric unlock binding (issue #57, ADR-0019)
@@ -428,9 +462,10 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 // A malformed/unreadable binding is a vault-state problem:
                 // generic error, the PIN path is untouched.
+                DiagLog.w(TAG, "biometric unlock request failed", e)
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
             }
         }
@@ -452,7 +487,8 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                         enterUnlockedSession()
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        DiagLog.w(TAG, "biometric unlock failed", e)
                         _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
                     }
                 }
@@ -462,6 +498,7 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 VaultBiometrics.Failure.KEY_INVALIDATED -> viewModelScope.launch {
                     runCatching { repository.removeBiometricBinding() }
                     refreshBiometricReadiness()
+                    DiagLog.i(TAG, "biometric: key invalidated -> binding removed")
                     _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_invalidated))
                 }
                 VaultBiometrics.Failure.ERROR ->
@@ -491,10 +528,12 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     repository.saveBiometricBinding(result.sealedSecret)
                     refreshBiometricReadiness()
+                    DiagLog.i(TAG, "biometric: enrolled")
                     _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_enabled))
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    DiagLog.w(TAG, "biometric enroll failed", e)
                     _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
                 }
             }
@@ -520,10 +559,12 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 repository.removeBiometricBinding()
                 refreshBiometricReadiness()
+                DiagLog.i(TAG, "biometric: unenrolled")
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_biometric_disabled))
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                DiagLog.w(TAG, "biometric unenroll failed", e)
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_error_generic))
             }
         }
@@ -544,10 +585,12 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
      * ALL decrypted session state clears with it, thumbnails included.
      * Issue #69: the lock-session generation advances (orphaning every
      * in-flight thumbnail batch's publishes) and the batches themselves
-     * are cancelled outright.
+     * are cancelled outright. W1: the transition leaves one INFO line ---
+     * the "when did the session end" leg of the device story.
      */
     fun onBackgrounded() {
         if (_state.value is VaultUiState.Unlocked) {
+            DiagLog.i(TAG, "session: auto-locked")
             _state.value = VaultUiState.Locked
         }
         // Issue #69: end the session IN ORDER --- invalidate first, then stop
@@ -697,8 +740,9 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 )
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 // Fall through to the narration with whatever landed.
+                DiagLog.w(TAG, "consent retry failed", e)
             } finally {
                 clearMoveBusy()
             }
@@ -763,7 +807,8 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                DiagLog.w(TAG, "restore failed", e)
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_restore_failed))
             } finally {
                 _busy.value = null
@@ -786,7 +831,8 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 _events.tryEmit(VaultEvent.ShowPlural(R.plurals.vault_deleted, 1))
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                DiagLog.w(TAG, "delete failed", e)
                 _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_delete_failed))
             } finally {
                 _busy.value = null
@@ -807,7 +853,10 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
             ensureThumbnails(entries)
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // Silent by design in the UI (the last listing stays); the
+            // diagnostics ring still gets the story.
+            DiagLog.w(TAG, "reload failed", e)
             _state.value = current
         }
     }
@@ -888,6 +937,9 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
          * button state off the same constant.
          */
         const val MIN_PIN_LENGTH = 4
+
+        /** Diagnostics tag shared by the vault's Android seams (W1). */
+        private const val TAG = "ToadVault"
 
         /** One event per phase; 16 coalesces bursts without blocking tryEmit. */
         private const val EVENT_BUFFER_CAPACITY = 16

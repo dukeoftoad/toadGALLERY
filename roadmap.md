@@ -325,7 +325,9 @@ the start.
 > decode straddles a lock/background event can never republish into the
 > cleared memory of the locked session) closed the one defect the
 > real-device review surfaced in the #58 slice. The remaining exit work
-> is real-device validation of the #62–#69 slices on the next pre-release.
+> is real-device validation of the #62–#69 slices on the next pre-release
+> (v0.4.1-alpha-r7; the per-slice pass/fail list is
+> `docs/phase-3/device-validation-checklist.md`).
 > CI runs compile + JVM tests with lint as a hard gate (ADR-0016, #52).
 
 #### Tasks

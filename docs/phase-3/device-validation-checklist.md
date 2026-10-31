@@ -1,0 +1,117 @@
+# Phase 3 device-validation checklist — v0.4.1-alpha (r7)
+
+**Status:** pending device validation (the Phase 3 exit work; see
+`roadmap.md`'s Phase 3 progress note).\
+**Target build:** `toadGALLERY-0.4.1-alpha-r7.apk` from the
+`v0.4.1-alpha-r7` pre-release (versionCode 11, built from `ab79a1d`).\
+**Reference device:** the Xiaomi device used for the 2026-10-30/31 logcat
+reviews (`c2.qti.hevc.decoder` hardware; 10-bit HEVC Main10 sample in MKV;
+`getFrameAtTime` NULL-frame samples).\
+**Method:** install over the previous build, run each section, note
+pass/fail + a logcat snippet for anything unexpected
+(`adb logcat -s ExoPlayerImpl MediaCodec Coil CCodec AndroidRuntime`).
+Sections map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
+
+---
+
+## 1. Search tab v1 (#62)
+
+- [ ] Search tab opens with the prompt state (no results rendered for an
+      empty query; nothing scans MediaStore until text is typed).
+- [ ] Typing a filename substring (try mixed CASE, and a query containing
+      `%` or `_`) returns the expected photos AND videos, newest first.
+- [ ] Photo/Video filter chips narrow correctly; "All" shows both.
+- [ ] Tapping a result opens the full-screen viewer at that item, and
+      paging left/right from inside the viewer walks the result set.
+- [ ] Clearing the query returns to the prompt state; a nonsense query
+      shows the no-results state.
+
+## 2. Viewer operations (#63)
+
+- [ ] Info action in the viewer top bar opens the details sheet
+      (name/type/size/dimensions/duration/dates/album) for the CURRENT
+      page; dismissed by outside tap; closes on page swipe.
+- [ ] Share from the viewer hands the file to the system share sheet
+      (verify a real target receives a playable/viewable item).
+- [ ] Rename from the viewer updates the item name everywhere (grid,
+      info sheet, MediaStore) and stays renamed after an app restart.
+- [ ] Delete from the viewer routes the item to the system trash
+      (consent dialog where the platform requires it) and the grid
+      invalidates.
+
+## 3. Decoder fallback + honest errors (#65) — the 10-bit HEVC case
+
+- [ ] The 10-bit HEVC (Main10) MKV that failed on `v0.4.0-alpha-r3`
+      (`format_supported=NO_EXCEEDS_CAPABILITIES`, CodecException in
+      `queueInputBuffer`) now **plays in-app**: ExoPlayer falls back to
+      the software `c2.android.hevc.decoder` (first frames may take a
+      beat longer to start — acceptable; note the stall duration).
+- [ ] Its grid thumbnail still renders the fallback plate if the
+      platform retriever cannot extract a frame — plate + duration chip,
+      never a blank cell.
+- [ ] A genuinely undecodable file (corrupt container) shows the honest
+      playback-error copy, not a frozen black surface, and the viewer
+      stays interactive (back, swipe).
+
+## 4. Album detail parity (#64)
+
+- [ ] Long-press in an album starts selection with the same count/actions
+      bar as Photos; rename (single), copy, move, delete, move-to-vault
+      all work from an album's grid exactly as from the timeline.
+- [ ] A delete from album detail lands in Settings → Recycle bin and
+      restores to the same album.
+
+## 5. Vault biometric unlock (#57, ADR-0019)
+
+- [ ] With biometrics enrolled, the vault setup offers the opt-in
+      (default OFF); enabling it prompts the hardware keyguard and
+      succeeds.
+- [ ] Locked vault shows "Unlock with biometrics"; a successful prompt
+      opens the same unlocked session a correct PIN does.
+- [ ] The prompt's negative/"use PIN" fallback still unlocks via PIN.
+- [ ] Adding a new fingerprint in system settings invalidates the
+      binding on next biometric attempt: the app removes the dead
+      binding and shows the re-enable nudge (PIN still works).
+
+## 6. Vault thumbnails (#58) + the lock-race guard (#69) — the owner's defect scenario
+
+- [ ] Unlocked vault list shows decrypted thumbnails (photos AND videos),
+      size-bounded; unsupported/corrupt blobs degrade to the placeholder
+      plate without a crash.
+- [ ] **The race scenario**: with the vault unlocked and a large vault
+      (enough entries that thumbnails keep decoding for a few seconds),
+      press Home (background the app) IMMEDIATELY after unlock while
+      thumbnails are still filling in, then `adb shell dumpsys meminfo
+      io.github.dukeoftoad.gallery` / re-open the app: thumbnails must be
+      GONE (locked state), and nothing may render or re-populate them
+      while locked. Re-open should show the PIN/biometric gate, not the
+      previous thumbnails.
+- [ ] Long-press Home / split-screen or any ON_STOP path reproduces the
+      same wholesale clear.
+- [ ] Restore + delete from the vault prune/add thumbnails correctly
+      within the same session.
+
+## 7. Favorites + sorting (#66)
+
+- [ ] The heart toggle in the viewer persists a favorite across restarts
+      (verify in a second gallery app if handy).
+- [ ] The sort menu (newest/oldest/name) re-orders the timeline and the
+      choice sticks; the favorites filter shows exactly the flagged
+      items.
+
+## 8. Regression pass (prior rounds on this build)
+
+- [ ] Timeline paging still invalidates after external adds/removes
+      (camera shot while app open appears; deletes from another app
+      disappear).
+- [ ] Recycle bin restore/delete/empty still behaves (r3-verified flows).
+- [ ] Privacy gate: `adb logcat` shows zero network attempts during all
+      of the above (the APK holds no INTERNET permission — verify once
+      with `aapt dump badging` or an install-time check if convenient).
+- [ ] No new ANRs/crashes in logcat during the whole pass.
+
+---
+
+**Sign-off:** record results per section; any fail gets a logcat snippet
+and a new issue filed against milestone **Phase 3** (#4) — that milestone
+stays open until this checklist passes on the reference device.

@@ -304,21 +304,25 @@ green CI workflow.
 operations, with safety nets (recycle bin, hidden vault) in place from
 the start.
 
-> **Progress (2026-10-31):** landed on main --- Photos timeline + permission
+> **Progress (2026-10-31, revised after device testing of
+> v0.4.0-alpha-r3):** landed on main --- Photos timeline + permission
 > flow (#25), Albums tab (#29), Paging 3 incremental timeline (#28),
 > aspect-aware staggered grid + video/GIF overlays (#33, #34), paging
 > follow-ups: invalidation, append load-states, idempotent re-entry (#38),
 > screen-state system (#13), system Photo Picker path (#27), file operations
 > (#30), full-screen media viewer with in-app video playback (#50), recycle
-> bin over MediaStore's system trash (#31), hidden vault complete: crypto
-> core + sealed store + PIN setup/unlock + move-to-vault + restore +
-> auto-lock (#32, ADR-0017), and the deferred-from-#50 viewer follow-ups:
-> pinch-zoom/pan with clamped bounds, double-tap zoom and animated GIF
-> decode. The Phase 3 deliverable set (end-to-end browsing and basic media
-> operations, recycle bin, hidden vault, failure-mode tests) is complete;
-> biometric unlock binding and vault item thumbnails are documented
-> follow-ups. CI runs compile + JVM tests with lint as a hard gate
-> (ADR-0016, #52).
+> bin over MediaStore's system trash (#31), hidden vault: crypto core +
+> sealed store + PIN setup/unlock + move-to-vault + restore + auto-lock
+> (#32, ADR-0017), the deferred-from-#50 viewer follow-ups (pinch-zoom/pan,
+> double-tap zoom, animated GIF decode), search tab v1: name query +
+> photo/video filter into the viewer (#62), viewer operations: info sheet,
+> share, rename, delete + decoder fallback for capability-exceeding video
+> (#63, #65), and album-detail selection + file-ops parity with Photos
+> (#64). **Phase 3 is NOT yet complete**: device testing reopened the
+> milestone --- remaining work is vault biometric unlock binding (#57),
+> vault item thumbnails (#58), and favorites + sorting (#66), plus
+> real-device validation of the #62–#65 slices on the next pre-release.
+> CI runs compile + JVM tests with lint as a hard gate (ADR-0016, #52).
 
 #### Tasks
 

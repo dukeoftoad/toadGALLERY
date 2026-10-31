@@ -42,6 +42,7 @@ import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
+import io.github.dukeoftoad.gallery.ui.search.SearchScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 import io.github.dukeoftoad.gallery.ui.trash.TrashScreen
@@ -226,11 +227,9 @@ fun ToadGalleryApp() {
                     }
                 }
                 composable(Destinations.SEARCH) {
-                    StateScreen(
-                        iconRes = R.drawable.ic_nav_search,
-                        titleRes = R.string.state_search_empty_title,
-                        bodyRes = R.string.state_search_empty_body,
-                    )
+                    // Phase 3 (issue #62): real name search replaces the
+                    // placeholder; results open the shared viewer hand-off.
+                    SearchScreen(onOpenViewer = openViewer)
                 }
                 composable(Destinations.SETTINGS) {
                     // Issue #27: the real Settings screen (Photo Picker toggle,

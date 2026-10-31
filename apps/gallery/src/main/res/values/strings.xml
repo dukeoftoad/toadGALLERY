@@ -12,7 +12,7 @@
     <string name="state_albums_empty_title">No albums yet</string>
     <string name="state_albums_empty_body">Albums group your media by folder. Grant access in the next step to see them.</string>
     <string name="state_search_empty_title">Search your library</string>
-    <string name="state_search_empty_body">Advanced filters by date, album, type and more arrive with the search engine (roadmap Phase 5).</string>
+    <string name="state_search_empty_body">Type at least 2 characters to find photos and videos by file name. Advanced filters by date, album and more arrive with the smart search (roadmap Phase 5).</string>
     <string name="state_settings_empty_title">Settings</string>
     <string name="state_settings_empty_body">Appearance, privacy and storage preferences land as the product grows.</string>
     <string name="state_permission_title">Access needed</string>
@@ -23,6 +23,25 @@
     <string name="state_photos_error_body">Something went wrong while reading on-device media. Nothing was changed — your photos are safe.</string>
     <string name="state_action_retry">Try again</string>
     <string name="state_shell_badge">Phase 3 — on-device timeline</string>
+
+    <!-- Search tab v1 (issue #62): name query + photo/video filter. The
+         idle state reuses state_search_empty_title/body above; the retry
+         affordance is the shared state_action_retry. -->
+    <string name="search_field_label">Search</string>
+    <string name="cd_search_clear">Clear search</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_photos">Photos</string>
+    <string name="search_filter_videos">Videos</string>
+    <string name="search_short_query_title">Keep typing</string>
+    <string name="search_short_query_body">Type at least 2 characters to search file names across your photos and videos.</string>
+    <string name="search_no_results_title">No matches</string>
+    <string name="search_no_results_body">Nothing in your library is named like that. Try fewer letters or a different filter.</string>
+    <string name="search_error_title">Couldn\'t search your library</string>
+    <string name="search_error_body">Something went wrong while searching. Nothing was changed — your media is safe.</string>
+    <plurals name="search_results_count">
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
+    </plurals>
 
     <!-- Albums (issue #29) -->
     <plurals name="album_item_count">
@@ -128,6 +147,22 @@
     <string name="viewer_video_error_title">Can\'t play this video</string>
     <string name="viewer_video_error_body">This device\'s video decoder can\'t handle the file — it may use an unsupported codec. The file itself is untouched.</string>
     <string name="cd_viewer_photo">Full-screen photo</string>
+
+    <!-- Viewer operations (#63/#65) -->
+    <string name="cd_viewer_action_info">Details</string>
+    <string name="cd_viewer_action_share">Share</string>
+    <string name="cd_viewer_action_rename">Rename</string>
+    <string name="cd_viewer_action_delete">Delete</string>
+    <string name="viewer_info_title">Details</string>
+    <string name="viewer_info_name">Name</string>
+    <string name="viewer_info_type">Type</string>
+    <string name="viewer_info_size">Size</string>
+    <string name="viewer_info_dimensions">Dimensions</string>
+    <string name="viewer_info_duration">Duration</string>
+    <string name="viewer_info_date_added">Date added</string>
+    <string name="viewer_info_uri">Content URI</string>
+    <string name="viewer_info_unknown">Unknown</string>
+    <string name="viewer_share_unavailable">No app available to share this item</string>
 
     <!-- Recycle bin (issue #31) -->
     <string name="trash_title">Recycle bin</string>

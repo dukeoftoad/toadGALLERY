@@ -29,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -95,6 +97,7 @@ import io.github.dukeoftoad.gallery.data.checkRenameInput
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
+import io.github.dukeoftoad.gallery.ui.photos.UndoPayload
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -131,11 +134,24 @@ import kotlinx.coroutines.launch
  * [ViewerInfoSheet]), Share (`ACTION_SEND` with the local content URI),
  * Rename and Delete (both through the viewer-scoped [FileOpsViewModel] ---
  * the SAME state machine, consent round-trip and undo snackbars the Photos
- * tab uses for issue #30, driven one item at a time). Rename/Delete are
- * hidden below Android 10, where the app is read-only (the lexically visible
- * `SDK_INT` gate NewApi lint recognizes; the ViewModel is inert there too).
- * Icon actions keep the 48dp `IconButton` touch floor (DesignTokens) and
- * TalkBack descriptions via `cd_viewer_action_*`.
+ * tab uses for issue #30, driven one item at a time). Issue #66 adds the
+ * FAVORITE toggle as the first action: a heart that reflects the current
+ * page's favorite state (filled vs outlined) and drives the SAME
+ * viewer-scoped [FileOpsViewModel] through its single-item favorite op
+ * (`requestFavorite`) --- one `IS_FAVORITE` write, the write-consent
+ * round-trip on Android 11+ for items this app didn't contribute, and an
+ * undo snackbar that toggles back. Like Rename/Delete it rides the Q+
+ * write gate (`canModify`); below Android 10 the app is read-only and the
+ * heart stays hidden. The frozen tap-time window cannot mutate its items,
+ * so the screen keeps page-local OVERRIDES (keyed by content URI) that the
+ * success snackbar's `UndoPayload.Favorite` updates --- the heart is always
+ * honest for pages the user toggled in this viewer session, and the grids
+ * pick the persisted state up through the MediaStore observer on R+.
+ * Rename/Delete are hidden below Android 10, where the app is read-only
+ * (the lexically visible `SDK_INT` gate NewApi lint recognizes; the
+ * ViewModel is inert there too). Icon actions keep the 48dp `IconButton`
+ * touch floor (DesignTokens) and TalkBack descriptions via
+ * `cd_viewer_action_*`.
  *
  * ### Window mutation after ops (issue #63, honest v1)
  * DELETE success drops the deleted item's page from the shell-scoped
@@ -222,6 +238,28 @@ fun ViewerScreen(
     // delete-SUCCESS narrations drop the page.
     var deleteInFlight by remember { mutableStateOf<String?>(null) }
 
+    // Issue #66: page-local favorite overrides over the frozen tap-time
+    // window. The window is a snapshot (ViewerViewModel owns no mutation
+    // for favorites), so a toggle's persisted result is mirrored here keyed
+    // by content URI; the success snackbar's UndoPayload.Favorite updates
+    // it, and undoing toggles it back just as cleanly.
+    var favoriteOverrides by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+    /** The effective favorite state of [item] (override > window snapshot). */
+    fun favoriteStateOf(item: MediaItem): Boolean =
+        favoriteOverrides[item.uri.toString()] ?: item.isFavorite
+
+    /**
+     * Toggles the current page's favorite flag (issue #66): one item, one
+     * `IS_FAVORITE` write through the SAME viewer-scoped ops ViewModel
+     * (consent round-trip + undo included); no selection is needed because
+     * the favorite op takes its item directly.
+     */
+    fun requestToggleFavorite(item: MediaItem) {
+        if (fileOpsState is FileOpsUiState.Running) return
+        fileOpsViewModel.requestFavorite(item, favorite = !favoriteStateOf(item))
+    }
+
     // Dialog/sheet state, screen-local exactly like PhotosTimeline's: one-tap
     // decisions that need not survive process death.
     var infoTarget by remember { mutableStateOf<MediaItem?>(null) }
@@ -261,6 +299,15 @@ fun ViewerScreen(
                     )
                     if (shown == SnackbarResult.ActionPerformed) {
                         fileOpsViewModel.performUndo(event.undo)
+                    }
+                    // Issue #66: a favorite success narration carries its
+                    // UndoPayload.Favorite on EVERY favorite write (including
+                    // undo) --- the payload is the success signal that keeps
+                    // the page-local heart override honest: the new state is
+                    // the inverse of the payload's `previous`.
+                    (event.undo as? UndoPayload.Favorite)?.let { favorite ->
+                        favoriteOverrides = favoriteOverrides +
+                            (favorite.item.uri.toString() to !favorite.previous)
                     }
                     // Issue #63 window mutation: the ViewModel's public
                     // event surface narrates delete success through exactly
@@ -392,12 +439,17 @@ fun ViewerScreen(
                 current = pagerState.currentPage,
                 total = window.items.size,
                 // Read-only below Android 10 (the app holds no write
-                // consent protocol there): rename/delete appear only on Q+,
-                // the lexically visible guard NewApi lint recognizes.
+                // consent protocol there): the favorite toggle appears only
+                // on Q+ alongside rename/delete, the lexically visible
+                // guard NewApi lint recognizes.
                 canModify = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+                isFavorite = favoriteStateOf(window.items[pagerState.currentPage]),
                 onBack = onBack,
                 onInfo = { infoTarget = window.items[pagerState.currentPage] },
                 onShare = { shareItem(window.items[pagerState.currentPage]) },
+                onToggleFavorite = {
+                    requestToggleFavorite(window.items[pagerState.currentPage])
+                },
                 onRename = { renameTarget = window.items[pagerState.currentPage] },
                 onDelete = { deleteConfirmTarget = window.items[pagerState.currentPage] },
                 modifier = Modifier.align(Alignment.TopCenter),
@@ -911,7 +963,9 @@ private fun VideoPage(item: MediaItem) {
  * The viewer's chrome: a top scrim with the back action, the
  * `viewer_counter` position text ("n of m") and --- issue #63 --- the
  * actions for the CURRENT page's item: Details, Share, and (Q+ only,
- * [canModify]) Rename and Delete. Fading in/out with [visible]; chrome
+ * [canModify]) Rename and Delete. Issue #66 adds the favorite toggle as
+ * the first action: a filled heart while [isFavorite], an outlined heart
+ * otherwise (both CORE-set icons). Fading in/out with [visible]; chrome
  * visibility is toggled by photo taps ([PhotoPage]); video pages keep the
  * PlayerView's own controls, so the top bar simply follows the last
  * toggled state there.
@@ -919,7 +973,8 @@ private fun VideoPage(item: MediaItem) {
  * Every action is an `IconButton` --- the 48dp touch floor DesignTokens
  * mandates --- with a `cd_viewer_action_*` content description, and all
  * icons come from the material-icons CORE set the repo already depends on
- * (Info, Share, Edit, Delete; no extended-icons dependency is added).
+ * (Info, Share, Edit, Delete, Favorite, FavoriteBorder; no extended-icons
+ * dependency is added).
  */
 @Composable
 private fun ViewerTopBar(
@@ -927,9 +982,11 @@ private fun ViewerTopBar(
     current: Int,
     total: Int,
     canModify: Boolean,
+    isFavorite: Boolean,
     onBack: () -> Unit,
     onInfo: () -> Unit,
     onShare: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
@@ -982,6 +1039,30 @@ private fun ViewerTopBar(
                 )
             }
             if (canModify) {
+                // Issue #66: the favorite toggle. Filled heart while the
+                // current page is a favorite, outlined otherwise; the
+                // content description flips with the state so TalkBack
+                // announces the action, not the glyph.
+                IconButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.testTag("viewer_action_favorite"),
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) {
+                            Icons.Filled.Favorite
+                        } else {
+                            Icons.Filled.FavoriteBorder
+                        },
+                        contentDescription = stringResource(
+                            if (isFavorite) {
+                                R.string.cd_viewer_action_favorite_remove
+                            } else {
+                                R.string.cd_viewer_action_favorite_add
+                            },
+                        ),
+                        tint = Color.White,
+                    )
+                }
                 IconButton(
                     onClick = onRename,
                     modifier = Modifier.testTag("viewer_action_rename"),

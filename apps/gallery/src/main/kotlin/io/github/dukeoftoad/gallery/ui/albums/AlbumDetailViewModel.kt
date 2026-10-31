@@ -7,8 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.BucketContent
+import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
+import io.github.dukeoftoad.gallery.data.TimelineSort
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,12 +25,29 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * State holder for the album detail view (Phase 3, issue #29; file-ops
- * refresh since #64).
+ * refresh since #64; favorites pseudo-bucket + sorting since #66).
  *
  * Loads one bucket's contents plus its display name. The screen is only
  * reachable after the Albums tab already loaded with granted access, so
  * there is no permission flow here; a mid-session revoke surfaces as an
  * empty grid rather than a crash (the query is defensive).
+ *
+ * ## Favorites pseudo-bucket (issue #66)
+ * When [bucketId] is the sentinel [Favorites.FAVORITES_BUCKET_ID] (the
+ * pinned "Favorites" card on the Albums tab), [load] serves
+ * [MediaStoreSource.queryFavorites] instead of a bucket query and the
+ * screen resolves the title from `albums_favorites_title`. The favorites
+ * detail keeps newest-first in v1 (issue #66's documented scope), so the
+ * sort state is ignored --- and its menu hidden --- there. Because the
+ * favorites surface is Q+ (see `Favorites`), a defensively reachable
+ * sentinel below Q simply renders the honest empty state.
+ *
+ * ## Sorting (issue #66)
+ * [sort] is per-session ViewModel state, applied by re-querying the bucket
+ * in the chosen order ([MediaStoreSource.queryBucket] owns the total
+ * order). The snapshot model makes a sort change a plain new [load] --- no
+ * Paging generation to rebuild here --- with the same generation guard as
+ * every other re-query.
  *
  * ## Refresh after file operations (issue #64)
  * Unlike the Photos timeline there is no Paging pipeline here --- the grid
@@ -65,6 +85,15 @@ class AlbumDetailViewModel(
 
     private val _state = MutableStateFlow<AlbumDetailState>(AlbumDetailState.Loading)
     val state: StateFlow<AlbumDetailState> = _state.asStateFlow()
+
+    /**
+     * The bucket's sort direction (issue #66): per-session ViewModel state,
+     * newest-first by default; the screen's sort menu writes it and every
+     * change re-queries (the snapshot model has no pipeline to rebuild).
+     * Ignored for the favorites pseudo-bucket (newest-first in v1).
+     */
+    private val _sort = MutableStateFlow(TimelineSort.NEWEST_FIRST)
+    val sort: StateFlow<TimelineSort> = _sort.asStateFlow()
 
     /**
      * MediaStore change notifications, emitted by the observer registered
@@ -120,6 +149,18 @@ class AlbumDetailViewModel(
         load()
     }
 
+    /**
+     * Changes the bucket's sort direction (issue #66): no-op for the current
+     * value, otherwise store + re-query. (The favorites pseudo-bucket stays
+     * newest-first in v1; the screen hides its menu there, and a defensive
+     * call is absorbed because [load] ignores the sort for the sentinel.)
+     */
+    fun onSortChange(newSort: TimelineSort) {
+        if (_sort.value == newSort) return
+        _sort.value = newSort
+        load()
+    }
+
     override fun onCleared() {
         bucketObserver?.let { source.unregisterTimelineObserver(it) }
         bucketObserver = null
@@ -129,10 +170,24 @@ class AlbumDetailViewModel(
     /** One defensive bucket query; failures map to an empty bucket. */
     private fun load() {
         val generation = ++loadGeneration
+        val favorites = Favorites.isFavoritesBucket(bucketId)
+        val sort = _sort.value
+        val app = getApplication<Application>()
         viewModelScope.launch {
             val content: BucketContent = withContext(Dispatchers.IO) {
-                runCatching { source.queryBucket(bucketId) }
-                    .getOrElse { BucketContent(bucketName = "", items = emptyList()) }
+                if (favorites) {
+                    // Issue #66: the sentinel routes to the favorites query;
+                    // newest-first in v1 (the sort state is ignored here by
+                    // design --- the screen hides the menu).
+                    BucketContent(
+                        bucketName = app.getString(R.string.albums_favorites_title),
+                        items = runCatching { source.queryFavorites() }
+                            .getOrElse { emptyList() },
+                    )
+                } else {
+                    runCatching { source.queryBucket(bucketId, sort) }
+                        .getOrElse { BucketContent(bucketName = "", items = emptyList()) }
+                }
             }
             if (generation == loadGeneration) {
                 _state.value = AlbumDetailState.Ready(

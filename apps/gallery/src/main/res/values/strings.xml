@@ -292,4 +292,19 @@
     <string name="vault_biometric_disabled">Biometric unlock turned off.</string>
     <string name="vault_biometric_error">Biometric unlock didn\'t work. Use your PIN instead.</string>
     <string name="vault_biometric_invalidated">Biometric unlock stopped working — your device\'s biometrics changed. Unlock with your PIN, then turn biometric unlock back on.</string>
+
+    <!-- Favorites + sorting (#66) -->
+    <!-- MediaStore IS_FAVORITE toggle (viewer heart action with the Q+ write
+         gate + R+ consent round-trip of the other file ops), the favorites
+         pseudo-album pinned on the Albums tab (sentinel bucket id, live
+         count), the heart overlay on favorited grid cells, and the
+         newest/oldest timeline sort menu. -->
+    <string name="albums_favorites_title">Favorites</string>
+    <string name="cd_sort_menu">Sort</string>
+    <string name="sort_newest_first">Newest first</string>
+    <string name="sort_oldest_first">Oldest first</string>
+    <string name="cd_viewer_action_favorite_add">Add to favorites</string>
+    <string name="cd_viewer_action_favorite_remove">Remove from favorites</string>
+    <string name="favorite_added">Added to favorites</string>
+    <string name="favorite_removed">Removed from favorites</string>
 </resources>

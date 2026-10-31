@@ -36,6 +36,26 @@ All notable changes to toadGALLERY are documented here. The format follows
   and clear with the session on auto-lock. 29 new JVM tests pin the binding
   envelope, the store's binding leg, the thumbnail downsample/naming policy
   and the biometric readiness decision table.
+- Favorites and sorting (#66): the viewer's top bar gains a heart toggle for
+  the current page — a MediaStore `IS_FAVORITE` write through the same
+  consent machinery as rename/delete (Android 11+ write-consent round-trip
+  for items this app didn't contribute, single-shot retry; Android 10 keeps
+  the honest failure narration since `createWriteRequest` needs Android 11)
+  with an undo snackbar that toggles back. Favorited cells carry a small
+  heart chip in every grid (the same scrim idiom as the duration and GIF
+  badges, driven by the new `MediaItem.isFavorite` mapping in all queries),
+  and the Albums tab pins a distinct "Favorites" pseudo-album card with a
+  live count at the top — its sentinel bucket id (−1) routes the album
+  detail screen to an `IS_FAVORITE = 1` query, and the count rides the
+  unified collection observer on Android 11+ (favorites and search keep
+  newest-first in v1). The Photos timeline and album detail gain a sort menu
+  (Newest/Oldest first, `_id`-tiebroken total order, per-session state):
+  changing it swaps in a fresh Paging generation — the provider sort clause
+  is parameterized through the windowed queries, the snapshot paths sort
+  in memory, and the observer-invalidation pipeline stays intact. Below
+  Android 10 the whole favorites surface stays hidden (write gate, same as
+  the other file ops). 15 new JVM tests pin the sort mapping and the
+  favorites selection/sentinel rules.
 - Album detail file operations (#64): the Albums tab grid gains the full
   #30 selection machinery --- long-press selection with checkmark overlays,
   count app bar, Rename (single selection), Copy, Move (album picker that

@@ -4,7 +4,7 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.0-alpha] — unreleased on main (versionCode 10)
+## [0.4.1-alpha] — unreleased on main (versionCode 11)
 
 ### Added
 

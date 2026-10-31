@@ -321,8 +321,11 @@ the start.
 > (#64). **Phase 3 code-complete pending device validation**: after the
 > reopening, wave 2 landed vault biometric unlock binding (#57,
 > ADR-0019), decrypted vault thumbnails (#58) and favorites + sorting
-> (#66). The remaining exit work is real-device validation of the
-> #62–#66 slices on the next pre-release.
+> (#66), and the vault thumbnail lock-race guard (#69 --- a bitmap whose
+> decode straddles a lock/background event can never republish into the
+> cleared memory of the locked session) closed the one defect the
+> real-device review surfaced in the #58 slice. The remaining exit work
+> is real-device validation of the #62–#69 slices on the next pre-release.
 > CI runs compile + JVM tests with lint as a hard gate (ADR-0016, #52).
 
 #### Tasks

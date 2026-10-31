@@ -15,9 +15,11 @@ import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.vault.VaultBiometricReadiness
 import io.github.dukeoftoad.gallery.data.vault.VaultBiometricSupport
 import io.github.dukeoftoad.gallery.data.vault.VaultIndexEntry
+import io.github.dukeoftoad.gallery.data.vault.VaultLockGeneration
 import io.github.dukeoftoad.gallery.data.vault.VaultMoveOutcome
 import io.github.dukeoftoad.gallery.data.vault.VaultRepository
 import io.github.dukeoftoad.gallery.data.vault.VaultRestoreResult
+import io.github.dukeoftoad.gallery.data.vault.VaultThumbnailPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
@@ -176,6 +178,20 @@ sealed interface VaultBiometricRequest {
  * media persists on disk (the video frame temp file is private-cache and
  * deleted immediately; see `VaultThumbnailDecoder`).
  *
+ * ## Lock race (issue #69)
+ * A decode is a suspend call: file I/O + cipher + `BitmapFactory` spend real
+ * time, and an auto-lock can land in the middle. The pre-decode unlocked
+ * check alone therefore cannot stop a still-running batch from publishing
+ * plaintext pixels into the CLEARED map of a locked session --- exactly the
+ * "thumbnails can be repopulated after locking" defect. The guard is
+ * two-legged, per the issue #69 prescription: a monotonic lock-session
+ * generation ([VaultLockGeneration], advanced at every unlock/lock boundary)
+ * that every batch captures at launch, PLUS wholesale cancellation of the
+ * in-flight batches on lock. Each bitmap must pass
+ * [VaultThumbnailPolicy.shouldPublishThumbnail] --- generation still fresh
+ * AND session still unlocked --- IMMEDIATELY before it is published; a stale
+ * bitmap is dropped, never published.
+ *
  * ## API level
  * The repository's MediaStore methods are `@RequiresApi(Q)`; the state
  * machine never leaves [VaultUiState.Unsupported] below Q, so every call is
@@ -263,6 +279,24 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Entry ids already attempted this session; prevents retry loops on failure. */
     private val thumbnailAttempted = mutableSetOf<Long>()
+
+    /**
+     * Issue #69: the lock-session token. Advanced at EVERY unlock/lock
+     * boundary ([enterUnlockedSession] and [onBackgrounded]); each thumbnail
+     * batch captures it at launch and re-validates immediately before
+     * publishing. Pure JVM ([AtomicLong] under the hood) so its semantics
+     * are pinned by `VaultLockGenerationTest`.
+     */
+    private val lockGeneration = VaultLockGeneration()
+
+    /**
+     * Issue #69: the in-flight thumbnail batch jobs, so [onBackgrounded] can
+     * cancel them wholesale on lock (decodes under a locked vault are wasted
+     * work even when the publish re-check already guarantees they cannot
+     * land). Jobs remove themselves on completion; at most a handful exist
+     * (one per ensureThumbnails kick, deduped by the attempted set).
+     */
+    private val thumbnailBatches = mutableListOf<Job>()
 
     init {
         resolveConfiguration()
@@ -357,6 +391,11 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
      * decode batch for the fresh listing.
      */
     private suspend fun enterUnlockedSession() {
+        // Issue #69: a fresh session is a fresh generation --- orphans any
+        // batch that might still be running from the previous session
+        // (defensive: onBackgrounded cancels them, but belt-and-braces the
+        // token makes cross-session publishes impossible either way).
+        lockGeneration.advance()
         val entries = repository.loadEntriesAfterSweep()
         _state.value = VaultUiState.Unlocked(entries)
         ensureThumbnails(entries)
@@ -503,11 +542,22 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
      * record are untouched, and a running move batch finishes on its own
      * (it is provider/file I/O that is crash-safe by ordering). Issue #58:
      * ALL decrypted session state clears with it, thumbnails included.
+     * Issue #69: the lock-session generation advances (orphaning every
+     * in-flight thumbnail batch's publishes) and the batches themselves
+     * are cancelled outright.
      */
     fun onBackgrounded() {
         if (_state.value is VaultUiState.Unlocked) {
             _state.value = VaultUiState.Locked
         }
+        // Issue #69: end the session IN ORDER --- invalidate first, then stop
+        // the work, then clear the memory. The generation bump orphans every
+        // in-flight batch (their post-decode re-check can never pass again,
+        // even if a blocking IO decode outlives the cancel); cancelling the
+        // batches stops the wasted decodes outright.
+        lockGeneration.advance()
+        thumbnailBatches.forEach { it.cancel() }
+        thumbnailBatches.clear()
         _thumbnails.value = emptyMap()
         thumbnailAttempted.clear()
     }
@@ -772,15 +822,28 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
      * off the main thread, one item at a time; a null result (failed / OOM /
      * unsupported codec) simply never lands in [thumbnails], so the row
      * keeps its placeholder --- no retry loop, no crash.
+     *
+     * Issue #69 race guard: the batch captures [VaultLockGeneration.current]
+     * at launch; EVERY bitmap must pass
+     * [VaultThumbnailPolicy.shouldPublishThumbnail] --- generation still
+     * fresh AND session still unlocked --- IMMEDIATELY before it is
+     * published. The pre-decode unlocked checks alone cannot help: a lock /
+     * background event can land while `decodeThumbnail` is suspended, and
+     * without the post-decode re-check the still-running batch would
+     * repopulate plaintext pixels into the cleared map of a locked session.
      */
     private fun ensureThumbnails(entries: List<VaultIndexEntry>) {
         val todo = entries.filter { it.id !in _thumbnails.value && it.id !in thumbnailAttempted }
         if (todo.isEmpty()) return
         todo.forEach { thumbnailAttempted += it.id }
-        viewModelScope.launch {
+        val batch = viewModelScope.launch {
             // One stale-temp sweep per batch (crash leftovers from the video
             // frame-extraction path; issue #58 hygiene).
             runCatching { repository.cleanThumbnailTempFiles() }
+            // The generation this batch runs under (issue #69). Every lock/
+            // unlock boundary advances it; the re-check below compares against
+            // it so a bitmap decoded under a DEAD session can never publish.
+            val capturedGeneration = lockGeneration.current()
             for (entry in todo) {
                 if (_state.value !is VaultUiState.Unlocked) return@launch
                 thumbnailGate.withPermit {
@@ -792,11 +855,29 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                     } catch (_: Throwable) {
                         null
                     }
-                    if (bitmap != null) {
+                    // Issue #69 (the race itself): decodeThumbnail just spent
+                    // real time suspended in I/O + cipher + BitmapFactory ---
+                    // a lock/background event may have landed in the middle.
+                    // Re-check the generation AND the unlocked state
+                    // IMMEDIATELY before publishing; a stale bitmap is dropped
+                    // (onBackgrounded cleared the map; it must stay cleared).
+                    if (bitmap != null && VaultThumbnailPolicy.shouldPublishThumbnail(
+                            capturedGeneration = capturedGeneration,
+                            currentGeneration = lockGeneration.current(),
+                            isUnlocked = _state.value is VaultUiState.Unlocked,
+                        )
+                    ) {
                         _thumbnails.value = _thumbnails.value + (entry.id to bitmap.asImageBitmap())
                     }
                 }
             }
+        }
+        // Issue #69: remember the batch so onBackgrounded can cancel it on
+        // lock; self-remove when done (completed/cancelled alike) to keep the
+        // list bounded across a long unlocked session.
+        synchronized(thumbnailBatches) {
+            thumbnailBatches.add(batch)
+            batch.invokeOnCompletion { synchronized(thumbnailBatches) { thumbnailBatches.remove(batch) } }
         }
     }
 

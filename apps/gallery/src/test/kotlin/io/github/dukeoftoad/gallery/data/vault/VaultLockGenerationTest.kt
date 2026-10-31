@@ -52,17 +52,19 @@ class VaultLockGenerationTest {
 
     @Test
     fun `publishing requires both a fresh generation and an unlocked session`() {
+        // The full decision table: only fresh-generation + still-unlocked
+        // publishes.
+        data class Row(val captured: Long, val current: Long, val unlocked: Boolean, val expected: Boolean)
         val truthTable = listOf(
-            /* captured, current, unlocked, expected */
-            Triple(7L, 7L, true, true),    // same session, still unlocked
-            Triple(7L, 7L, false, false),  // fresh token but locked RIGHT NOW
-            Triple(7L, 8L, true, false),   // boundary crossed mid-decode
-            Triple(7L, 8L, false, false),  // locked AND stale
+            Row(captured = 7L, current = 7L, unlocked = true, expected = true),   // same session, still unlocked
+            Row(captured = 7L, current = 7L, unlocked = false, expected = false), // fresh token but locked RIGHT NOW
+            Row(captured = 7L, current = 8L, unlocked = true, expected = false),   // boundary crossed mid-decode
+            Row(captured = 7L, current = 8L, unlocked = false, expected = false), // locked AND stale
         )
-        truthTable.forEach { (captured, current, unlocked, expected) ->
+        truthTable.forEach { row ->
             assertEquals(
-                expected,
-                VaultThumbnailPolicy.shouldPublishThumbnail(captured, current, unlocked),
+                row.expected,
+                VaultThumbnailPolicy.shouldPublishThumbnail(row.captured, row.current, row.unlocked),
             )
         }
     }

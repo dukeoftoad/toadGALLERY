@@ -12,6 +12,29 @@ import java.io.OutputStream
 class VaultStoreException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
+ * One [VaultStore.describeState] probe: the vault's on-disk shape as plain
+ * values (W1 --- the Settings > About > Diagnostics surface). Pure JVM like
+ * the store itself, so the probe is pinned by the same JVM suite; booleans
+ * and counts only --- nothing here decrypts content or exposes names.
+ */
+data class VaultStoreState(
+    /** The store root is a directory (false: never created, or wiped away). */
+    val rootExists: Boolean,
+    /** `pin.bin` exists (half of the configured marker; see [VaultStore.isConfigured]). */
+    val pinPresent: Boolean,
+    /** `index.bin` exists (the other half; pin without index = broken residue). */
+    val indexPresent: Boolean,
+    /** The optional #57 `biometric.binding` envelope exists. */
+    val biometricBindingPresent: Boolean,
+    /** Files in `blobs/`, raw listing (0 when the directory is absent/unreadable). */
+    val blobCount: Int,
+    /** Sum of the `blobs/` file sizes in bytes (0 under the same rule). */
+    val blobBytes: Long,
+    /** Root is a directory AND a `.probe` file could be created and deleted inside it. */
+    val rootWritable: Boolean,
+)
+
+/**
  * The hidden vault's app-private store (issue #32, ADR-0017): sealed blobs +
  * a sealed index + a sealed PIN record under one root directory.
  *
@@ -170,6 +193,57 @@ class VaultStore(
                     "broken vault residue ${file.name} cannot be removed; wipe() first",
                 )
             }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Diagnostics (W1; read-only disk truth for the About screen)
+    // ------------------------------------------------------------------
+
+    /**
+     * The pure-JVM state probe behind Settings > About > Diagnostics (W1):
+     * the vault's DISK truth as plain values, so a user-side failure report
+     * can show what the store actually looks like without decrypting
+     * anything. Reads only (the sole mutation is [rootWritable]'s
+     * create-and-delete `.probe` file, cleaned up in a `finally`); never
+     * decrypts; never throws --- unreadable probes degrade to false/0, and
+     * a missing `blobs/` listing (null) counts as 0. `blobCount`/`blobBytes`
+     * are the RAW directory listing (every file, whatever its name): the
+     * honest number, not the filtered one --- the sweep, not the probe, is
+     * the judge of orphans.
+     */
+    fun describeState(): VaultStoreState {
+        val blobs = blobsDir().listFiles()
+        return VaultStoreState(
+            rootExists = root.isDirectory,
+            pinPresent = pinFile().exists(),
+            indexPresent = indexFile().exists(),
+            biometricBindingPresent = bindingFile().exists(),
+            blobCount = blobs?.size ?: 0,
+            blobBytes = blobs?.sumOf { it.length() } ?: 0L,
+            rootWritable = probeRootWritable(),
+        )
+    }
+
+    /**
+     * Honest writability probe of [root]: a store-private `.probe` file
+     * must be creatable AND deletable inside it. A stale leftover is
+     * truncated, never trusted; the `finally` guarantees no residue even
+     * when the delete itself is the failing step; an IOException (read-only
+     * filesystem, full disk, broken directory) reports plain false.
+     */
+    private fun probeRootWritable(): Boolean {
+        if (!root.isDirectory) return false
+        val probe = File(root, PROBE_FILE_NAME)
+        return try {
+            FileOutputStream(probe).use { /* creating the file IS the probe */ }
+            probe.delete()
+        } catch (e: IOException) {
+            false
+        } finally {
+            // Belt-and-braces: re-deleting a deleted file is a harmless
+            // no-op, and this covers the throw-between window.
+            probe.delete()
         }
     }
 
@@ -505,5 +579,8 @@ class VaultStore(
 
         /** In-flight suffix of [atomicWrite]; swept when found stale. */
         const val TMP_SUFFIX = ".tmp"
+
+        /** [probeRootWritable]'s transient file; store-private, never a sealed artifact. */
+        const val PROBE_FILE_NAME = ".probe"
     }
 }

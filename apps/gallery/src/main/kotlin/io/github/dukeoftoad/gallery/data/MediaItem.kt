@@ -17,10 +17,17 @@ import android.net.Uri
  * (see [isGif]) --- for the play indicator; the mimetype is otherwise
  * preserved for the future viewer and for Coil's decoder dispatch.
  *
- * The three new values are trailing properties with `0` defaults, which means
+ * The three later values are trailing properties with `0` defaults, which means
  * "unknown": MediaStore rows can lack the underlying columns, callers may
  * construct items without them, and the UI treats `0` dimensions as a
  * square-aspect fallback and `0` duration as "no overlay".
+ *
+ * Issue #66 adds [isFavorite] in the same trailing-default style: mapped from
+ * the MediaStore `is_favorite` column wherever the provider exposes it
+ * (Android 10+; below that it stays `false`, matching the read gate), it
+ * drives the heart overlay on grid cells and the viewer's favorite toggle.
+ * The flag itself is system-managed state in MediaStore (see
+ * `data/Favorites.kt`), never app-private storage.
  */
 data class MediaItem(
     val id: Long,
@@ -34,6 +41,8 @@ data class MediaItem(
     val height: Int = 0,
     /** Video duration in milliseconds from MediaStore; `0` means "unknown". */
     val durationMs: Long = 0,
+    /** MediaStore `is_favorite` flag (issue #66); `false` when unprojected. */
+    val isFavorite: Boolean = false,
 ) {
     /**
      * Whether this item is an animated GIF, for the play indicator

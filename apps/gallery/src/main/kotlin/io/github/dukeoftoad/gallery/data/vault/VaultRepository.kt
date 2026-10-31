@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.content.IntentSender
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -100,6 +101,10 @@ class VaultRepository(context: Context) {
         keys = AndroidVaultKeys,
     )
 
+    /** Issue #58: bounded in-memory thumbnails over the store + private cacheDir. */
+    private val thumbnails: VaultThumbnailDecoder =
+        VaultThumbnailDecoder(cacheDir = context.cacheDir, store = store)
+
     /**
      * Q+ only, mirroring `MediaFileOps`'s `@RequiresApi(Q)` contract (the
      * lexically lint-visible `SDK_INT` check is the guard NewApi lint
@@ -158,6 +163,48 @@ class VaultRepository(context: Context) {
     /** Deletes one entry (sealed blob + index row) from the vault. */
     suspend fun deleteEntry(entry: VaultIndexEntry) {
         withContext(Dispatchers.IO) { store.delete(entry) }
+    }
+
+    // ------------------------------------------------------------------
+    // Biometric binding (issue #57, ADR-0019; thin IO over the store)
+    // ------------------------------------------------------------------
+
+    /** True once the optional `biometric.binding` envelope exists (#57). */
+    suspend fun hasBiometricBinding(): Boolean =
+        withContext(Dispatchers.IO) { store.hasBiometricBinding() }
+
+    /** Persists a freshly sealed session secret (the enroll round's last step). */
+    suspend fun saveBiometricBinding(sealedSecret: ByteArray) {
+        withContext(Dispatchers.IO) { store.saveBiometricBinding(sealedSecret) }
+    }
+
+    /**
+     * The stored sealed session secret, or null when biometric unlock is
+     * not enrolled. Throws [VaultStoreException] on a malformed envelope ---
+     * the ViewModel narrates that as an error, never "not enrolled".
+     */
+    suspend fun loadBiometricBinding(): ByteArray? =
+        withContext(Dispatchers.IO) { store.loadBiometricBinding() }
+
+    /** Removes the binding (toggle off, or the invalidated-key cleanup). */
+    suspend fun removeBiometricBinding(): Boolean =
+        withContext(Dispatchers.IO) { store.removeBiometricBinding() }
+
+    // ------------------------------------------------------------------
+    // Thumbnails (issue #58; Dispatchers.IO, caller bounds concurrency)
+    // ------------------------------------------------------------------
+
+    /**
+     * One bounded in-memory thumbnail for [entry], or null on any per-item
+     * failure (placeholder territory --- see [VaultThumbnailDecoder]). The
+     * stale-temp sweep runs once per call batch via [cleanThumbnailTempFiles].
+     */
+    suspend fun decodeThumbnail(entry: VaultIndexEntry): Bitmap? =
+        withContext(Dispatchers.IO) { thumbnails.decode(entry) }
+
+    /** Sweeps crash-leftover plaintext temp files (issue #58 hygiene). */
+    suspend fun cleanThumbnailTempFiles() {
+        withContext(Dispatchers.IO) { thumbnails.cleanStaleTempFiles() }
     }
 
     // ------------------------------------------------------------------

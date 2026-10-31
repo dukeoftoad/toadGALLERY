@@ -973,6 +973,95 @@ working with no secrets on the machine.
 
 ---
 
+## ADR-0019 — Vault biometric unlock binding (issue #57)
+
+**Status:** ACCEPTED · **Date:** 2026-10-31 · **Application phase:** 3 (vault
+follow-up slice; resolves ADR-0017's "Deferred: biometric-bound crypto
+objects" and extends ADR-0017's store additively).
+
+**Context.** The hidden vault (ADR-0017) unlocks with a PIN only: every entry
+into the vault costs a PBKDF2 round plus four-to-eight digit typing, which is
+real friction for a screen users open many times a day. Issue #57 asks for
+`BiometricPrompt` with a `setUserAuthenticationRequired(true)` Keystore key
+--- hardware-bound, per-use-authenticated unlock rather than a cosmetic
+"prompt then behave as if unlocked". Constraints from ADR-0017: the crypto
+core (`VaultCrypto`/`VaultStore`) is pure JVM and pinned by the 39-test
+suite; the unlock session is in-memory only and clears on `ON_STOP`; and
+ADR-0014 forbids any dependency that could reintroduce network reach.
+
+**Decision.**
+
+1. **Opt-in enrollment, PIN stays primary.** Biometric unlock is an optional
+   step after setup, driven by a settings-style toggle on the unlocked vault
+   screen (also reachable later); the PIN path is untouched and remains the
+   only path on devices without usable biometrics or without an enrolled
+   binding. Enrollment, unlock and disable all require exactly the state you
+   would expect (unlocked session to enroll/disable; locked screen to
+   unlock).
+
+2. **A second Keystore key seals a per-vault session secret.** A new
+   AndroidKeyStore AES-256-GCM key (alias `toadgallery_vault_biometric`,
+   distinct from the media key on purpose), StrongBox-attempted with
+   TEE fallback (the ADR-0017 pattern), is generated with
+   `setUserAuthenticationRequired(true)` and NO validity-duration override:
+   per-use authentication, so **every** biometric unlock prompts. At
+   enrollment a fresh random 32-byte session secret is sealed under that key
+   via a prompt-authorized `Cipher` (`BiometricPrompt.CryptoObject`); at
+   unlock the same handshake decrypts the secret --- successful
+   authenticated decrypt of the 32-byte secret IS the unlock proof (no PIN
+   entry). Enrollment invalidation stays ON (default): each enrollment
+   re-mints the key and re-seals a fresh secret, discarding the old pair.
+
+3. **Binding file, additive and strictly parsed.** The sealed secret lives
+   in one new OPTIONAL store file, `biometric.binding`
+   (`version(1) || IV(12) || ciphertext(32) || GCM tag(16)`), written through
+   the store's atomic-write path. Absent file = biometric not enrolled = the
+   pre-#57 behavior, byte for byte; a present-but-malformed file is a loud
+   store error, never a silent "not enrolled". The orphan sweep and every
+   other store behavior are unchanged. The file is deliberately NOT sealed
+   under the media key: its confidentiality rests on the auth-bound
+   biometric key and its lifetime follows that key.
+
+4. **Honest invalidation semantics.** A biometric enrollment change
+   (fingerprint/face added or removed) permanently invalidates the
+   AndroidKeyStore key: the binding silently cannot decrypt anymore. The
+   failure is caught, the dead binding file removed, and the user lands on
+   the PIN path with a plain "your device biometrics changed --- use the PIN,
+   then re-enable biometric unlock" nudge. No data is lost (the vault content
+   is untouched; only the convenience binding dies).
+
+5. **Permission posture unchanged.** `androidx.biometric:biometric:1.1.0`
+   declares `USE_BIOMETRIC` (a normal permission, merged from its manifest)
+   but NOT `INTERNET`, so the ADR-0014 offline-by-construction gate is
+   unaffected. `MainActivity` becomes a `FragmentActivity` (the androidx
+   prompt requires one); no fragments of our own are introduced, and Compose
+   remains the only UI toolkit (ADR-0009).
+
+**Consequences.**
+
+- Pro: unlocking the vault becomes a single fingerprint/face confirmation
+  backed by hardware-enforced per-use authentication --- stronger than a
+  4-digit PIN against shoulder-surfing, faster than PBKDF2 round-trips.
+- Pro: ADR-0017's crypto core is untouched; the only store change is one
+  optional file with strict parsing, and the existing JVM suite still pins
+  the whole layout (plus new tests for the binding envelope, the readiness
+  decision table, and the thumbnail policy).
+- Con: biometric enrollment changes invalidate the key and the binding
+  breaks --- by design (the alternative, `setInvalidatedByBiometricEnrollment
+  (false)`, would keep an old key authorized by new fingers). The nudge path
+  makes the break honest and recovery one toggle away.
+- Con: biometric unlock is only as trustworthy as the device's biometric
+  verification; the vault's at-rest security still rests entirely on
+  ADR-0017's media key, so a defeated biometric sensor does not expose
+  ciphertext it cannot reach.
+- Privacy: no cloud, no metadata leakage. Biometric data never enters the
+  app at all (the OS compares, the Keystore authorizes --- the app only sees
+  whether the round succeeded); the sealed session secret never leaves the
+  Keystore cipher pipeline; and the app still holds no INTERNET permission,
+  so nothing can be transmitted.
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -995,3 +1084,4 @@ working with no secrets on the machine.
 | 0016 | CI scope: compile + JVM tests; instrumented tests on physical devices | ACCEPTED |
 | 0017 | Hidden vault crypto: Keystore AES-256-GCM + PBKDF2 PIN (issue #32) | ACCEPTED |
 | 0018 | Release signing and the pre-release pipeline (issue #59) | ACCEPTED |
+| 0019 | Vault biometric unlock binding (issue #57) | ACCEPTED |

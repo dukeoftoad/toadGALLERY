@@ -318,10 +318,11 @@ the start.
 > photo/video filter into the viewer (#62), viewer operations: info sheet,
 > share, rename, delete + decoder fallback for capability-exceeding video
 > (#63, #65), and album-detail selection + file-ops parity with Photos
-> (#64). **Phase 3 is NOT yet complete**: device testing reopened the
-> milestone --- remaining work is vault biometric unlock binding (#57),
-> vault item thumbnails (#58), and favorites + sorting (#66), plus
-> real-device validation of the #62–#65 slices on the next pre-release.
+> (#64). **Phase 3 code-complete pending device validation**: after the
+> reopening, wave 2 landed vault biometric unlock binding (#57,
+> ADR-0019), decrypted vault thumbnails (#58) and favorites + sorting
+> (#66). The remaining exit work is real-device validation of the
+> #62–#66 slices on the next pre-release.
 > CI runs compile + JVM tests with lint as a hard gate (ADR-0016, #52).
 
 #### Tasks

@@ -4,10 +4,58 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.0-alpha] — unreleased on main (versionCode 9)
+## [0.4.0-alpha] — unreleased on main (versionCode 10)
 
 ### Added
 
+- Vault biometric unlock binding (#57, ADR-0019) and decrypted vault
+  thumbnails (#58): the hidden vault gains an opt-in "Unlock with biometrics"
+  path backed by hardware --- a second AndroidKeyStore AES-256-GCM key
+  (`toadgallery_vault_biometric`, StrongBox→TEE) generated with
+  `setUserAuthenticationRequired(true)` and per-use authentication, so EVERY
+  unlock prompts. Enrollment (a settings-style toggle on the unlocked vault
+  screen, visible right after setup) seals a fresh random 32-byte session
+  secret under a prompt-authorized `BiometricPrompt.CryptoObject` cipher into
+  a new optional, strictly-parsed store file `biometric.binding`
+  (`version(1) || IV(12) || ciphertext(32) || tag(16)`) --- absent file =
+  the pre-#57 PIN-only behavior, byte for byte; the PIN stays the primary
+  and always-available fallback, auto-lock semantics are unchanged, and a
+  biometric enrollment change honestly invalidates the key: the dead binding
+  is removed with a "re-enable" nudge instead of a silent break. `MainActivity`
+  becomes a `FragmentActivity` (the androidx prompt requires one); the new
+  `androidx.biometric` dependency declares `USE_BIOMETRIC` but not `INTERNET`,
+  so the ADR-0014 offline gate is unaffected. The unlocked vault list now
+  shows decrypted, size-bounded thumbnails (photos downsampled to a 256px
+  edge straight off the unseal stream via `inSampleSize`; videos decrypted
+  to a temp file in the private `cacheDir`, one frame extracted via
+  `MediaMetadataRetriever`, temp file deleted in a `finally` immediately
+  after --- no plaintext vault media ever persists on disk), decoded on
+  `Dispatchers.IO` under a 3-permit semaphore with per-item `Throwable`
+  catching so a bad or oversized blob degrades to the placeholder plate
+  instead of crashing; all thumbnail bitmaps live in ViewModel memory only
+  and clear with the session on auto-lock. 29 new JVM tests pin the binding
+  envelope, the store's binding leg, the thumbnail downsample/naming policy
+  and the biometric readiness decision table.
+- Favorites and sorting (#66): the viewer's top bar gains a heart toggle for
+  the current page — a MediaStore `IS_FAVORITE` write through the same
+  consent machinery as rename/delete (Android 11+ write-consent round-trip
+  for items this app didn't contribute, single-shot retry; Android 10 keeps
+  the honest failure narration since `createWriteRequest` needs Android 11)
+  with an undo snackbar that toggles back. Favorited cells carry a small
+  heart chip in every grid (the same scrim idiom as the duration and GIF
+  badges, driven by the new `MediaItem.isFavorite` mapping in all queries),
+  and the Albums tab pins a distinct "Favorites" pseudo-album card with a
+  live count at the top — its sentinel bucket id (−1) routes the album
+  detail screen to an `IS_FAVORITE = 1` query, and the count rides the
+  unified collection observer on Android 11+ (favorites and search keep
+  newest-first in v1). The Photos timeline and album detail gain a sort menu
+  (Newest/Oldest first, `_id`-tiebroken total order, per-session state):
+  changing it swaps in a fresh Paging generation — the provider sort clause
+  is parameterized through the windowed queries, the snapshot paths sort
+  in memory, and the observer-invalidation pipeline stays intact. Below
+  Android 10 the whole favorites surface stays hidden (write gate, same as
+  the other file ops). 15 new JVM tests pin the sort mapping and the
+  favorites selection/sentinel rules.
 - Album detail file operations (#64): the Albums tab grid gains the full
   #30 selection machinery --- long-press selection with checkmark overlays,
   count app bar, Rename (single selection), Copy, Move (album picker that

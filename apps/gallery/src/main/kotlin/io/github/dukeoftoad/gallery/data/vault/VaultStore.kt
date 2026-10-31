@@ -37,8 +37,17 @@ class VaultStoreException(message: String, cause: Throwable? = null) : Exception
  *   pin.bin     sealed PBKDF2 record: salt(16) || digest(32)
  *   index.bin   sealed [VaultIndex] serialization
  *   blobs/1.bin sealed media blob (IV(12) || ciphertext || GCM tag)
+ *   biometric.binding  optional v1 biometric envelope (issue #57, ADR-0019)
  * ```
- * Blob file names are the entry's stable id, never the display name.
+ * Blob file names are the entry's stable id, never the display name. The
+ * `biometric.binding` file is the ADDITIVE #57 extension: absent = biometric
+ * unlock not enrolled = the pre-#57 PIN-only behavior, byte for byte;
+ * present = `version(1) || IV(12) || ciphertext(32) || GCM tag(16)` (a
+ * session secret sealed under the auth-bound key), parsed strictly via
+ * [VaultBiometricBinding] like the index. It is deliberately NOT sealed
+ * under the media key: its confidentiality already rests on the biometric
+ * key, and its lifetime follows the biometric key (re-enrollment replaces
+ * it wholesale), not the media key.
  *
  * ## Crash-safety orderings (ADR-0017)
  *  - **store**: blob fully written FIRST, index persisted SECOND --- a crash
@@ -103,6 +112,59 @@ class VaultStore(
 
     /** True once the PIN record exists (the vault's single "configured" marker). */
     fun isConfigured(): Boolean = pinFile().exists()
+
+    // ------------------------------------------------------------------
+    // Biometric binding (issue #57, ADR-0019; additive, optional file)
+    // ------------------------------------------------------------------
+
+    /** True once the optional `biometric.binding` file exists (#57 enrollment marker). */
+    fun hasBiometricBinding(): Boolean = bindingFile().exists()
+
+    /**
+     * Persists the biometric binding: [sealedSecret] is the session secret
+     * sealed under the auth-bound key (`IV(12) || ciphertext(32) || tag(16)`,
+     * exactly [VaultBiometricBinding.SEALED_SECRET_BYTES] bytes --- anything
+     * else is rejected loudly, the same store-honesty rule as the index).
+     * The file is written through [atomicWrite], so a crash never leaves a
+     * half-written binding. Requires a configured vault (like every write).
+     */
+    fun saveBiometricBinding(sealedSecret: ByteArray) {
+        check(isConfigured()) { "vault is not configured; run setup() first" }
+        if (!VaultBiometricBinding.isSealedSecretWellFormed(sealedSecret)) {
+            throw VaultStoreException(
+                "biometric binding must be ${VaultBiometricBinding.SEALED_SECRET_BYTES} sealed bytes",
+            )
+        }
+        atomicWrite(bindingFile(), VaultBiometricBinding.build(sealedSecret))
+    }
+
+    /**
+     * The stored sealed session secret, or null when no binding is enrolled
+     * (the default, pre-#57 state). A present-but-unparseable file throws
+     * [VaultStoreException] --- corruption is narrated as an error and the
+     * user falls back to the PIN, never a silent "not enrolled".
+     */
+    fun loadBiometricBinding(): ByteArray? {
+        if (!hasBiometricBinding()) return null
+        val raw = try {
+            bindingFile().readBytes()
+        } catch (e: IOException) {
+            throw VaultStoreException("biometric binding is unreadable", e)
+        }
+        return try {
+            VaultBiometricBinding.parse(raw)
+        } catch (e: VaultBiometricBinding.VaultBiometricBindingException) {
+            throw VaultStoreException("biometric binding is malformed", e)
+        }
+    }
+
+    /**
+     * Removes the binding (the settings toggle's "off" leg, and the
+     * invalidated-key cleanup). True when a file was removed. The session
+     * secret and the AndroidKeyStore key are simply abandoned --- nothing
+     * else references them once the envelope is gone.
+     */
+    fun removeBiometricBinding(): Boolean = bindingFile().delete()
 
     /**
      * Verifies [pin] against the stored PBKDF2 record (constant-time).
@@ -274,6 +336,9 @@ class VaultStore(
     private fun pinFile() = File(root, "pin$BLOB_SUFFIX")
 
     private fun indexFile() = File(root, "index$BLOB_SUFFIX")
+
+    /** The optional #57 binding file (a non-`.bin` name on purpose: the sweep judges only `blobs/`). */
+    private fun bindingFile() = File(root, "biometric.binding")
 
     private fun blobsDir() = File(root, "blobs")
 

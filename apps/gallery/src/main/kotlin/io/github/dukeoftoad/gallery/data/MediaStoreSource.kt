@@ -130,11 +130,21 @@ class MediaStoreSource(private val context: Context) {
     }
 
     /**
-     * Returns the contents of one bucket, newest-first, plus its display name
-     * (issue #29 detail view). The name comes from the bucket's own rows, so
-     * the detail screen needs no extra lookup.
+     * Returns the contents of one bucket in [sort] order, plus its display
+     * name (issue #29 detail view; sort parameter since #66). The name comes
+     * from the bucket's own rows, so the detail screen needs no extra
+     * lookup.
+     *
+     * Since issue #66 the ordering uses [TimelineSort.sortItems] --- the same
+     * `date_added` + `_id` tiebreak discipline the windowed timeline uses ---
+     * instead of a bare date sort, so the bucket list stays stable under
+     * burst-shot ties. The default keeps the pre-#66 newest-first order for
+     * existing callers.
      */
-    fun queryBucket(bucketId: Long): BucketContent {
+    fun queryBucket(
+        bucketId: Long,
+        sort: TimelineSort = TimelineSort.NEWEST_FIRST,
+    ): BucketContent {
         val items = ArrayList<MediaItem>(64)
         var name: String? = null
         listOf(
@@ -151,7 +161,7 @@ class MediaStoreSource(private val context: Context) {
         }
         return BucketContent(
             bucketName = name ?: "Album",
-            items = items.sortedByDescending { it.dateAddedSec },
+            items = sort.sortItems(items, { it.dateAddedSec }, { it.id }),
         )
     }
 
@@ -172,6 +182,11 @@ class MediaStoreSource(private val context: Context) {
         // "duration" has been a `Video.VideoColumns` column since API 1. All
         // reads go through `getColumnIndexOrNull`, so a missing column simply
         // yields 0 ("unknown") instead of failing.
+        //
+        // "is_favorite" (issue #66) is only projected where the provider is
+        // known to have the column --- Android 10+; earlier providers reject
+        // the projection outright. Below Q every row maps `isFavorite = false`,
+        // which matches the favorites surface being Q+ (see `Favorites`).
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.MIME_TYPE,
@@ -182,6 +197,10 @@ class MediaStoreSource(private val context: Context) {
             MediaStore.Images.ImageColumns.HEIGHT,
         ) + if (isVideo) {
             arrayOf(MediaStore.Video.VideoColumns.DURATION)
+        } else {
+            emptyArray<String>()
+        } + if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf(Favorites.COLUMN_IS_FAVORITE)
         } else {
             emptyArray<String>()
         }
@@ -205,6 +224,9 @@ class MediaStoreSource(private val context: Context) {
                 } else {
                     -1
                 }
+                // Issue #66: only projected on Q+; -1 (or a 0 flag) maps to
+                // `false` --- favorites are Q+ anyway (see `Favorites`).
+                val favoriteCol = cursor.getColumnIndexOrNull(Favorites.COLUMN_IS_FAVORITE)
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else null
@@ -220,6 +242,7 @@ class MediaStoreSource(private val context: Context) {
                         width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
                         height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
                         durationMs = if (durationCol >= 0) cursor.getLong(durationCol) else 0L,
+                        isFavorite = favoriteCol >= 0 && cursor.getInt(favoriteCol) == 1,
                     )
                 }
             }
@@ -369,8 +392,9 @@ class MediaStoreSource(private val context: Context) {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
     /**
-     * Returns the timeline window `[offset, offset + limit)`, newest first
-     * (issue #28). This is the window backend of [WindowPagingSource] on
+     * Returns the timeline window `[offset, offset + limit)` in [sort] order
+     * (issue #28; sort parameter since #66, defaulting to the historical
+     * newest-first). This is the window backend of [WindowPagingSource] on
      * API 30+; the caller must check [supportsWindowedQueries] first ---
      * pre-30 devices page over the full [queryTimeline] snapshot instead.
      *
@@ -380,12 +404,14 @@ class MediaStoreSource(private val context: Context) {
      * client-side merge, so the offset arithmetic is exact.
      *
      * ## Window stability: the `_id` tiebreak is REQUIRED
-     * The sort order is `date_added DESC, _id DESC`. Many rows share one
-     * `date_added` second (burst shots, screenshots), and a window boundary
-     * can fall between them; without a total order the provider would be
-     * free to reorder tied rows between windows, silently skipping or
-     * duplicating items across pages. The tiebreak pins every window to
-     * the same sequence.
+     * The sort order is [TimelineSort.sortOrder] --- `date_added DESC, _id
+     * DESC` newest-first or `date_added ASC, _id ASC` oldest-first, each a
+     * total order. Many rows share one `date_added` second (burst shots,
+     * screenshots), and a window boundary can fall between them; without a
+     * total order the provider would be free to reorder tied rows between
+     * windows, silently skipping or duplicating items across pages. The
+     * tiebreak pins every window to the same sequence, in BOTH directions
+     * (see `TimelineSort`).
      *
      * ## Sort / paging arguments
      * Passed via the Bundle-args `ContentResolver.query` overload with
@@ -413,16 +439,26 @@ class MediaStoreSource(private val context: Context) {
      * projects and maps exactly the same columns with the same 0-fallback
      * contract as the snapshot path's [queryCollection], so paged and
      * snapshot items are identical in content --- the staggered grid and
-     * the overlay behave identically on both paging paths.
+     * the overlay behave identically on both paging paths. Since issue #66
+     * the window also projects `is_favorite` (always safe here: the windowed
+     * protocol is R+, and the provider column is Q+) so favorited cells can
+     * carry the heart overlay on the paged timeline.
      *
      * @param offset zero-based window start in the ordered timeline; Paging
      *  keys are always `>= 0` (see [WindowPagingSource]).
      * @param limit requested window size; must be positive (Paging 3 load
      *  sizes always are).
+     * @param sort the direction of the ordered timeline the windows tile;
+     *  one [TimelineSort] value per Pager generation (changing it means a
+     *  new generation, never a mid-generation flip --- see `PhotosViewModel`).
      */
     @RequiresApi(Build.VERSION_CODES.R) // static contract for lint; the
     // check() below is the runtime tripwire for unguarded callers
-    fun queryTimelineWindow(offset: Int, limit: Int): List<MediaItem> {
+    fun queryTimelineWindow(
+        offset: Int,
+        limit: Int,
+        sort: TimelineSort = TimelineSort.NEWEST_FIRST,
+    ): List<MediaItem> {
         check(supportsWindowedQueries()) {
             "Windowed MediaStore queries need API 30+; use queryTimeline() on older devices."
         }
@@ -435,6 +471,7 @@ class MediaStoreSource(private val context: Context) {
             MediaStore.Images.ImageColumns.WIDTH,
             MediaStore.Images.ImageColumns.HEIGHT,
             MediaStore.Video.VideoColumns.DURATION,
+            Favorites.COLUMN_IS_FAVORITE,
         )
         val queryArgs = Bundle().apply {
             // The bundle form of the media-type selection: images + videos
@@ -447,11 +484,11 @@ class MediaStoreSource(private val context: Context) {
             )
             putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
             putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
-            // Stable total order; the _id tiebreak is REQUIRED for window
-            // alignment (see method KDoc).
+            // Stable total order (issue #66: parameterized direction); the
+            // _id tiebreak is REQUIRED for window alignment (see method KDoc).
             putString(
                 ContentResolver.QUERY_ARG_SQL_SORT_ORDER,
-                "date_added DESC, _id DESC",
+                sort.sortOrder,
             )
         }
         val out = ArrayList<MediaItem>(limit.coerceIn(1, 256))
@@ -469,6 +506,10 @@ class MediaStoreSource(private val context: Context) {
                 val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
                 val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
                 val durationCol = cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                // Issue #66: projected unconditionally (R+ >= Q), but read
+                // through the null-tolerant lookup like every other optional
+                // column anyway.
+                val favoriteCol = cursor.getColumnIndexOrNull(Favorites.COLUMN_IS_FAVORITE)
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     val isVideo = cursor.getInt(typeCol) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
@@ -494,9 +535,106 @@ class MediaStoreSource(private val context: Context) {
                         width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
                         height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
                         durationMs = if (isVideo && durationCol >= 0) cursor.getLong(durationCol) else 0L,
+                        isFavorite = favoriteCol >= 0 && cursor.getInt(favoriteCol) == 1,
                     )
                 }
             }
+        return out
+    }
+
+    // ------------------------------------------------------------------
+    // Favorites (issue #66): the read side of the system-managed
+    // `is_favorite` flag. The selection/sort literals live in the pure
+    // `Favorites` object (JVM-pinned); this method is the ContentResolver
+    // half, the same split as the search path (issue #62).
+    // ------------------------------------------------------------------
+
+    /**
+     * Returns every favorited image/video, newest-first (issue #66) --- the
+     * content of the "Favorites" pseudo-album.
+     *
+     * One query over the unified `MediaStore.Files` collection (the same
+     * shape as [querySearch], via the API-1 volume-name overload) with the
+     * pure [Favorites.FAVORITES_SELECTION] (images+videos `media_type`
+     * semantics, `is_favorite = 1`) and [Favorites.FAVORITES_SORT_ORDER]
+     * (newest-first with the `_id` tiebreak --- the favorites pseudo-album
+     * keeps newest-first in v1, per issue #66's scope note).
+     *
+     * Rows surface as canonical `images/<id>` / `video/<id>` content URIs
+     * with `isFavorite = true`, identical in shape to every other query
+     * path --- ADR-0006 content URIs anchored by `_id`, no filesystem paths.
+     * The heart overlay and the viewer toggle therefore behave the same on
+     * favorites as on the timeline.
+     *
+     * ## API gate: empty below Android 10
+     * The `is_favorite` provider column is the scoped-storage era; below Q
+     * the projection would be rejected outright, and the favorites surface
+     * (toggle AND pseudo-album) is Q+ anyway. This method therefore returns
+     * an empty list below Q instead of throwing --- callers render "no
+     * favorites" rather than guarding every call site.
+     *
+     * Privacy (ADR-0014): reads local content URIs only; no network path
+     * exists (no INTERNET permission, kernel-enforced).
+     */
+    fun queryFavorites(): List<MediaItem> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptyList()
+        val collection = MediaStore.Files.getContentUri("external")
+        // The same projection querySearch maps, plus the flag itself (all
+        // rows here are favorites, but projecting keeps the mapping honest
+        // against providers that filter loosely).
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            MediaStore.Images.ImageColumns.WIDTH,
+            MediaStore.Images.ImageColumns.HEIGHT,
+            MediaStore.Video.VideoColumns.DURATION,
+            Favorites.COLUMN_IS_FAVORITE,
+        )
+        val out = ArrayList<MediaItem>(64)
+        context.contentResolver
+            .query(collection, projection, Favorites.FAVORITES_SELECTION, null, Favorites.FAVORITES_SORT_ORDER)
+            ?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val mimeCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.MIME_TYPE)
+                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+                val typeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
+                val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
+                val durationCol = cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                val favoriteCol = cursor.getColumnIndexOrNull(Favorites.COLUMN_IS_FAVORITE)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val isVideo = cursor.getInt(typeCol) ==
+                        MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                    val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else null
+                    out += MediaItem(
+                        id = id,
+                        // Canonical per-type URI (== every other query path);
+                        // see the method KDoc.
+                        uri = ContentUris.withAppendedId(
+                            if (isVideo) {
+                                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                            } else {
+                                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                            },
+                            id,
+                        ),
+                        // Same null-mime fallback as queryCollection: some
+                        // HEIC/RAW rows carry no MIME_TYPE.
+                        mimeType = mime ?: if (isVideo) "video/*" else "image/*",
+                        dateAddedSec = cursor.getLong(dateCol),
+                        isVideo = isVideo,
+                        width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
+                        height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
+                        durationMs = if (isVideo && durationCol >= 0) cursor.getLong(durationCol) else 0L,
+                        isFavorite = favoriteCol < 0 || cursor.getInt(favoriteCol) == 1,
+                    )
+                }
+            }
+        // The provider already applied the total order from the sort clause;
+        // no client-side re-sort needed.
         return out
     }
 
@@ -618,7 +756,9 @@ class MediaStoreSource(private val context: Context) {
         val collection = MediaStore.Files.getContentUri("external")
         // The same projection queryTimelineWindow maps: media_type drives
         // isVideo + the per-type URI; width/height/duration feed the
-        // staggered grid and the duration overlay (issues #33/#34).
+        // staggered grid and the duration overlay (issues #33/#34). The
+        // favorite flag (#66) rides along on Q+ only --- see queryCollection
+        // for the pre-Q projection caveat.
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.MIME_TYPE,
@@ -627,7 +767,11 @@ class MediaStoreSource(private val context: Context) {
             MediaStore.Images.ImageColumns.WIDTH,
             MediaStore.Images.ImageColumns.HEIGHT,
             MediaStore.Video.VideoColumns.DURATION,
-        )
+        ) + if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf(Favorites.COLUMN_IS_FAVORITE)
+        } else {
+            emptyArray<String>()
+        }
         val out = ArrayList<MediaItem>(64)
         context.contentResolver
             .query(
@@ -645,6 +789,7 @@ class MediaStoreSource(private val context: Context) {
                 val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
                 val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
                 val durationCol = cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                val favoriteCol = cursor.getColumnIndexOrNull(Favorites.COLUMN_IS_FAVORITE)
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     val isVideo = cursor.getInt(typeCol) ==
@@ -674,6 +819,7 @@ class MediaStoreSource(private val context: Context) {
                         } else {
                             0L
                         },
+                        isFavorite = favoriteCol >= 0 && cursor.getInt(favoriteCol) == 1,
                     )
                 }
             }

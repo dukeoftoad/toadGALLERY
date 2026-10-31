@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.Album
+import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.FileOpKind
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.RenameCheck
@@ -76,6 +77,7 @@ import io.github.dukeoftoad.gallery.ui.media.MediaThumb
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
+import io.github.dukeoftoad.gallery.ui.photos.TimelineSortMenu
 
 /**
  * Album detail view (Phase 3, issue #29; selection mode + file ops since
@@ -132,6 +134,13 @@ import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
  * no-op and the grid renders exactly as before #64 --- the same reliance
  * on ViewModel inertness (not a UI-side `SDK_INT` branch) as PhotosScreen.
  *
+ * ## Sorting (issue #66)
+ * The plain album bar gains the shared [TimelineSortMenu] action (Newest
+ * first / Oldest first, per-session ViewModel state; every change
+ * re-queries the bucket). The favorites pseudo-bucket hides it --- its
+ * contents stay newest-first in v1 (the issue's documented scope), and a
+ * hidden control beats a lying one.
+ *
  * ## Refresh after ops (issue #64)
  * The bucket list is a snapshot (no Paging pipeline), so the screen adds
  * the honest triggers [AlbumDetailViewModel] documents: the R+ MediaStore
@@ -161,6 +170,7 @@ fun AlbumDetailScreen(
     // never leak across the Photos tab and this detail view.
     val fileOpsViewModel: FileOpsViewModel = viewModel()
     val state by viewModel.state.collectAsState()
+    val sort by viewModel.sort.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
     val selection = fileOpsState as? FileOpsUiState.Selection
     val running = fileOpsState as? FileOpsUiState.Running
@@ -267,6 +277,17 @@ fun AlbumDetailScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.cd_back),
+                            )
+                        }
+                    },
+                    actions = {
+                        // Issue #66: the shared sort menu. Hidden for the
+                        // favorites pseudo-bucket --- its detail stays
+                        // newest-first in v1 (see AlbumDetailViewModel).
+                        if (!Favorites.isFavoritesBucket(bucketId)) {
+                            TimelineSortMenu(
+                                current = sort,
+                                onChange = viewModel::onSortChange,
                             )
                         }
                     },

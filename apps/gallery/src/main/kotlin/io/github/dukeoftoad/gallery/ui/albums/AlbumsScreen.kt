@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ui.albums
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,16 +10,22 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
@@ -31,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.Album
+import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
@@ -52,6 +60,13 @@ import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
  * item in the bucket, URI-first per ADR-0006), folder name, item count.
  * Tapping a card navigates to the album detail view (`AlbumDetailScreen`),
  * which reuses the shared `MediaGrid`.
+ *
+ * Since issue #66 a non-empty favorites set pins a distinct "Favorites"
+ * pseudo-album card FIRST ([FavoritesAlbumCard]): newest favorite as the
+ * cover, a primary heart chip as the distinguishing mark, and the live
+ * count the same plurals use. Tapping it routes the SAME album-detail
+ * navigation with [Favorites.FAVORITES_BUCKET_ID] --- the detail ViewModel
+ * resolves the sentinel to the favorites query.
  */
 @Composable
 fun AlbumsScreen(
@@ -111,10 +126,17 @@ private fun AlbumGrid(
             items = albums,
             key = { it.bucketId },
         ) { album ->
-            AlbumCard(
-                album = album,
-                onClick = { onOpenAlbum(album.bucketId) },
-            )
+            if (Favorites.isFavoritesBucket(album.bucketId)) {
+                FavoritesAlbumCard(
+                    album = album,
+                    onClick = { onOpenAlbum(album.bucketId) },
+                )
+            } else {
+                AlbumCard(
+                    album = album,
+                    onClick = { onOpenAlbum(album.bucketId) },
+                )
+            }
         }
     }
 }
@@ -138,6 +160,84 @@ private fun AlbumCard(
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(16.dp)),
         )
+        Text(
+            text = album.bucketName,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
+        )
+        Text(
+            text = album.itemCount.let { count ->
+                androidx.compose.ui.res.pluralStringResource(
+                    R.plurals.album_item_count, count, count
+                )
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
+        )
+    }
+}
+
+/**
+ * The favorites pseudo-album card (issue #66): the SAME column geometry as
+ * [AlbumCard] (square clipped cover, name, live count plurals) so the grid
+ * stays uniform, but DISTINCTLY marked --- a solid primary circle with a
+ * white heart pinned over the cover's bottom-end corner. The cover is the
+ * newest favorite; the card only exists while at least one favorite does
+ * (see [AlbumsViewModel]), so the cover is guaranteed non-null.
+ *
+ * Tapping routes the album-detail navigation with the sentinel bucket id
+ * [Favorites.FAVORITES_BUCKET_ID], which the detail ViewModel resolves to
+ * the `IS_FAVORITE = 1` query. The heart glyph is the CORE-set
+ * `Icons.Filled.Favorite` --- the same vector the viewer toggle and the
+ * grid overlay use.
+ */
+@Composable
+private fun FavoritesAlbumCard(
+    album: Album,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .testTag("albums_favorites_card"),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(16.dp)),
+        ) {
+            AsyncImage(
+                model = album.coverUri,
+                contentDescription = null, // decorative; the label below carries meaning
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null, // decorative; the card label carries meaning
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
         Text(
             text = album.bucketName,
             style = MaterialTheme.typography.titleSmall,

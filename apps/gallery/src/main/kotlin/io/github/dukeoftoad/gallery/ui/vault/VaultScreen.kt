@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ui.vault
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,11 +28,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -45,6 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -54,39 +59,54 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
+import io.github.dukeoftoad.gallery.data.vault.VaultBiometricReadiness
 import io.github.dukeoftoad.gallery.data.vault.VaultIndexEntry
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 
 /**
- * The hidden vault sub-screen (issue #32, ADR-0017).
+ * The hidden vault sub-screen (issue #32, ADR-0017; #57/#58 extend it).
  *
  * UX follows the sub-page contract (issue #29, like the Trash screen): no
- * bottom bar, own top app bar with Up. Three lock phases:
+ * bottom bar, own top app bar with Up. Lock phases:
  *  - [VaultUiState.NotConfigured]: the setup flow. The explainer states the
  *    ADR-0017 trade-off verbatim --- encrypted on this device only, no
  *    cloud, no recovery; a forgotten PIN or a lost/reset device makes the
  *    vault permanently unopenable.
  *  - [VaultUiState.Locked]: PIN entry. A wrong PIN gets generic copy (no
  *    hints). Unlock runs PBKDF2 off the main thread; the button carries a
- *    spinner while it does.
- *  - [VaultUiState.Unlocked]: the entry list. SAFE v1 rendering on purpose:
- *    name + plaintext size ([DataSizeFormats]) + a small photo/video icon
- *    (the same `ic_video_fallback` plate the viewer reuses). NO thumbnail
- *    decoding in v1 --- plaintext frames would live in the image cache and
- *    decode on every listing; a vault-scoped preview is a documented
- *    follow-up. Per-item Restore (immediate) and Delete (explicit confirm,
+ *    spinner while it does. Issue #57 (ADR-0019): when the device can
+ *    prompt AND a binding is enrolled, an "Unlock with biometrics" button
+ *    sits above the PIN field and the prompt fires once on entry; the PIN
+ *    path stays untouched as the always-available fallback.
+ *  - [VaultUiState.Unlocked]: the entry list. Issue #58: rows now carry
+ *    DECRYPTED, size-bounded thumbnails (in memory only --- photos decode
+ *    downsampled off the unseal stream, videos extract one frame via a
+ *    temp file in the private cache that is deleted immediately; failures
+ *    degrade honestly to the placeholder plate). A settings-style toggle
+ *    offers the opt-in biometric unlock (#57: enrollment binds a fresh
+ *    session secret under the phone's secure hardware --- the toggle is
+ *    deliberately visible right after setup, i.e. the optional post-PIN
+ *    step). Per-item Restore (immediate) and Delete (explicit confirm,
  *    permanent, no undo), plus a progress dialog while either runs.
  *
  * The shell scopes the shared [VaultViewModel] (the `viewerViewModel`
  * pattern), so the Settings entry and the Photos move-to-vault flow see the
  * same session state; auto-lock on `ON_STOP` lands the screen back in
- * Locked.
+ * Locked and clears every decrypted byte with it (thumbnails included).
  *
- * Privacy (ADR-0006/ADR-0010/ADR-0014): every byte is local --- sealed
- * app-private files, an AndroidKeyStore key, and no INTERNET permission.
+ * The BiometricPrompt itself lives HERE, not in the ViewModel: the androidx
+ * prompt needs the hosting [FragmentActivity] (which `MainActivity` is
+ * since #57), so the ViewModel emits the request via its biometric flow and
+ * this screen drives `VaultBiometrics` (the thin device-only wrapper).
+ *
+ * Privacy (ADR-0006/ADR-0010/ADR-0014/ADR-0019): every byte is local ---
+ * sealed app-private files, AndroidKeyStore keys, no INTERNET permission.
+ * Biometric data never enters the app at all: the OS compares and the
+ * Keystore authorizes; the app only ever sees whether the round succeeded.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,6 +116,8 @@ fun VaultScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val busy by viewModel.busy.collectAsState()
+    val biometrics by viewModel.biometrics.collectAsState()
+    val thumbnails by viewModel.thumbnails.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -120,6 +142,40 @@ fun VaultScreen(
                     duration = SnackbarDuration.Short,
                 )
             }
+        }
+    }
+
+    // Issue #57: the BiometricPrompt requests arrive on their own flow (the
+    // prompt needs this screen's FragmentActivity front-and-center; see
+    // VaultBiometricRequest's KDoc). The ViewModel owns the session the
+    // authorized decrypt opens; this screen only drives the device round.
+    LaunchedEffect(Unit) {
+        viewModel.biometricRequests.collect { request ->
+            val activity = context as? FragmentActivity ?: return@collect
+            when (request) {
+                is VaultBiometricRequest.Unlock -> VaultBiometrics.unlock(
+                    activity,
+                    request.sealedSecret,
+                ) { result -> viewModel.onBiometricUnlockResult(result) }
+
+                VaultBiometricRequest.Enroll -> VaultBiometrics.enroll(activity) { result ->
+                    viewModel.onBiometricEnrollResult(result)
+                }
+            }
+        }
+    }
+
+    // Issue #57: one automatic biometric prompt on entering the Locked
+    // screen with an enrolled binding --- predictable (exactly once per
+    // visit, never again mid-screen), and the PIN field stays right there
+    // for the always-available fallback.
+    val biometricUnlockReady =
+        (biometrics as? VaultBiometricReadiness.Supported)?.bindingEnrolled == true
+    var biometricAutoPrompted by remember { mutableStateOf(false) }
+    LaunchedEffect(state, biometricUnlockReady) {
+        if (state == VaultUiState.Locked && biometricUnlockReady && !biometricAutoPrompted) {
+            biometricAutoPrompted = true
+            viewModel.requestBiometricUnlock()
         }
     }
 
@@ -175,6 +231,8 @@ fun VaultScreen(
             ) {
                 VaultUnlockBody(
                     busy = busy?.kind == VaultBusyKind.VERIFYING,
+                    showBiometricUnlock = biometricUnlockReady,
+                    onBiometricUnlock = viewModel::requestBiometricUnlock,
                     onUnlock = viewModel::attemptUnlock,
                 )
             }
@@ -195,6 +253,10 @@ fun VaultScreen(
                     VaultContent(
                         entries = s.entries,
                         busy = busy,
+                        thumbnails = thumbnails,
+                        biometrics = biometrics,
+                        onEnableBiometric = viewModel::enableBiometricUnlock,
+                        onDisableBiometric = viewModel::disableBiometricUnlock,
                         onRestore = viewModel::restore,
                         onDelete = viewModel::deleteEntry,
                         modifier = Modifier.padding(innerPadding),
@@ -274,10 +336,18 @@ private fun VaultSetupBody(
     }
 }
 
-/** The locked flow: PIN entry + unlock, with the auto-lock behavior stated. */
+/**
+ * The locked flow: optional biometric unlock (issue #57, ADR-0019) over PIN
+ * entry, with the auto-lock behavior stated. The biometric button appears
+ * only when the device can prompt AND a binding is enrolled; the PIN field
+ * is ALWAYS present --- the fallback is a first-class path, not a recovery
+ * mode.
+ */
 @Composable
 private fun VaultUnlockBody(
     busy: Boolean,
+    showBiometricUnlock: Boolean,
+    onBiometricUnlock: () -> Unit,
     onUnlock: (CharArray) -> Unit,
 ) {
     var pin by remember { mutableStateOf("") }
@@ -292,6 +362,18 @@ private fun VaultUnlockBody(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (showBiometricUnlock) {
+            Spacer(Modifier.height(24.dp))
+            OutlinedButton(
+                onClick = onBiometricUnlock,
+                enabled = !busy,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vault_unlock_biometric"),
+            ) {
+                Text(stringResource(R.string.vault_biometric_unlock_action))
+            }
+        }
         Spacer(Modifier.height(24.dp))
         VaultPinField(
             labelRes = R.string.vault_unlock_pin_label,
@@ -312,21 +394,28 @@ private fun VaultUnlockBody(
 }
 
 /**
- * The unlocked vault body: a "n items · size" header over the entry list.
- * Entries render newest-first (gallery convention; the index is
- * insertion-ordered) with SAFE v1 rendering --- name, plaintext size, and a
- * type icon, never a decoded thumbnail (see the screen KDoc).
+ * The unlocked vault body: a "n items · size" header, the opt-in biometric
+ * toggle (issue #57), and the entry list. Entries render newest-first
+ * (gallery convention; the index is insertion-ordered) with issue #58
+ * thumbnails: a decrypted, size-bounded in-memory preview when one decoded
+ * successfully, the type plate otherwise (honest degradation --- a blob
+ * that fails to decode never takes the listing down).
  */
 @Composable
 private fun VaultContent(
     entries: List<VaultIndexEntry>,
     busy: VaultBusy?,
+    thumbnails: Map<Long, ImageBitmap>,
+    biometrics: VaultBiometricReadiness,
+    onEnableBiometric: () -> Unit,
+    onDisableBiometric: () -> Unit,
     onRestore: (VaultIndexEntry) -> Unit,
     onDelete: (VaultIndexEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val newestFirst = remember(entries) { entries.asReversed() }
     var deleteTarget by remember { mutableStateOf<VaultIndexEntry?>(null) }
+    val biometricSupported = biometrics as? VaultBiometricReadiness.Supported
 
     Column(modifier = modifier.fillMaxSize()) {
         Text(
@@ -338,6 +427,14 @@ private fun VaultContent(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         )
+        if (biometricSupported != null) {
+            VaultBiometricToggle(
+                enrolled = biometricSupported.bindingEnrolled,
+                onCheckedChange = { enable ->
+                    if (enable) onEnableBiometric() else onDisableBiometric()
+                },
+            )
+        }
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -350,6 +447,7 @@ private fun VaultContent(
             ) { entry ->
                 VaultEntryRow(
                     entry = entry,
+                    thumbnail = thumbnails[entry.id],
                     onRestore = { onRestore(entry) },
                     onDelete = { deleteTarget = entry },
                 )
@@ -412,13 +510,57 @@ private fun VaultContent(
 }
 
 /**
- * One vault entry row: type icon, display name (single line), plaintext
- * size, then the two per-item actions --- Restore (immediate; the safe
- * direction) and Delete (error-colored; confirmed by the dialog above).
+ * The settings-style biometric unlock toggle (issue #57, ADR-0019): opt-in
+ * on (runs the enrollment prompt: a fresh session secret sealed under the
+ * phone's secure hardware), off removes the binding. The copy states the
+ * ADR-0019 facts plainly: biometric data never leaves the device, and the
+ * PIN keeps working either way.
+ */
+@Composable
+private fun VaultBiometricToggle(
+    enrolled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .testTag("vault_biometric_toggle_row"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.vault_biometric_section_title),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = stringResource(R.string.vault_biometric_section_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = enrolled,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testTag("vault_biometric_toggle"),
+        )
+    }
+}
+
+/**
+ * One vault entry row: the #58 thumbnail slot (decrypted preview when
+ * available, the type plate otherwise), display name (single line),
+ * plaintext size, then the two per-item actions --- Restore (immediate; the
+ * safe direction) and Delete (error-colored; confirmed by the dialog).
  */
 @Composable
 private fun VaultEntryRow(
     entry: VaultIndexEntry,
+    thumbnail: ImageBitmap?,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -429,18 +571,31 @@ private fun VaultEntryRow(
             .testTag("vault_entry_row"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            painter = painterResource(
-                if (entry.isVideo) R.drawable.ic_video_fallback else R.drawable.ic_nav_photos,
-            ),
-            contentDescription = stringResource(
-                if (entry.isVideo) R.string.cd_media_thumb_video else R.string.cd_media_thumb_image,
-            ),
-            // Unspecified keeps the video plate's own two-tone look (the
-            // viewer reuses the same drawable this way); photos tint normally.
-            tint = if (entry.isVideo) Color.Unspecified else LocalContentColor.current,
-            modifier = Modifier.size(24.dp),
-        )
+        if (thumbnail != null) {
+            // Issue #58: decrypted, size-bounded, in-memory-only preview;
+            // cleared wholesale with the session on auto-lock.
+            Image(
+                bitmap = thumbnail,
+                contentDescription = stringResource(
+                    if (entry.isVideo) R.string.cd_media_thumb_video else R.string.cd_media_thumb_image,
+                ),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(48.dp),
+            )
+        } else {
+            Icon(
+                painter = painterResource(
+                    if (entry.isVideo) R.drawable.ic_video_fallback else R.drawable.ic_nav_photos,
+                ),
+                contentDescription = stringResource(
+                    if (entry.isVideo) R.string.cd_media_thumb_video else R.string.cd_media_thumb_image,
+                ),
+                // Unspecified keeps the video plate's own two-tone look (the
+                // viewer reuses the same drawable this way); photos tint normally.
+                tint = if (entry.isVideo) Color.Unspecified else LocalContentColor.current,
+                modifier = Modifier.size(24.dp),
+            )
+        }
         Column(
             modifier = Modifier
                 .weight(1f)

@@ -39,4 +39,26 @@ class ViewerViewModel : ViewModel() {
     fun open(items: List<MediaItem>, index: Int) {
         _window.value = ViewerWindow.of(items, index)
     }
+
+    /**
+     * Drops the page of the item whose content URI is [uriString] (issue
+     * #63: a successful viewer delete). Removal is by URI, not by the page
+     * index at request time --- the user can swipe while a system consent
+     * dialog is up, and the pager must drop the right page regardless.
+     * [ViewerWindow.withoutPageAt] picks the honest follow-up page, and an
+     * emptied window becomes `null`, which [ViewerScreen]'s defensive
+     * empty-check turns into "navigate back" --- the viewer never strands
+     * the user on a black screen.
+     *
+     * Rename does NOT need a counterpart: a MediaStore rename rewrites
+     * `DISPLAY_NAME` only; row id and content URI are unchanged, so the
+     * URI-keyed pager pages stay valid (see [ViewerWindow.withoutPageAt]'s
+     * KDoc).
+     */
+    fun removeItem(uriString: String) {
+        val current = _window.value ?: return
+        val index = current.items.indexOfFirst { it.uri.toString() == uriString }
+        if (index < 0) return
+        _window.value = current.withoutPageAt(index)
+    }
 }

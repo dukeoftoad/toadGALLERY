@@ -4,10 +4,49 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.0-alpha] — unreleased on main (versionCode 8)
+## [0.4.0-alpha] — unreleased on main (versionCode 9)
 
 ### Added
 
+- Album detail file operations (#64): the Albums tab grid gains the full
+  #30 selection machinery --- long-press selection with checkmark overlays,
+  count app bar, Rename (single selection), Copy, Move (album picker that
+  excludes the bucket you are in) and Delete with the established consent
+  round-trip, undo snackbars and cancellable batch progress; below Android 10
+  the screen stays read-only like Photos. `FileOpsViewModel` proved genuinely
+  screen-agnostic (zero code changes) and is now documented as driving both
+  screens. Album grids also refresh after operations: API 30+ rides the same
+  unified collection `ContentObserver` the Photos timeline watches (debounced,
+  generation-guarded re-query), while every level re-queries when the
+  file-ops machine settles back to idle --- covering Android 10, where ops
+  are enabled but no observer fires (residual undo-staleness on Q documented
+  alongside the Photos one). 5 JVM tests pin the move-target rule.
+- Viewer operations (#63) and decoder fallback (#65): the full-screen viewer
+  gains top-bar actions for the current page --- Info (Material 3 bottom
+  sheet: name, type, size, dimensions, duration, date added, content URI,
+  honest "Unknown" for missing values), Share (`ACTION_SEND` with the content
+  URI and a read grant), and Q+-gated Rename and Delete driving a
+  viewer-scoped `FileOpsViewModel` through the same consent machinery, undo
+  snackbars and trash-routing as the Photos tab; a deleted page drops from the
+  pager URI-keyed (swiping during the consent dialog is safe) and an emptied
+  window closes the viewer, while a rename only rewrites `DISPLAY_NAME` so
+  pages stay valid by design. Video pages now build their player with
+  `DefaultRenderersFactory.setEnableDecoderFallback(true)`: a hardware decoder
+  that rejects the stream (device log: 10-bit HEVC `hvc1.2.4.H123.90` in MKV,
+  `c2.qti.hevc.decoder` failing with `NO_EXCEEDS_CAPABILITIES`) falls back to
+  alternates including the software HEVC decoder, and a playback failure now
+  shows an in-page error state with Retry instead of a silent black surface.
+  18 new JVM tests (info formatting, window removal semantics).
+- Search tab v1 (#62): the Search tab is real. A debounced (300 ms)
+  `DISPLAY_NAME LIKE` query with `%`/`_` escaped through the SQL `ESCAPE`
+  clause, photo/video/all media-type filter (the timeline's `media_type`
+  semantics), newest-first results capped at 1000 in v1, rendered through the
+  shared aspect-aware grid with the video-duration and GIF overlays and
+  opening into the full-screen viewer on tap. Filter chips, clear button,
+  short-query hint, no-results and error states follow the screen-state
+  system; the query builder is a pure, Android-free helper pinned by 23 JVM
+  tests (escaping, type clauses, sort/limit). Advanced smart filters stay in
+  Phase 5 as planned.
 - Signed testing pre-releases via a dedicated Release workflow (#59,
   ADR-0018): Phase 3+ snapshots are now shippable as installable,
   updatable builds. The new `Release` workflow

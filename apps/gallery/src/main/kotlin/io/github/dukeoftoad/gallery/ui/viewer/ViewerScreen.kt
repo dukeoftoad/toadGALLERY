@@ -1,33 +1,59 @@
 package io.github.dukeoftoad.gallery.ui.viewer
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +62,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,10 +75,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.MediaItem as PlayerMediaItem
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -59,6 +89,14 @@ import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.MediaItem
+import io.github.dukeoftoad.gallery.data.RenameCheck
+import io.github.dukeoftoad.gallery.data.baseNameOf
+import io.github.dukeoftoad.gallery.data.checkRenameInput
+import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
+import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
+import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
+import java.util.Locale
+import kotlinx.coroutines.launch
 
 /**
  * The full-screen media viewer (issue #50): Mi-Gallery-style single-item
@@ -81,21 +119,47 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  *  - videos play in-app through media3's [ExoPlayer] in a views-based
  *    [PlayerView] (its own transport controls and gestures --- photo zoom is
  *    deliberately out of scope there), autoplaying with proper audio focus
- *    handling. A decode/playback failure (e.g. the device codec cannot
- *    handle the container --- the same class of failure that makes
- *    `getFrameAtTime` return NULL for some thumbnails) renders the honest
- *    `viewer_video_error_*` copy instead of a dead black page.
+ *    handling, and built with DECODER FALLBACK enabled (issue #65 --- see
+ *    [VideoPage]). A decode/playback failure renders the honest
+ *    `viewer_video_error_*` copy plus a Retry button instead of a dead black
+ *    page.
  *
- * A scrim top bar carries the back action and the position counter
- * (`viewer_counter`), fading with the chrome visibility. The window comes
- * from the shell-scoped [ViewerViewModel] --- [ToadGalleryApp] passes the
- * SAME instance the grid screens wrote to (issue #27 hand-off pattern); a
- * null/empty window (defensive: deep link or race) navigates straight back.
+ * A scrim top bar carries the back action, the position counter
+ * (`viewer_counter`) and --- issue #63 --- the operations for the CURRENT
+ * page's item: Details (a [ModalBottomSheet] fed by the pure
+ * [ViewerInfoFormat] plus one optional MediaStore lookup, see
+ * [ViewerInfoSheet]), Share (`ACTION_SEND` with the local content URI),
+ * Rename and Delete (both through the viewer-scoped [FileOpsViewModel] ---
+ * the SAME state machine, consent round-trip and undo snackbars the Photos
+ * tab uses for issue #30, driven one item at a time). Rename/Delete are
+ * hidden below Android 10, where the app is read-only (the lexically visible
+ * `SDK_INT` gate NewApi lint recognizes; the ViewModel is inert there too).
+ * Icon actions keep the 48dp `IconButton` touch floor (DesignTokens) and
+ * TalkBack descriptions via `cd_viewer_action_*`.
+ *
+ * ### Window mutation after ops (issue #63, honest v1)
+ * DELETE success drops the deleted item's page from the shell-scoped
+ * window ([ViewerViewModel.removeItem] -> [ViewerWindow.withoutPageAt]); an
+ * emptied window falls through the defensive empty-check below and closes
+ * the viewer. RENAME needs no mutation at all: MediaStore rename rewrites
+ * `DISPLAY_NAME` only, so the row id, the content URI and therefore the
+ * pager's URI-keyed pages stay valid. Success detection rides the
+ * ViewModel's public event surface: exactly the two delete-success
+ * narrations (`trash_moved`, `file_ops_done_delete`) mean "the row is gone",
+ * and only they drop a page --- failures and declined consent keep it.
+ *
+ * The window comes from the shell-scoped [ViewerViewModel] ---
+ * [ToadGalleryApp] passes the SAME instance the grid screens wrote to
+ * (issue #27 hand-off pattern); a null/empty window (defensive: deep link or
+ * race, or the last page was just deleted) navigates straight back.
  *
  * Privacy (ADR-0006 / ADR-0014): every model value is a local MediaStore
- * content URI; ExoPlayer is fed content URIs only, and the GIF decoders
- * (coil-gif) decode purely on-device. The app holds no INTERNET permission,
- * so nothing here can reach the network even with a hostile URI.
+ * content URI; ExoPlayer is fed content URIs only, Share hands the SAME
+ * local content URI to the user-chosen app with a read grant
+ * (`FLAG_GRANT_READ_URI_PERMISSION`) --- nothing is uploaded or copied
+ * anywhere the app itself controls, and the app holds no INTERNET
+ * permission, so nothing here can reach the network even with a hostile
+ * URI. The GIF decoders (coil-gif) decode purely on-device.
  */
 @Composable
 fun ViewerScreen(
@@ -121,9 +185,164 @@ fun ViewerScreen(
     val window = windowState
     if (window == null || window.items.isEmpty()) {
         // Defensive: the route is only navigated to after open(), but a bad
-        // entry point must not strand the user on a black screen.
+        // entry point must not strand the user on a black screen. Issue #63
+        // makes this reachable legitimately: deleting the LAST page of the
+        // window empties it, and closing the viewer is the honest result.
         LaunchedEffect(Unit) { onBack() }
         return
+    }
+
+    // ---- Viewer file operations (issue #63) ----
+    // A viewer-route-scoped instance of the SAME #30 state machine the
+    // Photos tab uses (plain AndroidViewModel; read-only for this slice ---
+    // driven here strictly through its public API). It owns the batch
+    // runner, the consent round-trip and the undo payloads; the viewer only
+    // selects one item at a time and mirrors the surface PhotosScreen wires.
+    val fileOpsViewModel: FileOpsViewModel = viewModel()
+    val fileOpsState by fileOpsViewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    // The system consent launcher (API 29+ recovery), the minimal mirror of
+    // PhotosScreen's wiring: RequestConsent hands over an IntentSender, the
+    // screen launches it and reports the result code; the ViewModel retries
+    // on RESULT_OK. Leaving any lingering selection afterwards keeps a
+    // declined round from wedging the next single-item op on another page
+    // (the ViewModel never resets a running selection by itself).
+    val consentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        fileOpsViewModel.onConsentResult(result.resultCode == Activity.RESULT_OK)
+        fileOpsViewModel.exitSelection()
+    }
+
+    // The delete whose outcome is still unresolved (the item's URI, not a
+    // page index --- the user can swipe while the system dialog is up).
+    // Cleared on the first narration that follows; only the two
+    // delete-SUCCESS narrations drop the page.
+    var deleteInFlight by remember { mutableStateOf<String?>(null) }
+
+    // Dialog/sheet state, screen-local exactly like PhotosTimeline's: one-tap
+    // decisions that need not survive process death.
+    var infoTarget by remember { mutableStateOf<MediaItem?>(null) }
+    var renameTarget by remember { mutableStateOf<MediaItem?>(null) }
+    var renamePrefill by remember { mutableStateOf<String?>(null) }
+    var deleteConfirmTarget by remember { mutableStateOf<MediaItem?>(null) }
+
+    LaunchedEffect(Unit) {
+        fileOpsViewModel.events.collect { event ->
+            when (event) {
+                is FileOpsEvent.RequestConsent -> consentLauncher.launch(
+                    IntentSenderRequest.Builder(event.intentSender).build(),
+                )
+                is FileOpsEvent.ShowSnackbar -> {
+                    // Strings resolve against the current configuration at
+                    // display time; the event carries only ids/args (same
+                    // pattern as PhotosScreen).
+                    val message = if (event.pluralCount >= 0) {
+                        context.resources.getQuantityString(
+                            event.messageRes, event.pluralCount, event.pluralCount,
+                        )
+                    } else if (event.formatArgs.isEmpty()) {
+                        context.getString(event.messageRes)
+                    } else {
+                        context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+                    }
+                    val actionLabel = event.undo
+                        ?.let { context.getString(R.string.file_ops_undo_action) }
+                    val shown = snackbarHostState.showSnackbar(
+                        message = message,
+                        actionLabel = actionLabel,
+                        duration = if (event.undo != null) {
+                            SnackbarDuration.Long
+                        } else {
+                            SnackbarDuration.Short
+                        },
+                    )
+                    if (shown == SnackbarResult.ActionPerformed) {
+                        fileOpsViewModel.performUndo(event.undo)
+                    }
+                    // Issue #63 window mutation: the ViewModel's public
+                    // event surface narrates delete success through exactly
+                    // two resources --- the API 30+ trash round and the
+                    // batch delete --- and only those mean "the row is
+                    // gone". Failures (file_ops_failed) and declined
+                    // consent keep the page.
+                    val uriString = deleteInFlight
+                    if (uriString != null) {
+                        deleteInFlight = null
+                        if (event.messageRes == R.plurals.trash_moved ||
+                            event.messageRes == R.plurals.file_ops_done_delete
+                        ) {
+                            viewModel.removeItem(uriString)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Selects [item] into the ops ViewModel and fires the delete round. */
+    fun requestDelete(item: MediaItem) {
+        if (fileOpsState is FileOpsUiState.Running) return
+        deleteInFlight = item.uri.toString()
+        // The public single-item path: selection of exactly one item, then
+        // the op. exitSelection() before re-selecting clears any stale
+        // selection (a declined round leaves one behind), and the one after
+        // requestDelete() clears the R+ trash path's selection --- the
+        // request is already armed in the ViewModel's pendingConsent, and a
+        // decline would otherwise never return to Idle. On the API 29 batch
+        // path the second call is a no-op: state is already Running, which
+        // the guard skips.
+        fileOpsViewModel.exitSelection()
+        fileOpsViewModel.onItemLongPressed(item)
+        fileOpsViewModel.requestDelete()
+        fileOpsViewModel.exitSelection()
+    }
+
+    /** Selects [item] into the ops ViewModel and renames it to [newName]. */
+    fun requestRename(item: MediaItem, newName: String) {
+        if (fileOpsState is FileOpsUiState.Running) return
+        fileOpsViewModel.exitSelection()
+        fileOpsViewModel.onItemLongPressed(item)
+        fileOpsViewModel.requestRename(newName)
+        // No trailing exitSelection here: requestRename re-checks the
+        // selection after its name lookup suspends; its own run settles the
+        // state back to Idle on completion.
+    }
+
+    /**
+     * Share (issue #63): plain ACTION_SEND with the item's LOCAL content
+     * URI and a read grant, through the system chooser. ADR-0006/ADR-0014:
+     * the app never touches a network or remote URI --- it only lends
+     * read access to whatever app the user picks.
+     */
+    fun shareItem(item: MediaItem) {
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = item.mimeType
+            putExtra(Intent.EXTRA_STREAM, item.uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            context.startActivity(Intent.createChooser(sendIntent, null))
+        } catch (_: ActivityNotFoundException) {
+            // Honest narration instead of a crash on ROMs without a chooser.
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.viewer_share_unavailable),
+                )
+            }
+        }
+    }
+
+    // Rename prefill: the current name minus its extension (the extension
+    // is restored on submit; see checkRenameInput). Below Q the lookup
+    // yields null (the ops layer is Q+ only) --- the actions are hidden
+    // there anyway, so the dialog is unreachable.
+    LaunchedEffect(renameTarget) {
+        renamePrefill = renameTarget?.let { item ->
+            fileOpsViewModel.displayNameOf(item)?.let { name -> baseNameOf(name) }
+        }
     }
 
     var chromeVisible by remember { mutableStateOf(true) }
@@ -133,42 +352,272 @@ fun ViewerScreen(
     // disabled while this is set, the zoomed page is by construction the
     // settled page, so a single flag is enough.
     var currentPageZoomed by remember { mutableStateOf(false) }
-    val pagerState = rememberPagerState(initialPage = window.startIndex) {
-        window.items.size
+
+    // A delete replaces the window object; key() gives the pager a fresh
+    // state seeded at the window's computed follow-up page (the pager's
+    // own index bookkeeping cannot know which page a removal meant to
+    // keep). The window is otherwise frozen, so this re-keys ONLY on the
+    // initial open and on delete mutations.
+    key(window) {
+        val pagerState = rememberPagerState(initialPage = window.startIndex) {
+            window.items.size
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .testTag("viewer_screen"),
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = !currentPageZoomed,
+                key = { page -> window.items[page].uri.toString() },
+            ) { page ->
+                val item = window.items[page]
+                if (item.isVideo) {
+                    VideoPage(item = item)
+                } else {
+                    PhotoPage(
+                        item = item,
+                        isCurrentPage = pagerState.currentPage == page,
+                        onTap = { chromeVisible = !chromeVisible },
+                        onZoomedChanged = { zoomed -> currentPageZoomed = zoomed },
+                    )
+                }
+            }
+            ViewerTopBar(
+                visible = chromeVisible,
+                current = pagerState.currentPage,
+                total = window.items.size,
+                // Read-only below Android 10 (the app holds no write
+                // consent protocol there): rename/delete appear only on Q+,
+                // the lexically visible guard NewApi lint recognizes.
+                canModify = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+                onBack = onBack,
+                onInfo = { infoTarget = window.items[pagerState.currentPage] },
+                onShare = { shareItem(window.items[pagerState.currentPage]) },
+                onRename = { renameTarget = window.items[pagerState.currentPage] },
+                onDelete = { deleteConfirmTarget = window.items[pagerState.currentPage] },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+            // The viewer is full-screen; ops narration surfaces through a
+            // SnackbarHost over the canvas rather than escaping to a shell
+            // scaffold the user cannot see here.
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp),
+            )
+        }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .testTag("viewer_screen"),
-    ) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-            userScrollEnabled = !currentPageZoomed,
-            key = { page -> window.items[page].uri.toString() },
-        ) { page ->
-            val item = window.items[page]
-            if (item.isVideo) {
-                VideoPage(item = item)
-            } else {
-                PhotoPage(
-                    item = item,
-                    isCurrentPage = pagerState.currentPage == page,
-                    onTap = { chromeVisible = !chromeVisible },
-                    onZoomedChanged = { zoomed -> currentPageZoomed = zoomed },
-                )
-            }
-        }
-        ViewerTopBar(
-            visible = chromeVisible,
-            current = pagerState.currentPage,
-            total = window.items.size,
-            onBack = onBack,
-            modifier = Modifier.align(Alignment.TopCenter),
+    // ---- Viewer dialogs & the info sheet (issue #63) ----
+
+    infoTarget?.let { item ->
+        ViewerInfoSheet(item = item, onDismiss = { infoTarget = null })
+    }
+    renameTarget?.let { item ->
+        ViewerRenameDialog(
+            prefill = renamePrefill,
+            onConfirm = { name ->
+                requestRename(item, name)
+                renameTarget = null
+            },
+            onDismiss = { renameTarget = null },
         )
     }
+    deleteConfirmTarget?.let { item ->
+        ViewerDeleteDialog(
+            onConfirm = {
+                deleteConfirmTarget = null
+                requestDelete(item)
+            },
+            onDismiss = { deleteConfirmTarget = null },
+        )
+    }
+}
+
+/**
+ * The info sheet (issue #63): a Material 3 [ModalBottomSheet] with the
+ * current item's details. Every value comes from the pure
+ * [ViewerInfoFormat] (JVM-pinned) over [MediaItem] fields plus ONE
+ * optional MediaStore lookup ([queryViewerInfoLookup]) for the two columns
+ * the item does not carry (display name, size); `null` from any formatter
+ * renders the localized `viewer_info_unknown` --- honest "not known"
+ * beats a fabricated number.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ViewerInfoSheet(item: MediaItem, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var lookup by remember(item.uri) { mutableStateOf<ViewerInfoLookup?>(null) }
+    LaunchedEffect(item.uri) {
+        lookup = queryViewerInfoLookup(context.contentResolver, item.uri)
+    }
+    // A date is localized prose (unlike a duration); the current
+    // configuration's locale feeds the pure formatter.
+    val locale: Locale = LocalConfiguration.current.locales[0]
+    val unknown = stringResource(R.string.viewer_info_unknown)
+    fun value(text: String?): String = text ?: unknown
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.viewer_info_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            ViewerInfoRow(
+                label = stringResource(R.string.viewer_info_name),
+                value = value(ViewerInfoFormat.displayName(lookup?.displayName, item.uri.toString())),
+            )
+            ViewerInfoRow(
+                label = stringResource(R.string.viewer_info_type),
+                value = item.mimeType,
+            )
+            ViewerInfoRow(
+                label = stringResource(R.string.viewer_info_size),
+                value = value(ViewerInfoFormat.size(lookup?.sizeBytes)),
+            )
+            ViewerInfoRow(
+                label = stringResource(R.string.viewer_info_dimensions),
+                value = value(ViewerInfoFormat.dimensions(item.width, item.height)),
+            )
+            if (item.isVideo) {
+                ViewerInfoRow(
+                    label = stringResource(R.string.viewer_info_duration),
+                    value = value(ViewerInfoFormat.duration(item.durationMs, item.isVideo)),
+                )
+            }
+            ViewerInfoRow(
+                label = stringResource(R.string.viewer_info_date_added),
+                value = value(ViewerInfoFormat.dateAdded(item.dateAddedSec, locale)),
+            )
+            ViewerInfoRow(
+                label = stringResource(R.string.viewer_info_uri),
+                value = item.uri.toString(),
+            )
+        }
+    }
+}
+
+/** One label/value pair of the info sheet; label muted, value prominent. */
+@Composable
+private fun ViewerInfoRow(label: String, value: String) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag("viewer_info_row"),
+        )
+    }
+}
+
+/**
+ * The viewer's rename dialog (issue #63): the SAME UX contract as the
+ * Photos rename dialog --- prefilled with the current base name (extension
+ * stripped; it is restored on submit), live-validated by the pure
+ * [checkRenameInput], confirm enabled only for valid input. Reimplemented
+ * here rather than shared because the Photos dialog is private to its
+ * screen and file ownership forbids editing it; the copy strings are the
+ * SAME resources, so the two dialogs cannot drift in wording.
+ */
+@Composable
+private fun ViewerRenameDialog(
+    prefill: String?,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Re-seeds once the (fast) provider lookup lands; typing before that is
+    // impossible to validate meaningfully, so the field starts empty and
+    // the confirm disabled.
+    var text by remember(prefill) { mutableStateOf(prefill ?: "") }
+    val check = remember(text) { checkRenameInput(text) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text) },
+                enabled = check is RenameCheck.Valid,
+            ) {
+                Text(stringResource(R.string.file_ops_action_rename))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.file_ops_action_cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.file_ops_rename_title)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(stringResource(R.string.file_ops_rename_label)) },
+                isError = text.isNotBlank() && check !is RenameCheck.Valid,
+                singleLine = true,
+                supportingText = {
+                    if (text.isNotBlank() && check !is RenameCheck.Valid) {
+                        Text(stringResource(R.string.file_ops_rename_invalid))
+                    }
+                },
+                modifier = Modifier.testTag("viewer_dialog_rename_field"),
+            )
+        },
+        modifier = Modifier.testTag("viewer_dialog_rename"),
+    )
+}
+
+/**
+ * The viewer's delete confirmation (issue #63): the SAME honest copy as the
+ * Photos delete dialog --- recycle bin on Android 11+, permanent on
+ * Android 10 and below (the plurals resource covers the single item).
+ */
+@Composable
+private fun ViewerDeleteDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Text(stringResource(R.string.file_ops_delete_confirm_yes))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.file_ops_action_cancel))
+            }
+        },
+        title = {
+            Text(
+                pluralStringResource(
+                    R.plurals.file_ops_delete_confirm_title, 1, 1,
+                ),
+            )
+        },
+        text = { Text(stringResource(R.string.file_ops_delete_confirm_body)) },
+        modifier = Modifier.testTag("viewer_dialog_delete"),
+    )
 }
 
 /**
@@ -347,24 +796,45 @@ private fun PhotoPage(
  * [PlayerView] with its transport controls enabled, autoplaying the local
  * content URI with audio-focus handling so music/podcasts pause correctly.
  *
+ * ## Decoder fallback (issue #65)
+ * The player is built with [DefaultRenderersFactory] and
+ * `setEnableDecoderFallback(true)`: a real Xiaomi device log (issue #65,
+ * c2.qti.hevc.decoder) shows 10-bit HEVC (`hvc1.2.4.H123.90`) in an MKV
+ * container being rejected by the hardware decoder ---
+ * `format_supported=NO_EXCEEDS_CAPABILITIES`, then `Decoder failed:
+ * c2.qti.hevc.decoder` and a dead black surface. With fallback enabled,
+ * ExoPlayer continues down its decoder-init list instead of dying on the
+ * first hardware rejection, so the software `c2.android.hevc.decoder`
+ * (or any other capable init) gets the stream. AudioAttributes and the
+ * rest of the configuration are applied after the build, unchanged.
+ *
  * The player lives for as long as the page shows (remembered and keyed by the
  * item's URI, released on dispose --- swiping away or leaving the viewer
- * always releases). Playback errors set a flag that swaps the dead surface
- * for the `viewer_video_error_*` fallback copy; the same underlying device
- * limitation that makes `getFrameAtTime` return NULL for some thumbnails can
- * make playback undecodable, and the viewer must say so instead of showing a
- * frozen black frame.
+ * always releases). Playback errors swap the dead surface for the honest
+ * `viewer_video_error_*` fallback copy --- with a Retry button (issue #65)
+ * that re-prepares the same item; the failure flag is keyed by the URI, so
+ * swiping to another page always starts clean. The same underlying device
+ * limitation that makes `getFrameAtTime` return NULL for some thumbnails
+ * can make playback undecodable even after a retry, and the viewer must say
+ * so instead of showing a frozen black frame.
  *
  * Zoom/pan are deliberately out of scope on video pages: `PlayerView` owns
  * its gestures, and the photo pipeline ([ZoomableState],
  * [detectPanZoomGestures]) never installs itself here.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun VideoPage(item: MediaItem) {
     val context = LocalContext.current
     var playbackFailed by remember(item.uri) { mutableStateOf(false) }
     val player = remember(item.uri) {
-        ExoPlayer.Builder(context).build().apply {
+        // Issue #65: decoder fallback on top of the default renderers, so a
+        // hardware decoder rejection (10-bit HEVC NO_EXCEEDS_CAPABILITIES on
+        // c2.qti.hevc.decoder in the filed device log) degrades to the next
+        // capable decoder instead of ending playback. See the KDoc above.
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true)
+        ExoPlayer.Builder(context, renderersFactory).build().apply {
             setAudioAttributes(AudioAttributes.DEFAULT, /* handleAudioFocus = */ true)
             addListener(object : Player.Listener {
                 override fun onPlayerError(error: PlaybackException) {
@@ -378,6 +848,14 @@ private fun VideoPage(item: MediaItem) {
     }
     DisposableEffect(item.uri) {
         onDispose { player.release() }
+    }
+
+    /** Issue #65: re-prepare the same item after a playback failure. */
+    fun retryPlayback() {
+        playbackFailed = false
+        player.setMediaItem(PlayerMediaItem.fromUri(item.uri))
+        player.prepare()
+        player.playWhenReady = true
     }
 
     if (playbackFailed) {
@@ -403,6 +881,16 @@ private fun VideoPage(item: MediaItem) {
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp, start = 32.dp, end = 32.dp),
                 )
+                TextButton(
+                    onClick = ::retryPlayback,
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
+                    // 48dp touch floor (DesignTokens): IconButton-sized
+                    // padding keeps the target comfortable on the black
+                    // canvas.
+                    modifier = Modifier.padding(top = 16.dp),
+                ) {
+                    Text(stringResource(R.string.state_action_retry))
+                }
             }
         }
     } else {
@@ -420,18 +908,30 @@ private fun VideoPage(item: MediaItem) {
 }
 
 /**
- * The viewer's chrome: a top scrim with the back action and the
- * `viewer_counter` position text ("n of m"), fading in/out with [visible].
- * Chrome visibility is toggled by photo taps ([PhotoPage]); video pages keep
- * the PlayerView's own controls, so the top bar simply follows the last
+ * The viewer's chrome: a top scrim with the back action, the
+ * `viewer_counter` position text ("n of m") and --- issue #63 --- the
+ * actions for the CURRENT page's item: Details, Share, and (Q+ only,
+ * [canModify]) Rename and Delete. Fading in/out with [visible]; chrome
+ * visibility is toggled by photo taps ([PhotoPage]); video pages keep the
+ * PlayerView's own controls, so the top bar simply follows the last
  * toggled state there.
+ *
+ * Every action is an `IconButton` --- the 48dp touch floor DesignTokens
+ * mandates --- with a `cd_viewer_action_*` content description, and all
+ * icons come from the material-icons CORE set the repo already depends on
+ * (Info, Share, Edit, Delete; no extended-icons dependency is added).
  */
 @Composable
 private fun ViewerTopBar(
     visible: Boolean,
     current: Int,
     total: Int,
+    canModify: Boolean,
     onBack: () -> Unit,
+    onInfo: () -> Unit,
+    onShare: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -440,10 +940,12 @@ private fun ViewerTopBar(
         exit = fadeOut(),
         modifier = modifier,
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .background(Color.Black.copy(alpha = 0.55f))
-                .statusBarsPadding(),
+                .statusBarsPadding()
+                .padding(end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
                 Icon(
@@ -456,10 +958,51 @@ private fun ViewerTopBar(
                 text = stringResource(R.string.viewer_counter, current + 1, total),
                 style = MaterialTheme.typography.labelLarge,
                 color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 16.dp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f),
             )
+            IconButton(
+                onClick = onInfo,
+                modifier = Modifier.testTag("viewer_action_info"),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = stringResource(R.string.cd_viewer_action_info),
+                    tint = Color.White,
+                )
+            }
+            IconButton(
+                onClick = onShare,
+                modifier = Modifier.testTag("viewer_action_share"),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Share,
+                    contentDescription = stringResource(R.string.cd_viewer_action_share),
+                    tint = Color.White,
+                )
+            }
+            if (canModify) {
+                IconButton(
+                    onClick = onRename,
+                    modifier = Modifier.testTag("viewer_action_rename"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.cd_viewer_action_rename),
+                        tint = Color.White,
+                    )
+                }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.testTag("viewer_action_delete"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.cd_viewer_action_delete),
+                        tint = Color.White,
+                    )
+                }
+            }
         }
     }
 }

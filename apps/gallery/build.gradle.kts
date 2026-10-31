@@ -20,10 +20,11 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        // 0.4.0-alpha: file operations (issue #30) --- rename/copy/move/delete
-        // with consent recovery, undo, batch progress --- riding on the grid-UX
-        // slice 0.3.3-alpha / versionCode 7 (issues #33/#34, on top of #28's paging)
-        versionCode = 8
+        // 0.4.0-alpha continued: search tab v1 (#62), viewer operations +
+        // decoder fallback (#63/#65), album-detail file-ops parity (#64) on
+        // top of the 0.4.0-alpha slices at versionCode 8 (file ops #30,
+        // trash #31, vault #32, viewer #50 + follow-ups)
+        versionCode = 9
         versionName = "0.4.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

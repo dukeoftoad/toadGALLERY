@@ -1,6 +1,7 @@
 package io.github.dukeoftoad.gallery.ui.viewer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -55,5 +56,46 @@ class ViewerWindowTest {
         // no re-sorting happens between grid and viewer.
         val items = listOf(9, 7, 5, 3, 1)
         assertEquals(items, ViewerWindow.of(items, 0).items)
+    }
+
+    // ------------------------------------------------------------------
+    // Page removal after a viewer delete (issue #63): the follow-up page
+    // must be the item that FOLLOWED the deleted one, or the new last page
+    // when the tail went away; an emptied window reports "close the viewer".
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `removing a middle page lands on the item that followed it`() {
+        val window = ViewerWindow.of(listOf(10, 20, 30, 40), 2).withoutPageAt(2)
+        assertEquals(listOf(10, 20, 40), window?.items)
+        assertEquals(2, window?.startIndex) // the former 40 slid into slot 2
+    }
+
+    @Test
+    fun `removing the first page lands on the new first page`() {
+        val window = ViewerWindow.of(listOf(10, 20, 30), 0).withoutPageAt(0)
+        assertEquals(listOf(20, 30), window?.items)
+        assertEquals(0, window?.startIndex)
+    }
+
+    @Test
+    fun `removing the last page lands on the new last page`() {
+        val window = ViewerWindow.of(listOf(10, 20, 30), 2).withoutPageAt(2)
+        assertEquals(listOf(10, 20), window?.items)
+        assertEquals(1, window?.startIndex)
+    }
+
+    @Test
+    fun `removing the only page empties the window`() {
+        // The viewer turns this into "navigate back" --- it must never keep
+        // paging over a black screen.
+        assertNull(ViewerWindow.of(listOf(42), 0).withoutPageAt(0))
+    }
+
+    @Test
+    fun `out-of-range removal leaves the window unchanged, empty stays empty`() {
+        val window = ViewerWindow.of(listOf(10, 20, 30), 1)
+        assertEquals(window, window.withoutPageAt(7))
+        assertNull(ViewerWindow.of(emptyList<Int>(), 0).withoutPageAt(0))
     }
 }

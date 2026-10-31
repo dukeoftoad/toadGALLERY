@@ -1,4 +1,4 @@
-package io.github.dukeoftoad.gallery.ui.search
+package io.github.dukeoftoad.gallery.data
 
 /**
  * Pure query-building logic for the Search tab v1 (issue #62).

@@ -11,8 +11,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
-import io.github.dukeoftoad.gallery.ui.search.SearchMediaType
-import io.github.dukeoftoad.gallery.ui.search.SearchQuery
+import io.github.dukeoftoad.gallery.data.SearchMediaType
+import io.github.dukeoftoad.gallery.data.SearchQuery
 
 /**
  * Reads the on-device media timeline (Phase 3, issues #25 and #29).
@@ -568,7 +568,7 @@ class MediaStoreSource(private val context: Context) {
     // Search (issue #62): file-NAME query over the unified Files
     // collection. The query-building half (selection text, LIKE escaping,
     // LIMIT clause) lives in the pure, android-free
-    // io.github.dukeoftoad.gallery.ui.search.SearchQuery object so JVM
+    // io.github.dukeoftoad.gallery.data.SearchQuery object so JVM
     // tests pin it (the FileOpNaming convention); this method is the
     // ContentResolver half.
     // ------------------------------------------------------------------

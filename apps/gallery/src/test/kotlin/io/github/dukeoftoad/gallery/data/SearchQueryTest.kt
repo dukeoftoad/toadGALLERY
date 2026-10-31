@@ -1,4 +1,4 @@
-package io.github.dukeoftoad.gallery.ui.search
+package io.github.dukeoftoad.gallery.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.data.MediaItem
+import io.github.dukeoftoad.gallery.data.SearchMediaType
+import io.github.dukeoftoad.gallery.data.SearchQuery
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers

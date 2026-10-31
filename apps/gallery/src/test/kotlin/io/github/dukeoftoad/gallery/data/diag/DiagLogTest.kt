@@ -209,20 +209,20 @@ class DiagLogTest {
 
     // ---- Helpers -------------------------------------------------------
 
-    /** The `cause == itself` spelling: an overridden getCause pointing at itself. */
+    /** The `cause == itself` spelling: an overridden cause pointing at itself. */
     private class SelfCauseException(message: String) : Exception(message) {
-        override fun getCause(): Throwable = this
+        override val cause: Throwable get() = this
     }
 
     /** One half of an a <-> b cause loop. */
     private class CycleA : Exception("a") {
         lateinit var other: Throwable
-        override fun getCause(): Throwable = other
+        override val cause: Throwable get() = other
     }
 
     /** The other half: created with its partner, points straight back at it. */
     private class CycleB(val a: CycleA) : Exception("b") {
-        override fun getCause(): Throwable = a
+        override val cause: Throwable get() = a
     }
 
     private companion object {

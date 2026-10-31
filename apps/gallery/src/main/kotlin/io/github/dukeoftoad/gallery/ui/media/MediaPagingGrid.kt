@@ -147,10 +147,12 @@ fun MediaPagingGrid(
                 }
             },
             span = { rowIndex ->
+                // Headers span the full line; media cells stay in a single
+                // lane (the span API is non-null in foundation 1.7).
                 if (rows[rowIndex] is TimelineRow.Header) {
                     StaggeredGridItemSpan.FullLine
                 } else {
-                    null
+                    StaggeredGridItemSpan.SingleLane
                 }
             },
         ) { rowIndex ->

@@ -295,7 +295,7 @@ fun AboutScreen(
                     onClick = {
                         // Everything below was composed above; the click
                         // only assembles it into clipboard plain text.
-                        clipboard.setPlainText(
+                        clipboard.setText(
                             AnnotatedString(
                                 buildString {
                                     appendLine(appName)

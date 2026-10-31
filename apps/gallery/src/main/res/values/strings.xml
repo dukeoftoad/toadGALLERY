@@ -275,4 +275,19 @@
     <string name="vault_move_not_removed">The copies are in the vault, but the originals couldn\'t be removed from the gallery.</string>
     <string name="vault_move_cancelled">Stopped — %1$d of %2$d items processed.</string>
     <string name="vault_consent_denied">Permission was needed and declined — nothing more was changed.</string>
+
+    <!-- Favorites + sorting (#66) -->
+    <!-- MediaStore IS_FAVORITE toggle (viewer heart action with the Q+ write
+         gate + R+ consent round-trip of the other file ops), the favorites
+         pseudo-album pinned on the Albums tab (sentinel bucket id, live
+         count), the heart overlay on favorited grid cells, and the
+         newest/oldest timeline sort menu. -->
+    <string name="albums_favorites_title">Favorites</string>
+    <string name="cd_sort_menu">Sort</string>
+    <string name="sort_newest_first">Newest first</string>
+    <string name="sort_oldest_first">Oldest first</string>
+    <string name="cd_viewer_action_favorite_add">Add to favorites</string>
+    <string name="cd_viewer_action_favorite_remove">Remove from favorites</string>
+    <string name="favorite_added">Added to favorites</string>
+    <string name="favorite_removed">Removed from favorites</string>
 </resources>

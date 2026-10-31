@@ -293,6 +293,54 @@ class MediaFileOps(private val resolver: ContentResolver) {
             }
         }
 
+    /**
+     * Sets or clears the favorite flag of [uri] (issue #66): exactly one
+     * `ContentResolver.update` writing the MediaStore `is_favorite` column
+     * (0/1) --- the column literal lives in the pure [Favorites] object.
+     *
+     * Favorites are SYSTEM-MANAGED state, not app-private storage: the flag
+     * lives on the MediaStore row, is honored by every gallery app that
+     * reads the column, and survives this app being uninstalled. The write
+     * itself is a plain metadata update --- no bytes move, no row is
+     * created or destroyed, and undo is simply the inverse update (the
+     * caller's [FileOpsViewModel] narrates it with an undo payload that
+     * toggles back).
+     *
+     * - Row gone -> [FileOpFailureReason.NOT_FOUND].
+     * - Another app's item -> [FileOpOutcome.NeedsConsent] (the caller
+     *   launches ONE write-consent request and retries; consent RECOVERY is
+     *   R+ --- `MediaStore.createWriteRequest` --- so on API 29 a blocked
+     *   write must surface as an honest failure instead, see
+     *   `FileOpsViewModel.requestFavorite`).
+     * - A provider that rejects the column outright ->
+     *   [FileOpFailureReason.PROVIDER] (defensive; the column exists from Q,
+     *   the same tier this class is gated to).
+     */
+    suspend fun setFavorite(uri: Uri, favorite: Boolean): FileOpResult =
+        withContext(Dispatchers.IO) {
+            val values = ContentValues().apply {
+                put(Favorites.COLUMN_IS_FAVORITE, if (favorite) 1 else 0)
+            }
+            try {
+                val updated = resolver.update(uri, values, null, null)
+                if (updated > 0) {
+                    FileOpResult(FileOpOutcome.Success)
+                } else {
+                    FileOpResult(FileOpOutcome.Failure(FileOpFailureReason.NOT_FOUND))
+                }
+            } catch (e: RecoverableSecurityException) {
+                FileOpResult(FileOpOutcome.NeedsConsent)
+            } catch (e: SecurityException) {
+                FileOpResult(FileOpOutcome.NeedsConsent)
+            } catch (e: IllegalArgumentException) {
+                // The provider is the final authority on its columns.
+                FileOpResult(FileOpOutcome.Failure(FileOpFailureReason.PROVIDER), detail = e.message)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                FileOpResult(FileOpOutcome.Failure(FileOpFailureReason.PROVIDER), detail = e.message)
+            }
+        }
+
     // ------------------------------------------------------------------
     // Batch orchestration: (index, total) progress, per-item results
     // ------------------------------------------------------------------

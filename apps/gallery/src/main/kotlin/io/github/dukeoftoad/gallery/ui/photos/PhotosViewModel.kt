@@ -11,6 +11,7 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
+import io.github.dukeoftoad.gallery.data.TimelineSort
 import io.github.dukeoftoad.gallery.data.WindowPagingSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -58,6 +59,17 @@ import kotlin.time.Duration.Companion.milliseconds
  *    window math and same state shell; only the memory profile stays the
  *    pre-paging one (windowed Bundle queries are not reliable there).
  *
+ * ## Sorting (issue #66)
+ * [sort] is per-session ViewModel state (persistence is deliberately out
+ * of scope for #66). Changing it through [onSortChange] does NOT mutate any
+ * live generation --- a generation's windows must all tile ONE total order,
+ * so the ViewModel builds a fresh `Pager` (fresh `PagingSource`, fresh
+ * `cachedIn` stream) and swaps it into a new [PhotosState.Ready]. The
+ * screen's `collectAsLazyPagingItems` re-collects the new flow, restarts
+ * from offset 0, and the paging factory hands the new [currentSource] to
+ * the SAME observer-invalidation pipeline --- a sort change is simply the
+ * next generation, exactly like an observer-driven invalidation ending one.
+ *
  * ## Dataset drift -> generational invalidation (issue #38, finding 1)
  * LIMIT/OFFSET windows are positional: if MediaStore changes between two
  * windows of the SAME generation (camera shot, download, delete), the
@@ -98,6 +110,14 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow<PhotosState>(PhotosState.Loading)
     val state: StateFlow<PhotosState> = _state.asStateFlow()
+
+    /**
+     * The timeline's sort direction (issue #66): per-session ViewModel state,
+     * newest-first by default. Read by the screen's sort menu; written only
+     * through [onSortChange], which rebuilds the paging pipeline.
+     */
+    private val _sort = MutableStateFlow(TimelineSort.NEWEST_FIRST)
+    val sort: StateFlow<TimelineSort> = _sort.asStateFlow()
 
     /**
      * The [WindowPagingSource] of the CURRENT Pager generation (issue #38
@@ -170,17 +190,7 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
     fun onPermissionGranted() {
         if (_state.value is PhotosState.Ready) return
         _state.value = PhotosState.Loading
-        val pagingData = Pager(
-            config = PagingConfig(
-                pageSize = TIMELINE_PAGE_SIZE,
-                // == pageSize on purpose; see the class KDoc for why a bigger
-                // initial window would duplicate rows on prepend.
-                initialLoadSize = TIMELINE_PAGE_SIZE,
-                enablePlaceholders = false,
-            ),
-            pagingSourceFactory = ::timelineWindowPagingSource,
-        ).flow.cachedIn(viewModelScope)
-        _state.value = PhotosState.Ready(pagingData)
+        _state.value = PhotosState.Ready(buildPagingData(_sort.value))
     }
 
     /** Called when the user denies the permission or revokes it later. */
@@ -189,26 +199,67 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * One [WindowPagingSource] per Pager generation, backed by the best
-     * window mechanism this API level offers. The explicit
-     * `Build.VERSION.SDK_INT` check (not `supportsWindowedQueries()`) is what
-     * NewApi lint recognizes as the guard for the `@RequiresApi(30)` call.
-     * Every generation also becomes [currentSource], so the debounced
-     * MediaStore change collector invalidates exactly the live source.
+     * Changes the timeline's sort direction (issue #66). No-op for the
+     * current value; otherwise the ready timeline is REPLACED by a fresh
+     * `Pager` generation carrying the new order (see the class KDoc's
+     * sorting section for why a live generation is never re-sorted
+     * mid-flight). While the shell is not `Ready` (permission pending) the
+     * value is only stored --- the next grant builds with it.
      */
-    private fun timelineWindowPagingSource(): WindowPagingSource<MediaItem> {
+    fun onSortChange(newSort: TimelineSort) {
+        if (_sort.value == newSort) return
+        _sort.value = newSort
+        if (_state.value is PhotosState.Ready) {
+            _state.value = PhotosState.Ready(buildPagingData(newSort))
+        }
+    }
+
+    /**
+     * One `Pager` + `cachedIn(viewModelScope)` stream for one generation
+     * (one permission grant OR one sort change, issue #66). The paging
+     * source factory captures the generation's [TimelineSort]; every window
+     * of the generation therefore tiles the same total order.
+     */
+    private fun buildPagingData(sort: TimelineSort): Flow<PagingData<MediaItem>> =
+        Pager(
+            config = PagingConfig(
+                pageSize = TIMELINE_PAGE_SIZE,
+                // == pageSize on purpose; see the class KDoc for why a bigger
+                // initial window would duplicate rows on prepend.
+                initialLoadSize = TIMELINE_PAGE_SIZE,
+                enablePlaceholders = false,
+            ),
+            pagingSourceFactory = { timelineWindowPagingSource(sort) },
+        ).flow.cachedIn(viewModelScope)
+
+    /**
+     * One [WindowPagingSource] per Pager generation, backed by the best
+     * window mechanism this API level offers, ordered by the generation's
+     * [sort] (issue #66). The explicit `Build.VERSION.SDK_INT` check (not
+     * `supportsWindowedQueries()`) is what NewApi lint recognizes as the
+     * guard for the `@RequiresApi(30)` call. Every generation also becomes
+     * [currentSource], so the debounced MediaStore change collector
+     * invalidates exactly the live source.
+     */
+    private fun timelineWindowPagingSource(sort: TimelineSort): WindowPagingSource<MediaItem> {
         val newSource = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Native windows: one Bundle-args MediaStore query per page.
+            // Native windows: one Bundle-args MediaStore query per page,
+            // ordered by the generation's sort (the provider applies the
+            // total order; the _id tiebreak keeps windows aligned).
             WindowPagingSource { offset, limit ->
-                withContext(Dispatchers.IO) { source.queryTimelineWindow(offset, limit) }
+                withContext(Dispatchers.IO) { source.queryTimelineWindow(offset, limit, sort) }
             }
         } else {
             // Pre-30 fallback: one full snapshot per generation, memoized on
-            // first load, then sliced in-memory with the same window contract.
+            // first load in the generation's order (TimelineSort applies the
+            // same date+_id total order in memory), then sliced with the
+            // same window contract.
             var snapshot: List<MediaItem>? = null
             WindowPagingSource { offset, limit ->
                 withContext(Dispatchers.IO) {
-                    (snapshot ?: source.queryTimeline().also { snapshot = it })
+                    (snapshot ?: sort
+                        .sortItems(source.queryTimeline(), { it.dateAddedSec }, { it.id })
+                        .also { snapshot = it })
                         .drop(offset)
                         .take(limit)
                 }

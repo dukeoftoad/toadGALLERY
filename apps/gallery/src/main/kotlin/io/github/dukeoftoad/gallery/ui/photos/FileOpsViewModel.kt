@@ -39,6 +39,10 @@ import kotlinx.coroutines.withContext
  * screen-agnostic by construction (no Photos paging/pipeline references),
  * and #64 needed zero code changes here: the album screen excludes its
  * own bucket from the move picker locally and owns its grid refresh.
+ * Since issue #66 it also carries the single-item FAVORITE toggle
+ * ([requestFavorite]) --- a metadata-only MediaStore write, deliberately
+ * NOT routed through the batch runner (one item, no progress dialog), but
+ * through the same consent round-trip and undo snackbar machinery.
  *
  * Deliberately a SEPARATE ViewModel from [PhotosViewModel] --- the paging
  * pipeline there is frozen for concurrent work (#38 follow-ups), and file
@@ -145,6 +149,14 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
      * pre-op display name for undo. Cleared when the run finishes.
      */
     private var renameRequest: RenameRequest? = null
+
+    /**
+     * The favorite toggle awaiting its consent round (issue #66), if any;
+     * consumed by [onConsentResult]. Kept SEPARATE from [pendingConsent]
+     * (which is keyed by [FileOpKind] for batch ops) so adding the favorite
+     * flow needed no changes to the batch bookkeeping types.
+     */
+    private var pendingFavorite: FavoriteRequest? = null
 
     // ------------------------------------------------------------------
     // Selection
@@ -301,6 +313,72 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
         runJob?.cancel()
     }
 
+    // ------------------------------------------------------------------
+    // Favorite toggle (issue #66)
+    // ------------------------------------------------------------------
+
+    /**
+     * Toggles the favorite flag of ONE item (issue #66) --- the viewer's
+     * heart action. Deliberately NOT a batch run: one item needs no progress
+     * dialog and no aggregation, so this is a single [MediaFileOps.setFavorite]
+     * with the same consent recovery and undo narration as the batch ops.
+     *
+     * ## API level contract (honest tiering)
+     *  - Below Q the whole call is a no-op (`fileOps` is null --- the app is
+     *    read-only there, like every other write op).
+     *  - On Q, a consent-blocked write (another app's item) surfaces as an
+     *    honest failure: the recovery request (`createWriteRequest`) is R+,
+     *    so looping a dialog that cannot exist would only lie.
+     *  - On R+, one write-consent round-trip for the item, then a single
+     *    retry ([retry]); a second block fails honestly --- the same
+     *    bounded, single-shot retry discipline the batch ops use.
+     *
+     * Success narrates `favorite_added` / `favorite_removed` with an undo
+     * payload that toggles back (a favorite write is its own inverse). The
+     * MediaStore change observer refreshes the grids on R+; below that the
+     * overlays catch up on re-entry (the documented Q staleness class).
+     */
+    fun requestFavorite(item: MediaItem, favorite: Boolean, retry: Boolean = false) {
+        @Suppress("NewApi")
+        val ops = fileOps ?: return // below API 29 the app is read-only
+        viewModelScope.launch {
+            @Suppress("NewApi")
+            val result = ops.setFavorite(item.uri, favorite)
+            when (result.outcome) {
+                is FileOpOutcome.Success -> _events.tryEmit(
+                    FileOpsEvent.ShowSnackbar(
+                        messageRes = if (favorite) {
+                            R.string.favorite_added
+                        } else {
+                            R.string.favorite_removed
+                        },
+                        // Undo = the inverse update; the payload carries the
+                        // PRE-op state so the viewer can also correct its
+                        // heart override (the snackbar event IS the success
+                        // signal for it).
+                        undo = UndoPayload.Favorite(item = item, previous = !favorite),
+                    ),
+                )
+                is FileOpOutcome.NeedsConsent -> {
+                    if (!retry && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        pendingFavorite = FavoriteRequest(item = item, favorite = favorite)
+                        @Suppress("NewApi")
+                        _events.tryEmit(
+                            FileOpsEvent.RequestConsent(
+                                ops.createWriteConsentRequest(listOf(item.uri)),
+                            ),
+                        )
+                    } else {
+                        // Q (no recovery protocol) or a still-blocked retry:
+                        // bounded, honest failure --- never a dialog loop.
+                        emitFailed(1)
+                    }
+                }
+                else -> emitFailed(1)
+            }
+        }
+    }
+
     /**
      * Activity result of the system consent dialog. Granted: re-runs only
      * the remaining work the consent covers. Declined: reports what did
@@ -310,6 +388,18 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
     fun onConsentResult(granted: Boolean) {
         @Suppress("NewApi")
         val ops = fileOps ?: return
+        // Issue #66: the favorite toggle has its own single-item pending
+        // state (see pendingFavorite); resolve it FIRST so a favorite
+        // round-trip can never be mistaken for a batch consent.
+        pendingFavorite?.let { request ->
+            pendingFavorite = null
+            if (granted) {
+                requestFavorite(request.item, request.favorite, retry = true)
+            } else {
+                _events.tryEmit(FileOpsEvent.ShowSnackbar(R.string.file_ops_consent_denied))
+            }
+            return
+        }
         val pending = pendingConsent ?: return
         pendingConsent = null
         if (!granted) {
@@ -388,6 +478,14 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                     // extension restore make this the exact inverse rename.
                     @Suppress("NewApi")
                     if (ops.rename(payload.item.uri, payload.oldName).outcome != FileOpOutcome.Success) {
+                        failures++
+                    }
+                }
+                is UndoPayload.Favorite -> {
+                    // A favorite write is its own inverse: restore the
+                    // pre-op flag (issue #66).
+                    @Suppress("NewApi")
+                    if (ops.setFavorite(payload.item.uri, payload.previous).outcome != FileOpOutcome.Success) {
                         failures++
                     }
                 }
@@ -750,6 +848,13 @@ sealed interface UndoPayload {
     /** Rename-undo: restore [oldName]. */
     data class Rename(val item: MediaItem, val oldName: String) : UndoPayload
 
+    /**
+     * Favorite-undo (issue #66): restore [previous] --- the flag value
+     * before the toggled write. Doubles as the success signal the viewer
+     * reads to correct its page-local heart override.
+     */
+    data class Favorite(val item: MediaItem, val previous: Boolean) : UndoPayload
+
     /** Copy-undo: delete every created copy (app-owned, no consent). */
     data class Copies(val createdUris: List<Uri>) : UndoPayload
 
@@ -772,6 +877,12 @@ private data class RenameRequest(
     val item: MediaItem,
     val newName: String,
     val oldName: String,
+)
+
+/** The favorite toggle awaiting its consent round (issue #66). */
+private data class FavoriteRequest(
+    val item: MediaItem,
+    val favorite: Boolean,
 )
 
 /**

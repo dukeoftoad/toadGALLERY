@@ -6,16 +6,21 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,8 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
-import androidx.paging.compose.itemKey
 import io.github.dukeoftoad.gallery.data.MediaItem
+import io.github.dukeoftoad.gallery.ui.settings.GroupBy
+import java.util.Locale
 
 /**
  * The paged staggered media grid for the Photos timeline (Phase 3, issues
@@ -35,10 +41,31 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  * badge, issue #33), `columns` columns, 2.dp gaps, `uri.toString()` keys ---
  * but the rows come from Paging 3: [LazyPagingItems] instead of a
  * materialized `List`. The grid renders `itemCount` slots and Paging appends
- * more windows as the user scrolls; `key = itemKey { uri }` keeps
- * recomposition (and the Coil cache) keyed by the stable content URI,
+ * more windows as the user scrolls; cell keys stay the stable content URI,
  * exactly as [MediaGrid] does, so cell, key and spacing behavior can never
  * diverge between the two grids.
+ *
+ * ## Grouped headers (appearance settings slice, roadmap Phase 3)
+ * [groupBy] (default [GroupBy.NONE], the flat pre-slice timeline) layers
+ * full-line date headers between the cells via the [TimelineRow] model:
+ * the rows are recomputed REACTIVELY from `items.itemSnapshotList` (a
+ * snapshot-state-backed list) inside a `derivedStateOf`, so appended windows
+ * and refreshes regroup without any manual invalidation. The `remember` is
+ * keyed on [groupBy] AND [items] --- an unkeyed remember would keep the
+ * first composition's closure alive across a settings change or a paging
+ * generation swap and render a stale grouping. Keys: cells keep
+ * `uri.toString()`; headers use `"header_" + groupKey`; a cell whose
+ * snapshot slot is somehow null falls back to `"cell_<index>"` (the row
+ * model skips nulls, so this only covers a snapshot mutating between the
+ * rows computation and the key call). Headers render with
+ * [StaggeredGridItemSpan.FullLine] and the `timeline_header` test tag.
+ *
+ * ## Uniform grid mode (appearance settings slice, roadmap Phase 3)
+ * [uniformCells] (default `false`) switches every cell to the Ente-style
+ * GRID layout --- [MediaThumb]'s `forceSquare` --- while the grid itself
+ * stays a staggered layout (uniform cells in a staggered grid pack as a
+ * plain square grid; one composable, two looks). The defaults keep every
+ * pre-slice call site rendering exactly what it rendered before.
  *
  * ## Footer slot (issue #38, finding 2)
  * [footer] is an optional trailing composable rendered as the grid's LAST
@@ -66,6 +93,9 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  * is exactly what `itemSnapshotList` maps back to), so the Photos screen can
  * hand the shell the tap-time window + position for the full-screen viewer
  * while selection mode keeps toggling membership. Long-press is unchanged.
+ * Grouping does not disturb this: a [TimelineRow.Cell] CARRIES the snapshot
+ * index, so selection and taps keep operating on the same positions the
+ * ungrouped grid used.
  *
  * Privacy: mirrors [MediaGrid] --- every thumbnail decodes from a local
  * content URI. Coil 2.x ships its HTTP fetcher inside the default
@@ -81,12 +111,21 @@ fun MediaPagingGrid(
     items: LazyPagingItems<MediaItem>,
     modifier: Modifier = Modifier,
     columns: Int = 3,
+    groupBy: GroupBy = GroupBy.NONE,
+    uniformCells: Boolean = false,
     selectionActive: Boolean = false,
     selectedKeys: Set<String> = emptySet(),
     onItemTap: ((index: Int, item: MediaItem) -> Unit)? = null,
     onItemLongPress: ((MediaItem) -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
 ) {
+    // Grouped-timeline rows: recomputed reactively (itemSnapshotList is
+    // snapshot-state backed, so appended windows and refreshes re-run the
+    // derivation) and re-derived when the grouping itself or the paging
+    // instance changes (see the KDoc --- an unkeyed remember would go stale).
+    val rows = remember(groupBy, items) {
+        derivedStateOf { buildTimelineRows(items.itemSnapshotList, groupBy) }
+    }.value
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(columns),
         modifier = modifier.fillMaxSize(),
@@ -94,26 +133,56 @@ fun MediaPagingGrid(
         verticalItemSpacing = 2.dp,
     ) {
         items(
-            count = items.itemCount,
-            key = items.itemKey { it.uri.toString() },
-        ) { index ->
-            items[index]?.let { item ->
-                if (onItemTap != null && onItemLongPress != null) {
-                    // Interactive cell: long-press enters selection even in
-                    // the plain timeline (the ViewModel no-ops below API 29,
-                    // where file ops are hidden); the overlay chrome appears
-                    // only while a selection is active.
-                    SelectableMediaCell(
-                        index = index,
-                        item = item,
-                        selected = item.uri.toString() in selectedKeys,
-                        overlayVisible = selectionActive,
-                        onItemTap = onItemTap,
-                        onItemLongPress = onItemLongPress,
-                    )
+            count = rows.size,
+            key = { rowIndex ->
+                when (val row = rows[rowIndex]) {
+                    is TimelineRow.Header -> "header_" + row.groupKey
+                    is TimelineRow.Cell -> {
+                        // Same uri keys the ungrouped grid used; the
+                        // cell_<index> fallback only fires if the snapshot
+                        // mutated under the derived rows (a null slot there
+                        // renders nothing, like the pre-grouping grid did).
+                        items[row.index]?.uri?.toString() ?: "cell_${row.index}"
+                    }
+                }
+            },
+            span = { rowIndex ->
+                if (rows[rowIndex] is TimelineRow.Header) {
+                    StaggeredGridItemSpan.FullLine
                 } else {
-                    // Byte-identical to the pre-#30 render (and to MediaGrid).
-                    MediaThumb(item = item)
+                    null
+                }
+            },
+        ) { rowIndex ->
+            when (val row = rows[rowIndex]) {
+                is TimelineRow.Header -> Text(
+                    text = formatGroupLabel(row, Locale.getDefault()),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 4.dp, top = 12.dp, bottom = 4.dp)
+                        .testTag("timeline_header"),
+                )
+                is TimelineRow.Cell -> items[row.index]?.let { item ->
+                    if (onItemTap != null && onItemLongPress != null) {
+                        // Interactive cell: long-press enters selection even in
+                        // the plain timeline (the ViewModel no-ops below API 29,
+                        // where file ops are hidden); the overlay chrome appears
+                        // only while a selection is active.
+                        SelectableMediaCell(
+                            index = row.index,
+                            item = item,
+                            forceSquare = uniformCells,
+                            selected = item.uri.toString() in selectedKeys,
+                            overlayVisible = selectionActive,
+                            onItemTap = onItemTap,
+                            onItemLongPress = onItemLongPress,
+                        )
+                    } else {
+                        // Byte-identical to the pre-#30 render (and to MediaGrid).
+                        MediaThumb(item = item, forceSquare = uniformCells)
+                    }
                 }
             }
         }
@@ -137,13 +206,16 @@ fun MediaPagingGrid(
  * - tap toggles membership while selecting;
  * - the check badge shows on EVERY cell while selection is active so the
  *   mode is self-evident; picked cells add a primary-color scrim
- *   (Mi-Gallery-style visual anchoring).
+ *   (Mi-Gallery-style visual anchoring);
+ * - [forceSquare] is the appearance slice's GRID-layout pass-through (see
+ *   [MediaPagingGrid]'s KDoc): straight into [MediaThumb].
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SelectableMediaCell(
     index: Int,
     item: MediaItem,
+    forceSquare: Boolean,
     selected: Boolean,
     overlayVisible: Boolean,
     onItemTap: (Int, MediaItem) -> Unit,
@@ -155,7 +227,7 @@ private fun SelectableMediaCell(
             onLongClick = { onItemLongPress(item) },
         ),
     ) {
-        MediaThumb(item = item)
+        MediaThumb(item = item, forceSquare = forceSquare)
         if (overlayVisible) {
             if (selected) {
                 Box(

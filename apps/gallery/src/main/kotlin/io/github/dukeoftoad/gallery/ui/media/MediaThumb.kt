@@ -78,10 +78,21 @@ import io.github.dukeoftoad.gallery.data.displayAspectRatio
  * The parallel paging slice (Phase 3) ships its own grid composable over
  * `LazyPagingItems`; it swaps its inline cell for this composable at
  * integration time, so both grids render identical cells.
+ *
+ * The appearance settings slice (roadmap Phase 3) adds [forceSquare] for the
+ * GRID layout (Ente-style): when set, the cell ignores the item's aspect
+ * ratio and renders a uniform `1f` square, the classic dense-gallery look.
+ * The default `false` keeps every pre-slice call site (Photos timeline,
+ * album detail, trash, favorites, search) rendering exactly as before ---
+ * the COLLAGE default must stay byte-identical.
  */
 @Composable
-fun MediaThumb(item: MediaItem, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.aspectRatio(item.displayAspectRatio)) {
+fun MediaThumb(item: MediaItem, modifier: Modifier = Modifier, forceSquare: Boolean = false) {
+    Box(
+        modifier = modifier.aspectRatio(
+            if (forceSquare) 1f else item.displayAspectRatio
+        )
+    ) {
         AsyncImage(
             model = item.uri,
             contentDescription = when {

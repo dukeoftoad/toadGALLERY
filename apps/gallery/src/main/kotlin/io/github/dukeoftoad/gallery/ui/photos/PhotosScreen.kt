@@ -68,6 +68,9 @@ import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.MediaPagingGrid
 import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
 import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
+import io.github.dukeoftoad.gallery.ui.settings.Appearance
+import io.github.dukeoftoad.gallery.ui.settings.LayoutStyle
+import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 import io.github.dukeoftoad.gallery.ui.vault.VaultBusy
 import io.github.dukeoftoad.gallery.ui.vault.VaultBusyKind
 import io.github.dukeoftoad.gallery.ui.vault.VaultEvent
@@ -158,6 +161,14 @@ import io.github.dukeoftoad.gallery.ui.vault.isConfigured
  * generation (see `PhotosViewModel`); the bar disappears in selection mode
  * exactly like the pre-#66 grid did, replaced by the count bar.
  *
+ * ## Appearance settings (roadmap Phase 3 slice)
+ * The shell-scoped [settingsViewModel] (shared with the Settings tab and
+ * album detail) feeds the collected [Appearance] into the grid: columns,
+ * group-by headers and the GRID layout's square cells. Defaults
+ * (COLLAGE/3/NONE) keep the render this screen shipped with byte-identical;
+ * changes apply live because the grid derives its rows from the paging
+ * snapshot reactively (see `MediaPagingGrid`).
+ *
  * Privacy: every image is a local content URI (ADR-0006). Coil 2.x ships
  * its HTTP fetcher inside the default `coil-compose` registry (there is no
  * separate network artifact to exclude until Coil 3), so the offline
@@ -171,10 +182,12 @@ fun PhotosScreen(
     viewModel: PhotosViewModel = viewModel(),
     fileOpsViewModel: FileOpsViewModel = viewModel(),
     vaultViewModel: VaultViewModel,
+    settingsViewModel: SettingsViewModel,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
 ) {
     val state by viewModel.state.collectAsState()
     val sort by viewModel.sort.collectAsState()
+    val appearance by settingsViewModel.appearance.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
     val vaultState by vaultViewModel.state.collectAsState()
     val vaultBusy by vaultViewModel.busy.collectAsState()
@@ -324,6 +337,7 @@ fun PhotosScreen(
                 }
                 else -> PhotosTimeline(
                     lazyItems = lazyItems,
+                    appearance = appearance,
                     sort = sort,
                     onSortChange = viewModel::onSortChange,
                     fileOpsViewModel = fileOpsViewModel,
@@ -346,7 +360,8 @@ fun PhotosScreen(
  * picker, batch progress). The vault chrome (issue #32) rides along: the
  * move-to-vault confirmation and its cancellable progress dialog. Since
  * issue #66 the plain timeline also carries the sort header bar
- * ([PhotosHeaderBar] + [TimelineSortMenu]).
+ * ([PhotosHeaderBar] + [TimelineSortMenu]); since the appearance slice it
+ * threads the shell's [Appearance] through to the grid.
  *
  * Grid refreshing after ops is NOT done by hand: MediaStore writes fire the
  * existing ContentObserver -> paging invalidation (issue #38); see the
@@ -355,6 +370,7 @@ fun PhotosScreen(
 @Composable
 private fun PhotosTimeline(
     lazyItems: LazyPagingItems<MediaItem>,
+    appearance: Appearance,
     sort: TimelineSort,
     onSortChange: (TimelineSort) -> Unit,
     fileOpsViewModel: FileOpsViewModel,
@@ -402,6 +418,7 @@ private fun PhotosTimeline(
                 Box(modifier = Modifier.weight(1f)) {
                     PhotosGrid(
                         lazyItems = lazyItems,
+                        appearance = appearance,
                         fileOpsViewModel = fileOpsViewModel,
                         selectionActive = true,
                         selectedKeys = selection.items.mapTo(HashSet()) { it.uri.toString() },
@@ -437,6 +454,7 @@ private fun PhotosTimeline(
                 Box(modifier = Modifier.weight(1f)) {
                     PhotosGrid(
                         lazyItems = lazyItems,
+                        appearance = appearance,
                         fileOpsViewModel = fileOpsViewModel,
                         selectionActive = false,
                         selectedKeys = emptySet(),
@@ -554,6 +572,8 @@ private fun PhotosHeaderBar(
 /**
  * The timeline grid call, shared by plain and selection layouts so the
  * `photos_state_grid` tag, footer and selection wiring cannot diverge.
+ * The shell's [Appearance] lands here: columns, group-by and the GRID
+ * layout's square cells (see `MediaPagingGrid`).
  *
  * Tap semantics (issue #50): while a selection is active a tap toggles the
  * item's membership (issue #30 behavior, unchanged); on the plain timeline a
@@ -565,6 +585,7 @@ private fun PhotosHeaderBar(
 @Composable
 private fun PhotosGrid(
     lazyItems: LazyPagingItems<MediaItem>,
+    appearance: Appearance,
     fileOpsViewModel: FileOpsViewModel,
     selectionActive: Boolean,
     selectedKeys: Set<String>,
@@ -573,6 +594,9 @@ private fun PhotosGrid(
     MediaPagingGrid(
         items = lazyItems,
         modifier = Modifier.testTag("photos_state_grid"),
+        columns = appearance.columns,
+        groupBy = appearance.groupBy,
+        uniformCells = appearance.layout == LayoutStyle.GRID,
         selectionActive = selectionActive,
         selectedKeys = selectedKeys,
         onItemTap = { index, item ->

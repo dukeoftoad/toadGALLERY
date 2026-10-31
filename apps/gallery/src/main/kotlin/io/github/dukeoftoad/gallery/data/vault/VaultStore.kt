@@ -87,9 +87,28 @@ class VaultStore(
      * explicit future feature that must handle re-sealing. The UI only
      * offers setup while unconfigured, so the throw is a loud invariant,
      * not a user-facing path.
+     *
+     * Transactional (issue follow-up to #32): both ciphertexts are staged
+     * as `.tmp` files and committed by rename (index first, PIN last), so a
+     * failure in either write rolls back to a fully unconfigured store ---
+     * never the pin-without-index state that reported configured but could
+     * not load its index. A one-file residue from a pre-fix crash or
+     * external deletion self-heals: it is removed and setup proceeds fresh.
      */
     fun setup(pin: CharArray) {
-        check(!isConfigured()) { "vault is already configured; wipe() first" }
+        val pinPresent = pinFile().exists()
+        val indexPresent = indexFile().exists()
+        when {
+            pinPresent && indexPresent ->
+                throw IllegalStateException("vault is already configured; wipe() first")
+            // Broken residue: one of the two files survived a pre-transactional
+            // setup crash or was deleted externally. A vault cannot load
+            // without BOTH files (the index is the only entry list), so the
+            // remnant holds nothing recoverable --- remove it and self-heal
+            // with a fresh setup instead of leaving the store permanently
+            // wedged between "configured" (pin only) and "loadable".
+            pinPresent || indexPresent -> selfHealBrokenResidue()
+        }
         val salt = VaultCrypto.generateSalt()
         val digest = VaultCrypto.pinDigest(pin, salt)
         if (!root.mkdirs() && !root.isDirectory) {
@@ -99,19 +118,60 @@ class VaultStore(
             throw VaultStoreException("cannot create vault blobs directory")
         }
         try {
-            atomicWrite(pinFile(), VaultCrypto.encrypt(salt + digest, keys.key()))
-            atomicWrite(
+            // Two-phase commit: STAGE both ciphertexts as `.tmp` files first,
+            // then commit by rename. Commit order matters: the index lands
+            // FIRST and the PIN record LAST --- `isConfigured()` treats the
+            // pair as the marker, and a crash between the two renames can
+            // then only leave a sweepable index (or nothing at all), never
+            // the old "pin without index" state that looked configured but
+            // could not load.
+            stageWrite(pinFile(), VaultCrypto.encrypt(salt + digest, keys.key()))
+            stageWrite(
                 indexFile(),
                 VaultCrypto.encrypt(VaultIndex.serialize(emptyList()), keys.key()),
             )
+            try {
+                if (!staged(indexFile()).renameTo(indexFile())) {
+                    throw VaultStoreException("cannot commit the vault index")
+                }
+                if (!staged(pinFile()).renameTo(pinFile())) {
+                    throw VaultStoreException("cannot commit the vault PIN record")
+                }
+            } catch (e: VaultStoreException) {
+                // Rollback: neither file is configured yet (the check above
+                // guaranteed that), so everything on disk right now is THIS
+                // attempt's output --- remove it all and surface the failure.
+                staged(indexFile()).delete()
+                staged(pinFile()).delete()
+                indexFile().delete()
+                pinFile().delete()
+                throw VaultStoreException("vault setup failed; nothing was configured", e)
+            }
         } finally {
             // The digest is the vault's secret-of-record; scrub it like a PIN.
             digest.fill(0)
         }
     }
 
-    /** True once the PIN record exists (the vault's single "configured" marker). */
-    fun isConfigured(): Boolean = pinFile().exists()
+    /**
+     * True once BOTH the sealed PIN record and the sealed index exist. A
+     * single-file check lied after a mid-setup failure: with only `pin.bin`
+     * on disk the vault reported configured while every [entries] call
+     * threw (issue follow-up to #32; setup is transactional since, so this
+     * guards against external deletion and pre-fix residue).
+     */
+    fun isConfigured(): Boolean = pinFile().exists() && indexFile().exists()
+
+    /** Removes a broken one-file residue; a stuck file fails loudly. */
+    private fun selfHealBrokenResidue() {
+        for (file in listOf(pinFile(), indexFile())) {
+            if (file.exists() && !file.delete()) {
+                throw VaultStoreException(
+                    "broken vault residue ${file.name} cannot be removed; wipe() first",
+                )
+            }
+        }
+    }
 
     // ------------------------------------------------------------------
     // Biometric binding (issue #57, ADR-0019; additive, optional file)
@@ -343,6 +403,20 @@ class VaultStore(
     private fun blobsDir() = File(root, "blobs")
 
     private fun blobFile(id: Long) = File(blobsDir(), "$id$BLOB_SUFFIX")
+
+    /**
+     * The staging half of [setup]'s two-phase commit: writes [bytes] to the
+     * `.tmp` sibling only (no rename --- the caller commits both targets in
+     * order and rolls back on any failure). Stale `.tmp` leftovers are
+     * reclaimed by [sweepOrphans] and by the next setup's rollback.
+     */
+    private fun stageWrite(target: File, bytes: ByteArray) {
+        val tmp = staged(target)
+        FileOutputStream(tmp).use { it.write(bytes) }
+    }
+
+    /** The `.tmp` staging path of [target]. */
+    private fun staged(target: File): File = File(target.parentFile, target.name + TMP_SUFFIX)
 
     /**
      * Writes [bytes] to a `.tmp` sibling, then renames into place. On

@@ -76,7 +76,9 @@ enum class VaultRestoreResult {
  * The inverse: insert a pending row into the right collection, stream the
  * plaintext in, publish the row, and only THEN delete the sealed blob ---
  * a failure before publishing keeps the vault copy, so restore can never
- * lose media.
+ * lose media. Publication is confirmed by the `update()` row count: a
+ * 0-row publish is treated as a failure (pending row cleaned up, vault
+ * copy kept), never as success.
  *
  * ## API level gating (mirrors the file-ops slice exactly)
  *  - [moveToVault]/[deleteOriginals]/[restore] are `@RequiresApi(Q)`:
@@ -351,7 +353,18 @@ class VaultRepository(context: Context) {
                 val settled = ContentValues().apply {
                     put(MediaStore.MediaColumns.IS_PENDING, 0)
                 }
-                resolver.update(newUri, settled, null, null)
+                val published = resolver.update(newUri, settled, null, null)
+                if (published <= 0) {
+                    // A 0-row update is NOT a publication: the provider
+                    // refused (or the pending row vanished) while the bytes
+                    // are already streamed. Treat it like any other failure
+                    // --- delete the app-owned pending row and keep the
+                    // vault copy (ADR-0017: never delete the sealed blob
+                    // without confirmed publication).
+                    throw IOException(
+                        "provider did not publish the pending row ($published rows updated)",
+                    )
+                }
             } catch (e: CancellationException) {
                 runCatching { resolver.delete(newUri, null, null) }
                 throw e

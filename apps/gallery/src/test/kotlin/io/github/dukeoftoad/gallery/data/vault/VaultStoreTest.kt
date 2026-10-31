@@ -106,6 +106,85 @@ class VaultStoreTest {
         assertFalse(fixture.store.verifyPin("9999".toCharArray()))
     }
 
+    /**
+     * Failure injection for setup's second write (issue follow-up to #32):
+     * a non-empty directory parked at `index.bin` makes the index commit
+     * rename fail. Setup must roll back to a fully unconfigured store ---
+     * no pin, no index, no staged `.tmp` residue --- and a retry after the
+     * obstruction is removed must succeed.
+     */
+    @Test
+    fun `a failed index commit leaves nothing configured and setup can be retried`() {
+        val fixture = newFixture()
+        val blocker = File(fixture.root, "index.bin").apply {
+            mkdirs()
+            File(this, "occupied").writeBytes(byteArrayOf(1))
+        }
+        assertThrows(VaultStoreException::class.java) {
+            fixture.store.setup(PIN.toCharArray())
+        }
+        assertFalse(fixture.store.isConfigured())
+        assertFalse(File(fixture.root, "pin.bin").exists())
+        assertTrue(blocker.isDirectory) // untouched by the rollback
+        assertEquals(
+            "no staged residue survives the rollback",
+            emptyList<String>(),
+            fixture.root.listFiles()!!.map { it.name }.filter { it.endsWith(".tmp") },
+        )
+        // Retry after the obstruction is gone: the store is usable.
+        blocker.deleteRecursively()
+        fixture.store.setup(PIN.toCharArray())
+        assertTrue(fixture.store.isConfigured())
+        assertTrue(fixture.store.entries().isEmpty())
+    }
+
+    /** Same injection against the PIN commit (the second rename): full rollback again. */
+    @Test
+    fun `a failed pin commit rolls back the already-committed index`() {
+        val fixture = newFixture()
+        val blocker = File(fixture.root, "pin.bin").apply {
+            mkdirs()
+            File(this, "occupied").writeBytes(byteArrayOf(1))
+        }
+        assertThrows(VaultStoreException::class.java) {
+            fixture.store.setup(PIN.toCharArray())
+        }
+        assertFalse(fixture.store.isConfigured())
+        assertFalse(
+            "the index committed before the pin failure must be rolled back",
+            File(fixture.root, "index.bin").exists(),
+        )
+        assertTrue(blocker.isDirectory)
+        // Retry after the obstruction is gone: the store is usable.
+        blocker.deleteRecursively()
+        fixture.store.setup(PIN.toCharArray())
+        assertTrue(fixture.store.isConfigured())
+    }
+
+    /** `isConfigured` requires BOTH files; a pin-only residue must not lie. */
+    @Test
+    fun `isConfigured is false when the index is missing even though the pin record exists`() {
+        val fixture = configuredFixture()
+        assertTrue(File(fixture.root, "index.bin").delete())
+        assertFalse(fixture.store.isConfigured())
+    }
+
+    /**
+     * A one-file residue from a pre-transactional crash self-heals: setup
+     * removes the stale remnant and proceeds fresh instead of wedging the
+     * store between "configured" and "loadable".
+     */
+    @Test
+    fun `a broken pin-without-index residue self-heals on setup`() {
+        val fixture = newFixture()
+        // Simulate the old bug's on-disk state: pin present, index lost.
+        File(fixture.root, "pin.bin").writeBytes(randomBytes(64))
+        fixture.store.setup(PIN.toCharArray())
+        assertTrue(fixture.store.isConfigured())
+        assertTrue(fixture.store.verifyPin(PIN.toCharArray()))
+        assertTrue(fixture.store.entries().isEmpty())
+    }
+
     // ---- Store / list / open -------------------------------------------
 
     @Test

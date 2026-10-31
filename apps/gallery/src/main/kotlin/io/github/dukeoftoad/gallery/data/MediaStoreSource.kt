@@ -11,6 +11,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
+import io.github.dukeoftoad.gallery.ui.search.SearchMediaType
+import io.github.dukeoftoad.gallery.ui.search.SearchQuery
 
 /**
  * Reads the on-device media timeline (Phase 3, issues #25 and #29).
@@ -560,6 +562,124 @@ class MediaStoreSource(private val context: Context) {
      */
     fun unregisterTimelineObserver(observer: ContentObserver) {
         context.contentResolver.unregisterContentObserver(observer)
+    }
+
+    // ------------------------------------------------------------------
+    // Search (issue #62): file-NAME query over the unified Files
+    // collection. The query-building half (selection text, LIKE escaping,
+    // LIMIT clause) lives in the pure, android-free
+    // io.github.dukeoftoad.gallery.ui.search.SearchQuery object so JVM
+    // tests pin it (the FileOpNaming convention); this method is the
+    // ContentResolver half.
+    // ------------------------------------------------------------------
+
+    /**
+     * Searches the media timeline by file NAME (issue #62, search tab v1):
+     * one query over the unified `MediaStore.Files` collection, filtered to
+     * images and/or videos by [mediaType], matching the user's [query] as a
+     * case-insensitive substring of `_display_name` (SQLite `LIKE`), newest
+     * first, capped at [limit] rows.
+     *
+     * The selection / args / sort order come fully built from the pure
+     * [SearchQuery] helper (which also owns the `%`/`_`/`\` LIKE escaping
+     * and the `ESCAPE '\'` clause); see its KDoc for the column-literal
+     * mapping and the JVM-test contract. The `LIMIT n` suffix in the sort
+     * order is the MediaStore/SQLite convention for bounding a query
+     * through the string sortOrder parameter.
+     *
+     * Single unified query (images and videos share one table under scoped
+     * storage) --- the same shape as [queryTimelineWindow] and
+     * [queryTrashed], and like them it uses the volume-name string overload
+     * of `MediaStore.Files.getContentUri` (API 1), so this works from
+     * minSdk 26 with no `@RequiresApi` guard. MediaProvider's defaults
+     * exclude pending and trashed rows, which is what a gallery wants.
+     *
+     * Rows surface as canonical `images/<id>` / `video/<id>` content URIs
+     * (not `files/<id>`): identical keys + Coil cache entries to the
+     * timeline and window paths --- ADR-0006 content URIs anchored by
+     * `_id`, no filesystem paths.
+     *
+     * Privacy (ADR-0014 / ADR-0010): reads local content URIs only; no
+     * network path exists (no INTERNET permission, kernel-enforced).
+     *
+     * @param query raw user text; the caller (SearchViewModel) is expected
+     *  to gate on [SearchQuery.isSearchable] --- a too-short query here
+     *  simply matches very broadly and is wasted work, not an error.
+     * @param mediaType All / Images / Videos filter chip state.
+     * @param limit hard result cap; the default matches
+     *  [SearchQuery.DEFAULT_LIMIT].
+     */
+    fun querySearch(
+        query: String,
+        mediaType: SearchMediaType,
+        limit: Int = SearchQuery.DEFAULT_LIMIT,
+    ): List<MediaItem> {
+        val spec = SearchQuery.build(query, mediaType, limit)
+        val collection = MediaStore.Files.getContentUri("external")
+        // The same projection queryTimelineWindow maps: media_type drives
+        // isVideo + the per-type URI; width/height/duration feed the
+        // staggered grid and the duration overlay (issues #33/#34).
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            MediaStore.Images.ImageColumns.WIDTH,
+            MediaStore.Images.ImageColumns.HEIGHT,
+            MediaStore.Video.VideoColumns.DURATION,
+        )
+        val out = ArrayList<MediaItem>(64)
+        context.contentResolver
+            .query(
+                collection,
+                projection,
+                spec.selection,
+                spec.selectionArgs.toTypedArray(),
+                spec.sortOrder,
+            )
+            ?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val mimeCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.MIME_TYPE)
+                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+                val typeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
+                val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
+                val durationCol = cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val isVideo = cursor.getInt(typeCol) ==
+                        MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                    val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else null
+                    out += MediaItem(
+                        id = id,
+                        // Canonical per-type URI (== the timeline/window paths);
+                        // see the method KDoc.
+                        uri = ContentUris.withAppendedId(
+                            if (isVideo) {
+                                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                            } else {
+                                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                            },
+                            id,
+                        ),
+                        // Same null-mime fallback as queryCollection: some
+                        // HEIC/RAW rows carry no MIME_TYPE.
+                        mimeType = mime ?: if (isVideo) "video/*" else "image/*",
+                        dateAddedSec = cursor.getLong(dateCol),
+                        isVideo = isVideo,
+                        width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
+                        height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
+                        durationMs = if (isVideo && durationCol >= 0) {
+                            cursor.getLong(durationCol)
+                        } else {
+                            0L
+                        },
+                    )
+                }
+            }
+        // The provider already applies the total order (date_added DESC,
+        // _id DESC) from the sort clause; no client-side re-sort needed.
+        return out
     }
 }
 

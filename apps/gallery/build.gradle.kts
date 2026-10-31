@@ -20,11 +20,12 @@ android {
         applicationId = "io.github.dukeoftoad.gallery" // provisional --- ADR-0009
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        // 0.4.0-alpha continued: search tab v1 (#62), viewer operations +
-        // decoder fallback (#63/#65), album-detail file-ops parity (#64) on
-        // top of the 0.4.0-alpha slices at versionCode 8 (file ops #30,
-        // trash #31, vault #32, viewer #50 + follow-ups)
-        versionCode = 9
+        // 0.4.0-alpha continued: wave 1 (search #62, viewer ops + decoder
+        // fallback #63/#65, album-detail ops #64) and wave 2 (vault biometric
+        // binding + thumbnails #57/#58, favorites + sorting #66) on top of
+        // the versionCode-8 slices (file ops #30, trash #31, vault #32,
+        // viewer #50 + follow-ups)
+        versionCode = 10
         versionName = "0.4.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

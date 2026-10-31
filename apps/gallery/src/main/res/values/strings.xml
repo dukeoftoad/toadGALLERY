@@ -148,6 +148,22 @@
     <string name="viewer_video_error_body">This device\'s video decoder can\'t handle the file — it may use an unsupported codec. The file itself is untouched.</string>
     <string name="cd_viewer_photo">Full-screen photo</string>
 
+    <!-- Viewer operations (#63/#65) -->
+    <string name="cd_viewer_action_info">Details</string>
+    <string name="cd_viewer_action_share">Share</string>
+    <string name="cd_viewer_action_rename">Rename</string>
+    <string name="cd_viewer_action_delete">Delete</string>
+    <string name="viewer_info_title">Details</string>
+    <string name="viewer_info_name">Name</string>
+    <string name="viewer_info_type">Type</string>
+    <string name="viewer_info_size">Size</string>
+    <string name="viewer_info_dimensions">Dimensions</string>
+    <string name="viewer_info_duration">Duration</string>
+    <string name="viewer_info_date_added">Date added</string>
+    <string name="viewer_info_uri">Content URI</string>
+    <string name="viewer_info_unknown">Unknown</string>
+    <string name="viewer_share_unavailable">No app available to share this item</string>
+
     <!-- Recycle bin (issue #31) -->
     <string name="trash_title">Recycle bin</string>
     <string name="trash_empty_title">Nothing here</string>

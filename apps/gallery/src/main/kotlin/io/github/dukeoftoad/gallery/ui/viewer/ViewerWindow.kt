@@ -42,4 +42,32 @@ data class ViewerWindow<T>(
             )
         }
     }
+
+    /**
+     * The window with page [pageIndex] removed (issue #63: a viewer delete
+     * drops the page of the item that left MediaStore), or `null` when
+     * nothing remains --- the caller treats that as "close the viewer".
+     *
+     * The follow-up page is chosen for the one realistic caller shape: the
+     * removed page IS the page being shown (the viewer only deletes the
+     * current page). The item that FOLLOWED it slides into its index, so
+     * the new [ViewerWindow.startIndex] is [pageIndex] when a successor
+     * exists and the last remaining page otherwise --- never a blank jump.
+     *
+     * Pure like the rest of this type: `ViewerWindowTest` pins the
+     * follow-up semantics on the plain JVM. The window otherwise stays the
+     * frozen tap-time snapshot the class documents; rename deliberately
+     * does NOT call this --- a MediaStore rename rewrites `DISPLAY_NAME`
+     * only, the row `_id` and therefore the content URI are unchanged, so
+     * the pager's URI-keyed pages stay valid as they are.
+     */
+    fun withoutPageAt(pageIndex: Int): ViewerWindow<T>? {
+        if (pageIndex !in items.indices) return if (items.isEmpty()) null else this
+        val remaining = items.filterIndexed { index, _ -> index != pageIndex }
+        if (remaining.isEmpty()) return null
+        return ViewerWindow(
+            items = remaining,
+            startIndex = if (pageIndex < remaining.size) pageIndex else remaining.lastIndex,
+        )
+    }
 }

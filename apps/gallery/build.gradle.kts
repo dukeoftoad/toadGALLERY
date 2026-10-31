@@ -247,6 +247,13 @@ dependencies {
     // --- Phase 3: Lifecycle/ViewModel for the Photos timeline state holder (issue #25)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // --- Vault biometric unlock binding (issue #57, ADR-0019): androidx
+    // BiometricPrompt + CryptoObject over a user-auth-bound AndroidKeyStore
+    // key. Pure on-device auth library: it declares USE_BIOMETRIC (a normal
+    // permission merged in from its manifest) but NOT INTERNET, so the
+    // ADR-0014 offline-by-construction gate is unaffected. Requires the
+    // activity to be a FragmentActivity (see MainActivity).
+    implementation(libs.androidx.biometric)
     // --- Phase 3: Paging 3 --- windowed timeline loads + LazyPagingItems grid (issue #28)
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)

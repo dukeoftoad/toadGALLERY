@@ -1,9 +1,9 @@
 package io.github.dukeoftoad.gallery
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import io.github.dukeoftoad.gallery.ui.ToadGalleryApp
 
 /**
@@ -24,8 +24,16 @@ import io.github.dukeoftoad.gallery.ui.ToadGalleryApp
  * into `innerPadding` for the `NavHost`, so screens and the full-screen
  * states (permission, loading, error, unsupported) center inside inset-paid
  * geometry and never pad themselves against the status bar.
+ *
+ * Issue #57 (ADR-0019): the base class is [FragmentActivity] (the direct
+ * supertype of `AppCompatActivity`; everything else about the shell is
+ * unchanged) because the androidx `BiometricPrompt` used by the hidden
+ * vault's biometric unlock binding requires a FragmentActivity host ---
+ * `ComponentActivity` alone is not enough for its prompt fragment. The app
+ * still uses no Fragments of its own; Compose remains the only UI toolkit
+ * (ADR-0009).
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -9,6 +9,10 @@ androidx-exifinterface = "1.4.1"
 androidx-paging = "3.3.2"
 # Lifecycle (ViewModel + runtime-compose) for Phase 3 state holders
 androidx-lifecycle = "2.8.7"
+# BiometricPrompt for the vault's biometric unlock binding (issue #57,
+# ADR-0019): declares USE_BIOMETRIC but NOT INTERNET, so the ADR-0014
+# offline gate is unaffected
+androidx-biometric = "1.1.0"
 # Material (Theme.Material3.DayNight.NoActionBar manifest theme)
 material = "1.13.0"
 # Jetpack Compose (ADR-0009) --- BOM-pinned
@@ -35,6 +39,10 @@ androidx-navigation-compose = { module = "androidx.navigation:navigation-compose
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "androidx-exifinterface" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+# BiometricPrompt + auth-bound Keystore CryptoObject for the vault (issue #57,
+# ADR-0019): pure on-device auth library, no network code --- it declares
+# USE_BIOMETRIC but NOT INTERNET, so the ADR-0014 merged-manifest gate holds
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
 # Paging 3 (issue #28): windowed MediaStore loads + LazyPagingItems grid
 androidx-paging-runtime = { module = "androidx.paging:paging-runtime", version.ref = "androidx-paging" }
 androidx-paging-compose = { module = "androidx.paging:paging-compose", version.ref = "androidx-paging" }

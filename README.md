@@ -97,6 +97,23 @@ No Flutter SDK required. No Dart SDK required. The CI workflow at
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the source of truth for
 "does it build"; a green CI check is required to merge any PR.
 
+### Release builds / testing pre-releases
+
+Testing pre-releases are produced by the dedicated `Release` workflow
+([`.github/workflows/release.yml`](.github/workflows/release.yml), ADR-0018,
+issue #59), separate from CI: push a `v*` tag, or dispatch the workflow by
+hand (its `tag_name` input defaults to a `versionName`-derived
+`v0.4.0-alpha-r<run_number>`, so testing releases can be cut ad hoc). The
+signed APK is published as a GitHub **pre-release** --- never marked latest
+while pre-1.0 --- together with a `.sha256` checksum and the R8
+`mapping.txt` for de-obfuscating crash traces. A hard `apksigner verify`
+gate pins the signer certificate SHA-256 digest
+(`8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494`), so an
+unsigned or wrongly-signed APK cannot publish. Verify a downloaded APK with
+`apksigner verify --print-certs` and compare the digest. Local builds are
+unaffected: without the signing env vars the release build falls back to
+unsigned.
+
 ## Upstream references (recorded 2026-10-29)
 
 | Project | Recorded commit | License | Role under ADR-0008 |

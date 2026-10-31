@@ -1,0 +1,277 @@
+name: Release
+
+# toadGALLERY release workflow --- issue #59, ADR-0018 (docs/integration-decisions.md)
+#
+# Dedicated PRE-RELEASE pipeline for SIGNED testing APKs. User directive
+# (issue #59): release APKs for pre-release testing must be signed, and they
+# are produced by this dedicated release workflow --- not mixed into the
+# canonical CI.
+#
+#   - Triggers: `v*` tag pushes (cutting a release) and workflow_dispatch
+#     (ad-hoc testing pre-releases; empty tag_name input falls back to a
+#     computed v<versionName>-r<run_number> default tag).
+#   - ADR-0013: ci.yml remains the canonical CI (build/lint/test gating PRs
+#     and main). This file does NOT gate PRs and deliberately runs no lint
+#     or unit tests --- those are ci.yml's job on green merges; a release is
+#     only ever cut from an already-reviewed, already-green SHA.
+#   - ADR-0014: the INTERNET privacy gate still runs here, transitively ---
+#     the release-variant gate anchors on assembleRelease in
+#     apps/gallery/build.gradle.kts, so every release APK is re-verified as
+#     offline-by-construction before it can be published.
+#   - ADR-0018: release signing. The keystore and its credentials live only
+#     in GitHub Encrypted Secrets (referenced by name, never committed), and
+#     the signer certificate is pinned in the hard signature gate below, so
+#     an unsigned or debug-key APK can never reach a GitHub release.
+#   - Roadmap: pulls the Phase 11 "release readiness" deliverable forward to
+#     put Phase 3 snapshot builds (browsing, viewer, file ops, trash, vault)
+#     on real devices for testing ahead of schedule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to publish under. Leave empty to compute v<versionName>-r<run_number> at the built SHA.'
+        type: string
+        required: false
+        default: ''
+  push:
+    tags: [ 'v*' ]
+
+jobs:
+  release:
+    name: Build + publish signed pre-release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Creating the tag (dispatch path) and the GitHub release needs write
+    # access to repo contents.
+    permissions:
+      contents: write
+    # Release builds are never cancelled mid-flight: a queued run waits for
+    # the current publish to finish rather than tearing it down half-way.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+
+    env:
+      # Fixed staging dir for the publishable artifact set, declared at job
+      # level so the always() artifact upload below can reference it even if
+      # an earlier step failed before anything was exported to GITHUB_ENV.
+      RELEASE_STAGE: ${{ runner.temp }}/release-staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # GH ubuntu runners ship a preinstalled Android SDK at $ANDROID_HOME
+      # (cmdline-tools included) but do not always put sdkmanager on PATH, and
+      # android-actions/setup-android@v3 is broken on current images (it runs the
+      # legacy `sdkmanager tools` package, which no longer exists). Resolve the
+      # binary directly and install only what the project pins.
+      - name: Install Android SDK packages (platform 36, build-tools 36)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SDK_MGR="$(command -v sdkmanager)"
+          else
+            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
+          fi
+          echo "Using sdkmanager: $SDK_MGR"
+          yes | "$SDK_MGR" --licenses > /dev/null || true
+          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
+          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # Both trigger paths funnel into a single TAG_NAME here:
+      #   - tag push: the pushed tag (GITHUB_REF_NAME, i.e. github.ref_name)
+      #   - dispatch: the tag_name input if non-empty, else the computed
+      #     default v<versionName>-r<run_number> (e.g. versionName
+      #     "0.4.0-alpha" at run 72 becomes v0.4.0-alpha-r72).
+      # VERSION_NAME comes straight from apps/gallery/build.gradle.kts so the
+      # tag always agrees with what the APK actually reports.
+      - name: Resolve release tag and version name
+        env:
+          DISPATCH_TAG: ${{ github.event.inputs.tag_name }}
+        run: |
+          VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' apps/gallery/build.gradle.kts | head -n1)"
+          if [[ -z "$VERSION_NAME" ]]; then
+            echo "::error::could not extract versionName from apps/gallery/build.gradle.kts"
+            exit 1
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            TAG_NAME="$GITHUB_REF_NAME"
+          elif [[ -n "$DISPATCH_TAG" ]]; then
+            TAG_NAME="$DISPATCH_TAG"
+          else
+            TAG_NAME="v${VERSION_NAME}-r${GITHUB_RUN_NUMBER}"
+          fi
+          echo "versionName=$VERSION_NAME  tag=$TAG_NAME"
+          {
+            echo "VERSION_NAME=$VERSION_NAME"
+            echo "TAG_NAME=$TAG_NAME"
+          } >> "$GITHUB_ENV"
+
+      # ADR-0018: the release keystore lives ONLY in GitHub Encrypted Secrets
+      # (TG_RELEASE_KEYSTORE_BASE64, set per ADR-0018) --- it is never
+      # committed to the repo, so no clone can ever sign releases.
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
+          chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
+          if [[ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]]; then
+            echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
+            exit 1
+          fi
+
+      # ADR-0018 contract with the release signingConfig in
+      # apps/gallery/build.gradle.kts (landing in the same PR): the Gradle
+      # build reads exactly these four TG_* env vars. The TG_RELEASE_* secret
+      # values are passed through the step env and appended to GITHUB_ENV in
+      # one heredoc, so they never appear in command lines or command logs
+      # (GitHub masks them in logs regardless --- this keeps it clean).
+      - name: Export signing environment for Gradle
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
+        run: |
+          cat >> "$GITHUB_ENV" <<EOF
+          TG_KEYSTORE_FILE=$RUNNER_TEMP/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD
+          TG_KEY_ALIAS=$KEY_ALIAS
+          TG_KEY_PASSWORD=$KEY_PASSWORD
+          EOF
+
+      # assembleRelease runs the release-variant privacy gate (ADR-0014,
+      # transitively via the assemble* anchor in apps/gallery/build.gradle.kts)
+      # plus R8 minify + resource shrink.
+      - name: Build signed release APK
+        run: ./gradlew :apps:gallery:assembleRelease --no-daemon --stacktrace
+
+      # HARD SIGNATURE GATE (ADR-0018) --- the core invariant of this workflow:
+      # an unsigned or wrongly signed APK must NEVER be published.
+      #   1. assembleRelease must have produced an APK, and it must not be a
+      #      *-unsigned.apk (unsigned output means the TG_* signing env
+      #      contract above is broken or the secrets are missing).
+      #   2. apksigner must verify the APK's signature and print a signer.
+      #   3. The signer certificate SHA-256 must equal the pinned release
+      #      identity below. A debug key --- or any other keystore --- fails
+      #      the job, so what gets published is always signed by THE
+      #      toadGALLERY release key.
+      - name: Verify release signature (hard gate)
+        run: |
+          APK_DIR="apps/gallery/build/outputs/apk/release"
+          if [[ ! -d "$APK_DIR" ]]; then
+            echo "::error::$APK_DIR does not exist --- assembleRelease produced no output"
+            exit 1
+          fi
+          SIGNED_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*unsigned*' -print -quit)"
+          UNSIGNED_APK="$(find "$APK_DIR" -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+          if [[ -z "$SIGNED_APK" ]]; then
+            echo "::error::no signed release APK in $APK_DIR (unsigned present: ${UNSIGNED_APK:-none}) --- the build did not sign; check the TG_* env contract (ADR-0018)"
+            exit 1
+          fi
+          echo "Release APK: $SIGNED_APK"
+
+          # Resolve apksigner robustly: the exact pinned build-tools dir
+          # first, then a glob fallback in case the runner layout differs.
+          APKSIGNER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/apksigner"
+          if [[ ! -x "$APKSIGNER" ]]; then
+            APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -path '*36.0.0*/apksigner' -print -quit)"
+          fi
+          if [[ -z "$APKSIGNER" || ! -x "$APKSIGNER" ]]; then
+            echo "::error::apksigner not found under build-tools 36.0.0"
+            exit 1
+          fi
+
+          # Non-zero exit from apksigner verify fails the step outright
+          # (bash -e): the APK carries no valid signature.
+          "$APKSIGNER" verify --print-certs "$SIGNED_APK" > "$RUNNER_TEMP/apk-certs.txt"
+          cat "$RUNNER_TEMP/apk-certs.txt"
+
+          # Pinned release identity (ADR-0018): toadGALLERY release-key cert.
+          EXPECTED_SHA256="8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494"
+          ACTUAL_SHA256="$(grep -oP 'Signer #1 certificate SHA-256 digest: \K[0-9a-fA-F]+' "$RUNNER_TEMP/apk-certs.txt" | tr '[:upper:]' '[:lower:]')"
+          if [[ -z "$ACTUAL_SHA256" ]]; then
+            echo "::error::apksigner reported no signer certificate --- signature did not verify"
+            exit 1
+          fi
+          if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
+            echo "::error::signer mismatch: expected $EXPECTED_SHA256, got $ACTUAL_SHA256 --- NOT the ADR-0018 release key; refusing to publish"
+            exit 1
+          fi
+          echo "Signature gate OK --- signer cert SHA-256 matches the pinned release identity."
+          echo "RELEASE_APK=$SIGNED_APK" >> "$GITHUB_ENV"
+
+      # Publishable set: the renamed APK, its sha256 checksum, and the R8
+      # mapping.txt (the release build is minified, so the mapping is needed
+      # for crash symbolication).
+      - name: Stage release artifacts
+        run: |
+          mkdir -p "$RELEASE_STAGE"
+          APK_NAME="toadGALLERY-${VERSION_NAME}-r${GITHUB_RUN_NUMBER}.apk"
+          cp "$RELEASE_APK" "$RELEASE_STAGE/$APK_NAME"
+          ( cd "$RELEASE_STAGE" && sha256sum "$APK_NAME" > "$APK_NAME.sha256" )
+          if [[ -f apps/gallery/build/outputs/mapping/release/mapping.txt ]]; then
+            cp apps/gallery/build/outputs/mapping/release/mapping.txt "$RELEASE_STAGE/"
+          else
+            echo "::warning::no R8 mapping at apps/gallery/build/outputs/mapping/release/mapping.txt"
+          fi
+          ls -l "$RELEASE_STAGE"
+          cat "$RELEASE_STAGE/$APK_NAME.sha256"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gallery-release-apk
+          path: ${{ env.RELEASE_STAGE }}
+          if-no-files-found: warn
+          retention-days: 30
+
+      # softprops/action-gh-release creates the tag at the current SHA when it
+      # does not exist yet --- that is what makes the dispatch path work: the
+      # computed default tag (e.g. v0.4.0-alpha-r72) never exists in git
+      # before the run. On a real `v*` tag push the tag already exists and
+      # the release simply attaches to it. prerelease + make_latest: false
+      # keep these testing builds clearly separate from any future stable
+      # release (they never show up as "Latest").
+      - name: Publish GitHub pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: toadGALLERY ${{ env.VERSION_NAME }} pre-release (r${{ github.run_number }})
+          prerelease: true
+          make_latest: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: ${{ env.RELEASE_STAGE }}/*
+          body: |
+            **TESTING pre-release** --- this is a Phase 3 snapshot of toadGALLERY
+            (browsing, viewer, file operations, trash, hidden vault), built for
+            pre-release testing ahead of the Phase 11 release-readiness work. It
+            is not a stable release.
+
+            - Built from commit `${{ github.sha }}`
+            - The APK is signed with the toadGALLERY release key per ADR-0018;
+              CI pins the signer certificate, so an unsigned or debug-signed
+              build can never reach this page.
+            - Verify your download against the checksum file (in the same
+              directory as the APK): `sha256sum -c toadGALLERY-*.apk.sha256`

@@ -32,6 +32,31 @@ android {
         compose = true     // ADR-0009
     }
 
+    // --- Release signing (issue #59) ---
+    // The release keystore is NEVER committed --- .gitignore excludes
+    // *.jks / *.keystore, so the signing material lives only outside the
+    // repo. All four inputs are injected from the environment
+    // (TG_KEYSTORE_FILE / TG_KEYSTORE_PASSWORD / TG_KEY_ALIAS /
+    // TG_KEY_PASSWORD); the release workflow feeds them from the GitHub
+    // Actions secrets TG_RELEASE_KEYSTORE_BASE64,
+    // TG_RELEASE_KEYSTORE_PASSWORD, TG_RELEASE_KEY_ALIAS and
+    // TG_RELEASE_KEY_PASSWORD. providers.environmentVariable keeps this
+    // configuration-cache friendly. When the variables are absent --- local
+    // dev or CI jobs without the release secrets --- the signing config is
+    // deliberately left unwired and assembleRelease falls back to the
+    // unsigned APK as before; only the release pipeline (issue #59) signs.
+    val releaseKeystoreFile = providers.environmentVariable("TG_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystoreFile.isPresent) {
+            create("release") {
+                storeFile = file(releaseKeystoreFile.get())
+                storePassword = providers.environmentVariable("TG_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("TG_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("TG_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -40,6 +65,11 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Wire signing only when the keystore env is present; otherwise
+            // this variant stays unsigned by design (see signingConfigs above).
+            if (releaseKeystoreFile.isPresent) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
@@ -155,6 +185,37 @@ androidComponents {
             tasks.matching { it.name == anchor }.configureEach { dependsOn(gate) }
         }
         tasks.matching { it.name == "check" }.configureEach { dependsOn(gate) }
+    }
+}
+
+/**
+ * Release-only Compose mapping classpath fixup (issue #59).
+ *
+ * The release variant has never been assembled before (CI builds debug
+ * only), so this integration path had not run until the release-signing
+ * work. With AGP 9's built-in Kotlin, the Compose compiler plugin builds its
+ * composeMappingProducerClasspath dependency as
+ * `org.jetbrains.kotlin:compose-group-mapping:<kotlinPluginVersion>`, where
+ * the version is AGP's built-in Kotlin (2.2.10) --- a version that was never
+ * published for that artifact (its earliest release is 2.3.0). Resolution
+ * then dies inside produceReleaseComposeMapping. Pin it to 2.3.10, the
+ * Kotlin / Compose compiler toolchain this project actually pins via the
+ * version catalog, so the mapping artifact resolves and release builds work.
+ */
+configurations.configureEach {
+    if (name == "composeMappingProducerClasspath") {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.jetbrains.kotlin" &&
+                requested.module.name == "compose-group-mapping"
+            ) {
+                useVersion("2.3.10")
+                because(
+                    "AGP 9.2.1 built-in Kotlin reports version 2.2.10, which was never " +
+                        "published for compose-group-mapping; 2.3.10 matches the applied " +
+                        "Compose compiler plugin (Kotlin 2.3.10, issue #59)."
+                )
+            }
+        }
     }
 }
 

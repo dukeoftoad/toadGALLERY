@@ -8,6 +8,33 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- Signed testing pre-releases via a dedicated Release workflow (#59,
+  ADR-0018): Phase 3+ snapshots are now shippable as installable,
+  updatable builds. The new `Release` workflow
+  (`.github/workflows/release.yml`, separate from CI) triggers on `v*`
+  tag pushes and on `workflow_dispatch` (input `tag_name`, default
+  `v0.4.0-alpha-r<run_number>` computed from `versionName`, so testing
+  releases can be cut ad hoc without manual tagging), runs
+  `assembleRelease` — the ADR-0014 privacy gate anchors on
+  `assemble<Variant>`, so release APKs are still built under the
+  offline-by-construction check — signs with a dedicated PKCS12 release
+  keystore (RSA-2048, alias `toadgallery-release`, 25-year validity;
+  never committed, held only as GitHub Actions secrets), and publishes a
+  GitHub pre-release (`prerelease: true`, never marked latest pre-1.0)
+  attaching the APK, a `.sha256` checksum and the R8 `mapping.txt`. A
+  hard `apksigner verify` gate pins the signer certificate SHA-256 digest
+  (`8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494`),
+  so an unsigned or wrongly-signed APK can never reach the publish step;
+  the digest is also the user-side verification anchor for sideloaded
+  builds (`apksigner verify --print-certs`). The release
+  `signingConfig` is injected from `TG_KEYSTORE_FILE` /
+  `TG_KEYSTORE_PASSWORD` / `TG_KEY_ALIAS` / `TG_KEY_PASSWORD` env vars
+  with a graceful unsigned fallback when they are absent, so local dev
+  builds are unaffected. This pulls the Phase 11 "release-signed APK
+  production on tag pushes" deliverable forward for Phase 3 testing
+  builds; reproducible builds and F-Droid metadata (F-Droid builds and
+  re-signs its own binaries, so this identity governs only the
+  project's own testing/sideload pre-releases) stay in Phase 11.
 - Viewer pinch-zoom, pan and animated GIFs (#50 follow-ups): photo pages zoom
   to 5x around the pinch centroid, pan with Fit-letterbox clamping (the photo
   never leaves the screen; zooming out re-centers), and double-tap toggles

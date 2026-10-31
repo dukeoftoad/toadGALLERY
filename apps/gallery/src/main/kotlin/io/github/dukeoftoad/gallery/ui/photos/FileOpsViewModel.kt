@@ -34,7 +34,11 @@ import kotlinx.coroutines.withContext
 /**
  * State holder for the Photos-tab file operations (issue #30): selection
  * mode, batch execution with `(index, total)` progress, user-consent
- * recovery, and undo.
+ * recovery, and undo. Since issue #64 the SAME instance type drives the
+ * album detail screen (`ui/albums/AlbumDetailScreen`) --- the class is
+ * screen-agnostic by construction (no Photos paging/pipeline references),
+ * and #64 needed zero code changes here: the album screen excludes its
+ * own bucket from the move picker locally and owns its grid refresh.
  *
  * Deliberately a SEPARATE ViewModel from [PhotosViewModel] --- the paging
  * pipeline there is frozen for concurrent work (#38 follow-ups), and file

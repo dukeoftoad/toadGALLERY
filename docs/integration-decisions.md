@@ -861,6 +861,118 @@ that buffers whole files.
 
 ---
 
+## ADR-0018 — Release signing and the pre-release pipeline (issue #59)
+
+**Status:** ACCEPTED · **Date:** 2026-10-31 · **Application phases:** all
+releases from Phase 3 on (amends ADR-0013; pulls the Phase 11
+"release-signed APK production on tag pushes" deliverable forward).
+
+**Context.** Phase 3 is complete on main (milestone M4 closed): browsing,
+full-screen viewer, file operations, recycle bin and hidden vault have all
+landed, and the 0.4.0-alpha tree is the first snapshot worth asking a
+tester to install. An unsigned artifact is not a testing build: Android
+ties sideload updates to the APK signing identity, so a sequence of
+unsigned builds either fails to install over itself or forces an
+uninstall/reinstall on every update --- it can never become an update
+channel. Testing pre-releases therefore need one dedicated, stable release
+key from the first published build onward. ADR-0013 anticipated exactly
+this ("produce release-signed APKs (Phase 11)"; open question: "Decide
+whether to add a `release.yml` workflow for tagged releases. Initial:
+defer to Phase 11."), and the issue #59 user directive now pulls it
+forward --- SIGNED pre-releases under a NEW, dedicated release workflow,
+separate from `ci.yml`. Constraints that shape the design: ADR-0013 §7
+(signing keys live in GitHub Encrypted Secrets, referenced by name only
+in workflow YAML, never committed); ADR-0016 (never reintroduce emulator
+jobs; the instrumented egress suite stays a manual physical-device
+release gate); and the requirement that local development builds keep
+working with no secrets on the machine.
+
+**Decision.**
+
+1. **Dedicated release keystore, held only as GitHub Actions secrets.**
+   PKCS12, RSA-2048, alias `toadgallery-release`, validity 25 years (to
+   2051), dname CN=toadGALLERY, OU=Gallery, O=dukeoftoad, L=Internet,
+   C=IN. Keystore material is never committed (`.gitignore` excludes
+   keystore and key-property files by pattern); it exists only as the
+   secrets `TG_RELEASE_KEYSTORE_BASE64`, `TG_RELEASE_KEYSTORE_PASSWORD`,
+   `TG_KEY_ALIAS` and `TG_KEY_PASSWORD`.
+
+2. **A new, dedicated `Release` workflow** (`.github/workflows/release.yml`,
+   alongside but separate from `ci.yml`): triggers on tag push `v*` and
+   on `workflow_dispatch` with a `tag_name` input whose default is
+   computed from `versionName` (`v0.4.0-alpha-r<run_number>`), so a
+   testing pre-release can be cut ad hoc without hand-managing tags. The
+   job runs `assembleRelease`, which necessarily runs the ADR-0014 Layer 1
+   privacy gate too (the gate anchors on `assemble<Variant>`, so no
+   release APK escapes the offline-by-construction check).
+
+3. **Env-injected signingConfig with an unsigned fallback.** The release
+   `signingConfig` in `apps/gallery/build.gradle.kts` is wired from the
+   `TG_KEYSTORE_FILE` / `TG_KEYSTORE_PASSWORD` / `TG_KEY_ALIAS` /
+   `TG_KEY_PASSWORD` environment variables, which the workflow
+   materializes from its secrets (the base64 keystore is decoded to a
+   file). When any of them is absent --- a local dev machine --- the
+   release build falls back to an unsigned APK and still succeeds; no
+   local setup or secret is required to develop.
+
+4. **Hard `apksigner verify` gate pinning the signer certificate.** After
+   the build, the workflow verifies the APK and requires the SHA-256
+   digest of the signer certificate to be exactly
+   `8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494`;
+   anything else fails the run before the publish step. An unsigned APK,
+   or one signed with any other key, therefore can never be published
+   through this pipeline.
+
+5. **GitHub pre-release, never latest.** Publishing sets `prerelease:
+   true` and `make_latest: false` --- until v1.0, no testing build is
+   presented as the repository's latest release. The release attaches the
+   signed APK, a `.sha256` checksum, and the R8 `mapping.txt` (release
+   builds are minified; the mapping de-obfuscates crash traces from
+   testing devices). No emulator job is added (ADR-0016 §3 stands); the
+   instrumented egress suite remains the manual physical-device gate it
+   already is.
+
+**Consequences.**
+
+- Pro: Phase 3+ snapshots become installable, updatable testing builds ---
+  one sideload installs, and later pre-releases update in place because
+  the signing identity is stable from the first published APK.
+- Pro: the pinned digest makes authenticity mechanically checkable on
+  both sides: the workflow refuses to publish anything signed by any
+  other key, and a user can verify any downloaded APK with
+  `apksigner verify --print-certs` against the SHA-256 fingerprint
+  documented here and in the README.
+- Con: losing the keystore means a new signing identity --- sideload
+  updates over the old identity become impossible, and users must
+  uninstall and reinstall the newly-signed build. Mitigation: 25-year
+  validity, secrets held only in GitHub Encrypted Secrets, and the
+  digest pinned in both the workflow and the docs, so an identity change
+  is loud and documented, never silent.
+- Local development is unaffected: without the signing env vars the
+  release variant degrades to an unsigned build instead of failing; the
+  CI debug path is unchanged.
+- This is not a Play Store pipeline (no bundle, no store upload) and not
+  an F-Droid pipeline: F-Droid builds its own binaries and re-signs them,
+  so this signing identity governs the project's own testing/sideload
+  pre-releases only. Reproducible-build verification and F-Droid metadata
+  stay in Phase 11; the roadmap's Phase 11 deliverable line is annotated
+  accordingly.
+- Because dispatch computes a default `tag_name`, releases may be cut ad
+  hoc for testing without tagging manually; `v*` tag pushes remain the
+  canonical path that records history.
+
+**Open questions.**
+
+- Key rotation: if the keystore is ever lost or compromised, the only
+  path is a new identity (superseding ADR, new pinned digest, one-time
+  reinstall for sideload users). Play-style key-upgrade lineage is
+  deliberately out of scope pre-v1.0.
+- Whether the Release workflow should later emit build-attestation or
+  SBOM artifacts for the Phase 11 reproducible-build work is deferred
+  with that work.
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -882,3 +994,4 @@ that buffers whole files.
 | 0015 | Paging 3 for the incremental media timeline (issue #28) | ACCEPTED |
 | 0016 | CI scope: compile + JVM tests; instrumented tests on physical devices | ACCEPTED |
 | 0017 | Hidden vault crypto: Keystore AES-256-GCM + PBKDF2 PIN (issue #32) | ACCEPTED |
+| 0018 | Release signing and the pre-release pipeline (issue #59) | ACCEPTED |

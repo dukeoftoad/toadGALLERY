@@ -719,7 +719,13 @@ NLE. Bounded by ADR-0012.
 - License/attribution package and documented known limitations.
 - F-Droid metadata ready for submission.
 - CI workflow extended with release-signed APK production on tag
-  pushes.
+  pushes. **Pulled forward and delivered early (2026-10-31, issue #59,
+  ADR-0018):** the dedicated `Release` workflow signs testing APKs with
+  the project release key and publishes GitHub pre-releases (APK +
+  `.sha256` checksum + R8 `mapping.txt`), hard-gated by an
+  `apksigner verify` pin on the signer certificate digest. The Phase 11
+  remainder --- reproducible-build verification and F-Droid metadata ---
+  stays in Phase 11.
 
 #### Exit criteria
 

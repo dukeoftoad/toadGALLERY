@@ -1,5 +1,7 @@
 package io.github.dukeoftoad.gallery.data.vault
 
+import java.util.concurrent.atomic.AtomicLong
+
 /**
  * The pure, JVM-tested policy half of vault thumbnails (issue #58): the
  * downsample computation and the temporary-file naming/lifecycle rules that
@@ -7,6 +9,16 @@ package io.github.dukeoftoad.gallery.data.vault
  * arithmetic here means the exact halving contract and the plaintext-temp
  * policy are pinned by `VaultThumbnailPolicyTest` without any Android
  * machinery (ADR-0016).
+ *
+ * The issue #69 race guard also lives here (see [VaultLockGeneration] and
+ * [shouldPublishThumbnail]): `VaultViewModel.ensureThumbnails` checks the
+ * unlocked state BEFORE each decode, but a decode is a suspend call that
+ * spends real time in file I/O + cipher + BitmapFactory --- a lock /
+ * background event (ADR-0017 auto-lock) can land in the middle. The batch
+ * captures the lock-session generation at launch and re-checks it and the
+ * unlocked state IMMEDIATELY before publishing each bitmap; a bitmap decoded
+ * under generation G may only enter memory while the session still is G and
+ * still unlocked.
  *
  * Privacy (ADR-0010/ADR-0014): thumbnails are decoded from DECRYPTED vault
  * bytes in memory only (issue #58 hard rule --- no plaintext vault media ever
@@ -70,4 +82,49 @@ object VaultThumbnailPolicy {
         if (id.isEmpty() || id.any { it !in '0'..'9' }) return false
         return id.toLongOrNull()?.let { it > 0 } == true
     }
+
+    /**
+     * Issue #69: whether a decoded bitmap may be published into the
+     * in-memory thumbnail map. True ONLY when BOTH hold:
+     *  - [capturedGeneration] equals [currentGeneration] --- no lock/unlock
+     *    session boundary was crossed while the decode was suspended;
+     *  - [isUnlocked] --- the session is still unlocked right now.
+     *
+     * This is the immediate post-decode re-check the race demanded: the
+     * pre-decode guard alone cannot help, because the auto-lock
+     * (`VaultViewModel.onBackgrounded`) clears the map and can land in the
+     * middle of `repository.decodeThumbnail`, after which the still-running
+     * batch would otherwise repopulate plaintext pixels into locked-session
+     * memory.
+     */
+    fun shouldPublishThumbnail(
+        capturedGeneration: Long,
+        currentGeneration: Long,
+        isUnlocked: Boolean,
+    ): Boolean = capturedGeneration == currentGeneration && isUnlocked
+}
+
+/**
+ * The monotonic lock-session generation (issue #69): advances at EVERY
+ * boundary crossing of the vault's lock/unlock session line --- entering the
+ * unlocked session, and leaving it (auto-lock/background). A thumbnail batch
+ * captures [current] at launch and must re-validate against it immediately
+ * before publishing each bitmap (see [VaultThumbnailPolicy.shouldPublishThumbnail]).
+ *
+ * Pure JVM (a bare [AtomicLong]) so the token semantics are pinned by
+ * `VaultLockGenerationTest` without Android machinery; the ViewModel keeps a
+ * single instance.
+ */
+class VaultLockGeneration {
+    private val counter = AtomicLong(0L)
+
+    /** The generation a batch launched under. */
+    fun current(): Long = counter.get()
+
+    /**
+     * Bumps and returns the fresh generation; call at each session
+     * boundary (unlock success and lock alike). Monotonic: a stale capture
+     * can never match again, even after unlock-unlock-lock-unlock sequences.
+     */
+    fun advance(): Long = counter.incrementAndGet()
 }

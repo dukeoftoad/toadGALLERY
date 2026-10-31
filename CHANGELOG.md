@@ -211,6 +211,24 @@ All notable changes to toadGALLERY are documented here. The format follows
   marked DROPPED per ADR-0008; risk register updated (R-10 downgraded, R-14
   closed, R-16/R-17/R-18 added).
 
+### Fixed
+
+- Vault thumbnails can no longer be repopulated after locking (#69): a
+  thumbnail decode is a suspend call, and an auto-lock/background event
+  landing mid-decode used to race the still-running batch — it returned and
+  published freshly decrypted pixels into the CLEARED map of a locked
+  session. The guard is two-legged, per the defect report: a monotonic
+  lock-session generation token (`VaultLockGeneration`, advanced at every
+  unlock/lock boundary — `enterUnlockedSession` and `onBackgrounded`) that
+  each batch captures at launch, plus wholesale cancellation of the in-flight
+  batch jobs on lock; and the decisive half — every bitmap must re-validate
+  generation AND unlocked state IMMEDIATELY before it is published
+  (`VaultThumbnailPolicy.shouldPublishThumbnail`), so a stale bitmap is
+  dropped, never republished. Cross-session staleness is covered too: a
+  batch orphaned from a previous unlocked session can never match the new
+  generation. 7 new JVM tests pin the token semantics and the 2×2 publish
+  truth table (fresh+unlocked only).
+
 ## [0.3.3-alpha] — unreleased on main (versionCode 7)
 
 ### Added

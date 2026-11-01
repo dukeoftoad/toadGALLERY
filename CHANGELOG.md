@@ -4,9 +4,78 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 18)
+## [0.4.1-alpha] — unreleased on main (versionCode 22)
 
 ### Added
+
+- **Editable metadata fields (EXIF write-back)** (r15 round; the Phase 4
+  write path):
+  - A pure edit-capability gate (`MediaEditCapability`: EDITABLE /
+    READ_ONLY / UNSUPPORTED_FORMAT / NOT_ELIGIBLE / UNSUPPORTED_FIELD /
+    CONSENT_REQUIRED) with documented precedence; the GPS field is
+    consent-gated on API 29+ through the r14 machinery.
+  - The write flow opens the item's content URI read-write and saves
+    through `androidx.exifinterface`; the pinned 1.4.1's supported
+    write set and its inability to write `Rating`/`XPKeywords` were
+    verified from the sources jar — those fields render honest "later
+    round" states rather than silent no-op writes. PNG is excluded
+    because our own pinned reader cannot display a PNG EXIF result.
+  - The API 30+ `MediaStore.createWriteRequest` escalation is a pure
+    state machine (single-shot retry, stale-signal guards) behind a
+    thin activity-result shell; API 29 exactly reports the honest
+    read-only outcome (no dialog exists there).
+  - Details view: edit affordances on supported rows, live validation
+    in the editor dialog, writes off the main thread, honest
+    Saving/Failed/Denied states; a write re-enters the scan pipeline's
+    documented eventual-consistency contract.
+- **On-device map view** (r16 round; zero network tiles by
+  construction):
+  - The world renders from a bundled Natural Earth 110m land outline
+    (public domain, ~135 KB); a dependency-free GeoJSON parser,
+    equirectangular projection and grid clustering draw it (plus photo
+    dots) on a new Map tab; tapping a dot opens a location sheet → the
+    existing viewer. The offline tile-pack sideload is a documented
+    later-round contract (`docs/phase-4/on-device-map.md`), not a fake
+    tile loader.
+  - GPS persistence, Room v3 → v4 (non-destructive; the hand-written
+    v4 schema JSON was verified by re-implementing Room 2.8.5's
+    identityHash algorithm — it reproduces the committed v1–v3 hashes
+    byte-for-byte): latitude/longitude + provenance columns, written
+    by a `LocationIndexer` (a second `ScanIndexHook`, composite
+    fan-out) that parses EXIF GPS through the read boundary and
+    persists honest nulls while the platform redacts (API 29+
+    ungranted).
+  - The map's empty/consent states are honest (no coordinates yet vs
+    location consent off → Settings); the grant-triggered full re-pass
+    is a documented Phase 5 seam (`LocationConsentReindexPolicy`).
+- **Collections + smart-filter chips** (r17 round; Aves-style, design
+  reference only — no Dart port):
+  - A pure filter engine (media type incl. GIFs, favorites, folder,
+    date-range) with three JVM-tested projections — in-memory
+    predicate, MediaStore selection args, catalogue SQL WHERE —
+    applied on BOTH timeline paths (catalogue windows and legacy
+    MediaStore windows), so the grid never lies during cold start.
+  - Chips row on Photos (All / Photos / Videos / GIFs / Favorites,
+    clear-all) and a Collections section on Albums (derived, zero
+    persistence). The folder chip stays engine-only — the catalogue
+    has no bucket column — and date-range awaits its picker UI; both
+    are the honest subset, not lying chips.
+  - Flagged (pre-existing, NOT fixed here): search/favorites build
+    `media_type IN (1, 2)` but the platform reference says 2 = AUDIO
+    and 3 = VIDEO.
+- **Format-support audit** (r18 round; the deliverable is a cited
+  matrix):
+  - A magic-byte `FormatSniffer` (19 honest verdicts: JPEG/PNG/GIF/
+    WebP subtypes/HEIF/AVIF/TIFF-family RAWs incl. the DNGVersion
+    walk/ISO-BMFF brands/EBML, bounded reads, honest UNKNOWN) +
+    `FormatSupportCatalogue` (per-family still-decode / animated /
+    EXIF-read / EXIF-write / playback), and
+    `docs/phase-4/format-support-audit.md` — the format matrix with
+    repo cites or official-docs URLs on every platform claim, per-API
+    26→36 differences, and the honest-limitations register. Adoption
+    point (Phase 5): the unsupported-format surface + Details rows.
+  - 196 new JVM tests across the four rounds; all four PR suites ran
+    green on CI before merging.
 
 - **Metadata Details view (read path)** (r14 round; the first
   user-facing Phase 4 deliverable):

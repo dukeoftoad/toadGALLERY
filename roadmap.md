@@ -470,10 +470,45 @@ permission flow** (a pure JVM-tested state machine, a Settings
 "Location data" section, and Details-view GPS rows display-gated on
 the consent state via `MediaLocationDisplayRules.Default`).
 
-**Still open in Phase 4:** the editable metadata fields (EXIF
-write-back via `androidx.exifinterface`, then our IPTC/XMP wrappers),
-the on-device map view, collections/smart-filter chips, and the
-format-support audit deliverable.
+**Named follow-ups (the honest remainder of Phase 4):** the IPTC/XMP
+read+write wrappers (they build on r15's write spine), the offline
+tile-pack sideload implementation for the map, a catalogue bucket
+column before the folder chip can be surfaced, a writable path for the
+keywords/rating EXIF tags, and the pre-existing `media_type IN (1, 2)`
+search/favorites query bug flagged by the r17 round (the platform
+reference says 2 = AUDIO, 3 = VIDEO).
+
+#### Status — r15–r18 rounds (versionCode 22): the four still-open items landed
+
+The four parallel rounds of 2026-11-02 (built as four sibling branches,
+CI-validated, merged in sequence #86–#89) land the rest of Phase 4:
+
+- **r15 — editable metadata fields (EXIF write-back)**: a pure
+  edit-capability gate, the rw write flow through
+  `androidx.exifinterface` (saveAttributes, the pinned 1.4.1's verified
+  write set), the API 30+ `MediaStore.createWriteRequest` escalation
+  state machine, and Details-view edit affordances (date/time +
+  offset, GPS, copyright, comment). Platform-verified honesty: the
+  pinned library physically cannot write Rating/XPKeywords — those
+  render "later round" states instead of fake successes.
+- **r16 — on-device map view**: a bundled Natural Earth 110m world
+  outline (public domain), a dependency-free GeoJSON parser +
+  equirectangular projection + grid clustering, a consent-gated Map
+  tab, and GPS persistence (Room v3→v4: latitude/longitude +
+  provenance, a `LocationIndexer` as a second `ScanIndexHook`,
+  composite fan-out wiring). Zero network tiles ever; the tile-pack
+  sideload is a documented later-round contract
+  (`docs/phase-4/on-device-map.md`).
+- **r17 — collections + smart-filter chips**: a pure filter engine
+  projected three ways (in-memory, MediaStore selection, catalogue
+  WHERE) driving the Photos chips row (All/Photos/Videos/GIFs/
+  Favorites) on BOTH data paths, plus the Albums Collections section.
+  The folder chip stays engine-only (no bucket column in the catalogue
+  — the honest subset), date-range likewise.
+- **r18 — format-support audit**: a magic-byte sniffer + capability
+  catalogue (48 JVM tests, the signature-level sample corpus) and
+  `docs/phase-4/format-support-audit.md` — the cited format matrix
+  (every platform claim carries a repo cite or an official-docs URL).
 
 #### Tasks
 

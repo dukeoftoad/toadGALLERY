@@ -1,21 +1,25 @@
-# Phase 3 device-validation checklist — v0.4.1-alpha (r10)
+# Phase 3 device-validation checklist — v0.4.1-alpha (r11)
 
-**Status:** pending device validation (the Phase 3 exit work + the r10
+**Status:** pending device validation (the Phase 3 exit work + the r11
 fix; see `roadmap.md`'s Phase 3 progress note).\
-**Target build:** `toadGALLERY-0.4.1-alpha-r10.apk` from the
-`v0.4.1-alpha-r10` pre-release (versionCode 14). r10 fixes the single
-r9 device finding — the biometric-sheet crash
-(`IllegalArgumentException: Negative text must be set and non-empty.`)
-— and ships the Phase 4 contract foundation, which has NO user-facing
-surface yet (no UI consumes it; regressions there would surface as
+**Target build:** `toadGALLERY-0.4.1-alpha-r11.apk` from the
+`v0.4.1-alpha-r11` pre-release (versionCode 15). r10's fix moved the
+same crash one validation later — build 14 still died on the same tap,
+now with `Crypto-based authentication is not supported for Class 2
+(Weak) biometrics.` — and r11 fixes the authenticator class itself
+(`BIOMETRIC_STRONG` end to end; see section 5's r11 addendum and
+section 13). The Phase 4 contract foundation still has NO user-facing
+surface (no UI consumes it; regressions there would surface as
 startup/surface crashes, which section 12's smoke pass covers).
 Sections 1–11 carry over from r8/r9 (8 from r7, 3 from r8, 1 fixed in
-r9's round).\
+r9's round); section 12 is the r10 smoke pass.\
 **Reference device:** the Xiaomi device used for the 2026-10-30/31 and
 11-01 logcat reviews (`c2.qti.hevc.decoder` hardware; 10-bit HEVC Main10
 sample in MKV; `getFrameAtTime` NULL-frame samples; the build-11/12
 "vault PIN creating failed", the r8 `Index: 60, Size: 60` crash and
-the r9 `Negative text must be set` biometric crash).\
+the r9 `Negative text must be set` biometric crash); the build-14
+validation ran on the user's Redmi veux (Android 13), which reproduced
+the same crash one validation later.\
 **Method:** install over the previous build, run each section, note
 pass/fail + a logcat snippet for anything unexpected. For vault/diagnostic
 sections also capture the in-app log: `adb logcat -s ToadDiag ToadVault`
@@ -72,6 +76,17 @@ Sections 1–8 map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
       restores to the same album.
 
 ## 5. Vault biometric unlock (#57, ADR-0019; the r10 fix)
+
+> **r11 addendum — re-run this round on build 15 with updated
+> expectations.** r10 fixed the prompt's missing negative text, but the
+> same tap still crashed on build 14 (the authenticator class itself,
+> not the negative button); r11 fixes that. On build 15: (1) the
+> biometric sheet must APPEAR (no crash) with the **Use PIN** negative
+> button; (2) a successful fingerprint opens the vault; (3) **Use PIN**
+> returns to the PIN screen; (4) the enroll toggle round likewise; (5)
+> IF the device's fingerprint is not Class 3, the biometric affordances
+> are absent and PIN unlock works — that is the intended degradation,
+> not a failure. Section 13 is the build-15 pass record.
 
 - [ ] **The r10 regression check first (build 13 crashed here):** with
       biometrics enrolled and the binding ON, tapping "Unlock with
@@ -188,12 +203,67 @@ regression smoke pass.
       `AndroidRuntime` FATAL lines in logcat across the whole session
       (the new code must be inert until a consumer wires it up).
 - [ ] About → Diagnostics: the vault state probe and the log ring still
-      work; the build line reads `0.4.1-alpha (build 14)`.
+      work; the build line reads `0.4.1-alpha (build 15)`.
 - [ ] The r9 vault behaviors still hold on this build: setup commits
       (`ToadVault: setup: committed`), unlock with PIN works, the
       auto-lock timer fires, and section 5's biometric round passes.
 - [ ] No unexpected process restarts while browsing/editing/moving
       items (the Phase 4 code adds zero startup hooks on purpose).
+
+## 13. r11 pass — the authenticator-class fix on build 15
+
+r10's "Use PIN" fix moved the same crash one validation later: build 14
+still died on the same tap, now with
+`IllegalArgumentException: Crypto-based authentication is not supported
+for Class 2 (Weak) biometrics.` — the library tests the REQUESTED
+authenticator flags (the CryptoObject-bound `BIOMETRIC_WEAK` prompt),
+not the device's sensor class, so the path crashed on every device. r11
+requests `BIOMETRIC_STRONG` end to end. Re-run the section-5 biometric
+round (with the r11 addendum) on build 15, in whichever branch the
+device falls into, plus the PIN regressions.
+
+### The section-5 biometric round, re-run on build 15
+
+Class 3 branch (device has a Class 3 fingerprint sensor and
+enrollment):
+
+- [ ] With biometrics enrolled and the binding ON, tapping "Unlock with
+      biometrics" shows the biometric sheet — NOT a crash — and the
+      sheet carries the **Use PIN** negative button.
+- [ ] A successful fingerprint opens the same unlocked session a
+      correct PIN does.
+- [ ] The sheet's Use PIN button returns to the PIN screen silently
+      (the CANCELLED path is quiet by design).
+- [ ] The enroll toggle round likewise: with the vault unlocked,
+      enabling "Unlock with biometrics" prompts the hardware keyguard,
+      succeeds, and that sheet also shows Use PIN and does not crash.
+
+Class 2 branch (no Class 3 sensor, or no Class 3-enrolled fingerprint):
+
+- [ ] The vault shows NO biometric affordances (no "Unlock with
+      biometrics" affordance; the enroll toggle is absent/disabled):
+      the readiness probe now uses `canAuthenticate(BIOMETRIC_STRONG)`,
+      so the device lands in the `Unsupported` readiness.
+- [ ] PIN unlock works exactly as before — that degradation is the
+      intended behavior, not a failure (a Class 2 biometric cannot
+      authorize an auth-per-use AndroidKeyStore key at all).
+
+### Vault PIN regression (unchanged by r11)
+
+- [ ] Vault setup commits (`ToadVault: setup: committed`); unlock with
+      a correct PIN opens the session and a wrong PIN is rejected.
+- [ ] Auto-lock on background still fires; the locked vault requires
+      the PIN (or, on the Class 3 branch, biometrics) again.
+
+### No-new-FATAL scan — with the stale-buffer guidance
+
+- [ ] No `AndroidRuntime` FATAL lines attributable to build 15 across
+      the whole session. **Stale-buffer guidance:** the previous device
+      log may still contain FATAL entries from older builds until the
+      device is rebooted — the build under test's crashes are
+      identified by the per-frame `r8-map-id` hash (all frames of one
+      APK share one id; compare against the current build's), so old
+      map-ids do NOT count as current-build findings.
 
 ---
 

@@ -78,7 +78,13 @@ object CanonicalDecodePlanner {
      *
      * **Memory budget (evaluated at sample size 1).** The guard compares
      * the FULL-RESOLUTION ARGB_8888 footprint --- [srcWidth] *
-     * [srcHeight] * 4 --- against [memoryBudgetBytes]. Sample 1, the
+     * [srcHeight] * 4 --- against [memoryBudgetBytes], evaluated with
+     * overflow-safe arithmetic: containers report dimensions as raw
+     * `Int`s, so an adversarial or corrupt file can claim
+     * `Int.MAX_VALUE`-scale edges whose pixel/byte product overflows
+     * `Long`; the guard divides the budget down per dimension instead of
+     * multiplying the dimensions up, so no magnitude can wrap into a
+     * falsely-accepted plan. Sample 1, the
      * smallest sample size, is the most memory ANY decode path could
      * demand, and `inSampleSize` is only a HINT: `BitmapFactory` documents
      * that codecs may honour it approximately, and some paths (HEIF/RAW
@@ -147,8 +153,20 @@ object CanonicalDecodePlanner {
         // Budget guard at the smallest sample size (1): the full-resolution
         // ARGB footprint is the one allocation the planner cannot rule out,
         // because inSampleSize is a hint, not a promise.
-        val fullResolutionBytes: Long = srcWidth.toLong() * srcHeight.toLong() * BYTES_PER_PIXEL
-        if (fullResolutionBytes > memoryBudgetBytes) return null
+        //
+        // Overflow-safe by construction (audit finding J): the naive
+        // `srcWidth.toLong() * srcHeight.toLong() * BYTES_PER_PIXEL` wraps
+        // for Int.MAX_VALUE-scale dimension pairs (product ~1.8e19 >
+        // Long.MAX), and the wrapped value can go NEGATIVE, slipping
+        // through a `> budget` check. Comparing by division instead ---
+        // `H > (budget / 4) / W` --- is the exact same integer inequality
+        // (W * H * 4 <= budget  <=>  H <= (budget / 4) / W for W > 0, both
+        // sides floor division) with no multiplication anywhere, so every
+        // magnitude is handled and the budget boundary stays inclusive.
+        // A negative budget divides to a negative bound and refuses
+        // everything, deterministically.
+        val maxPixelsAtBudget: Long = memoryBudgetBytes / BYTES_PER_PIXEL
+        if (srcHeight.toLong() > maxPixelsAtBudget / srcWidth.toLong()) return null
 
         val swapForUpright: Boolean =
             orientationDegrees == ORIENTATION_90 || orientationDegrees == ORIENTATION_270
@@ -167,6 +185,11 @@ object CanonicalDecodePlanner {
             // Floor of the exact rational short/long * maxDimension; the
             // floor costs < 1px of aspect fidelity and stays deterministic
             // across devices (no float rounding debates).
+            // Overflow-safe (audit finding J): shortSide <= longSide and
+            // both are <= Int.MAX_VALUE, so shortSide.toLong() *
+            // maxDimension <= (2^31 - 1)^2 ~ 4.6e18 < Long.MAX --- the Long
+            // product can never wrap, and the quotient is < maxDimension so
+            // the toInt() narrowing is exact.
             val targetShortSide: Int =
                 ((shortSide.toLong() * maxDimension) / longSide).toInt().coerceAtLeast(1)
             if (uprightWidth >= uprightHeight) {
@@ -206,6 +229,11 @@ object CanonicalDecodePlanner {
             targetWidth = targetWidth,
             targetHeight = targetHeight,
             swapDimensionsForUpright = swapForUpright,
+            // Overflow-safe (audit finding J): the never-upscale rule keeps
+            // each target edge <= its upright source edge, so the target
+            // area is <= the source area already proven (above) to satisfy
+            // W * H * 4 <= budget in exact integer arithmetic --- the Long
+            // product here can never wrap for any plan that reaches it.
             estimatedBitmapBytes = targetWidth.toLong() * targetHeight.toLong() * BYTES_PER_PIXEL,
         )
     }

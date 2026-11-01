@@ -55,18 +55,34 @@ import javax.crypto.spec.GCMParameterSpec
  * `BIOMETRIC_WEAK` and no negative button text throws
  * `IllegalArgumentException("Negative text must be set and non-empty.")`
  * from `PromptInfo.Builder.build()` the moment the biometric sheet is
- * shown. The negative text is REQUIRED here because a CryptoObject-bound
- * prompt cannot combine `BIOMETRIC_WEAK` with `DEVICE_CREDENTIAL` (the
- * Keystore handshake only authorizes a biometric round), so the prompt
- * has no credential fallback to substitute for the negative button. The
- * construction is isolated in [promptInfoBuilder] and pinned by
- * `VaultBiometricsPromptInfoTest` on the JVM (the rest of this object
- * stays hardware-bound and untested --- ADR-0016). One JVM limitation,
- * stated honestly: `PromptInfo.Builder.build()` itself calls
- * `android.text.TextUtils`, which the unit-test stub does not implement ---
- * so the suite pins the BUILDER state (negative text set, BIOMETRIC_WEAK,
- * no confirmation) via reflection and leaves the library's own `build()`
- * enforcement to the r10 device checklist.
+ * shown. The negative button is mandatory here because the prompt allows
+ * no `DEVICE_CREDENTIAL` fallback (a crypto prompt is biometric-only ---
+ * the Keystore handshake only authorizes a biometric round), and
+ * androidx.biometric requires non-empty negative text whenever device
+ * credential is not allowed. The construction is isolated in
+ * [promptInfoBuilder] and pinned by `VaultBiometricsPromptInfoTest` on the
+ * JVM (the rest of this object stays hardware-bound and untested ---
+ * ADR-0016). One JVM limitation, stated honestly: `PromptInfo.Builder.build()`
+ * itself calls `android.text.TextUtils`, which the unit-test stub does not
+ * implement --- so the suite pins the BUILDER state (negative text set,
+ * BIOMETRIC_STRONG, no confirmation) via reflection and leaves the
+ * library's own `build()` enforcement to the device checklist.
+ *
+ * r11 device fix (build 14 crash): the SAME tap crashed one validation
+ * later with `IllegalArgumentException("Crypto-based authentication is not
+ * supported for Class 2 (Weak) biometrics.")` from
+ * `BiometricPrompt.authenticate(PromptInfo, CryptoObject)`: the prompt
+ * requested `BIOMETRIC_WEAK` while binding a CryptoObject, a combination
+ * androidx.biometric 1.1.0 rejects unconditionally (the check tests the
+ * requested authenticator flags, not the device's sensor class --- the
+ * error's "Class 2" wording names the requested class, not the test
+ * device's sensor; the path crashed on every device, not only
+ * Class-2-sensor devices). A CryptoObject-bound prompt must request
+ * `BIOMETRIC_STRONG` --- the library's own default for crypto sessions
+ * when no authenticators are set is exactly that. The fix switches the
+ * builder and the [canPrompt] probe to STRONG, so devices without a
+ * Class 3 sensor/enrollment honestly offer PIN-only via
+ * [VaultBiometricSupport]'s `Unsupported` state.
  */
 object VaultBiometrics {
 
@@ -105,14 +121,19 @@ object VaultBiometrics {
     }
 
     /**
-     * True when this device can prompt RIGHT NOW for a `BIOMETRIC_WEAK`
-     * authenticator (hardware present AND at least one biometric enrolled).
-     * `BIOMETRIC_WEAK` is the class a CryptoObject-bound key may authorize;
-     * the vault accepts it --- the auth-bound key is the gate, not the
-     * authenticator class (ADR-0019).
+     * True when this device can prompt RIGHT NOW for a `BIOMETRIC_STRONG`
+     * (Class 3) authenticator --- hardware present AND at least one Class 3
+     * biometric enrolled. The vault's CryptoObject handshake can only be
+     * authorized by a Class 3 biometric (androidx.biometric enforces it, and
+     * only Class 3 can authorize an auth-per-use AndroidKeyStore key
+     * operation), so this is the honest probe (ADR-0019). On devices whose
+     * sensor/enrollment is only Class 2 (Weak), this returns false and the
+     * vault's readiness machine ([VaultBiometricSupport]) lands in
+     * `Unsupported` --- PIN-only, no biometric UI, the truthful degradation
+     * (a Class 2 biometric cannot gate this key at all).
      */
     fun canPrompt(context: Context): Boolean =
-        BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
+        BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
             BiometricManager.BIOMETRIC_SUCCESS
 
     /**
@@ -256,10 +277,17 @@ object VaultBiometrics {
     /**
      * The vault's [BiometricPrompt.PromptInfo] [BiometricPrompt.PromptInfo.Builder],
      * configured but NOT built --- the seam the JVM suite pins (see the r10
-     * note on the object): `BIOMETRIC_WEAK` + CryptoObject means the
-     * negative button is mandatory, so the builder ALWAYS sets non-empty
-     * text. Parameters are plain `CharSequence`s --- no `Context` --- so the
-     * test classpath needs no Android framework.
+     * and r11 notes on the object): the CryptoObject-bound prompt MUST
+     * request `BIOMETRIC_STRONG` --- androidx.biometric 1.1.0's
+     * `authenticate(PromptInfo, CryptoObject)` rejects any
+     * allowed-authenticator set that includes `BIOMETRIC_WEAK` (the
+     * build-14 crash), because crypto-bound Keystore auth requires a
+     * Class 3 (Strong) biometric; the check tests the requested flags, not
+     * the device's sensor class, so WEAK+crypto threw on every device.
+     * STRONG alone still means no `DEVICE_CREDENTIAL` fallback, so the
+     * builder ALWAYS sets non-empty negative text. Parameters are plain
+     * `CharSequence`s --- no `Context` --- so the test classpath needs no
+     * Android framework.
      */
     internal fun promptInfoBuilder(
         title: CharSequence,
@@ -270,7 +298,7 @@ object VaultBiometrics {
             .setTitle(title)
             .setSubtitle(subtitle)
             .setNegativeButtonText(negativeText)
-            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .setConfirmationRequired(false)
 
     /** The built prompt the two verbs authenticate with; see [promptInfoBuilder]. */

@@ -1,6 +1,8 @@
 package io.github.dukeoftoad.gallery.metadata.exif
 
 import androidx.exifinterface.media.ExifInterface
+import io.github.dukeoftoad.gallery.data.media.dates.CaptureDateSource
+import io.github.dukeoftoad.gallery.data.media.dates.DateCandidate
 import io.github.dukeoftoad.gallery.metadata.CameraInfo
 import io.github.dukeoftoad.gallery.metadata.CaptureDateSources
 import io.github.dukeoftoad.gallery.metadata.ExposureInfo
@@ -24,6 +26,30 @@ import java.io.IOException
 object ExifTags {
     /** EXIF capture datetime, `yyyy:MM:dd HH:mm:ss` in naive local time. */
     const val DATE_TIME_ORIGINAL = "DateTimeOriginal"
+
+    /**
+     * EXIF digitization datetime, same naive `yyyy:MM:dd HH:mm:ss` form
+     * as [DATE_TIME_ORIGINAL] (EXIF `CreateDate`; usually identical, and
+     * the fallback candidate when the original tag is missing).
+     */
+    const val DATE_TIME_DIGITIZED = "DateTimeDigitized"
+
+    /**
+     * ISO 8601 zone offset (`±HH:MM`) that interprets [DATE_TIME_ORIGINAL],
+     * added by EXIF 2.3.1. Absent on most legacy files; when missing the
+     * naive datetime keeps the UTC-anchor convention and downstream passes
+     * record the assumption.
+     */
+    const val OFFSET_TIME_ORIGINAL = "OffsetTimeOriginal"
+
+    /** The zone offset interpreting [DATE_TIME_DIGITIZED], same form as [OFFSET_TIME_ORIGINAL]. */
+    const val OFFSET_TIME_DIGITIZED = "OffsetTimeDigitized"
+
+    /**
+     * Fractional seconds of [DATE_TIME_ORIGINAL] as a decimal-digit
+     * string (`"123"` = 0.123 s); variable length, digits only.
+     */
+    const val SUBSEC_TIME_ORIGINAL = "SubSecTimeOriginal"
 
     /** Camera manufacturer string. */
     const val MAKE = "Make"
@@ -73,6 +99,10 @@ object ExifTags {
     /** Every tag [AndroidExifReader] extracts for [ParsedExif]. */
     val ALL: List<String> = listOf(
         DATE_TIME_ORIGINAL,
+        DATE_TIME_DIGITIZED,
+        OFFSET_TIME_ORIGINAL,
+        OFFSET_TIME_DIGITIZED,
+        SUBSEC_TIME_ORIGINAL,
         MAKE,
         MODEL,
         LENS_MODEL,
@@ -136,6 +166,12 @@ interface ExifReader {
  *    the values that are corrupt);
  *  - some parse, some do not -> PRESENT with the unparseable fields
  *    `null` --- a missing f-number must not hide a good ISO.
+ *
+ * Capture dates additionally flow through [captureDateCandidates] as
+ * resolver-ready [DateCandidate]s (one per datetime tag, EXIF_ORIGINAL
+ * ranked above EXIF_DIGITIZED); the snapshot's flat
+ * `exifCaptureDateMillis` field keeps its pre-existing raw-UTC-anchor
+ * meaning and stays untouched.
  */
 class ParsedExif(val tagValues: Map<String, String>) {
 
@@ -173,6 +209,72 @@ class ParsedExif(val tagValues: Map<String, String>) {
                 nonBlankTag(ExifTags.DATE_TIME_ORIGINAL),
             ),
         )
+    }
+
+    /**
+     * Resolver-ready capture-date candidates (audit finding I): one
+     * [DateCandidate] per datetime tag that parses, in the list order
+     * EXIF_ORIGINAL then EXIF_DIGITIZED (the resolver ranks by source
+     * ordinal, not list order --- the order here is just extraction
+     * stability).
+     *
+     * Per-candidate conventions:
+     *  - [DateCandidate.epochMillis] interprets the naive local datetime
+     *    with the file's own OffsetTime tag when that tag parsed, and
+     *    anchors at UTC otherwise --- [ExifMath.parseExifDateTimeWithOffset]
+     *    documents exactly that split. The EXIF placeholder `"  :  :  "`
+     *    and any other malformed datetime yield NO candidate (never a
+     *    sentinel instant).
+     *  - [DateCandidate.timezoneOffsetMinutes] is the parsed EXIF offset,
+     *    or `null` when the OffsetTime* tag is absent OR unparseable ---
+     *    i.e. `null` always means "the extractor made no zone decision",
+     *    so the dates package applies its device-zone assumption there
+     *    and records it.
+     *  - [DateCandidate.subsecondMillis] comes from SubSecTimeOriginal
+     *    (EXIF_ORIGINAL only; the Digitized subsecond tag is not read
+     *    this round) and defaults to 0, per the MediaDates contract.
+     *
+     * The [CaptureDateSources.exif] availability flag stays keyed to
+     * DateTimeOriginal alone; a file carrying only DateTimeDigitized
+     * still yields an EXIF_DIGITIZED candidate here.
+     */
+    fun captureDateCandidates(): List<DateCandidate> {
+        val candidates = mutableListOf<DateCandidate>()
+        val originalText = nonBlankTag(ExifTags.DATE_TIME_ORIGINAL)
+        if (originalText != null) {
+            val offsetMinutes =
+                ExifMath.parseExifOffsetTime(nonBlankTag(ExifTags.OFFSET_TIME_ORIGINAL))
+            val subsecondMillis =
+                ExifMath.parseExifSubsecond(nonBlankTag(ExifTags.SUBSEC_TIME_ORIGINAL))
+            val epochMillis = ExifMath.parseExifDateTimeWithOffset(originalText, offsetMinutes)
+            if (epochMillis != null) {
+                candidates.add(
+                    DateCandidate(
+                        source = CaptureDateSource.EXIF_ORIGINAL,
+                        epochMillis = epochMillis,
+                        timezoneOffsetMinutes = offsetMinutes,
+                        subsecondMillis = subsecondMillis ?: 0,
+                    ),
+                )
+            }
+        }
+        val digitizedText = nonBlankTag(ExifTags.DATE_TIME_DIGITIZED)
+        if (digitizedText != null) {
+            val offsetMinutes =
+                ExifMath.parseExifOffsetTime(nonBlankTag(ExifTags.OFFSET_TIME_DIGITIZED))
+            val epochMillis = ExifMath.parseExifDateTimeWithOffset(digitizedText, offsetMinutes)
+            if (epochMillis != null) {
+                candidates.add(
+                    DateCandidate(
+                        source = CaptureDateSource.EXIF_DIGITIZED,
+                        epochMillis = epochMillis,
+                        timezoneOffsetMinutes = offsetMinutes,
+                        subsecondMillis = 0,
+                    ),
+                )
+            }
+        }
+        return candidates
     }
 
     /** Camera strings: PRESENT with per-field nulls, ABSENT when all missing. */

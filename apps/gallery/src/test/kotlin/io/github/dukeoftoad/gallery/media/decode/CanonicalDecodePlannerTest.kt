@@ -231,6 +231,73 @@ class CanonicalDecodePlannerTest {
     }
 
     // ------------------------------------------------------------------
+    // Overflow: adversarial dimensions must refuse (or plan) deterministically
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `a one-by-one image plans a one-pixel target`() {
+        val plan = CanonicalDecodePlanner.plan(1, 1, 0)!!
+        assertEquals(1, plan.inSampleSize)
+        assertEquals(1, plan.targetWidth)
+        assertEquals(1, plan.targetHeight)
+        assertEquals(4L, plan.estimatedBitmapBytes)
+    }
+
+    @Test
+    fun `half-of-Int-max dimensions are refused by the default budget`() {
+        // 1073741823^2 * 4 ~ 4.6e18 bytes: the Long product itself does not
+        // wrap, but it is far over the 48 MiB default --- refused by the
+        // budget arithmetic, never handed to the decoder to find out.
+        assertNull(CanonicalDecodePlanner.plan(Int.MAX_VALUE / 2, Int.MAX_VALUE / 2, 0))
+    }
+
+    @Test
+    fun `a dimension product that overflows Long is refused even at Long-max budget`() {
+        // Int.MAX_VALUE^2 * 4 ~ 1.8e19 wraps past Long.MAX_VALUE; a naive
+        // multiply-then-compare guard lets the wrapped NEGATIVE product
+        // through ANY budget. The division-based guard refuses it at every
+        // magnitude, deterministically.
+        assertNull(
+            CanonicalDecodePlanner.plan(Int.MAX_VALUE, Int.MAX_VALUE, 0, 1024, Long.MAX_VALUE),
+        )
+    }
+
+    @Test
+    fun `an area that overflows Int but fits Long plans with a matching budget`() {
+        // 10^12 pixels: over Int.MAX_VALUE as an Int product, but the
+        // 4e12-byte sample-1 footprint fits the given Long budget, so the
+        // plan must come out geometrically exact, not wrapped.
+        val plan = CanonicalDecodePlanner.plan(1_000_000, 1_000_000, 0, 1024, 5_000_000_000_000L)!!
+        assertEquals(1024, plan.targetWidth)
+        assertEquals(1024, plan.targetHeight)
+        assertEquals(1 shl 10, plan.inSampleSize)
+        assertEquals(1024L * 1024 * 4, plan.estimatedBitmapBytes)
+    }
+
+    @Test
+    fun `Int-max-scale dimensions plan deterministically at the sampling ceiling`() {
+        // Int.MAX_VALUE / 2 edges with a maximal budget: exercises the
+        // budget comparison and the sampling doubling loop at magnitudes no
+        // real image reaches, and lands on the 2^20 ceiling exactly.
+        val plan = CanonicalDecodePlanner.plan(
+            Int.MAX_VALUE / 2,
+            Int.MAX_VALUE / 2,
+            0,
+            1024,
+            Long.MAX_VALUE,
+        )!!
+        assertEquals(1024, plan.targetWidth)
+        assertEquals(1024, plan.targetHeight)
+        assertEquals(1 shl 20, plan.inSampleSize)
+        assertEquals(1024L * 1024 * 4, plan.estimatedBitmapBytes)
+    }
+
+    @Test
+    fun `a negative memory budget refuses everything deterministically`() {
+        assertNull(CanonicalDecodePlanner.plan(8, 8, 0, 8, -1L))
+    }
+
+    // ------------------------------------------------------------------
     // Invalid inputs: every one returns null, never a nonsense plan
     // ------------------------------------------------------------------
 

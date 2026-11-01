@@ -55,7 +55,7 @@ class MediaScanRowTest {
     }
 
     @Test
-    fun `generation token defaults to null for pre-30 scans`() {
+    fun `per-row generation stamp defaults to null for pre-30 scans`() {
         val row = MediaScanRow(
             localMediaKey = "external_primary:1",
             canonicalUri = "content://media/external/images/1",

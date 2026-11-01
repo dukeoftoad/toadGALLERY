@@ -20,6 +20,9 @@ class MediaRevisionTest {
     private val base = MediaRevision(
         sizeBytes = 4_096_000L,
         dateModifiedMillis = 1_700_000_000_000L,
+        // The item's OWN per-row generation-modified stamp
+        // (MediaColumns.GENERATION_MODIFIED) --- NOT the per-volume
+        // MediaStore.getGeneration scan checkpoint (audit finding C).
         generationToken = "gen-7",
         metadataWriteRevision = 0,
         contentFingerprint = "sha256:aa",
@@ -56,7 +59,7 @@ class MediaRevisionTest {
     }
 
     @Test
-    fun `two observed generation tokens that disagree are content changed`() {
+    fun `two observed per-row generation-modified values that disagree are content changed`() {
         assertEquals(
             RevisionDelta.CONTENT_CHANGED,
             base.diff(base.copy(generationToken = "gen-8")),
@@ -97,7 +100,7 @@ class MediaRevisionTest {
     }
 
     @Test
-    fun `a generation token appearing after an os upgrade is not a content change`() {
+    fun `a per-row generation-modified value appearing after an os upgrade is not a content change`() {
         val beforeUpgrade = base.copy(generationToken = null)
         // Same story as fingerprints: API 30+ starts exposing generations
         // for identical bytes; invalidating AI on upgrade would be wrong.

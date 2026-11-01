@@ -44,7 +44,15 @@ android {
         // Phase 4 contract foundation (media identity/eligibility,
         // revision, dates, metadata seams, Room catalogue, change feed,
         // read boundary, decode plan) that has no UI yet.
-        versionCode = 14
+        // versionCode 15 (r11 round): the build-14 device finding --- the
+        // biometric crypto prompt crashed on `Crypto-based authentication
+        // is not supported for Class 2 (Weak) biometrics.` (androidx.biometric
+        // 1.1.0 rejects a CryptoObject-bound prompt that requests
+        // BIOMETRIC_WEAK, unconditionally); the prompt and the readiness
+        // probe now use BIOMETRIC_STRONG, Class-2-only devices honestly
+        // get PIN-only, plus the audit's Room transactional and
+        // schema-export hardening.
+        versionCode = 15
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
@@ -238,6 +246,18 @@ configurations.configureEach {
             }
         }
     }
+}
+
+/**
+ * Room schema export (Phase 4 audit finding K): the Room KSP processor
+ * writes one versioned JSON snapshot per database version into the
+ * directory below (MediaCatalogueDatabase is at version 1), and those
+ * snapshots are committed to source control --- every schema change ships
+ * with a reviewable diff, and migrations must be judged against them
+ * before any schema-changing release. See apps/gallery/schemas/README.md.
+ */
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

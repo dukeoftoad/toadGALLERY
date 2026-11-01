@@ -2,6 +2,7 @@ package io.github.dukeoftoad.gallery.data.catalogue.room
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 
 /**
@@ -14,6 +15,14 @@ import androidx.room.Upsert
  * ([io.github.dukeoftoad.gallery.data.media.changes.CatalogueReconciler]
  * for the diff; the caller for policy). The DAO only stores and fetches
  * whole rows.
+ *
+ * Two operations are composite [Transaction]s (Phase 4 audit finding D):
+ * [removeItemsAndWriteTombstones] (delete + tombstone in one transaction)
+ * and [upsertItemsAndClearTombstones] (upsert + tombstone clear in one
+ * transaction), so a process interruption can never leave the paired
+ * halves half-applied. `@Transaction` on suspend DAO methods is the
+ * suspend-native spelling of `RoomDatabase.runInTransaction` and needs no
+ * API beyond the already-present room-ktx coroutine support.
  *
  * All functions are `suspend`: room-ktx dispatches them off the calling
  * thread, so callers never block the main thread on disk I/O.
@@ -47,6 +56,26 @@ interface CatalogueDao {
     @Query("DELETE FROM catalogue_items WHERE localMediaKey IN (:localMediaKeys)")
     suspend fun deleteItemsByLocalMediaKey(localMediaKeys: List<String>)
 
+    /**
+     * The atomic remove/tombstone transition (Phase 4 audit finding D):
+     * deletes the live rows AND writes their tombstones inside ONE Room
+     * transaction, so a process interruption can leave the catalogue in
+     * exactly two states --- both halves applied, or neither. Before this
+     * wrapper existed a crash between the two writes left a live row
+     * without a tombstone (healed by the next scan, but only by then).
+     * Idempotent: re-running the same call converges to the same state
+     * (deleting absent rows and re-upserting the same tombstone are no-ops
+     * in effect). Callers reach this via [RoomMediaCatalogue.tombstone].
+     */
+    @Transaction
+    suspend fun removeItemsAndWriteTombstones(
+        localMediaKeys: List<String>,
+        tombstones: List<CatalogueTombstoneEntity>,
+    ) {
+        deleteItemsByLocalMediaKey(localMediaKeys)
+        upsertTombstones(tombstones)
+    }
+
     // --- Tombstones ---------------------------------------------------------
 
     /** Writes/refreshes the tombstone rows for the given keys. */
@@ -64,6 +93,27 @@ interface CatalogueDao {
      */
     @Query("DELETE FROM catalogue_tombstones WHERE localMediaKey IN (:localMediaKeys)")
     suspend fun deleteTombstonesByLocalMediaKey(localMediaKeys: List<String>)
+
+    /**
+     * The atomic upsert/restore transition (Phase 4 audit finding D):
+     * upserts the live rows AND clears their tombstones inside ONE Room
+     * transaction, so a process interruption can leave the catalogue in
+     * exactly two states --- both halves applied, or neither. The old
+     * two-call sequencing (item upsert, then tombstone clear) could crash
+     * in between and leave a resurrected row still reported dead by
+     * `tombstonedKeys()` until the next authoritative scan healed it.
+     * Idempotent: re-running converges (re-upsert of the same rows and
+     * re-deletion of absent tombstones are no-ops in effect). Callers
+     * reach this via [RoomMediaCatalogue.upsertAll].
+     */
+    @Transaction
+    suspend fun upsertItemsAndClearTombstones(
+        items: List<CatalogueItemEntity>,
+        clearedLocalMediaKeys: List<String>,
+    ) {
+        upsertItems(items)
+        deleteTombstonesByLocalMediaKey(clearedLocalMediaKeys)
+    }
 
     /**
      * Drops tombstones STRICTLY older than [cutoffMillis] (retention

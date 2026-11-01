@@ -38,8 +38,17 @@ data class MediaScanRow(
     /** Provider `date_added` in epoch millis. */
     val dateAddedMillis: Long,
     /**
-     * The MediaStore per-volume generation token (API 30+), part of the
-     * observed revision; `null` below API 30.
+     * The media item's OWN per-row MediaStore generation stamp ---
+     * `MediaStore.MediaColumns.GENERATION_MODIFIED` of THIS row (API 30+),
+     * part of the observed revision; `null` below API 30.
+     *
+     * Deliberately NOT the per-volume `MediaStore.getGeneration` value:
+     * that is the SCAN CHECKPOINT (see [MediaChangeFeed.currentGeneration])
+     * and moves whenever ANY item on the volume changes. Stamping the
+     * volume checkpoint here would make every row report as changed after
+     * every edit anywhere on the volume --- a full re-index storm (audit
+     * finding C). The scan producer must read the row's
+     * GENERATION_MODIFIED column into this field.
      */
     val generationToken: String? = null,
 ) {

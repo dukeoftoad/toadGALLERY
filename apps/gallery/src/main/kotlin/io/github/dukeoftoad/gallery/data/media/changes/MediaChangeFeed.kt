@@ -33,14 +33,36 @@ import android.provider.MediaStore
  *   volume-scoped file Uris do not exist either, and the observer falls
  *   back to the classic external images + video collection Uris, which is
  *   exactly the surface `MediaStoreSource` scans.
+ *
+ * TWO GENERATION CONCEPTS, kept strictly apart (audit finding C):
+ * 1. VOLUME generation --- what [currentGeneration] returns. A per-VOLUME
+ *    checkpoint MediaStore bumps on any change anywhere on the volume. Its
+ *    ONLY job: "is another scan needed?" The scan driver stores it via
+ *    `MediaCatalogue.saveScanCheckpoint` and short-circuits the next scan
+ *    when it matches. It must NEVER be stamped onto individual items.
+ * 2. PER-ROW generation-modified --- each item's own
+ *    `MediaStore.MediaColumns.GENERATION_MODIFIED` value (API 30+). This
+ *    is the per-item revision input: "did THIS item change?" It lives in
+ *    [MediaScanRow.generationToken] / [CatalogueRecord.generationToken]
+ *    and is what the reconciler compares. Stamping the volume checkpoint
+ *    per row instead would make every item on a volume report as changed
+ *    whenever a single item moved --- a full re-index storm.
  */
 interface MediaChangeFeed {
 
     /**
-     * The current MediaStore generation token of [volumeName], or `null`
-     * when the platform has none (API < 30) or the volume is unknown.
-     * `null` never means "unchanged" --- it means "you cannot tell without
-     * scanning".
+     * The current MediaStore PER-VOLUME generation of [volumeName] (via
+     * `MediaStore.getGeneration`), or `null` when the platform has none
+     * (API < 30) or the volume is unknown. `null` never means "unchanged"
+     * --- it means "you cannot tell without scanning".
+     *
+     * This is the SCAN CHECKPOINT only --- "has the volume moved since the
+     * last scan?" --- NOT a per-item revision input. MediaStore bumps the
+     * volume generation on ANY change anywhere on the volume, so stamping
+     * it onto individual rows would invalidate every item whenever one
+     * item changed. Per-item revision uses each row's own
+     * `MediaStore.MediaColumns.GENERATION_MODIFIED` instead (see the
+     * interface KDoc, "two generation concepts").
      */
     fun currentGeneration(volumeName: String): String?
 

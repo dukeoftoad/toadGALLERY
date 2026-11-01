@@ -131,6 +131,32 @@ fun buildTimelineRows(
 ): List<TimelineRow> = buildTimelineRows(items, { it.dateAddedSec }, groupBy, zone)
 
 /**
+ * The grid key of one cell row (the r8 device-crash fix): the media key
+ * when the snapshot slot still holds its item, else the positional
+ * fallback --- and NEVER a throw.
+ *
+ * The staggered grid queries keys for indices in its layout's nearest
+ * range, which can be one frame STALER than the paging data: a refresh
+ * (sort change, collection observer, generation swap) resets the page
+ * store while the last-composed rows still describe the longer pre-refresh
+ * list, so a key lookup can arrive for an index the store no longer holds.
+ * `LazyPagingItems.get` (the page-store read) throws
+ * `IndexOutOfBoundsException` in exactly that window --- the r8 crash,
+ * `Index: 60, Size: 60` --- so this helper reads the SNAPSHOT list with a
+ * bounds-checked [List.getOrNull] instead: an out-of-range or emptied slot
+ * degrades to the `"cell_<index>"` positional key, which cannot collide
+ * with the uri keys real items use, and the next recomposition re-derives
+ * rows for the new store anyway. Generic for the same JVM-test reason as
+ * [buildTimelineRows]; the production call site passes
+ * `LazyPagingItems.itemSnapshotList` and `{ it.uri.toString() }`.
+ */
+fun <T> timelineCellKey(
+    snapshot: List<T?>,
+    index: Int,
+    keyOf: (T) -> String,
+): String = snapshot.getOrNull(index)?.let(keyOf) ?: "cell_$index"
+
+/**
  * The user-facing label of one group header, via
  * `DateTimeFormatter.ofPattern`: "d MMMM yyyy" for day groups ("5 March
  * 2026"), "MMMM yyyy" for month groups ("March 2026"). The pattern text is

@@ -2,9 +2,15 @@ package io.github.dukeoftoad.gallery.ui.details
 
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
+import io.github.dukeoftoad.gallery.data.media.identity.EligiblePublicMedia
+import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
 import io.github.dukeoftoad.gallery.metadata.GpsCoordinates
 import io.github.dukeoftoad.gallery.metadata.MediaMetadataSnapshot
 import io.github.dukeoftoad.gallery.metadata.MetadataAvailability
+import io.github.dukeoftoad.gallery.metadata.edit.EditableExifCurrentValues
+import io.github.dukeoftoad.gallery.metadata.edit.MediaEditCapability
+import io.github.dukeoftoad.gallery.metadata.edit.MediaEditField
+import io.github.dukeoftoad.gallery.metadata.edit.MediaEditGate
 import io.github.dukeoftoad.gallery.metadata.exif.ExifMath
 import io.github.dukeoftoad.gallery.metadata.format.MetadataFormatMatrix
 import java.time.Instant
@@ -372,5 +378,99 @@ object DetailsPresentation {
         val zone = ZoneOffset.ofTotalSeconds((offsetMinutes ?: 0) * 60)
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
         return Instant.ofEpochMilli(epochMillis).atZone(zone).format(formatter)
+    }
+
+    // ------------------------------------------------------------------
+    // Editable fields (r15 write round)
+    // ------------------------------------------------------------------
+
+    /**
+     * One row of the Details view's "Editable fields" section (the r15
+     * write round): the roadmap field, its honest
+     * [MediaEditCapability] (the pure gate's answer for THIS item), the
+     * field's CURRENT value as display text (`null` = not set / not
+     * readable through the pinned writer's tag set --- keywords, rating
+     * and colour label are modelled but unreadable AND unwritable through
+     * androidx.exifinterface this round, so they render state text only,
+     * exactly like the IPTC/XMP block rows), and whether the writer's
+     * read-back produced a values object at all.
+     *
+     * [valuesReadable] keeps the two `valueText == null` reasons apart:
+     * `true` (the read-back succeeded) renders "not set" for an EDITABLE
+     * field, while `false` (the read-back itself failed --- the writer
+     * could not open the file) renders "current value unreadable" ---
+     * "not set" would be a claim about bytes the app could not read, and
+     * the honest-states doctrine forbids it.
+     */
+    data class EditableFieldRow(
+        val field: MediaEditField,
+        val capability: MediaEditCapability,
+        val valueText: String? = null,
+        val valuesReadable: Boolean = false,
+    )
+
+    /**
+     * Builds the editable-fields section: ONE row per roadmap field, in
+     * [MediaEditField] declaration order, every refusal visible with its
+     * own reason (the honest-states doctrine --- nothing silently
+     * omitted just because this round cannot write it).
+     *
+     * [currentValues] is what the writer's read-back produced for the
+     * item (`null` when the format is outside the pinned write set or
+     * the values could not be read --- see [EditableFieldRow.valuesReadable]
+     * for how the two render differently). [eligible]/[mimeType]/
+     * [apiLevel]/[locationState] feed the pure [MediaEditGate] exactly
+     * as the write path will consult it.
+     */
+    fun editableRows(
+        eligible: EligiblePublicMedia?,
+        mimeType: String,
+        apiLevel: Int,
+        locationState: MediaLocationState,
+        currentValues: EditableExifCurrentValues?,
+    ): List<EditableFieldRow> = MediaEditField.entries.map { field ->
+        EditableFieldRow(
+            field = field,
+            capability = MediaEditGate.capabilityFor(
+                eligible = eligible,
+                mimeType = mimeType,
+                field = field,
+                apiLevel = apiLevel,
+                locationState = locationState,
+            ),
+            valueText = editValueText(field, currentValues),
+            valuesReadable = currentValues != null,
+        )
+    }
+
+    /**
+     * The current value of [field] as display text, or `null` when unset
+     * or not readable this round. Locale-stable ASCII on purpose
+     * (coordinates and EXIF datetime strings are notation, not prose);
+     * the GPS form matches the read view's [decimalText] convention.
+     */
+    private fun editValueText(
+        field: MediaEditField,
+        values: EditableExifCurrentValues?,
+    ): String? = when (field) {
+        MediaEditField.DATE_TIME -> {
+            val dateTime = values?.dateTimeOriginal ?: return null
+            val offset = values.offsetTimeOriginal
+            if (offset == null) dateTime else "$dateTime $offset"
+        }
+        MediaEditField.GPS -> {
+            val latitude = values?.gpsLatitude ?: return null
+            val longitude = values.gpsLongitude ?: return null
+            String.format(Locale.ROOT, "%.6f, %.6f", latitude, longitude)
+        }
+        MediaEditField.COPYRIGHT -> values?.copyright
+        MediaEditField.COMMENT -> values?.userComment
+        // Not readable through the pinned androidx tag map (verified from
+        // the 1.4.1 sources): no value is ever shown for them, only the
+        // capability state text --- never a guessed or cached one.
+        MediaEditField.KEYWORDS,
+        MediaEditField.RATING,
+        MediaEditField.COLOUR_LABEL,
+        -> null
     }
 }

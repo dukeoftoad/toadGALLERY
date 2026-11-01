@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Metadata EDIT round strings (r15, versionCode 19 slice: "Editable
+     metadata fields, EXIF write-back via androidx.exifinterface").
+     Kept in this dedicated file (never merged into values/strings.xml)
+     so parallel branches cannot conflict on it.
+
+     The honest-states doctrine the Details view already follows applies
+     to the WRITE path too: every capability refusal gets its OWN string
+     (read-only platform vs read-only still-blocked vs unsupported format
+     vs unsupported field vs consent-required are different truths, never
+     one ambiguous "can't edit"). -->
+<resources>
+
+    <!-- The "Editable fields" section of the Details view. -->
+    <string name="details_section_edit">Editable fields</string>
+    <string name="details_edit_field_date_time">Date &amp; time</string>
+    <string name="details_edit_field_gps">Coordinates</string>
+    <string name="details_edit_field_copyright">Copyright</string>
+    <string name="details_edit_field_comment">Comment</string>
+    <string name="details_edit_field_keywords">Keywords</string>
+    <string name="details_edit_field_rating">Rating</string>
+    <string name="details_edit_field_colour_label">Colour label</string>
+
+    <!-- Per-field capability state text (why a field is or is not
+         editable); mirrors the read view's distinct availability labels. -->
+    <string name="details_edit_state_not_set">Not set — tap to edit</string>
+    <string name="details_edit_state_read_only">Read-only on this device</string>
+    <string name="details_edit_state_unsupported_format">Not supported for this format yet</string>
+    <string name="details_edit_state_unsupported_field">Coming in a later round</string>
+    <string name="details_edit_state_consent_required">Allow Location data to edit coordinates</string>
+    <string name="details_edit_state_not_eligible">Not editable for this item</string>
+
+    <!-- Editor dialog chrome. -->
+    <string name="details_edit_action_save">Save</string>
+    <string name="details_edit_action_retry">Retry</string>
+    <string name="details_edit_action_close">Close</string>
+    <string name="details_edit_action_allow_location">Allow Location data</string>
+    <string name="details_edit_saving">Saving…</string>
+    <string name="details_edit_prefill_unavailable">Current value unreadable</string>
+
+    <!-- DATE_TIME editor. -->
+    <string name="details_edit_label_datetime">Date &amp; time</string>
+    <string name="details_edit_hint_datetime">yyyy:MM:dd HH:mm:ss</string>
+    <string name="details_edit_label_offset">UTC offset (optional)</string>
+    <string name="details_edit_hint_offset">±HH:MM</string>
+    <string name="details_edit_invalid_datetime">Enter a valid date and time (yyyy:MM:dd HH:mm:ss)</string>
+    <string name="details_edit_invalid_offset">Enter a valid offset as ±HH:MM, or leave empty</string>
+
+    <!-- GPS editor. -->
+    <string name="details_edit_label_latitude">Latitude</string>
+    <string name="details_edit_label_longitude">Longitude</string>
+    <string name="details_edit_invalid_latitude">Enter a latitude between -90 and 90</string>
+    <string name="details_edit_invalid_longitude">Enter a longitude between -180 and 180</string>
+    <string name="details_edit_gps_clear_hint">Leave both empty to remove the coordinates</string>
+
+    <!-- Write outcomes, rendered honestly (one string per reason). -->
+    <string name="details_edit_failed_io">Couldn\'t write — the file could not be opened or saved. Try again.</string>
+    <string name="details_edit_failed_read_only_platform">This item belongs to another app, and this Android version has no write-grant dialog — the item is read-only here.</string>
+    <string name="details_edit_failed_read_only_still_blocked">Write access was granted but the provider still refused — the item stays read-only.</string>
+    <string name="details_edit_failed_unsupported_format">This format\'s EXIF cannot be written yet.</string>
+    <string name="details_edit_denied">Write access was declined — the item stays read-only.</string>
+
+    <!-- Content description for the row edit affordance. -->
+    <string name="cd_details_edit_field">Edit %1$s</string>
+</resources>

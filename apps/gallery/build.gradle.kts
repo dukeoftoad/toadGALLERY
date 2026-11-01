@@ -10,6 +10,9 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     alias(libs.plugins.android)
     alias(libs.plugins.kotlin.compose)
+    // KSP drives the Room schema compiler for the Phase 4 media catalogue
+    // (ADR-0006 persistence layer); see the room-* entries in the catalog.
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -287,6 +290,16 @@ dependencies {
 
     // --- Metadata (ADR-0008: androidx.exifinterface, NOT the Aves fork)
     implementation(libs.androidx.exifinterface)
+
+    // --- Phase 4: Room media catalogue (ADR-0006 persistence layer) ---
+    // Persists the media identity/revision cache, metadata-cache state and
+    // scan checkpoints (Phase 4 audit, "Room catalogue" contract item).
+    // Scope guard: face/CLIP vectors and all other AI outputs live in the
+    // engine-owned ML stores, NOT here --- Room stays catalogue-only. Pure
+    // on-device storage (no INTERNET permission, ADR-0014 unaffected).
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx) // suspend-DAO coroutine dispatch
+    ksp(libs.androidx.room.compiler) // schema validation via KSP, not kapt
 
     // --- In-app video playback for the full-screen viewer (issue #50):
     // ExoPlayer + the views-based PlayerView surface. Local content URIs

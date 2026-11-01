@@ -55,9 +55,11 @@ import java.util.Locale
  * first composition's closure alive across a settings change or a paging
  * generation swap and render a stale grouping. Keys: cells keep
  * `uri.toString()`; headers use `"header_" + groupKey`; a cell whose
- * snapshot slot is somehow null falls back to `"cell_<index>"` (the row
- * model skips nulls, so this only covers a snapshot mutating between the
- * rows computation and the key call). Headers render with
+ * snapshot slot is null, or whose index the paging store no longer holds
+ * (the refresh window of the r8 device crash), falls back to
+ * `"cell_<index>"` via [timelineCellKey] --- keys never throw, a stale
+ * layout interval beyond the current rows degrades to `"row_<index>"`.
+ * Headers render with
  * [StaggeredGridItemSpan.FullLine] and the `timeline_header` test tag.
  *
  * ## Uniform grid mode (appearance settings slice, roadmap Phase 3)
@@ -132,31 +134,40 @@ fun MediaPagingGrid(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalItemSpacing = 2.dp,
     ) {
+        // Every lambda below reads `rows`/the snapshot defensively: the
+        // staggered grid can query key/span/content for an index from its
+        // layout range, which is one frame staler than a refresh that
+        // shrank the paging store (the r8 device crash,
+        // IndexOutOfBoundsException from LazyPagingItems.get). Out-of-range
+        // rows degrade (positional key, single lane, empty cell) instead of
+        // throwing; the next recomposition re-derives rows for the new
+        // store. See [timelineCellKey] for the key contract.
         items(
             count = rows.size,
             key = { rowIndex ->
-                when (val row = rows[rowIndex]) {
+                when (val row = rows.getOrNull(rowIndex)) {
                     is TimelineRow.Header -> "header_" + row.groupKey
-                    is TimelineRow.Cell -> {
-                        // Same uri keys the ungrouped grid used; the
-                        // cell_<index> fallback only fires if the snapshot
-                        // mutated under the derived rows (a null slot there
-                        // renders nothing, like the pre-grouping grid did).
-                        items[row.index]?.uri?.toString() ?: "cell_${row.index}"
-                    }
+                    is TimelineRow.Cell -> timelineCellKey(
+                        items.itemSnapshotList,
+                        row.index,
+                    ) { it.uri.toString() }
+                    // Stale interval beyond the current rows (see above):
+                    // a positional key that cannot collide with uri keys or
+                    // header keys, replaced on the next recomposition.
+                    null -> "row_$rowIndex"
                 }
             },
             span = { rowIndex ->
                 // Headers span the full line; media cells stay in a single
                 // lane (the span API is non-null in foundation 1.7).
-                if (rows[rowIndex] is TimelineRow.Header) {
+                if (rows.getOrNull(rowIndex) is TimelineRow.Header) {
                     StaggeredGridItemSpan.FullLine
                 } else {
                     StaggeredGridItemSpan.SingleLane
                 }
             },
         ) { rowIndex ->
-            when (val row = rows[rowIndex]) {
+            when (val row = rows.getOrNull(rowIndex)) {
                 is TimelineRow.Header -> Text(
                     text = formatGroupLabel(row, Locale.getDefault()),
                     style = MaterialTheme.typography.labelLarge,
@@ -166,7 +177,7 @@ fun MediaPagingGrid(
                         .padding(start = 4.dp, top = 12.dp, bottom = 4.dp)
                         .testTag("timeline_header"),
                 )
-                is TimelineRow.Cell -> items[row.index]?.let { item ->
+                is TimelineRow.Cell -> cellItem(items, row.index)?.let { item ->
                     if (onItemTap != null && onItemLongPress != null) {
                         // Interactive cell: long-press enters selection even in
                         // the plain timeline (the ViewModel no-ops below API 29,
@@ -186,6 +197,7 @@ fun MediaPagingGrid(
                         MediaThumb(item = item, forceSquare = uniformCells)
                     }
                 }
+                null -> Unit
             }
         }
         // Append-state footer slot (issue #38): the caller decides what (if
@@ -196,6 +208,25 @@ fun MediaPagingGrid(
         }
     }
 }
+
+/**
+ * The CONTENT lambda's item read (the r8 device-crash fix): the presenter
+ * read `LazyPagingItems.get` is what records the access that drives Paging's
+ * append hints (the official `items()` DSL content does the same read for
+ * the same reason), so it STAYS --- but it checks its own page store, which
+ * a refresh can shrink one frame before the composed [TimelineRow] list
+ * catches up, and then it throws `IndexOutOfBoundsException` (the r8 crash,
+ * `Index: 60, Size: 60`). So: presenter read first (hints flow exactly as
+ * before), its out-of-bounds window caught, and the bounds-checked SNAPSHOT
+ * read as the no-throw fallback. A cell that reads null on both legs simply
+ * renders nothing --- the same degradation a null snapshot slot always had.
+ */
+private fun cellItem(items: LazyPagingItems<MediaItem>, index: Int): MediaItem? =
+    try {
+        items[index]
+    } catch (_: IndexOutOfBoundsException) {
+        null
+    } ?: items.itemSnapshotList.getOrNull(index)
 
 /**
  * One interactive grid cell (issue #30): [MediaThumb] wrapped in

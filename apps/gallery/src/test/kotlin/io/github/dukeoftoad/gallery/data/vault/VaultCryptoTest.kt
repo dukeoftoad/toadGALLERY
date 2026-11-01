@@ -114,6 +114,48 @@ class VaultCryptoTest {
         assertEquals(VaultCrypto.IV_BYTES + "same bytes".length + 16, a.size)
     }
 
+    // ---- Provider-IV encrypt init (the r8 device fix) ------------------
+    //
+    // AndroidKeyStore's default randomized-encryption policy rejects
+    // caller-provided IVs on encrypt ("Caller-provided IV not permitted"),
+    // which killed every real-device vault setup while this suite stayed
+    // green (software keys accept caller IVs). initEncrypt therefore uses
+    // the canonical provider-IV init FIRST; these tests pin its contract
+    // on the JVM leg. The AndroidKeyStore leg is the same code path ---
+    // parameter-less init --- that the platform documents for keystore
+    // keys, and the caller-IV fallback exists for exotic providers only.
+
+    @Test
+    fun `initEncrypt yields a 12-byte IV and a usable initialized cipher`() {
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        val iv = VaultCrypto.initEncrypt(cipher, key)
+        assertEquals(VaultCrypto.IV_BYTES, iv.size)
+        // The cipher must be ready to seal under the negotiated IV: the
+        // round-trip proves the IV matches the ciphertext it prefixed.
+        val sealed = iv + cipher.doFinal("negotiated".toByteArray())
+        assertEquals(
+            "negotiated",
+            String(VaultCrypto.decrypt(sealed, key)),
+        )
+    }
+
+    @Test
+    fun `initEncrypt draws a fresh provider IV per call`() {
+        val first = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            .let { VaultCrypto.initEncrypt(it, key) }
+        val second = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            .let { VaultCrypto.initEncrypt(it, key) }
+        assertFalse(first.contentEquals(second))
+    }
+
+    @Test
+    fun `provider-IV seal still follows the ADR envelope shape`() {
+        // IV(12) || ciphertext || tag(16), byte-countable exactly like the
+        // caller-IV seals above --- the wire format did not change.
+        val sealed = VaultCrypto.encrypt("envelope".toByteArray(), key)
+        assertEquals(VaultCrypto.IV_BYTES + "envelope".length + 16, sealed.size)
+    }
+
     // ---- Streaming seal (vault media) ---------------------------------
 
     private fun randomBytes(size: Int): ByteArray =

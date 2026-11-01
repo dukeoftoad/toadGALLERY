@@ -249,4 +249,45 @@ class TimelineRowsTest {
         val header = TimelineRow.Header("d0", LocalDate.of(2026, 1, 9).toEpochDay(), isMonth = false)
         assertEquals("9 January 2026", formatGroupLabel(header, Locale.ENGLISH))
     }
+
+    // ---- timelineCellKey (the r8 device-crash fix) ----------------------
+    //
+    // The grid's key lambda used LazyPagingItems.get (the page-store read),
+    // which throws IndexOutOfBounds when a refresh shrinks the store while
+    // the composed rows still describe the longer pre-refresh list (device:
+    // "Index: 60, Size: 60"). timelineCellKey reads the snapshot list
+    // bounds-checked instead: every rule below is a shape that MUST NOT
+    // throw, whatever the stale-layout window throws at it.
+
+    @Test
+    fun `cell key is the item key for an in-range slot`() {
+        val snapshot = listOf("uri:a", "uri:b", "uri:c")
+        assertEquals("uri:b", timelineCellKey(snapshot, 1) { it })
+    }
+
+    @Test
+    fun `cell key falls back positionally for a null slot`() {
+        // enablePlaceholders=false means no null slots in practice, but the
+        // snapshot TYPE is List<T?>; a null must degrade, never throw.
+        val snapshot = listOf("uri:a", null, "uri:c")
+        assertEquals("cell_1", timelineCellKey(snapshot, 1) { it })
+    }
+
+    @Test
+    fun `cell key degrades for the stale-index refresh window`() {
+        // The exact r8 shape: rows were derived from a 120-item snapshot,
+        // the store refreshed down to 60, and the grid still asks for the
+        // key of index 60. No throw; the positional key cannot collide
+        // with a uri key.
+        val snapshot = (0 until 60).map { "uri:$it" }
+        assertEquals("cell_60", timelineCellKey(snapshot, 60) { it })
+    }
+
+    @Test
+    fun `cell key degrades for far-out and negative indices`() {
+        val snapshot = listOf("uri:a")
+        assertEquals("cell_99", timelineCellKey(snapshot, 99) { it })
+        assertEquals("cell_-1", timelineCellKey(snapshot, -1) { it })
+        assertEquals("cell_0", timelineCellKey(emptyList<String>(), 0) { it })
+    }
 }

@@ -30,7 +30,11 @@ android {
         // (#73: confirmed publication before vault-copy deletion,
         // transactional setup) + the diagnostics logger and the
         // appearance/about settings round.
-        versionCode = 12
+        // versionCode 13 (r9 round): the two r8 device findings --- the
+        // AndroidKeyStore caller-IV seal rejection (provider-IV init in
+        // VaultCrypto, the actual "vault PIN creating failed" root cause)
+        // and the staggered-grid stale-index key crash.
+        versionCode = 13
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

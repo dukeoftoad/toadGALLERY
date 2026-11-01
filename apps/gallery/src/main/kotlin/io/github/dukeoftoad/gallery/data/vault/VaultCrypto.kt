@@ -2,6 +2,7 @@ package io.github.dukeoftoad.gallery.data.vault
 
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.GeneralSecurityException
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
@@ -74,6 +75,42 @@ object VaultCrypto {
     private fun generateIv(): ByteArray = ByteArray(IV_BYTES).also { random.nextBytes(it) }
 
     /**
+     * Initializes [cipher] for ONE seal operation and returns the IV that
+     * the caller MUST store alongside the ciphertext (the ADR-0017 envelope
+     * is `IV(12) || ciphertext || tag`).
+     *
+     * Provider-IV first, caller-IV fallback (the r8 device round): the
+     * canonical AndroidKeyStore GCM pattern is `init(ENCRYPT_MODE, key)`
+     * with NO parameters --- the keystore generates the IV and exposes it
+     * via `Cipher.getIV()` --- because AndroidKeyStore's default
+     * randomized-encryption policy REJECTS caller-provided IVs on encrypt
+     * with `InvalidAlgorithmParameterException("Caller-provided IV not
+     * permitted")`. That rejection is exactly what killed every real-device
+     * vault setup since the first slice: the JVM tests run against software
+     * keys (caller IVs accepted), so the suite stayed green while the device
+     * could not even seal the PIN record. A provider that instead demands
+     * explicit parameters (none of the tested ones do) falls back to a
+     * caller-generated fresh random IV --- the pre-fix behavior, which
+     * software keys accept. Both legs guarantee a fresh 12-byte IV per
+     * call, never reused under one key; the decrypt side is untouched
+     * (caller IVs ARE permitted in DECRYPT mode, and [decrypt] reads the
+     * stored IV exactly as before).
+     */
+    internal fun initEncrypt(cipher: Cipher, key: SecretKey): ByteArray {
+        try {
+            cipher.init(Cipher.ENCRYPT_MODE, key)
+            val providerIv = cipher.iv
+            if (providerIv != null && providerIv.size == IV_BYTES) return providerIv
+        } catch (_: GeneralSecurityException) {
+            // This provider refuses parameter-less GCM init (or produced no
+            // usable IV) --- the caller-IV leg below is the fallback.
+        }
+        val iv = generateIv()
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+        return iv
+    }
+
+    /**
      * Derives the PIN digest: PBKDF2-HMAC-SHA256 over the PIN's UTF-8
      * bytes. The PIN arrives as [CharArray] so the UI layer can wipe it
      * after use; this object keeps no reference.
@@ -103,11 +140,14 @@ object VaultCrypto {
         return diff == 0
     }
 
-    /** Seals a small payload: returns `IV(12) || ciphertext || GCM tag(16)`. */
+    /**
+     * Seals a small payload: returns `IV(12) || ciphertext || GCM tag(16)`.
+     * The IV is whatever [initEncrypt] negotiated (provider-generated on
+     * AndroidKeyStore, caller-generated on exotic providers).
+     */
     fun encrypt(plain: ByteArray, key: SecretKey): ByteArray {
         val cipher = Cipher.getInstance(CIPHER_TRANSFORMATION)
-        val iv = generateIv()
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+        val iv = initEncrypt(cipher, key)
         return iv + cipher.doFinal(plain)
     }
 
@@ -141,8 +181,7 @@ object VaultCrypto {
      */
     fun encryptTo(input: InputStream, output: OutputStream, key: SecretKey) {
         val cipher = Cipher.getInstance(CIPHER_TRANSFORMATION)
-        val iv = generateIv()
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+        val iv = initEncrypt(cipher, key)
         output.write(iv)
         CipherOutputStream(output, cipher).use { sealed ->
             input.copyTo(sealed, bufferSize = DEFAULT_COPY_BUFFER)

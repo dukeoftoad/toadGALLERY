@@ -44,13 +44,16 @@ data class MediaEligibility(
         get() = state == State.PUBLIC_INDEXABLE
 
     /**
-     * The gateway to [EligiblePublicMedia]: non-null only for
-     * [State.PUBLIC_INDEXABLE]. Every AI-side API takes the returned
-     * wrapper --- never a bare [MediaIdentity] or Uri --- so vault and
-     * revoked media are unrepresentable at the call site.
+     * The gateway to [EligiblePublicMedia]: vouches for [identity] and
+     * returns the wrapper only when this eligibility is
+     * [State.PUBLIC_INDEXABLE] --- `null` for every other state, so a vault
+     * entry, a trashed row or a permission-revoked item cannot be smuggled
+     * past the gate. Every AI-side API takes the returned wrapper --- never
+     * a bare [MediaIdentity] or Uri --- so vault and revoked media are
+     * unrepresentable at the call site.
      */
-    fun asEligible(): EligiblePublicMedia? =
-        if (isPublicIndexable) EligiblePublicMedia(this) else null
+    fun asEligible(identity: MediaIdentity): EligiblePublicMedia? =
+        if (isPublicIndexable) EligiblePublicMedia(identity) else null
 
     companion object {
         val PUBLIC_INDEXABLE = MediaEligibility(State.PUBLIC_INDEXABLE)

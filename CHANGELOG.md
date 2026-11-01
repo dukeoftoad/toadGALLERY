@@ -4,10 +4,53 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 11)
+## [0.4.1-alpha] — unreleased on main (versionCode 12)
 
 ### Added
 
+- On-device diagnostics (#74, the device round): every vault failure that
+  used to swallow into a generic snackbar now leaves a trace. A new
+  dependency-free ring-buffer logger `DiagLog` (CAP 400, thread-safe,
+  oldest evicted) mirrors to `android.util.Log` under the shared `ToadDiag`
+  tag and keeps entries as `MM-dd HH:mm:ss.SSS L/Tag: message` lines with
+  the throwable's cause chain folded into the same entry (up to 3 levels,
+  loop-safe). The privacy contract (ADR-0014) is enforced by construction:
+  op names, counts, ids, sizes, durations and exception class+message ONLY
+  --- never PIN data, key material or vault display names; with no INTERNET
+  permission, logcat is the only egress and it requires adb/physical access.
+  Every `VaultViewModel` catch (setup/unlock/biometric/auto-lock/consent
+  retries) and the repository's phase legs (setup, verify mismatch vs
+  corrupt record, restore insert/publish, rename/copy/favorite 0-row
+  outcomes) WARN under the shared `ToadVault` tag, so one failure reads as
+  a two-line story in logcat; the application logs its `versionName (build
+  N)` at process start so a pasted logcat is always attributable to an
+  exact build. 11 JVM tests pin the ring (cap/eviction/format/cause chain).
+- Appearance settings and the About page (#74, the device round): Settings
+  gains an **Appearance** section --- Layout (COLLAGE aspect-aware staggered
+  vs GRID uniform cards, checkmark state, Ente-style), Photos per row
+  (minus/plus steppers, clamped to [2,6], live preview) and Group by
+  (None/Day/Month) --- persisted through the existing settings channel and
+  applied to the Photos timeline immediately; grouping renders section
+  headers through the new `TimelineRows` helper without disturbing paging
+  keys, and defaults (COLLAGE / 3 / None) keep today's render byte-identical.
+  A new **About** screen shows the app name, version + versionCode and the
+  license pointer, plus a **Diagnostics** panel: the vault state probe
+  (root/pin/index/biometric-binding presence, blob count + bytes, root
+  writability, keystore key presence --- read-only, nothing decrypts or
+  generates, safe from any screen state) and the `DiagLog` ring with
+  copy-to-clipboard and clear. 27 new JVM tests pin the appearance codecs,
+  clamps and the timeline grouping math.
+- Vault integrity round 2 (#73): `restore()` now treats an unconfirmed
+  publish as a failure --- `resolver.update()`'s row count is checked and a
+  0-row publish throws into the existing failure path (pending row deleted,
+  the vault copy KEPT, ADR-0017); the same ignored-return flaw was fixed in
+  `MediaFileOps.copy`. First-time `VaultStore.setup()` is transactional:
+  both ciphertexts are staged as `.tmp` files and committed by rename
+  (index first, pin last); any leg failing rolls everything back and
+  surfaces a retryable `VaultStoreException("vault setup failed; nothing
+  was configured")` --- and `isConfigured()` now requires BOTH files, with
+  a self-heal pass cleaning pin-only/index-only residue from pre-#73
+  installs. 4 new failure-injection tests pin each rollback shape.
 - Vault biometric unlock binding (#57, ADR-0019) and decrypted vault
   thumbnails (#58): the hidden vault gains an opt-in "Unlock with biometrics"
   path backed by hardware --- a second AndroidKeyStore AES-256-GCM key
@@ -213,6 +256,18 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Fixed
 
+- Vault setup no longer dies on exotic StrongBox keystores (#74, the
+  device bug): some OEM/custom-ROM keystores abort StrongBox key generation
+  with a plain `ProviderException`/`KeyStoreException` instead of the
+  documented `StrongBoxUnavailableException` --- which used to abort vault
+  setup outright, surfacing as the device's "vault PIN creating failed"
+  with zero diagnostics. The StrongBox leg now falls back to the TEE
+  keystore on ANY `GeneralSecurityException` or `RuntimeException`
+  (WARN-logged with the throwable; the expected StrongBox-unavailable case
+  stays INFO). Only the TEE path itself still propagates --- a keystore
+  that cannot mint a regular key is genuinely fatal. Both spellings satisfy
+  ADR-0017 ("inside AndroidKeyStore"); StrongBox remains defense in depth,
+  never a requirement.
 - Vault thumbnails can no longer be repopulated after locking (#69): a
   thumbnail decode is a suspend call, and an auto-lock/background event
   landing mid-decode used to race the still-running batch — it returned and

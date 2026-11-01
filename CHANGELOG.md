@@ -4,9 +4,41 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 15)
+## [0.4.1-alpha] — unreleased on main (versionCode 16)
 
 ### Added
+
+- **Phase 4 scan driver** (r12 round; the roadmap's "scan driver that
+  wires the catalogue + change feed into app start" item):
+  - On app start the process now runs the full incremental discovery
+    pipeline: a per-volume authoritative MediaStore walk (`IS_TRASHED`
+    excluded on R+), diffed against the Room catalogue through the
+    r10 reconciler (added / changed / removed -> tombstone), a
+    per-volume generation-token checkpoint saved last so a crash
+    mid-apply self-heals on the next pass, and ContentObserver
+    registration so later changes re-scan (API 30+ rescans only when
+    the live generation differs from the checkpoint; API 26-29 always
+    rescans --- the observer alone cannot prove the volume unchanged).
+    The decision core is pure and exhaustively JVM-tested.
+  - **Capture-date adoption** (the other r12 roadmap item): every row
+    a scan adds or changes gets its capture date resolved ONCE from
+    EXIF evidence through the MediaReadHandle byte boundary (only
+    eligible public media; vault/trashed/revoked items are skipped by
+    type) and persisted onto the record's provenance fields
+    (instant + timezone assumption + winning source). Metadata that
+    is ABSENT vs UNREADABLE vs UNSUPPORTED persists null under its own
+    name; `date_added` is never persisted as a capture date. Room
+    v1 -> v2 via a hand-written non-destructive migration (three
+    `ALTER TABLE ... ADD COLUMN DEFAULT NULL`); the v2 schema JSON is
+    committed under `apps/gallery/schemas/`.
+  - The diagnostics ring logs `phase 4 scan driver started` at wiring
+    time (the W1 seam lesson: a device log showing the boot line but
+    not this line pins a pipeline-construction failure exactly).
+  - Deliberately no UI consumes the catalogue yet --- the timeline's
+    sort/group keys switch to the persisted capture dates next round,
+    after a device pass proves the pipeline on real volumes.
+
+### Pre-existing entries
 
 - PR #81 audit-hardening slice (the implementable findings from
   `docs/CRASH_INVESTIGATION_PLAN.md`, landed alongside the r11

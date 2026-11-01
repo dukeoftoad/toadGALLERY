@@ -1,5 +1,7 @@
 package io.github.dukeoftoad.gallery.data.catalogue
 
+import io.github.dukeoftoad.gallery.data.media.dates.CaptureDateSource
+import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -268,5 +270,92 @@ class InMemoryMediaCatalogueTest {
             // live with NO tombstone (never a residual death record).
             assertEquals(item, catalogue.record(key))
             assertFalse(catalogue.tombstonedKeys().contains(key))
+        }
+
+    // --- updateCaptureDate (r12 round: capture-date provenance) -------------
+
+    @Test
+    fun `updateCaptureDate persists provenance and leaves every other field untouched`() =
+        runBlocking {
+            val catalogue = InMemoryMediaCatalogue()
+            val original = record(
+                key = "external_primary:11",
+                sizeBytes = 3_000L,
+                metadataWriteRevision = 4,
+                metadataCacheState = MetadataCacheState.CACHED,
+                lastSeenAtMillis = 42L,
+            )
+            catalogue.upsertAll(listOf(original))
+
+            catalogue.updateCaptureDate(
+                "external_primary:11",
+                ResolvedCaptureDate(
+                    epochMillis = -50_000L, // pre-1970, negative on purpose
+                    source = CaptureDateSource.EXIF_ORIGINAL,
+                    timezoneOffsetMinutes = -450,
+                    subsecondMillis = 250,
+                ),
+            )
+
+            val stored = catalogue.record("external_primary:11")!!
+            assertEquals(-50_000L, stored.resolvedCaptureDateMillis)
+            assertEquals(-450, stored.resolvedCaptureDateZoneOffsetMinutes)
+            assertEquals("EXIF_ORIGINAL", stored.resolvedCaptureDateSource)
+            // The partial update carries ONLY the provenance fields --- the
+            // Room implementation's UPDATE statement has the same shape.
+            assertEquals(3_000L, stored.sizeBytes)
+            assertEquals(4, stored.metadataWriteRevision)
+            assertEquals(MetadataCacheState.CACHED, stored.metadataCacheState)
+            assertEquals(42L, stored.lastSeenAtMillis)
+        }
+
+    @Test
+    fun `updateCaptureDate with null clears the provenance fields`() = runBlocking {
+        val catalogue = InMemoryMediaCatalogue()
+        catalogue.upsertAll(
+            listOf(
+                record(key = "external_primary:12").copy(
+                    resolvedCaptureDateMillis = 1L,
+                    resolvedCaptureDateZoneOffsetMinutes = 60,
+                    resolvedCaptureDateSource = "MEDIASTORE",
+                ),
+            ),
+        )
+
+        catalogue.updateCaptureDate("external_primary:12", null)
+
+        val stored = catalogue.record("external_primary:12")!!
+        assertNull(stored.resolvedCaptureDateMillis)
+        assertNull(stored.resolvedCaptureDateZoneOffsetMinutes)
+        assertNull(stored.resolvedCaptureDateSource)
+    }
+
+    @Test
+    fun `updateCaptureDate on an unknown key is a no-op`() = runBlocking {
+        val catalogue = InMemoryMediaCatalogue()
+
+        catalogue.updateCaptureDate(
+            "external_primary:404",
+            ResolvedCaptureDate(1L, CaptureDateSource.EXIF_ORIGINAL),
+        )
+
+        assertNull(catalogue.record("external_primary:404"))
+        assertTrue(catalogue.allRecords().isEmpty())
+    }
+
+    @Test
+    fun `updateCaptureDate on a tombstoned key is a no-op and never resurrects it`() =
+        runBlocking {
+            val catalogue = InMemoryMediaCatalogue()
+            catalogue.upsertAll(listOf(record(key = "external_primary:13")))
+            catalogue.tombstone(listOf("external_primary:13"), atMillis = 1_000L)
+
+            catalogue.updateCaptureDate(
+                "external_primary:13",
+                ResolvedCaptureDate(1L, CaptureDateSource.EXIF_ORIGINAL),
+            )
+
+            assertNull(catalogue.record("external_primary:13"))
+            assertEquals(setOf("external_primary:13"), catalogue.tombstonedKeys())
         }
 }

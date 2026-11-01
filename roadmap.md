@@ -429,13 +429,29 @@ The audit's prerequisite contracts are implemented and JVM-tested
   files) and `CanonicalDecodePlanner` (power-of-two sampling, upright
   swaps, deterministic memory-budget refusal).
 
+#### Status — r12 round (versionCode 16): the scan driver is live
+
+The pipeline now runs from app start: `MediaScanDriver` (pure,
+exhaustively JVM-tested decision core) plans each pass from the
+per-volume checkpoint vs the live generation token (API 30+ skip when
+equal; 26-29 always rescan), `AndroidMediaScanRowSource` walks each
+mounted volume (trashed rows excluded on R+), the r10 reconciler diffs
+and the driver applies upserts/tombstones/checkpoints in self-healing
+order, and the ContentObserver feeds follow-up passes (coalesced). The
+capture-date resolver is adopted into the pipeline: every added/changed
+row gets its timezone-aware capture date resolved once from EXIF
+evidence (through the MediaReadHandle boundary, eligible public media
+only) and persisted onto the record (Room v1 -> v2, non-destructive
+migration, v2 schema committed). Still no UI consumes the catalogue.
+
 **Still open in Phase 4:** the metadata Details view + editable fields
 (EXIF write-back, then our IPTC/XMP wrappers), the on-device map view,
 collections/smart-filter chips, the format-support audit deliverable,
-the ACCESS_MEDIA_LOCATION permission flow, and the scan driver that
-wires the catalogue + change feed into app start; the date resolver
-still needs adopting in the timeline's sort/group keys (it is a
-contract landing, not a behavior change yet).
+and the ACCESS_MEDIA_LOCATION permission flow; the timeline's
+sort/group keys still need switching to the persisted capture dates
+(the r12 round persisted them; the behavior change rides the next
+round, after the build-16 device pass proves the pipeline on real
+volumes).
 
 #### Tasks
 

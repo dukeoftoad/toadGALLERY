@@ -4,6 +4,7 @@ import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
 import io.github.dukeoftoad.gallery.data.catalogue.MetadataCacheState
 import io.github.dukeoftoad.gallery.data.catalogue.ScanCheckpoint
+import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
 
 /**
  * The production [MediaCatalogue]: a THIN mapper over [CatalogueDao].
@@ -64,6 +65,26 @@ class RoomMediaCatalogue(
 
     override suspend fun record(localMediaKey: String): CatalogueRecord? =
         dao.itemByLocalMediaKey(localMediaKey)?.toRecord()
+
+    /**
+     * The targeted capture-date write: one partial UPDATE statement
+     * ([CatalogueDao.updateCaptureDateColumns]) that touches only the
+     * three provenance columns. See [MediaCatalogue.updateCaptureDate] for
+     * why this is deliberately NOT a read-modify-write upsert (it would
+     * clobber concurrent UI writes to other columns, and the catalogue
+     * promises transaction-per-call, never read-modify-write atomicity).
+     * The UPDATE matching zero rows (unknown/tombstoned key) is the
+     * interface's documented no-op --- never a resurrection.
+     */
+    override suspend fun updateCaptureDate(localMediaKey: String, date: ResolvedCaptureDate?) {
+        dao.updateCaptureDateColumns(
+            localMediaKey = localMediaKey,
+            dateMillis = date?.epochMillis,
+            zoneOffsetMinutes = date?.timezoneOffsetMinutes,
+            // The enum's name string, same convention as the record field.
+            sourceName = date?.source?.name,
+        )
+    }
 
     override suspend fun allRecords(): List<CatalogueRecord> =
         dao.allItems().map { it.toRecord() }
@@ -134,6 +155,9 @@ private fun CatalogueRecord.toEntity(): CatalogueItemEntity =
         metadataWriteRevision = metadataWriteRevision,
         metadataCacheState = metadataCacheState.name,
         lastSeenAtMillis = lastSeenAtMillis,
+        resolvedCaptureDateMillis = resolvedCaptureDateMillis,
+        resolvedCaptureDateZoneOffsetMinutes = resolvedCaptureDateZoneOffsetMinutes,
+        resolvedCaptureDateSource = resolvedCaptureDateSource,
     )
 
 /**
@@ -155,6 +179,9 @@ private fun CatalogueItemEntity.toRecord(): CatalogueRecord =
         metadataCacheState = runCatching { MetadataCacheState.valueOf(metadataCacheState) }
             .getOrDefault(MetadataCacheState.EMPTY),
         lastSeenAtMillis = lastSeenAtMillis,
+        resolvedCaptureDateMillis = resolvedCaptureDateMillis,
+        resolvedCaptureDateZoneOffsetMinutes = resolvedCaptureDateZoneOffsetMinutes,
+        resolvedCaptureDateSource = resolvedCaptureDateSource,
     )
 
 /** Row -> checkpoint; a straight field copy. */

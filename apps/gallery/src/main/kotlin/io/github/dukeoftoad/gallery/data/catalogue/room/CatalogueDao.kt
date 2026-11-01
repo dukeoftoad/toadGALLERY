@@ -57,6 +57,36 @@ interface CatalogueDao {
     suspend fun deleteItemsByLocalMediaKey(localMediaKeys: List<String>)
 
     /**
+     * The targeted capture-date write (r12 round): updates ONLY the three
+     * capture-date provenance columns of the row, leaving every other
+     * column (revision fields, metadata-cache state, counters) untouched.
+     *
+     * Why a partial UPDATE instead of a whole-row upsert: the capture-date
+     * indexer runs concurrently with UI-driven catalogue writes, and the
+     * catalogue's guarantee is transaction-PER-CALL, never
+     * read-modify-write atomicity. A read-copy-upsert round trip would
+     * clobber any field another writer changed between the read and the
+     * write; this statement cannot --- it does not carry the other
+     * columns at all. A no-op on an absent key (Room UPDATE matches zero
+     * rows) is deliberate: the indexer must never resurrect a tombstoned
+     * row (only [upsertItemsAndClearTombstones], driven by an
+     * authoritative scan, may).
+     */
+    @Query(
+        "UPDATE catalogue_items SET " +
+            "resolvedCaptureDateMillis = :dateMillis, " +
+            "resolvedCaptureDateZoneOffsetMinutes = :zoneOffsetMinutes, " +
+            "resolvedCaptureDateSource = :sourceName " +
+            "WHERE localMediaKey = :localMediaKey",
+    )
+    suspend fun updateCaptureDateColumns(
+        localMediaKey: String,
+        dateMillis: Long?,
+        zoneOffsetMinutes: Int?,
+        sourceName: String?,
+    )
+
+    /**
      * The atomic remove/tombstone transition (Phase 4 audit finding D):
      * deletes the live rows AND writes their tombstones inside ONE Room
      * transaction, so a process interruption can leave the catalogue in

@@ -64,6 +64,8 @@ import io.github.dukeoftoad.gallery.data.RenameCheck
 import io.github.dukeoftoad.gallery.data.TimelineSort
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
+import io.github.dukeoftoad.gallery.data.filters.PhotosFilterHandoff
+import io.github.dukeoftoad.gallery.data.filters.TimelineFilter
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.MediaPagingGrid
 import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
@@ -91,8 +93,10 @@ import io.github.dukeoftoad.gallery.ui.vault.isConfigured
  *     1. refresh Loading + nothing emitted yet -> the same centered spinner
  *     2. refresh Error -> the "couldn't load" StateScreen with a Retry
  *        button (`lazyItems.retry()` re-runs the failed refresh window)
- *     3. granted but empty library (refresh done, 0 items) -> the unchanged
- *        empty-state StateScreen (`state_photos_empty_title`)
+ *     3. granted but empty (refresh done, 0 items) -> the unchanged
+ *        empty-library StateScreen (`state_photos_empty_title`); under an
+ *        ACTIVE r17 filter this branch instead renders the honest
+ *        nothing-matched state, chips row included (see the r17 section)
  *     4. otherwise -> [MediaPagingGrid], the paged staggered thumbnail grid,
  *        now with an append-state footer (issue #38, finding 2): while
  *        Paging appends the next window the footer shows a small centered
@@ -161,6 +165,19 @@ import io.github.dukeoftoad.gallery.ui.vault.isConfigured
  * generation (see `PhotosViewModel`); the bar disappears in selection mode
  * exactly like the pre-#66 grid did, replaced by the count bar.
  *
+ * ## Smart-filter chips (r17)
+ * Under the header bar the plain timeline carries [PhotosFilterChipsRow]:
+ * All / Photos / Videos / GIFs / Favorites (multi-select; the last is Q+
+ * only --- the provider column is Q+), plus a Clear action while any
+ * filter is active. Chips write the ViewModel's [TimelineFilter] (one
+ * fresh paging generation per change), so grid, empty state and item
+ * count all reflect the SAME filtered slice on every data path. An empty
+ * result under an active filter renders the honest "nothing matched"
+ * state (with the chips row still on top --- the row's All/Clear
+ * affordances are the way back from an over-narrow filter), not the
+ * empty-library copy. The screen also consumes the Albums tab's
+ * Collections hand-off ([PhotosFilterHandoff]) on every entry.
+ *
  * ## Appearance settings (roadmap Phase 3 slice)
  * The shell-scoped [settingsViewModel] (shared with the Settings tab and
  * album detail) feeds the collected [Appearance] into the grid: columns,
@@ -187,6 +204,7 @@ fun PhotosScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val sort by viewModel.sort.collectAsState()
+    val filter by viewModel.filter.collectAsState()
     val appearance by settingsViewModel.appearance.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
     val vaultState by vaultViewModel.state.collectAsState()
@@ -285,6 +303,19 @@ fun PhotosScreen(
         requester.launch()
     }
 
+    // r17: the Albums tab's Collections hand-off, consumed ONCE per Photos
+    // entry. The shell owns every tab switch (its file is frozen for the
+    // parallel rounds), so a collection card cannot navigate here itself;
+    // the one-shot slot is the honest mechanism --- Albums stashes the
+    // requested filter (with a snackbar saying so) and the NEXT Photos
+    // composition applies it. LaunchedEffect(Unit) re-runs on every tab
+    // re-entry because the NavHost disposes a departing destination's
+    // content; a plain re-entry with nothing pending consumes null and
+    // changes nothing.
+    LaunchedEffect(Unit) {
+        PhotosFilterHandoff.consume()?.let(viewModel::onFilterChange)
+    }
+
     when (val s = state) {
         is PhotosState.Loading -> Box(
             modifier = Modifier.fillMaxSize(),
@@ -323,23 +354,51 @@ fun PhotosScreen(
                         onAction = { lazyItems.retry() },
                     )
                 }
-                // Granted, refresh settled, but the library is empty: the clean
-                // empty state (native windows return an empty terminal page
-                // here; NOT an error). Unchanged from the pre-paging UI.
+                // Granted, refresh settled, and nothing matched: with an
+                // ACTIVE filter this is the honest "nothing matched" state
+                // (not "your library is empty" --- the library may be full);
+                // with NO filter it is the clean empty state (native windows
+                // return an empty terminal page here; NOT an error).
+                // Unchanged from the pre-paging/pre-r17 UI otherwise.
                 lazyItems.itemCount == 0 -> Box(
                     modifier = Modifier.testTag("photos_state_empty"),
                 ) {
-                    StateScreen(
-                        iconRes = R.drawable.ic_nav_photos,
-                        titleRes = R.string.state_photos_empty_title,
-                        bodyRes = R.string.state_photos_empty_body,
-                    )
+                    if (filter.isActive) {
+                        // The chips stay reachable in the nothing-matched
+                        // state: the body copy says "clear a chip or two",
+                        // and the filter is ViewModel state that survives
+                        // tab switches --- without the row (and its All /
+                        // Clear affordances) an over-narrow filter would
+                        // strand the user with no way back to the grid.
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            PhotosFilterChipsRow(
+                                filter = filter,
+                                onChange = viewModel::onFilterChange,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Box(modifier = Modifier.weight(1f)) {
+                                StateScreen(
+                                    iconRes = R.drawable.ic_nav_photos,
+                                    titleRes = R.string.state_photos_filtered_empty_title,
+                                    bodyRes = R.string.state_photos_filtered_empty_body,
+                                )
+                            }
+                        }
+                    } else {
+                        StateScreen(
+                            iconRes = R.drawable.ic_nav_photos,
+                            titleRes = R.string.state_photos_empty_title,
+                            bodyRes = R.string.state_photos_empty_body,
+                        )
+                    }
                 }
                 else -> PhotosTimeline(
                     lazyItems = lazyItems,
                     appearance = appearance,
                     sort = sort,
                     onSortChange = viewModel::onSortChange,
+                    filter = filter,
+                    onFilterChange = viewModel::onFilterChange,
                     fileOpsViewModel = fileOpsViewModel,
                     fileOpsState = fileOpsState,
                     vaultViewModel = vaultViewModel,
@@ -361,7 +420,9 @@ fun PhotosScreen(
  * move-to-vault confirmation and its cancellable progress dialog. Since
  * issue #66 the plain timeline also carries the sort header bar
  * ([PhotosHeaderBar] + [TimelineSortMenu]); since the appearance slice it
- * threads the shell's [Appearance] through to the grid.
+ * threads the shell's [Appearance] through to the grid; since r17 the
+ * plain timeline also carries the smart-filter chips row
+ * ([PhotosFilterChipsRow]) under the header bar.
  *
  * Grid refreshing after ops is NOT done by hand: MediaStore writes fire the
  * existing ContentObserver -> paging invalidation (issue #38); see the
@@ -373,6 +434,8 @@ private fun PhotosTimeline(
     appearance: Appearance,
     sort: TimelineSort,
     onSortChange: (TimelineSort) -> Unit,
+    filter: TimelineFilter,
+    onFilterChange: (TimelineFilter) -> Unit,
     fileOpsViewModel: FileOpsViewModel,
     fileOpsState: FileOpsUiState,
     vaultViewModel: VaultViewModel,
@@ -450,6 +513,16 @@ private fun PhotosTimeline(
                 PhotosHeaderBar(
                     sort = sort,
                     onSortChange = onSortChange,
+                )
+                // The smart-filter chips (r17): under the header bar, plain
+                // timeline only (selection mode replaces the header with the
+                // count bar, and the chips would collide with the actions
+                // row). One tap = one ViewModel filter change = one fresh
+                // paging generation (see PhotosViewModel.onFilterChange).
+                PhotosFilterChipsRow(
+                    filter = filter,
+                    onChange = onFilterChange,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Box(modifier = Modifier.weight(1f)) {
                     PhotosGrid(

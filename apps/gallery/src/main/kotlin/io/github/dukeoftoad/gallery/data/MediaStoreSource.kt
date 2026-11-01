@@ -451,6 +451,18 @@ class MediaStoreSource(private val context: Context) {
      * @param sort the direction of the ordered timeline the windows tile;
      *  one [TimelineSort] value per Pager generation (changing it means a
      *  new generation, never a mid-generation flip --- see `PhotosViewModel`).
+     * @param filter the r17 smart filter (one [TimelineFilter] value per
+     *  Pager generation, exactly like [sort]; `null` keeps the pre-r17
+     *  query byte-identical). The pure engine
+     *  (`TimelineFilterMediaStore.selection`) projects it to a selection
+     *  fragment + bound args that AND-join after this method's
+     *  images+videos base selection --- the same builder-inside-the-source
+     *  split as [querySearch] and `SearchQuery.build`. The fragment rides
+     *  `QUERY_ARG_SQL_SELECTION` and its args ride
+     *  `QUERY_ARG_SQL_SELECTION_ARGS` (the Bundle protocol's documented
+     *  placeholder companion, API 26+ --- the windowed leg is R+ anyway).
+     *  Filtering must happen INSIDE the query: a window filtered
+     *  client-side would break the positional tiling the pager depends on.
      */
     @RequiresApi(Build.VERSION_CODES.R) // static contract for lint; the
     // check() below is the runtime tripwire for unguarded callers
@@ -458,6 +470,7 @@ class MediaStoreSource(private val context: Context) {
         offset: Int,
         limit: Int,
         sort: TimelineSort = TimelineSort.NEWEST_FIRST,
+        filter: io.github.dukeoftoad.gallery.data.filters.TimelineFilter? = null,
     ): List<MediaItem> {
         check(supportsWindowedQueries()) {
             "Windowed MediaStore queries need API 30+; use queryTimeline() on older devices."
@@ -473,15 +486,39 @@ class MediaStoreSource(private val context: Context) {
             MediaStore.Video.VideoColumns.DURATION,
             Favorites.COLUMN_IS_FAVORITE,
         )
+        // The r17 smart-filter projection (if any), built by the pure,
+        // JVM-tested engine: fixed clause shapes, enum dimensions as
+        // literals from the engine's own constants, value dimensions as
+        // bound placeholders --- never interpolated --- so no data value
+        // is ever spliced into SQL here.
+        val filterProjection = filter?.let {
+            io.github.dukeoftoad.gallery.data.filters.TimelineFilterMediaStore.selection(it)
+        }
         val queryArgs = Bundle().apply {
             // The bundle form of the media-type selection: images + videos
-            // only, straight from the files table's own constants.
-            putString(
-                ContentResolver.QUERY_ARG_SQL_SELECTION,
+            // only, straight from the files table's own constants. The r17
+            // smart-filter fragment (if any) AND-joins after the base; its
+            // bound args ride the protocol's selection-args key.
+            val baseSelection =
                 "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (" +
                     "${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, " +
-                    "${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})",
+                    "${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"
+            val filterSelection = filterProjection?.selection
+            val filterArgs = filterProjection?.selectionArgs.orEmpty()
+            putString(
+                ContentResolver.QUERY_ARG_SQL_SELECTION,
+                if (filterSelection == null) {
+                    baseSelection
+                } else {
+                    "$baseSelection AND ($filterSelection)"
+                },
             )
+            if (filterArgs.isNotEmpty()) {
+                putStringArray(
+                    ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS,
+                    filterArgs.toTypedArray(),
+                )
+            }
             putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
             putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
             // Stable total order (issue #66: parameterized direction); the

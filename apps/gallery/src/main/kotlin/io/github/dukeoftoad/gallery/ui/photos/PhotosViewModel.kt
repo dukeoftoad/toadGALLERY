@@ -18,6 +18,11 @@ import io.github.dukeoftoad.gallery.data.WindowPagingSource
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
 import io.github.dukeoftoad.gallery.data.catalogue.TimelineDirection
+import io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
+import io.github.dukeoftoad.gallery.data.filters.TimelineFilter
+import io.github.dukeoftoad.gallery.data.filters.TimelineFilterCatalogue
+import io.github.dukeoftoad.gallery.data.filters.TimelineFilterFields
+import io.github.dukeoftoad.gallery.data.filters.matches
 import io.github.dukeoftoad.gallery.data.media.identity.MediaIdentity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,7 +39,8 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * State holder for the Photos timeline (Phase 3, issue #25; paging since #28;
- * review follow-ups #38; catalogue-backed ordering since r13).
+ * review follow-ups #38; catalogue-backed ordering since r13; smart-filter
+ * chips since r17).
  *
  * Three states, derived from the user's permission decision:
  *  - `Loading`        : first frame, before the first permission check resolves
@@ -116,6 +122,39 @@ import kotlin.time.Duration.Companion.milliseconds
  * [TimelineDirection] ([toCatalogueDirection]) when the generation runs on
  * the catalogue backend.
  *
+ * ## Smart-filter chips (r17)
+ * [filter] is per-session ViewModel state (same persistence scope as
+ * [sort]: deliberately NOT persisted), written through [onFilterChange]
+ * and applied to BOTH data paths by the SAME generation mechanics a sort
+ * change uses --- a filter change builds a fresh `Pager` generation that
+ * captures the filter, so every window of the generation tiles ONE
+ * filtered total order:
+ *  - CATALOGUE: [RoomMediaCatalogue.filteredTimelineWindow] applies the
+ *    pure engine's WHERE projection (mimeType/isFavorite/dateAddedMillis
+ *    --- the columns `CatalogueItemEntity` already persists) before the
+ *    LIMIT/OFFSET, keeping windows positional over the FILTERED order;
+ *  - MEDIA_STORE_FALLBACK, API 30+: the engine's MediaStore selection
+ *    projection AND-joins into `queryTimelineWindow`'s base selection
+ *    (fragment via `QUERY_ARG_SQL_SELECTION`, value-dimension args via
+ *    `QUERY_ARG_SQL_SELECTION_ARGS`); every engine dimension serves there,
+ *    so no surfaced filter ever leaves this leg;
+ *  - MEDIA_STORE_FALLBACK, snapshot leg (below 30, or a non-Room catalogue
+ *    binding with an active filter it cannot serve): the full
+ *    `queryTimeline()` snapshot is filtered IN MEMORY with the engine's
+ *    predicate before the drop/take slicing, which keeps the window math
+ *    exact because the snapshot is fully materialized first. (The one
+ *    dimension memory cannot evaluate --- a bucket, no bucket field on
+ *    `MediaItem` --- fails CLOSED there: a visibly empty timeline, never a
+ *    silently unfiltered one; no surfaced chip can produce it.)
+ *
+ * The backend ladder itself ([timelineSource]) is filter-aware: a filter
+ * the catalogue cannot serve (a bucket --- no column; or a non-Room
+ * catalogue binding, which has no filtered-window method) keeps the
+ * generation on the MediaStore fallback, which serves every filter the
+ * UI can surface. The grid, the empty state and the item count therefore
+ * stay honest on every path: nothing is filtered client-side after
+ * paging.
+ *
  * ## Dataset drift -> generational invalidation (issue #38, finding 1)
  * LIMIT/OFFSET windows are positional: if the dataset changes between two
  * windows of the SAME generation (camera shot, download, delete), the
@@ -178,6 +217,20 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
     private val catalogue: MediaCatalogue =
         getApplication<ToadGalleryApplication>().mediaCatalogue
 
+    /**
+     * The catalogue binding as the concrete Room implementation (r17): the
+     * filtered timeline windows live on [RoomMediaCatalogue]
+     * ([RoomMediaCatalogue.filteredTimelineWindow]) because the
+     * [MediaCatalogue] interface and its in-memory reference twin are
+     * frozen for the parallel r15-r18 rounds. The production shell ALWAYS
+     * binds Room here (`ToadGalleryApplication.mediaCatalogue`), so this
+     * cast succeeds in every real process; the `as?` keeps a non-Room
+     * test wiring honest instead of crashing, and the backend ladder
+     * ([timelineSource]) then routes active filters onto the MediaStore
+     * fallback, which serves every filter the chips can surface.
+     */
+    private val roomCatalogue: RoomMediaCatalogue? = catalogue as? RoomMediaCatalogue
+
     private val _state = MutableStateFlow<PhotosState>(PhotosState.Loading)
     val state: StateFlow<PhotosState> = _state.asStateFlow()
 
@@ -188,6 +241,17 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val _sort = MutableStateFlow(TimelineSort.NEWEST_FIRST)
     val sort: StateFlow<TimelineSort> = _sort.asStateFlow()
+
+    /**
+     * The timeline's smart-filter state (r17): per-session ViewModel state
+     * (survives config changes with the ViewModel, deliberately NOT
+     * persisted across process death), read by the screen's chips row and
+     * written only through [onFilterChange], which rebuilds the paging
+     * pipeline. A fresh [TimelineFilter] is the unfiltered timeline --- the
+     * pre-r17 behavior, exactly.
+     */
+    private val _filter = MutableStateFlow(TimelineFilter())
+    val filter: StateFlow<TimelineFilter> = _filter.asStateFlow()
 
     /**
      * The [WindowPagingSource] of the CURRENT Pager generation (issue #38
@@ -329,6 +393,24 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Changes the timeline's smart filter (r17). No-op for the current
+     * value; otherwise the ready timeline is REPLACED by a fresh `Pager`
+     * generation capturing the new filter (see the class KDoc's
+     * smart-filter section for why a live generation is never re-filtered
+     * mid-flight --- the same total-order argument as a sort change). While
+     * the shell is not `Ready` (permission pending) the value is only
+     * stored --- the next grant builds with it. The screen also feeds the
+     * Collections hand-off ([PhotosFilterHandoff]) through here.
+     */
+    fun onFilterChange(newFilter: TimelineFilter) {
+        if (_filter.value == newFilter) return
+        _filter.value = newFilter
+        if (_state.value is PhotosState.Ready) {
+            startGeneration()
+        }
+    }
+
+    /**
      * One debounced catalogue change landed (r13): the timeline must
      * re-read, and HOW depends on whether the change also flipped the
      * backend choice.
@@ -367,37 +449,48 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Resolves the backend for the next generation and publishes it as a
-     * fresh [PhotosState.Ready]. The sort is read at PUBLISH time, not
-     * launch time: a rapid sort toggle can supersede this coroutine while
-     * it awaits [MediaCatalogue.liveItemCount], and publishing the
-     * superseded order would leave the grid disagreeing with the menu; the
-     * superseding build publishes the fresh order regardless.
+     * fresh [PhotosState.Ready]. The sort AND the filter are read at
+     * PUBLISH time, not launch time: a rapid sort/filter toggle can
+     * supersede this coroutine while it awaits [MediaCatalogue
+     * .liveItemCount], and publishing the superseded values would leave
+     * the grid disagreeing with the menu/chips; the superseding build
+     * publishes the fresh values regardless.
      */
     private suspend fun publishNextGeneration() {
         val backend = currentTimelineSource()
-        _state.value = PhotosState.Ready(buildPagingData(_sort.value, backend))
+        _state.value = PhotosState.Ready(
+            buildPagingData(sort = _sort.value, filter = _filter.value, backend = backend),
+        )
     }
 
     /**
      * The backend choice for a generation about to be built: the catalogue
-     * drives iff it is populated. One suspend Room read ([MediaCatalogue
+     * drives iff it is populated AND (since r17) the binding can serve the
+     * active filter. One suspend Room read ([MediaCatalogue
      * .liveItemCount]) on [Dispatchers.IO]; the pure decision itself is
      * [timelineSource] (JVM-tested).
      */
-    private suspend fun currentTimelineSource(): TimelineSource =
-        timelineSource(
+    private suspend fun currentTimelineSource(): TimelineSource {
+        val filter = _filter.value
+        val catalogueServesFilter = !filter.isActive ||
+            (roomCatalogue != null && TimelineFilterCatalogue.canServe(filter))
+        return timelineSource(
             cataloguePopulated = withContext(Dispatchers.IO) { catalogue.liveItemCount() } > 0,
+            catalogueServesFilter = catalogueServesFilter,
         )
+    }
 
     /**
      * One `Pager` + `cachedIn(viewModelScope)` stream for one generation
-     * (one permission grant, one sort change, or one backend flip). The
-     * paging source factory captures the generation's [TimelineSort] AND
-     * [TimelineSource]; every window of the generation therefore tiles the
-     * same total order from the same backend.
+     * (one permission grant, one sort change, one filter change, or one
+     * backend flip). The paging source factory captures the generation's
+     * [TimelineSort], [TimelineFilter] AND [TimelineSource]; every window
+     * of the generation therefore tiles the same total order, over the
+     * same filtered slice, from the same backend.
      */
     private fun buildPagingData(
         sort: TimelineSort,
+        filter: TimelineFilter,
         backend: TimelineSource,
     ): Flow<PagingData<MediaItem>> =
         Pager(
@@ -408,22 +501,27 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
                 initialLoadSize = TIMELINE_PAGE_SIZE,
                 enablePlaceholders = false,
             ),
-            pagingSourceFactory = { timelineWindowPagingSource(sort, backend) },
+            pagingSourceFactory = { timelineWindowPagingSource(sort, filter, backend) },
         ).flow.cachedIn(viewModelScope)
 
     /**
-     * One [WindowPagingSource] per Pager generation, backed by [backend]
-     * and ordered by the generation's [sort] (issue #66; the backend split
-     * since r13). The explicit `Build.VERSION.SDK_INT` check (not
-     * `supportsWindowedQueries()`) is what NewApi lint recognizes as the
-     * guard for the `@RequiresApi(30)` call --- note it gates only the
-     * FALLBACK branch; the catalogue branch is plain Room and serves every
-     * API level. Every generation also becomes [currentSource] (and its
-     * backend [currentBackend]), so the debounced change collectors
-     * invalidate exactly the live source through the right channel.
+     * One [WindowPagingSource] per Pager generation, backed by [backend],
+     * ordered by the generation's [sort] (issue #66; the backend split
+     * since r13) and narrowed to the generation's [filter] (r17) INSIDE
+     * every window query --- positional windows must filter in-query or
+     * offsets stop tiling, which is the same total-order argument that
+     * forbids re-sorting a live generation. The explicit
+     * `Build.VERSION.SDK_INT` check (not `supportsWindowedQueries()`) is
+     * what NewApi lint recognizes as the guard for the `@RequiresApi(30)`
+     * call --- note it gates only the FALLBACK branch; the catalogue
+     * branch is plain Room and serves every API level. Every generation
+     * also becomes [currentSource] (and its backend [currentBackend]), so
+     * the debounced change collectors invalidate exactly the live source
+     * through the right channel.
      */
     private fun timelineWindowPagingSource(
         sort: TimelineSort,
+        filter: TimelineFilter,
         backend: TimelineSource,
     ): WindowPagingSource<MediaItem> {
         val newSource = when (backend) {
@@ -434,9 +532,32 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
                     // ordering contract); this side only maps rows. The
                     // mapping is the pure [catalogueTimelineItem] core with
                     // `Uri.parse` at this thin seam.
-                    catalogue
-                        .timelineWindow(offset, limit, sort.toCatalogueDirection())
-                        .map { it.asTimelineItem().asMediaItem() }
+                    //
+                    // r17: an INACTIVE filter keeps the pre-r17 interface
+                    // read byte-identical; an ACTIVE one takes the filtered
+                    // twin on the Room binding. The backend ladder
+                    // ([currentTimelineSource]) only routes here for an
+                    // active filter when the Room binding exists AND the
+                    // engine's canServe gate passes, so the fail-closed
+                    // `?: emptyList()` below is unreachable in practice ---
+                    // and deliberately visible-empty (never silently
+                    // unfiltered) if a future caller violates the ladder.
+                    val records =
+                        if (!filter.isActive) {
+                            catalogue.timelineWindow(
+                                offset,
+                                limit,
+                                sort.toCatalogueDirection(),
+                            )
+                        } else {
+                            roomCatalogue?.filteredTimelineWindow(
+                                offset,
+                                limit,
+                                sort.toCatalogueDirection(),
+                                where = TimelineFilterCatalogue.where(filter),
+                            ) ?: emptyList()
+                        }
+                    records.map { it.asTimelineItem().asMediaItem() }
                 }
             }
 
@@ -445,21 +566,44 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
                     // Native windows: one Bundle-args MediaStore query per
                     // page, ordered by the generation's sort (the provider
                     // applies the total order; the _id tiebreak keeps
-                    // windows aligned). Exactly the pre-r13 path.
+                    // windows aligned) and filtered by the generation's
+                    // filter inside the same query (selection fragment +
+                    // bound args, both built by the pure engine inside
+                    // `queryTimelineWindow`). Exactly the pre-r13 path when
+                    // the filter is inactive.
                     WindowPagingSource { offset, limit ->
-                        withContext(Dispatchers.IO) { source.queryTimelineWindow(offset, limit, sort) }
+                        withContext(Dispatchers.IO) {
+                            source.queryTimelineWindow(offset, limit, sort, filter)
+                        }
                     }
                 } else {
                     // Pre-30 fallback: one full snapshot per generation,
                     // memoized on first load in the generation's order
                     // (TimelineSort applies the same date+_id total order
-                    // in memory), then sliced with the same window
-                    // contract. Exactly the pre-r13 path.
+                    // in memory), FILTERED in memory by the engine's
+                    // predicate BEFORE the memoization (r17) --- so the
+                    // drop/take slicing below stays exact over the
+                    // FILTERED list --- then sliced with the same window
+                    // contract. Exactly the pre-r13 path when the filter
+                    // is inactive (the empty filter's predicate passes
+                    // every item).
                     var snapshot: List<MediaItem>? = null
                     WindowPagingSource { offset, limit ->
                         withContext(Dispatchers.IO) {
                             (snapshot ?: sort
-                                .sortItems(source.queryTimeline(), { it.dateAddedSec }, { it.id })
+                                .sortItems(
+                                    source.queryTimeline().let { items ->
+                                        if (filter.isActive) {
+                                            items.filter { item ->
+                                                filter.matches(item.asFilterFields())
+                                            }
+                                        } else {
+                                            items
+                                        }
+                                    },
+                                    { it.dateAddedSec },
+                                    { it.id },
+                                )
                                 .also { snapshot = it })
                                 .drop(offset)
                                 .take(limit)
@@ -513,8 +657,11 @@ internal enum class TimelineSource {
 }
 
 /**
- * The pure backend choice for one timeline generation (r13, JVM-tested):
- * the catalogue drives iff it holds at least one live record.
+ * The pure backend choice for one timeline generation (r13, JVM-tested;
+ * filter-aware since r17): the catalogue drives iff it holds at least one
+ * live record AND the binding can serve the generation's active filter
+ * ([catalogueServesFilter] --- an inactive filter is always serveable, so
+ * the default keeps the pre-r17 decision exactly).
  *
  * An EMPTY catalogue means "the first scan has not populated yet" --- the
  * first cold start on a fresh install (or after the app's data was
@@ -524,9 +671,23 @@ internal enum class TimelineSource {
  * timeline keeps the MediaStore path, which needs no scan and orders by
  * `date_added`; the first catalogue change flips the generation onto the
  * catalogue path (see `onCatalogueChanged`).
+ *
+ * A filter the catalogue CANNOT serve (r17: a bucket dimension --- the
+ * entity has no bucket column --- or a non-Room catalogue binding, which
+ * has no filtered-window method) also keeps the generation on the
+ * MediaStore fallback, which serves every engine dimension; the Android
+ * side composes the boolean from the binding and the pure engine's
+ * `TimelineFilterCatalogue.canServe` gate, keeping this decision itself
+ * JVM-pure.
  */
-internal fun timelineSource(cataloguePopulated: Boolean): TimelineSource =
-    if (cataloguePopulated) TimelineSource.CATALOGUE else TimelineSource.MEDIA_STORE_FALLBACK
+internal fun timelineSource(
+    cataloguePopulated: Boolean,
+    catalogueServesFilter: Boolean = true,
+): TimelineSource = when {
+    !cataloguePopulated -> TimelineSource.MEDIA_STORE_FALLBACK
+    !catalogueServesFilter -> TimelineSource.MEDIA_STORE_FALLBACK
+    else -> TimelineSource.CATALOGUE
+}
 
 /**
  * Maps the timeline's [TimelineSort] onto the catalogue's
@@ -636,6 +797,23 @@ private fun CatalogueTimelineItem.asMediaItem(): MediaItem = MediaItem(
     isFavorite = isFavorite,
     captureDateMillis = captureDateMillis,
 )
+
+/**
+ * The `MediaItem` -> engine-tuple leg (r17): maps an android-bearing item
+ * onto the android-free [TimelineFilterFields] the pure predicate
+ * ([io.github.dukeoftoad.gallery.data.filters.matches]) evaluates. The
+ * one place the snapshot fallback translates a row for the filter engine;
+ * the tuple carries every field the engine can read (no bucket ---
+ * [MediaItem] has none, which is why the bucket dimension fails closed
+ * in memory; see the engine's KDoc).
+ */
+private fun MediaItem.asFilterFields(): TimelineFilterFields =
+    TimelineFilterFields(
+        mimeType = mimeType,
+        isVideo = isVideo,
+        isFavorite = isFavorite,
+        dateAddedSec = dateAddedSec,
+    )
 
 sealed interface PhotosState {
     /** Initial state: first frame before the first permission check resolves. */

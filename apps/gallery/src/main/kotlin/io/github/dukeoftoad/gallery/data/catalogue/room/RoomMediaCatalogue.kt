@@ -182,6 +182,64 @@ class RoomMediaCatalogue(
     override suspend fun purgeTombstonesOlderThan(cutoffMillis: Long) {
         dao.deleteTombstonesOlderThan(cutoffMillis)
     }
+
+    // ------------------------------------------------------------------
+    // r17 round: FILTERED timeline windows (smart-filter chips) --- an
+    // append-only section; nothing above this line is touched, and the
+    // entity<->record mappers below the class stay the ONLY translation
+    // point. Types are fully qualified on purpose so this file's import
+    // block stays untouched (parallel-round merge hygiene).
+    //
+    // The WHERE fragment + bound args arrive FULLY COMPOSED from the pure,
+    // JVM-tested filter engine (io.github.dukeoftoad.gallery.data.filters
+    // .TimelineFilterCatalogue) --- fixed clause shapes over existing
+    // columns, no user input, no string interpolation of values. This
+    // method's only jobs are the guards (identical to [timelineWindow]'s:
+    // a negative LIMIT is "unbounded" in SQLite, so invalid arguments must
+    // answer empty in BOTH implementations) and the ONE composition site:
+    // WHERE + the SAME total ORDER BY the fixed window queries use +
+    // LIMIT/OFFSET as bound args, handed to the DAO's @RawQuery window.
+    // ------------------------------------------------------------------
+
+    /**
+     * Window `[offset, offset+limit)` of LIVE records matching [where], in
+     * the SAME total order [timelineWindow] serves (effective instant,
+     * local-media-key tiebreak, [direction]) --- i.e. the FILTERED twin of
+     * [timelineWindow]: positional windows must apply the filter inside
+     * the query or offsets stop tiling.
+     *
+     * NOT on the [io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue]
+     * interface: the interface and its in-memory reference implementation
+     * are frozen for the parallel r15-r18 rounds; the production shell
+     * always binds THIS class (see `ToadGalleryApplication.mediaCatalogue`),
+     * and `PhotosViewModel` reaches the method through that binding. An
+     * active filter the catalogue cannot serve (a bucket --- no column)
+     * must never reach here; the engine's `canServe` gate and the
+     * ViewModel's backend ladder keep such generations on the MediaStore
+     * fallback, which serves every surfaced filter.
+     */
+    suspend fun filteredTimelineWindow(
+        offset: Int,
+        limit: Int,
+        direction: TimelineDirection,
+        where: io.github.dukeoftoad.gallery.data.filters.TimelineFilterCatalogue.CatalogueFilterWhere,
+    ): List<CatalogueRecord> {
+        if (offset < 0 || limit <= 0) return emptyList()
+        val directionWord = when (direction) {
+            TimelineDirection.NEWEST_FIRST -> "DESC"
+            TimelineDirection.OLDEST_FIRST -> "ASC"
+        }
+        val whereSql = where.sql?.let { " WHERE $it" } ?: ""
+        val sql =
+            "SELECT * FROM catalogue_items$whereSql " +
+                "ORDER BY COALESCE(resolvedCaptureDateMillis, dateAddedMillis) $directionWord, " +
+                "localMediaKey $directionWord " +
+                "LIMIT ? OFFSET ?"
+        val args = where.args.toTypedArray() + arrayOf(limit, offset)
+        return dao.timelineWindowFiltered(
+            androidx.sqlite.db.SimpleSQLiteQuery(sql, args),
+        ).map { it.toRecord() }
+    }
 }
 
 // --- entity <-> record mappers (the ONLY translation point) ---------------

@@ -50,6 +50,23 @@ import javax.crypto.spec.GCMParameterSpec
  * biometric data never enters the app (the OS compares, the Keystore
  * authorizes), the sealed secret never leaves AndroidKeyStore's cipher
  * pipeline, and the app holds no INTERNET permission anyway.
+ *
+ * r10 device fix (build 13 crash): `PromptInfo` built with
+ * `BIOMETRIC_WEAK` and no negative button text throws
+ * `IllegalArgumentException("Negative text must be set and non-empty.")`
+ * from `PromptInfo.Builder.build()` the moment the biometric sheet is
+ * shown. The negative text is REQUIRED here because a CryptoObject-bound
+ * prompt cannot combine `BIOMETRIC_WEAK` with `DEVICE_CREDENTIAL` (the
+ * Keystore handshake only authorizes a biometric round), so the prompt
+ * has no credential fallback to substitute for the negative button. The
+ * construction is isolated in [promptInfoBuilder] and pinned by
+ * `VaultBiometricsPromptInfoTest` on the JVM (the rest of this object
+ * stays hardware-bound and untested --- ADR-0016). One JVM limitation,
+ * stated honestly: `PromptInfo.Builder.build()` itself calls
+ * `android.text.TextUtils`, which the unit-test stub does not implement ---
+ * so the suite pins the BUILDER state (negative text set, BIOMETRIC_WEAK,
+ * no confirmation) via reflection and leaves the library's own `build()`
+ * enforcement to the r10 device checklist.
  */
 object VaultBiometrics {
 
@@ -227,13 +244,39 @@ object VaultBiometrics {
             callback,
         )
         prompt.authenticate(
-            BiometricPrompt.PromptInfo.Builder()
-                .setTitle(activity.getString(R.string.vault_biometric_prompt_title))
-                .setSubtitle(activity.getString(R.string.vault_biometric_prompt_subtitle))
-                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-                .setConfirmationRequired(false)
-                .build(),
+            buildPromptInfo(
+                title = activity.getString(R.string.vault_biometric_prompt_title),
+                subtitle = activity.getString(R.string.vault_biometric_prompt_subtitle),
+                negativeText = activity.getString(R.string.vault_biometric_prompt_negative),
+            ),
             BiometricPrompt.CryptoObject(cipher),
         )
     }
+
+    /**
+     * The vault's [BiometricPrompt.PromptInfo] [BiometricPrompt.PromptInfo.Builder],
+     * configured but NOT built --- the seam the JVM suite pins (see the r10
+     * note on the object): `BIOMETRIC_WEAK` + CryptoObject means the
+     * negative button is mandatory, so the builder ALWAYS sets non-empty
+     * text. Parameters are plain `CharSequence`s --- no `Context` --- so the
+     * test classpath needs no Android framework.
+     */
+    internal fun promptInfoBuilder(
+        title: CharSequence,
+        subtitle: CharSequence,
+        negativeText: CharSequence,
+    ): BiometricPrompt.PromptInfo.Builder =
+        BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setNegativeButtonText(negativeText)
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            .setConfirmationRequired(false)
+
+    /** The built prompt the two verbs authenticate with; see [promptInfoBuilder]. */
+    internal fun buildPromptInfo(
+        title: CharSequence,
+        subtitle: CharSequence,
+        negativeText: CharSequence,
+    ): BiometricPrompt.PromptInfo = promptInfoBuilder(title, subtitle, negativeText).build()
 }

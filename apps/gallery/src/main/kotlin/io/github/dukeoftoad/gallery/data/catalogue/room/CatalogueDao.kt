@@ -239,6 +239,39 @@ interface CatalogueDao {
     @Query("SELECT * FROM scan_checkpoints WHERE volumeName = :volumeName")
     suspend fun checkpointByVolumeName(volumeName: String): ScanCheckpointEntity?
 
+    // ------------------------------------------------------------------
+    // r17 round: FILTERED timeline windows (smart-filter chips).
+    //
+    // The filtered windows need a WHERE fragment between FROM and ORDER BY,
+    // which a fixed @Query string cannot host --- hence ONE @RawQuery
+    // method. The SQL is NOT built here (or in the caller by hand): the
+    // WHERE fragment and its bound args come fully composed from the pure,
+    // JVM-tested filter engine (io.github.dukeoftoad.gallery.data.filters
+    // .TimelineFilterCatalogue.where --- fixed clause shapes, no user
+    // input), and RoomMediaCatalogue.filteredTimelineWindow (this file's
+    // companion section in the wrapper class) owns the one composition
+    // site: WHERE + the SAME total ORDER BY the two fixed window queries
+    // above use + LIMIT/OFFSET as bound args. Fully-qualified annotation
+    // and parameter types on purpose: this section is an append-only
+    // addition (parallel-round merge hygiene), so the file's import block
+    // above stays untouched.
+    // ------------------------------------------------------------------
+
+    /**
+     * The raw window statement backing
+     * [io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
+     * .filteredTimelineWindow]: the caller supplies the complete statement
+     * (SELECT ... FROM catalogue_items [WHERE ...] ORDER BY ... LIMIT ?
+     * OFFSET ?) as a [androidx.sqlite.db.SupportSQLiteQuery]; Room maps
+     * the returned rows onto [CatalogueItemEntity] exactly as the fixed
+     * window queries above do. Android-adjacent Room glue, untested per
+     * ADR-0016 --- the fragment/args contracts are pinned on the JVM in
+     * the filter engine's own suite.
+     */
+    @androidx.room.RawQuery
+    suspend fun timelineWindowFiltered(
+        query: androidx.sqlite.db.SupportSQLiteQuery,
+    ): List<CatalogueItemEntity>
     // =====================================================================
     // --- r16 round: the on-device map view's location surface -------------
     // (additive end-of-file section; nothing above this line changes. A

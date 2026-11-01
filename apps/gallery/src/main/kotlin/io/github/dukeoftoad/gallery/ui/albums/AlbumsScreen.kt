@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ui.albums
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -20,14 +23,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -39,10 +49,14 @@ import coil.compose.AsyncImage
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.Favorites
+import io.github.dukeoftoad.gallery.data.filters.DerivedCollections
+import io.github.dukeoftoad.gallery.data.filters.PhotosFilterHandoff
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
 import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
+import io.github.dukeoftoad.gallery.ui.photos.collectionLabelRes
+import kotlinx.coroutines.launch
 
 /**
  * Albums tab (Phase 3, issue #29).
@@ -67,6 +81,20 @@ import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
  * count the same plurals use. Tapping it routes the SAME album-detail
  * navigation with [Favorites.FAVORITES_BUCKET_ID] --- the detail ViewModel
  * resolves the sentinel to the favorites query.
+ *
+ * Since r17 the non-empty Ready state also carries a "Collections"
+ * section ([CollectionsSection]) pinned as the grid's first, full-span
+ * item: the DERIVED collections of `DerivedCollections` --- Photos /
+ * Videos / GIFs / Favorites --- as tappable cards. A collection is nothing
+ * but a named `TimelineFilter` preset from the SAME pure engine the Photos
+ * chips use (zero persistence; user-defined saved collections are roadmap
+ * Phase 5 --- see `DerivedCollections`'s KDoc). The shell owns every tab
+ * switch and its file is frozen for the parallel rounds, so a card cannot
+ * navigate to Photos itself: tapping hands the preset to the Photos
+ * timeline through the one-shot [PhotosFilterHandoff] and confirms with a
+ * snackbar ("...open the Photos tab to view"); the Photos screen consumes
+ * the request on its next entry. The favorites card is Q+ only, matching
+ * the favorites pseudo-album's own tiering.
  */
 @Composable
 fun AlbumsScreen(
@@ -81,32 +109,67 @@ fun AlbumsScreen(
         }
     )
 
+    // r17: the Collections confirmation snackbar --- screen-owned, like the
+    // file-ops snackbars on the Photos tab (the hand-off itself is a plain
+    // process-wide object; no ViewModel state needed for one message).
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val onOpenCollection: (DerivedCollections.DerivedCollection) -> Unit = { collection ->
+        // One-shot request: the Photos tab's entry composition consumes it
+        // and applies it through the same onFilterChange the chips use.
+        PhotosFilterHandoff.request(collection.filter)
+        collectionLabelRes(collection.id)?.let { labelRes ->
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = context.getString(
+                        R.string.albums_collection_applied,
+                        context.getString(labelRes),
+                    ),
+                    duration = SnackbarDuration.Short,
+                )
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         requester.launch()
     }
 
-    when (val s = state) {
-        is AlbumsState.Loading -> LoadingState(tag = "albums_state_loading")
-        is AlbumsState.PermissionNeeded -> MediaPermissionState(onGrant = requester::launch)
-        is AlbumsState.Ready -> {
-            if (s.albums.isEmpty()) {
-                // StateScreen is frozen without a tag parameter, so the stable
-                // per-screen tag rides on a wrapper Box (issue #38.7).
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .testTag("albums_state_empty"),
-                ) {
-                    StateScreen(
-                        iconRes = R.drawable.ic_nav_albums,
-                        titleRes = R.string.state_albums_empty_title,
-                        bodyRes = R.string.state_albums_empty_body,
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (val s = state) {
+            is AlbumsState.Loading -> LoadingState(tag = "albums_state_loading")
+            is AlbumsState.PermissionNeeded -> MediaPermissionState(onGrant = requester::launch)
+            is AlbumsState.Ready -> {
+                if (s.albums.isEmpty()) {
+                    // StateScreen is frozen without a tag parameter, so the stable
+                    // per-screen tag rides on a wrapper Box (issue #38.7).
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("albums_state_empty"),
+                    ) {
+                        StateScreen(
+                            iconRes = R.drawable.ic_nav_albums,
+                            titleRes = R.string.state_albums_empty_title,
+                            bodyRes = R.string.state_albums_empty_body,
+                        )
+                    }
+                } else {
+                    AlbumGrid(
+                        albums = s.albums,
+                        onOpenAlbum = onOpenAlbum,
+                        onOpenCollection = onOpenCollection,
                     )
                 }
-            } else {
-                AlbumGrid(albums = s.albums, onOpenAlbum = onOpenAlbum)
             }
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp),
+        )
     }
 }
 
@@ -114,6 +177,7 @@ fun AlbumsScreen(
 private fun AlbumGrid(
     albums: List<Album>,
     onOpenAlbum: (bucketId: Long) -> Unit,
+    onOpenCollection: (DerivedCollections.DerivedCollection) -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -122,6 +186,12 @@ private fun AlbumGrid(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // The Collections section (r17) spans the grid's full width as its
+        // first item, so it scrolls with the albums (one scroll surface)
+        // and needs no extra layout scaffolding.
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            CollectionsSection(onOpenCollection = onOpenCollection)
+        }
         items(
             items = albums,
             key = { it.bucketId },
@@ -138,6 +208,84 @@ private fun AlbumGrid(
                 )
             }
         }
+    }
+}
+
+/**
+ * The Collections section (r17): the derived collections as a header + a
+ * horizontally scrolling row of tappable cards. The entries come from
+ * `DerivedCollections.visibleOn` (pure, JVM-tested): everything today,
+ * minus Favorites below Q (the `is_favorite` provider column is Q+, so
+ * the card would promise a view that can never fill --- the same tiering
+ * as the favorites pseudo-album card).
+ */
+@Composable
+private fun CollectionsSection(
+    onOpenCollection: (DerivedCollections.DerivedCollection) -> Unit,
+) {
+    val visible = DerivedCollections.visibleOn(Build.VERSION.SDK_INT)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.albums_collections_header),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.albums_collections_subtitle),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .testTag("albums_collections"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Count-based items: the file already imports the GRID items
+            // extension (`lazy.grid.items`) for the album cards below, and
+            // the LazyList list-overload shares its name.
+            items(visible.size) { index ->
+                val collection = visible[index]
+                collectionLabelRes(collection.id)?.let { labelRes ->
+                    CollectionCard(
+                        label = stringResource(labelRes),
+                        onClick = { onOpenCollection(collection) },
+                        modifier = Modifier.testTag("albums_collection_card_${collection.id}"),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One derived-collection card (r17): a tonal, rounded label card --- the
+ * collection has no cover of its own (it is a filter preset, not stored
+ * content), and pretending otherwise with some other item's thumbnail
+ * would be the fake-persistence look the section explicitly avoids.
+ */
+@Composable
+private fun CollectionCard(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
     }
 }
 

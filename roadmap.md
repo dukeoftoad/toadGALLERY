@@ -387,10 +387,55 @@ Aves code is ported (ADR-0008).
 > boundary) before any Ente-derived gallery-AI work can build on it. The
 > full audit, the Phase 4 contract requirements and the standalone
 > Ente-derived AI implementation plan live in
-> `docs/phase-4/phase-4-contract-audit-and-ente-ai-plan.md`. Note its
-> working-scope naming: "Phase 5" there means the Ente-derived gallery
-> AI, not this roadmap's Phase 5 below --- reconciling the numbering is
-> an explicit pre-implementation decision.
+> `docs/phase-4/phase-4-contract-audit-and-ente-ai-plan.md`.
+
+> **Phase map (authoritative, 2026-11-01):** the audit document above
+> uses "Phase 5" as a working label for the Ente-derived gallery AI
+> (People, semantic search, local indexing). This roadmap's numbering
+> stays authoritative and the mapping is now fixed so no work lands
+> under the wrong number: the Ente-derived AI **engine** (Rust ML port,
+> model pack, ML DB/vector store, index coordinator) is the engine
+> workstream *inside* this roadmap's **Phase 5** (its product surface is
+> Phase 5's People/Places/Things auto-albums and Magic Search), gated on
+> the Phase 4 contract items below; **Phase 8** remains the editor-AI
+> scope (ADR-0010). When the audit doc says "Phase 5", read "the Phase 5
+> AI-engine workstream".
+
+#### Status — r10 round (versionCode 14): the contract foundation has landed
+
+The audit's prerequisite contracts are implemented and JVM-tested
+(174 new tests; no UI consumes them yet --- deliberately, as the
+"contracts before Ente integration" gate):
+
+- `data/media/identity` --- `MediaIdentity` (volume-aware durable local
+  media key; path/display name never identity) and the type-level vault
+  boundary `MediaEligibility` → `EligiblePublicMedia`.
+- `data/media/revision` + `data/media/dates` --- `MediaRevision.diff`
+  (UNCHANGED / METADATA_CHANGED / CONTENT_CHANGED invalidation classes)
+  and the timezone-aware capture-date resolver with source precedence.
+- `metadata/` --- `MetadataAvailability` (PRESENT/ABSENT/UNSUPPORTED/
+  UNREADABLE), `MediaMetadataSnapshot`, `ExifMath` + `ParsedExif` over
+  a thin `androidx.exifinterface` reader, video container parses, and
+  `MetadataFormatMatrix` (the parser capability matrix, in data).
+- `data/catalogue` --- the Room media catalogue (`MediaCatalogue` +
+  Room 2.8.5/KSP, non-destructive migrations, per-volume scan
+  checkpoints).
+- `data/media/changes` --- `MediaChangeFeed` (per-volume generation on
+  API 30+, ContentObserver fallback below) + `CatalogueReconciler`
+  (tombstoning, generation-bump re-checks; in-app metadata writes alone
+  never trigger re-indexing).
+- `data/media/access` + `media/decode` --- `MediaReadHandle` byte
+  boundary (openable only for eligible public media, no plaintext temp
+  files) and `CanonicalDecodePlanner` (power-of-two sampling, upright
+  swaps, deterministic memory-budget refusal).
+
+**Still open in Phase 4:** the metadata Details view + editable fields
+(EXIF write-back, then our IPTC/XMP wrappers), the on-device map view,
+collections/smart-filter chips, the format-support audit deliverable,
+the ACCESS_MEDIA_LOCATION permission flow, and the scan driver that
+wires the catalogue + change feed into app start; the date resolver
+still needs adopting in the timeline's sort/group keys (it is a
+contract landing, not a behavior change yet).
 
 #### Tasks
 
@@ -447,7 +492,11 @@ organisational affordances, all on-device.
   per-day header and a horizontal "Moments" strip of recent highlights.
 - **Auto-albums (opt-in):** People, Places, Things. Each is generated
   by an on-device ML index that runs only after the user explicitly
-  turns it on (ADR-0010).
+  turns it on (ADR-0010). The engine workstream behind these is the
+  Ente-derived AI port defined in
+  `docs/phase-4/phase-4-contract-audit-and-ente-ai-plan.md` (see the
+  phase-map note under Phase 4); it builds on the Phase 4 contracts
+  landed in the r10 round.
   - **People:** on-device face clustering. No face data ever leaves the
     device. The user can name clusters, merge/split them, and exclude
     specific photos from a cluster.

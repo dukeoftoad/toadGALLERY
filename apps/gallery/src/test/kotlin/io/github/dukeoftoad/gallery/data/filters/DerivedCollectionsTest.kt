@@ -30,7 +30,7 @@ class DerivedCollectionsTest {
     }
 
     @Test
-    fun `every preset projects literal-only onto MediaStore (no bound args)` {
+    fun `every preset projects literal-only onto MediaStore (no bound args)`() {
         // Surfaced filters stay arg-free even though the Bundle protocol
         // supports args: the enum dimensions are vocabulary, not data, and
         // keeping them literal means the windowed query needs only the

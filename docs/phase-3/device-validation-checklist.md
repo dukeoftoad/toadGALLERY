@@ -1,15 +1,16 @@
-# Phase 3 device-validation checklist — v0.4.1-alpha (r8)
+# Phase 3 device-validation checklist — v0.4.1-alpha (r9)
 
 **Status:** pending device validation (the Phase 3 exit work; see
 `roadmap.md`'s Phase 3 progress note).\
-**Target build:** `toadGALLERY-0.4.1-alpha-r8.apk` from the
-`v0.4.1-alpha-r8` pre-release (versionCode 12). Sections 1–8 carry over
-from the r7 checklist unchanged; sections 9–11 are new for the r8 device
-round (#73 vault integrity + #74 diagnostics/appearance).\
-**Reference device:** the Xiaomi device used for the 2026-10-30/31 logcat
-reviews (`c2.qti.hevc.decoder` hardware; 10-bit HEVC Main10 sample in MKV;
-`getFrameAtTime` NULL-frame samples; the r7 "vault PIN creating failed"
-silent failure).\
+**Target build:** `toadGALLERY-0.4.1-alpha-r9.apk` from the
+`v0.4.1-alpha-r9` pre-release (versionCode 13). r9 fixes the two r8
+device findings: the AndroidKeyStore caller-IV seal rejection (the
+actual "vault PIN creating failed" root cause) and the grid
+stale-index crash. Sections 1–11 carry over (8 from r7, 3 from r8).\
+**Reference device:** the Xiaomi device used for the 2026-10-30/31 and
+11-01 logcat reviews (`c2.qti.hevc.decoder` hardware; 10-bit HEVC Main10
+sample in MKV; `getFrameAtTime` NULL-frame samples; the build-11/12
+"vault PIN creating failed" and the r8 `Index: 60, Size: 60` crash).\
 **Method:** install over the previous build, run each section, note
 pass/fail + a logcat snippet for anything unexpected. For vault/diagnostic
 sections also capture the in-app log: `adb logcat -s ToadDiag ToadVault`
@@ -112,13 +113,18 @@ Sections 1–8 map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
 - [ ] Privacy gate: `adb logcat` shows zero network attempts during all
       of the above (the APK holds no INTERNET permission — verify once
       with `aapt dump badging` or an install-time check if convenient).
+- [ ] No `IndexOutOfBoundsException` in logcat while scrolling the
+      timeline during/after a refresh (the r8 `Index: 60, Size: 60`
+      crash; try: scroll deep, then change sort or take a photo with
+      another app while toadGALLERY is open, keep scrolling).
 - [ ] No new ANRs/crashes in logcat during the whole pass.
 
-## 9. Vault setup failure scenario + integrity round 2 (#73/#74) — the r7 defect report
+## 9. Vault setup failure scenario + integrity round 2 (#73/#74/#76) — the build-11/12 defect report
 
-- [ ] On the SAME device where r7 showed "vault PIN creating failed":
-      vault setup now SUCCEEDS (the StrongBox leg falls back to the TEE
-      keystore on any keystore exception instead of aborting).
+- [ ] On the SAME device where builds 11/12 showed "vault PIN creating
+      failed": vault setup now SUCCEEDS (the seal init uses the
+      provider-IV pattern AndroidKeyStore requires; the r8 DiagLog
+      capture pinned the caller-IV rejection as the root cause).
 - [ ] If it still fails: Settings → About → Diagnostics shows the exact
       failure (op + exception chain) under the vault state probe, and
       `adb logcat -s ToadDiag ToadVault` carries the two-line story —

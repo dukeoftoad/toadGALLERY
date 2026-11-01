@@ -432,6 +432,66 @@ class VaultStoreTest {
         assertThrows(VaultStoreException::class.java) { stranger.verifyPin(PIN.toCharArray()) }
     }
 
+    // ---- Diagnostics (W1) ----------------------------------------------
+
+    /**
+     * The About > Diagnostics probe (W1) narrates the disk truth at every
+     * stage: a fresh store, a configured one, one holding a blob, and the
+     * pre-#73 broken-residue shape. The blob size matches the documented
+     * sealed layout (IV || ciphertext == plaintext || GCM tag), and the
+     * `.probe` writability file never lingers behind the probe.
+     */
+    @Test
+    fun `describeState narrates the disk truth from fresh to residue`() {
+        val fixture = newFixture()
+        // Fresh: nothing sealed yet, root present and writable.
+        fixture.store.describeState().let { fresh ->
+            assertTrue(fresh.rootExists)
+            assertFalse(fresh.pinPresent)
+            assertFalse(fresh.indexPresent)
+            assertFalse(fresh.biometricBindingPresent)
+            assertEquals(0, fresh.blobCount)
+            assertEquals(0L, fresh.blobBytes)
+            assertTrue(fresh.rootWritable)
+        }
+        // Configured: the pin+index pair, zero blobs.
+        fixture.store.setup(PIN.toCharArray())
+        fixture.store.describeState().let { configured ->
+            assertTrue(configured.rootExists)
+            assertTrue(configured.pinPresent)
+            assertTrue(configured.indexPresent)
+            assertFalse(configured.biometricBindingPresent)
+            assertEquals(0, configured.blobCount)
+            assertEquals(0L, configured.blobBytes)
+            assertTrue(configured.rootWritable)
+        }
+        // One stored blob: raw count and the documented sealed size
+        // (IV(12) || ciphertext == plaintext || GCM tag(16)).
+        val payload = randomBytes(2048)
+        fixture.store.store(
+            displayName = DISPLAY_NAME,
+            mimeType = "image/jpeg",
+            isVideo = false,
+            addedAtMillis = ADDED_AT,
+            bytes = ByteArrayInputStream(payload),
+            length = payload.size.toLong(),
+        )
+        val withBlob = fixture.store.describeState()
+        assertEquals(1, withBlob.blobCount)
+        assertEquals(
+            (payload.size + VaultCrypto.IV_BYTES + VaultCrypto.GCM_TAG_BITS / 8).toLong(),
+            withBlob.blobBytes,
+        )
+        // The broken residue shape (external index loss): pin present,
+        // index gone --- exactly the state isConfigured refuses to lie about.
+        assertTrue(File(fixture.root, "index.bin").delete())
+        val residue = fixture.store.describeState()
+        assertTrue(residue.pinPresent)
+        assertFalse(residue.indexPresent)
+        // The writability probe cleans up after itself.
+        assertFalse(File(fixture.root, ".probe").exists())
+    }
+
     // ---- Helpers -------------------------------------------------------
 
     /** Emits a few bytes, then dies: the shape of a provider stream failing mid-copy. */

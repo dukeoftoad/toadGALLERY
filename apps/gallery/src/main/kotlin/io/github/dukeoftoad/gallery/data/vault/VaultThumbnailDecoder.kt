@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.data.vault
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -36,7 +37,10 @@ import kotlin.math.roundToInt
  *    blobs, tampered blobs (GCM tag fails on the final read) --- return null
  *    and the UI shows the same placeholder plate the gallery grid uses.
  *    A `Throwable` is caught PER ITEM: one bad blob never takes the listing
- *    down, and an OOM decoding one entry does not crash the app.
+ *    down, and an OOM decoding one entry does not crash the app. W1: every
+ *    fallback decision point logs one INFO line (tag "ToadVault") with the
+ *    entry id and the tier that failed --- ids only, never names, never
+ *    plaintext; the placeholder stays the only visible consequence.
  *
  * Thin by design (the Android seam of [VaultThumbnailPolicy], like
  * `AndroidVaultKeys` vs `VaultCrypto`): no branching logic beyond the
@@ -56,13 +60,23 @@ class VaultThumbnailDecoder(
 
     /**
      * One decoded, size-bounded thumbnail for [entry], or null on ANY
-     * per-item failure (see the class KDoc's degradation contract).
+     * per-item failure (see the class KDoc's degradation contract). W1:
+     * every null outcome leaves one INFO line (entry id + failed tier) in
+     * [DiagLog] --- no plaintext, no names, no stack frames.
      */
-    fun decode(entry: VaultIndexEntry): Bitmap? = try {
-        if (entry.isVideo) decodeVideoFrame(entry) else decodePhoto(entry)
-    } catch (t: Throwable) {
-        // Honest degradation: log nothing (no plaintext in logcat), no crash.
-        null
+    fun decode(entry: VaultIndexEntry): Bitmap? {
+        val tier = if (entry.isVideo) TIER_VIDEO_FRAME else TIER_PHOTO
+        return try {
+            if (entry.isVideo) decodeVideoFrame(entry) else decodePhoto(entry)
+        } catch (t: Throwable) {
+            // Honest degradation: no crash, no plaintext in logcat --- the
+            // throwable's class only (ids and tiers, that is the contract).
+            DiagLog.i(
+                TAG,
+                "thumb: id=${entry.id} tier=$tier threw ${t.javaClass.name} -> placeholder",
+            )
+            null
+        }
     }
 
     /**
@@ -90,7 +104,11 @@ class VaultThumbnailDecoder(
             buffered.mark(HEADER_BUFFER_BYTES)
             BitmapFactory.decodeStream(buffered, null, bounds)
             val resetOk = runCatching { buffered.reset() }.isSuccess
-            if (!resetOk) return null
+            if (!resetOk) {
+                // W1: the header lookahead blew past the mark --- degrade.
+                DiagLog.i(TAG, "thumb: id=${entry.id} tier=$TIER_PHOTO_HEADER -> placeholder")
+                return null
+            }
             // Pass 2: the real decode, downsampled so only bounded pixels
             // enter the heap even for a 48 MP original.
             val options = BitmapFactory.Options().apply {
@@ -99,7 +117,13 @@ class VaultThumbnailDecoder(
                     bounds.outHeight,
                 )
             }
-            return BitmapFactory.decodeStream(buffered, null, options)?.let(::scaleToTarget)
+            val decoded = BitmapFactory.decodeStream(buffered, null, options)
+            if (decoded == null) {
+                // W1: the platform decoder refused the authenticated bytes.
+                DiagLog.i(TAG, "thumb: id=${entry.id} tier=$TIER_PHOTO_DECODE -> placeholder")
+                return null
+            }
+            return scaleToTarget(decoded)
         }
     }
 
@@ -118,10 +142,17 @@ class VaultThumbnailDecoder(
                 retriever.setDataSource(temp.absolutePath)
                 // OPTION_CLOSEST_SYNC is the cheap keyframe grab; the exact
                 // frame would force a decode of the preceding GOP.
-                return retriever.getFrameAtTime(
+                val frame = retriever.getFrameAtTime(
                     0,
                     MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                )?.let(::scaleToTarget)
+                )
+                if (frame == null) {
+                    // W1: the documented `videoFrame is a NULL pointer`
+                    // class of failures --- tier video-frame, placeholder.
+                    DiagLog.i(TAG, "thumb: id=${entry.id} tier=$TIER_VIDEO_FRAME -> placeholder")
+                    return null
+                }
+                return scaleToTarget(frame)
             } finally {
                 retriever.release()
             }
@@ -154,6 +185,21 @@ class VaultThumbnailDecoder(
     }
 
     private companion object {
+        /** Diagnostics tag shared by the vault's Android seams (W1). */
+        const val TAG = "ToadVault"
+
+        /** Photo tier: the outer per-item catch's coarse label (W1). */
+        const val TIER_PHOTO = "photo"
+
+        /** Photo tier: the bounds pass's header mark/reset failed (W1). */
+        const val TIER_PHOTO_HEADER = "photo-header"
+
+        /** Photo tier: the downsampled decode itself failed (W1). */
+        const val TIER_PHOTO_DECODE = "photo-decode"
+
+        /** Video tier: the frame extraction returned no frame (W1). */
+        const val TIER_VIDEO_FRAME = "video-frame"
+
         /**
          * Header lookahead for the bounds pass: image dimensions live within
          * the first 64 KiB for every format the platform decoder handles;

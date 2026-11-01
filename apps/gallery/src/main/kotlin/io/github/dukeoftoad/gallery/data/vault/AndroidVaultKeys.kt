@@ -5,6 +5,8 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import androidx.annotation.RequiresApi
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -29,12 +31,23 @@ import javax.crypto.SecretKey
  *  - **StrongBox**: attempted on API 28+ (`setIsStrongBoxBacked(true)`); a
  *    device without a StrongBox chip throws
  *    [StrongBoxUnavailableException] at generation time and the code falls
- *    back to the regular TEE-backed Keystore. Both spellings satisfy
- *    ADR-0017 ("inside AndroidKeyStore"); StrongBox is defense in depth,
- *    not a requirement.
+ *    back to the regular TEE-backed Keystore. The fallback is deliberately
+ *    BROADER than that documented exception (W1 hardening): some OEM and
+ *    custom-ROM keystores abort StrongBox generation with a plain
+ *    `ProviderException` or `KeyStoreException` instead, which used to
+ *    abort vault setup outright --- so the StrongBox leg now falls back to
+ *    the TEE on ANY [GeneralSecurityException] or [RuntimeException] too
+ *    (WARN-logged with the throwable; the expected StrongBox-unavailable
+ *    case stays INFO). Only the TEE generation path itself still propagates
+ *    failures: a keystore that cannot mint a regular key is genuinely
+ *    fatal. Both spellings satisfy ADR-0017 ("inside AndroidKeyStore");
+ *    StrongBox is defense in depth, not a requirement.
  *  - **Concurrency**: generation is [synchronized] with a re-check, so two
  *    racing first-unlocks cannot mint two different keys under one alias
  *    (the loser would silently orphan every blob the winner seals).
+ *  - **Diagnostics** (W1): every [key]/[probeExistingKey] outcome lands in
+ *    [DiagLog] under the shared "ToadVault" tag --- outcome class and
+ *    duration only, never key material.
  *
  * Privacy (ADR-0014): the key material never leaves the Keystore hardware;
  * the app holds no INTERNET permission, so neither key nor ciphertext can
@@ -44,23 +57,87 @@ object AndroidVaultKeys : VaultCrypto.VaultKeyProvider {
 
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 
+    /** Diagnostics tag shared by the vault's Android seams (W1). */
+    private const val TAG = "ToadVault"
+
     /** Keystore alias of the vault media key (v1; a rotation would bump it). */
     private const val ALIAS = "toadgallery.vault.media.v1"
 
     /** Serializes first access; see the class KDoc's concurrency note. */
     private val lock = Any()
 
+    /** Nanoseconds per millisecond; [elapsedMs]'s divisor. */
+    private const val NANOS_PER_MS = 1_000_000L
+
+    /**
+     * Whether this process has logged the key-reuse line yet (W1). [key]
+     * runs for EVERY crypto operation the store makes, so an unconditional
+     * line per call would flood the CAP=400 ring with repeats and evict the
+     * actual diagnostic story; the first reuse carries the whole signal.
+     * Guarded by [lock].
+     */
+    private var loggedReuse = false
+
     override fun key(): SecretKey = synchronized(lock) {
-        loadExistingKey()?.let { return it }
+        val existing = loadExistingKey()
+        if (existing != null) {
+            if (!loggedReuse) {
+                DiagLog.i(TAG, "key: existing keystore key reused")
+                loggedReuse = true
+            }
+            return existing
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
-                return generateStrongBoxKey()
+                val startedAt = System.nanoTime()
+                val key = generateStrongBoxKey()
+                DiagLog.i(TAG, "key: generated (StrongBox) in ${elapsedMs(startedAt)} ms")
+                return key
             } catch (e: StrongBoxUnavailableException) {
-                // No StrongBox secure element on this device; the regular
-                // Keystore is the ADR-0017-approved home for the key.
+                // No StrongBox secure element on this device (the common
+                // case); the regular Keystore is the ADR-0017-approved home
+                // for the key.
+                DiagLog.i(TAG, "key: StrongBox unavailable -> TEE keystore")
+            } catch (e: GeneralSecurityException) {
+                // W1 hardening: some OEM/custom-ROM keystores abort StrongBox
+                // generation with a plain KeyStoreException instead of the
+                // documented exception above --- fall back exactly like the
+                // expected case, but WARN with the throwable (unexpected).
+                DiagLog.w(
+                    TAG,
+                    "key: StrongBox generation failed (${e.javaClass.name}) -> TEE keystore",
+                    e,
+                )
+            } catch (e: RuntimeException) {
+                // ... and some with a plain ProviderException. StrongBox is
+                // defense in depth, never a requirement (ADR-0017).
+                DiagLog.w(
+                    TAG,
+                    "key: StrongBox generation failed (${e.javaClass.name}) -> TEE keystore",
+                    e,
+                )
             }
         }
-        generateKeystoreKey()
+        // The TEE path keeps propagating failures: a keystore that cannot
+        // mint a regular key is genuinely fatal, not a fallback condition.
+        val startedAt = System.nanoTime()
+        val key = generateKeystoreKey()
+        DiagLog.i(TAG, "key: generated (TEE) in ${elapsedMs(startedAt)} ms")
+        key
+    }
+
+    /**
+     * Load-only keystore probe for the About > Diagnostics screen (W1):
+     * true when the vault's media key exists, false when it does not or
+     * when the keystore itself cannot be read (WARN-logged --- a probe
+     * failure must never crash the About screen). NEVER generates; the
+     * first real crypto operation through [key] owns that decision.
+     */
+    fun probeExistingKey(): Boolean = try {
+        loadExistingKey() != null
+    } catch (e: Exception) {
+        DiagLog.w(TAG, "probe: keystore probe failed", e)
+        false
     }
 
     private fun loadExistingKey(): SecretKey? {
@@ -77,6 +154,10 @@ object AndroidVaultKeys : VaultCrypto.VaultKeyProvider {
         generator.init(baseSpecBuilder().build())
         return generator.generateKey()
     }
+
+    /** Elapsed whole milliseconds since [startedAtNanos] ([System.nanoTime] base). */
+    private fun elapsedMs(startedAtNanos: Long): Long =
+        (System.nanoTime() - startedAtNanos) / NANOS_PER_MS
 
     /** StrongBox-backed generation; API 28+ only (the lint-visible guard). */
     @RequiresApi(Build.VERSION_CODES.P)

@@ -307,4 +307,48 @@
     <string name="cd_viewer_action_favorite_remove">Remove from favorites</string>
     <string name="favorite_added">Added to favorites</string>
     <string name="favorite_removed">Removed from favorites</string>
+
+    <!-- Appearance + About (roadmap Phase 3: appearance settings slice) -->
+    <!-- Ente-inspired appearance preferences on the Settings tab (layout /
+         photos per row / group by; defaults keep the COLLAGE/3/NONE render
+         byte-identical) and the About sub-screen with the vault diagnostics
+         and the diagnostics ring. -->
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_layout_title">Layout</string>
+    <string name="settings_layout_grid">Grid</string>
+    <string name="settings_layout_collage">Collage</string>
+    <string name="settings_layout_grid_body">Uniform square thumbnails</string>
+    <string name="settings_layout_collage_body">Aspect-aware staggered thumbnails</string>
+    <string name="settings_photos_per_row">Photos per row</string>
+    <string name="settings_group_by">Group by</string>
+    <string name="settings_group_by_none">None</string>
+    <string name="settings_group_by_day">Day</string>
+    <string name="settings_group_by_month">Month</string>
+    <string name="settings_columns_increase">Increase photos per row</string>
+    <string name="settings_columns_decrease">Decrease photos per row</string>
+    <string name="settings_about_title">About toadGALLERY</string>
+    <string name="about_title">About</string>
+    <string name="about_version_line">%1$s (build %2$d)</string>
+    <string name="about_device_line">%1$s · Android %2$d</string>
+    <string name="about_privacy_title">Privacy</string>
+    <string name="about_privacy_body">toadGALLERY is offline by design: it holds no Internet permission, needs no account, and keeps every photo and video — vault contents included — on this device.</string>
+    <string name="about_credits_title">Credits</string>
+    <string name="about_credits_body">Inspired by Aves (metadata reference) and Ente (planned on-device AI). Built with Jetpack Compose, Coil and Media3.</string>
+    <string name="about_view_source">View source on GitHub</string>
+    <string name="about_diagnostics_title">Diagnostics</string>
+    <string name="about_diagnostics_copy">Copy diagnostics</string>
+    <string name="about_diagnostics_clear">Clear log</string>
+    <string name="about_diagnostics_empty">Nothing recorded yet.</string>
+    <string name="about_vault_configured">Vault configured — PIN and index present.</string>
+    <string name="about_vault_not_configured">Vault not configured yet.</string>
+    <string name="about_vault_binding_on">Biometric unlock bound.</string>
+    <string name="about_vault_binding_off">Biometric unlock not bound.</string>
+    <string name="about_vault_keystore_key_present">Keystore key present.</string>
+    <string name="about_vault_keystore_key_absent">Keystore key absent.</string>
+    <string name="about_vault_store_writable_yes">Vault storage writable.</string>
+    <string name="about_vault_store_writable_no">Vault storage not writable.</string>
+    <plurals name="about_vault_blobs">
+        <item quantity="one">%1$d sealed item — %2$s</item>
+        <item quantity="other">%1$d sealed items — %2$s</item>
+    </plurals>
 </resources>

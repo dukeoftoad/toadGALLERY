@@ -4,7 +4,11 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,9 +18,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,10 +37,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
@@ -42,14 +58,37 @@ import io.github.dukeoftoad.gallery.ui.vault.VaultUiState
 import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
 
 /**
- * The Settings tab (issue #27: first real content on this screen).
+ * The Settings tab (issue #27: first real content; appearance + About since
+ * the roadmap Phase 3 appearance slice).
  *
- * Scaffold-less scrollable column per the v1 design: a title and the one
- * live preference --- the "Use system Photo Picker" switch (default OFF;
- * persisted by [SettingsViewModel]). The description stays honest about
- * the privacy posture: the picker path browses ONLY user-selected media
- * via user-granted content URIs, requires no library-wide permission at
- * all, and --- like the rest of the app --- has no network access.
+ * Scaffold-less scrollable column per the v1 design. Sections, top to
+ * bottom:
+ *
+ * ## Appearance (Ente-inspired)
+ * The shell-scoped [SettingsViewModel] --- passed IN from `ToadGalleryApp`
+ * since this slice (it used to create its own `viewModel()` here) so a
+ * layout / photos-per-row / group-by change propagates live to the Photos
+ * timeline and album detail in the same session --- exposes the collected
+ * [Appearance] the section edits:
+ *  - Layout: two side-by-side selectable cards (`settings_layout_grid` /
+ *    `settings_layout_collage`), each carrying a small Compose-drawn
+ *    preview (2x2 squares vs staggered rectangles), its label, a one-line
+ *    body and a leading check when selected. COLLAGE is checked by default
+ *    per the [Appearance] defaults (the app's render since issues #34/#29).
+ *  - Photos per row: a label plus minus/plus [IconButton]s
+ *    (`settings_columns_minus` / `settings_columns_value` /
+ *    `settings_columns_plus`), bounded by [MIN_COLUMNS]/[MAX_COLUMNS] and
+ *    clamped again ViewModel-side.
+ *  - Group by: three single-select FilterChips (`settings_group_by_*`).
+ *    DAY/MONTH layer full-line date headers into the Photos timeline (see
+ *    `TimelineRows`/`MediaPagingGrid`).
+ *
+ * ## Media access (issue #27)
+ * The one live preference --- the "Use system Photo Picker" switch (default
+ * OFF; persisted by [SettingsViewModel]). The description stays honest
+ * about the privacy posture: the picker path browses ONLY user-selected
+ * media via user-granted content URIs, requires no library-wide permission
+ * at all, and --- like the rest of the app --- has no network access.
  *
  * API gating (issue #27):
  *  - API 33+ with the toggle ON: a "Pick photos to browse" button launches
@@ -83,17 +122,23 @@ import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
  * no size or count here, by design. Below Android 10 (API 29) there is no
  * consent protocol for the move/delete legs, so the entry renders as inert
  * copy (the same shape as the recycle bin below R).
+ *
+ * About entry (appearance slice): the same row shape as the recycle bin,
+ * opening the `about` sub-screen via [onOpenAbout] --- identity, privacy
+ * posture, credits and vault diagnostics live there.
  */
 @Composable
 fun SettingsScreen(
     pickedViewModel: PickedPhotosViewModel,
+    settingsViewModel: SettingsViewModel,
     onBrowsePicked: () -> Unit,
     onOpenTrash: () -> Unit,
     vaultViewModel: VaultViewModel,
     onOpenVault: () -> Unit,
+    onOpenAbout: () -> Unit,
 ) {
-    val settingsViewModel: SettingsViewModel = viewModel()
     val usePhotoPicker by settingsViewModel.usePhotoPicker.collectAsState()
+    val appearance by settingsViewModel.appearance.collectAsState()
     val pickedItems by pickedViewModel.picked.collectAsState()
     val trashViewModel: TrashViewModel = viewModel()
     val trashState by trashViewModel.state.collectAsState()
@@ -120,6 +165,116 @@ fun SettingsScreen(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
+
+        // ---- Appearance (Ente-inspired; first section, the screenshot's order) ----
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.settings_section_appearance),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.settings_layout_title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            LayoutCard(
+                title = stringResource(R.string.settings_layout_grid),
+                body = stringResource(R.string.settings_layout_grid_body),
+                selected = appearance.layout == LayoutStyle.GRID,
+                onSelect = { settingsViewModel.setLayout(LayoutStyle.GRID) },
+                uniformPreview = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("settings_layout_grid"),
+            )
+            LayoutCard(
+                title = stringResource(R.string.settings_layout_collage),
+                body = stringResource(R.string.settings_layout_collage_body),
+                selected = appearance.layout == LayoutStyle.COLLAGE,
+                onSelect = { settingsViewModel.setLayout(LayoutStyle.COLLAGE) },
+                uniformPreview = false,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("settings_layout_collage"),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_photos_per_row),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = { settingsViewModel.setColumns(appearance.columns - 1) },
+                enabled = appearance.columns > MIN_COLUMNS,
+                modifier = Modifier.testTag("settings_columns_minus"),
+            ) {
+                Icon(
+                    imageVector = RemoveIcon,
+                    contentDescription = stringResource(R.string.settings_columns_decrease),
+                )
+            }
+            Text(
+                text = appearance.columns.toString(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .testTag("settings_columns_value"),
+            )
+            IconButton(
+                onClick = { settingsViewModel.setColumns(appearance.columns + 1) },
+                enabled = appearance.columns < MAX_COLUMNS,
+                modifier = Modifier.testTag("settings_columns_plus"),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = stringResource(R.string.settings_columns_increase),
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.settings_group_by),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GroupBy.entries.forEach { option ->
+                FilterChip(
+                    selected = appearance.groupBy == option,
+                    onClick = { settingsViewModel.setGroupBy(option) },
+                    label = { Text(stringResource(option.labelRes)) },
+                    modifier = Modifier.testTag(
+                        when (option) {
+                            GroupBy.NONE -> "settings_group_by_none"
+                            GroupBy.DAY -> "settings_group_by_day"
+                            GroupBy.MONTH -> "settings_group_by_month"
+                        }
+                    ),
+                )
+            }
+        }
+
+        // ---- Media access (issue #27) ----
         Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.settings_section_access),
@@ -198,6 +353,7 @@ fun SettingsScreen(
             }
         }
 
+        // ---- Recycle bin (issue #31) ----
         Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.settings_recycle_bin_title),
@@ -245,6 +401,7 @@ fun SettingsScreen(
             )
         }
 
+        // ---- Hidden vault (issue #32, ADR-0017) ----
         Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.settings_vault_title),
@@ -308,5 +465,164 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+
+        // ---- About (appearance slice) ----
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.settings_about_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        // The same row shape as the recycle-bin entry (no subtitle: there
+        // is no live state to narrate --- the About page carries it all).
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .clickable(onClick = onOpenAbout)
+                .testTag("settings_about_entry")
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_about_title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
+
+/**
+ * One selectable Ente-style layout card: rounded border (the theme's
+ * primary when selected, a quiet outline otherwise), a small Compose-drawn
+ * grid/collage preview, the label with a leading check icon (transparent
+ * when unselected, so the label never shifts on selection), and a one-line
+ * body. The caller supplies [Modifier.weight] so the pair splits the width
+ * (each card lands at roughly 120.dp on a phone).
+ */
+@Composable
+private fun LayoutCard(
+    title: String,
+    body: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    uniformPreview: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .border(
+                width = 1.dp,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                },
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onSelect)
+            .padding(12.dp),
+    ) {
+        LayoutPreview(uniform = uniformPreview)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null, // decorative; the card border + title carry the state
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.Transparent
+                },
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .size(18.dp),
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * The layout card's preview glyph: a 2x2 of uniform squares for the GRID
+ * layout vs two staggered columns of different-height rectangles for
+ * COLLAGE (the same footprint, so the cards stay visually balanced).
+ * Compose-drawn on purpose --- no fitting drawable exists in the res set,
+ * and the shapes say more than any icon would.
+ */
+@Composable
+private fun LayoutPreview(uniform: Boolean) {
+    val swatch = MaterialTheme.colorScheme.onSurfaceVariant
+    if (uniform) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(Modifier.size(14.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+                Box(Modifier.size(14.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(Modifier.size(14.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+                Box(Modifier.size(14.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+            }
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(Modifier.size(14.dp, 10.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+                Box(Modifier.size(14.dp, 18.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(Modifier.size(14.dp, 18.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+                Box(Modifier.size(14.dp, 10.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+            }
+        }
+    }
+}
+
+/**
+ * The stepper's minus glyph: the canonical Material "remove" vector (the
+ * exact 14x2 bar of the extended icon set), built inline because the app
+ * deliberately ships only `material-icons-core` --- whose 49-glyph set
+ * carries [Icons.Filled.Add] but not "Remove" --- and this slice may not
+ * add the multi-megabyte `material-icons-extended` artifact for one bar.
+ * Same 24dp viewport and stroke weight as `Icons.Filled.Add`, so the
+ * minus/plus pair renders as one family.
+ */
+private val RemoveIcon: ImageVector = ImageVector.Builder(
+    name = "Remove",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).apply {
+    path(fill = SolidColor(Color.Black)) {
+        moveTo(19f, 13f)
+        horizontalLineTo(5f)
+        verticalLineTo(11f)
+        horizontalLineTo(19f)
+        verticalLineTo(13f)
+        close()
+    }
+}.build()
+
+/** The localized label of one group-by option (UI-layer resource mapping). */
+private val GroupBy.labelRes: Int
+    get() = when (this) {
+        GroupBy.NONE -> R.string.settings_group_by_none
+        GroupBy.DAY -> R.string.settings_group_by_day
+        GroupBy.MONTH -> R.string.settings_group_by_month
+    }

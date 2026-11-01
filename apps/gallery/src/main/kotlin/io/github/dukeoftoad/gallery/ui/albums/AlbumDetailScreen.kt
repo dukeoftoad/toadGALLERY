@@ -78,6 +78,9 @@ import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
 import io.github.dukeoftoad.gallery.ui.photos.TimelineSortMenu
+import io.github.dukeoftoad.gallery.ui.settings.Appearance
+import io.github.dukeoftoad.gallery.ui.settings.LayoutStyle
+import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 
 /**
  * Album detail view (Phase 3, issue #29; selection mode + file ops since
@@ -141,6 +144,13 @@ import io.github.dukeoftoad.gallery.ui.photos.TimelineSortMenu
  * contents stay newest-first in v1 (the issue's documented scope), and a
  * hidden control beats a lying one.
  *
+ * ## Appearance settings (roadmap Phase 3 slice)
+ * The shell-scoped [settingsViewModel] (the Settings tab's instance) drives
+ * this screen's grid, too: the configured column count and the GRID
+ * layout's square cells replace the hardcoded 3-column staggered look.
+ * Group-by stays a Photos-timeline feature here (see [AlbumDetailGrid]).
+ * Defaults (COLLAGE/3) keep the pre-slice render byte-identical.
+ *
  * ## Refresh after ops (issue #64)
  * The bucket list is a snapshot (no Paging pipeline), so the screen adds
  * the honest triggers [AlbumDetailViewModel] documents: the R+ MediaStore
@@ -154,6 +164,7 @@ import io.github.dukeoftoad.gallery.ui.photos.TimelineSortMenu
 fun AlbumDetailScreen(
     bucketId: Long,
     onBack: () -> Unit,
+    settingsViewModel: SettingsViewModel,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
 ) {
     // The Application is process-scoped; capturing it for the ViewModel
@@ -171,6 +182,7 @@ fun AlbumDetailScreen(
     val fileOpsViewModel: FileOpsViewModel = viewModel()
     val state by viewModel.state.collectAsState()
     val sort by viewModel.sort.collectAsState()
+    val appearance by settingsViewModel.appearance.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
     val selection = fileOpsState as? FileOpsUiState.Selection
     val running = fileOpsState as? FileOpsUiState.Running
@@ -328,6 +340,8 @@ fun AlbumDetailScreen(
                             Box(modifier = Modifier.weight(1f)) {
                                 AlbumDetailGrid(
                                     items = s.items,
+                                    columns = appearance.columns,
+                                    uniformCells = appearance.layout == LayoutStyle.GRID,
                                     selectionActive = true,
                                     selectedKeys = selection.items
                                         .mapTo(HashSet()) { it.uri.toString() },
@@ -359,6 +373,8 @@ fun AlbumDetailScreen(
                         // list as the window.
                         AlbumDetailGrid(
                             items = s.items,
+                            columns = appearance.columns,
+                            uniformCells = appearance.layout == LayoutStyle.GRID,
                             selectionActive = false,
                             selectedKeys = emptySet(),
                             fileOpsViewModel = fileOpsViewModel,
@@ -425,24 +441,32 @@ fun AlbumDetailScreen(
 
 /**
  * The bucket's staggered grid (issue #64): the same cell/spacing contract
- * as the shared `ui/media/MediaGrid` (`MediaThumb` cells, 3 columns, 2.dp
- * gaps, `uri.toString()` keys), plus the selection wiring
+ * as the shared `ui/media/MediaGrid` (`MediaThumb` cells, 2.dp gaps,
+ * `uri.toString()` keys), plus the selection wiring
  * `MediaPagingGrid` gives the Photos timeline --- long-press enters
  * selection, tap toggles while selecting and opens the viewer otherwise.
  * The shared grids themselves stay untouched (frozen for concurrent
  * work), so the interactive cell + overlay chrome live here.
+ *
+ * Since the appearance slice the column count and the GRID layout's square
+ * cells come from the shell's [Appearance] (the pre-slice screen hardcoded
+ * `StaggeredGridCells.Fixed(3)`); grouping stays OFF here in v1 --- a
+ * bucket is usually a single occasion, and date headers inside it would
+ * be noise, not orientation.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumDetailGrid(
     items: List<MediaItem>,
+    columns: Int,
+    uniformCells: Boolean,
     selectionActive: Boolean,
     selectedKeys: Set<String>,
     fileOpsViewModel: FileOpsViewModel,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
 ) {
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Fixed(3),
+        columns = StaggeredGridCells.Fixed(columns),
         modifier = Modifier
             .fillMaxSize()
             .testTag("album_detail_state_grid"),
@@ -468,7 +492,7 @@ private fun AlbumDetailGrid(
                     onLongClick = { fileOpsViewModel.onItemLongPressed(item) },
                 ),
             ) {
-                MediaThumb(item = item)
+                MediaThumb(item = item, forceSquare = uniformCells)
                 if (selectionActive) {
                     if (item.uri.toString() in selectedKeys) {
                         Box(

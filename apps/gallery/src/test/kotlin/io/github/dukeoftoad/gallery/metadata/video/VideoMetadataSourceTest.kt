@@ -25,7 +25,9 @@ class VideoMetadataSourceTest {
         assertEquals(0, VideoMetadataParse.rotationDegrees("45"))
         assertEquals(0, VideoMetadataParse.rotationDegrees("sideways"))
         assertEquals(0, VideoMetadataParse.rotationDegrees(null))
-        assertEquals(0, VideoMetadataParse.rotationDegrees(" 90 "))
+        // Padding around an axis value still names the axis --- the
+        // parser trims, so " 90 " is a 90, not garbage.
+        assertEquals(90, VideoMetadataParse.rotationDegrees(" 90 "))
     }
 
     @Test

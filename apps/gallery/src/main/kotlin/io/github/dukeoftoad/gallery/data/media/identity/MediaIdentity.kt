@@ -86,7 +86,7 @@ data class MediaIdentity(
                 // A parsed key carries no access handle; the caller
                 // re-resolves the Uri from the catalogue when needed.
                 canonicalUri = "",
-                pageId = pageId?.replace("%3A", ":").replace("%25", "%"),
+                pageId = pageId?.replace("%3A", ":")?.replace("%25", "%"),
             )
         }
     }

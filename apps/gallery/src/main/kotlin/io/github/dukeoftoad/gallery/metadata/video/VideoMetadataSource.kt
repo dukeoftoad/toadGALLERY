@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import java.time.DateTimeException
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -122,7 +123,10 @@ object VideoMetadataParse {
             if (minutes > 59) return null
             offset = try {
                 ZoneOffset.ofTotalSeconds(sign * (hours * 3600 + minutes * 60))
-            } catch (e: IllegalArgumentException) {
+            } catch (e: DateTimeException) {
+                // Out-of-range offsets ("+99:00" exceeds the +18:00 maximum
+                // ZoneOffset allows) are malformed input, not a crash ---
+                // ofTotalSeconds raises DateTimeException, not IAE.
                 return null
             }
             body = body.dropLast(suffix.value.length)

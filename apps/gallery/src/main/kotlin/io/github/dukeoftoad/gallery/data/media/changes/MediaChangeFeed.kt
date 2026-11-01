@@ -1,7 +1,7 @@
 package io.github.dukeoftoad.gallery.data.media.changes
 
-import android.content.ContentObserver
 import android.content.Context
+import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -74,7 +74,11 @@ class AndroidMediaStoreChangeFeed(
         // observer + full-scan path, which is the only correct one there.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
         return try {
-            MediaStore.getGeneration(context, volumeName)
+            // SDK 36: getGeneration returns a Long volume generation number;
+            // the string form is the persisted checkpoint token (Room stores
+            // it opaquely --- the only operations ever performed on it are
+            // equality and non-null-ness).
+            MediaStore.getGeneration(context, volumeName).toString()
         } catch (_: IllegalArgumentException) {
             // Unknown volume (not mounted / never existed): "cannot tell",
             // not a crash. The caller treats it like a token miss.

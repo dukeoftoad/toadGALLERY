@@ -37,7 +37,14 @@ android {
         // AndroidKeyStore caller-IV seal rejection (provider-IV init in
         // VaultCrypto, the actual "vault PIN creating failed" root cause)
         // and the staggered-grid stale-index key crash.
-        versionCode = 13
+        // versionCode 14 (r10 round): the r9 device finding --- the
+        // biometric sheet crash (androidx.biometric requires non-empty
+        // negative text for a BIOMETRIC_WEAK CryptoObject prompt; the
+        // prompt now carries a "Use PIN" negative button) --- plus the
+        // Phase 4 contract foundation (media identity/eligibility,
+        // revision, dates, metadata seams, Room catalogue, change feed,
+        // read boundary, decode plan) that has no UI yet.
+        versionCode = 14
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

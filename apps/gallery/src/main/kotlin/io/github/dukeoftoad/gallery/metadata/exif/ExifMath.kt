@@ -133,8 +133,18 @@ object ExifMath {
             else -> return null
         }
         // EXIF keeps the sign in the reference character; signed
-        // components mean a corrupt block.
+        // components mean a corrupt block. Denominators are unsigned too
+        // --- a negative one flips the component's sign behind the range
+        // check's back (51/-1 masquerades as -51 degrees), so it is
+        // rejected up front rather than normalized.
         if (degrees.numerator < 0L || minutes.numerator < 0L || seconds.numerator < 0L) {
+            return null
+        }
+        if (
+            degrees.denominator <= 0L ||
+            minutes.denominator <= 0L ||
+            seconds.denominator <= 0L
+        ) {
             return null
         }
         val deg = degrees.toDouble() ?: return null

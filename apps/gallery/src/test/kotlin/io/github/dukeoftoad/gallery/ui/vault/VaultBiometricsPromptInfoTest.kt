@@ -3,60 +3,67 @@ package io.github.dukeoftoad.gallery.ui.vault
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
  * Pins the r10 device fix (build 13 crash): tapping "Unlock with biometrics"
  * crashed with `IllegalArgumentException: Negative text must be set and
- * non-empty.` thrown from `PromptInfo.Builder.build()`.
+ * non-empty.` (androidx.biometric `PromptInfo.Builder.build()`).
  *
  * `VaultBiometrics` itself is deliberately hardware-bound and untested
- * (ADR-0016), but the prompt *construction* is pure androidx.biometric
+ * (ADR-0016), but the prompt *configuration* is pure androidx.biometric
  * Java --- no `Context`, no Keystore --- so the JVM suite can hold the
- * contract that keeps the biometric sheet from crashing:
+ * contract that keeps the biometric sheet from crashing: the vault's
+ * builder ALWAYS sets a non-empty negative button alongside
+ * `BIOMETRIC_WEAK`, because a CryptoObject-bound prompt cannot combine
+ * with `DEVICE_CREDENTIAL`, and without the credential fallback the
+ * negative text is the library-mandated cancel affordance.
  *
- *  1. a `BIOMETRIC_WEAK` PromptInfo WITHOUT negative text cannot be built
- *     (the library rejects it --- this is the crash);
- *  2. the vault's [VaultBiometrics.buildPromptInfo] always sets one.
- *
- * Why the negative button is unavoidable: the vault prompt authenticates a
- * `CryptoObject`-wrapped Keystore cipher, which cannot combine
- * `BIOMETRIC_WEAK` with `DEVICE_CREDENTIAL`, so there is no credential
- * fallback that would exempt us from the negative-text requirement.
+ * Honest JVM limitation: `build()` itself calls `android.text.TextUtils`,
+ * which the unit-test stub does not implement ("Method isEmpty ... not
+ * mocked") --- so the suite reflects the BUILDER's fields instead of
+ * calling `build()`, and the library's runtime enforcement is verified on
+ * the physical device by the r10 checklist section (the sheet must
+ * appear, not crash).
  */
 class VaultBiometricsPromptInfoTest {
 
     @Test
-    fun `biometric-weak prompt info without negative text is rejected by the library`() {
-        val builder = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock the hidden vault")
-            .setSubtitle("Confirm it's you to open the vault")
-            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-            .setConfirmationRequired(false)
-        try {
-            builder.build()
-            fail("androidx.biometric must reject a non-credential prompt without negative text")
-        } catch (expected: IllegalArgumentException) {
-            assertTrue(
-                "unexpected rejection reason: ${expected.message}",
-                expected.message!!.contains("Negative text"),
-            )
-        }
-    }
-
-    @Test
-    fun `vault prompt info builds and carries the negative text`() {
-        val info = VaultBiometrics.buildPromptInfo(
+    fun `vault prompt builder always sets the negative button text`() {
+        val builder = VaultBiometrics.promptInfoBuilder(
             title = "Unlock the hidden vault",
             subtitle = "Confirm it's you to open the vault",
             negativeText = "Use PIN",
         )
-        // The getter is @RestrictTo-annotated; read the backing field so
-        // lint cannot flag the test for using a library-private API.
-        val field = BiometricPrompt.PromptInfo::class.java.getDeclaredField("mNegativeButtonText")
+        // PromptInfo$Builder's fields are the @RestrictTo-annotated API's
+        // private storage; reading them via reflection keeps lint off the
+        // library-private getters while asserting exactly what build()
+        // will validate.
+        assertEquals("Use PIN", builder.field<CharSequence>("mNegativeButtonText"))
+    }
+
+    @Test
+    fun `vault prompt builder pins biometric-weak and the no-confirmation defaults`() {
+        val builder = VaultBiometrics.promptInfoBuilder(
+            title = "Unlock the hidden vault",
+            subtitle = "Confirm it's you to open the vault",
+            negativeText = "Use PIN",
+        )
+        assertEquals(
+            BiometricManager.Authenticators.BIOMETRIC_WEAK,
+            builder.field<Int>("mAllowedAuthenticators"),
+        )
+        assertFalse(builder.field<Boolean>("mIsConfirmationRequired"))
+        assertEquals("Unlock the hidden vault", builder.field<CharSequence>("mTitle"))
+        assertEquals("Confirm it's you to open the vault", builder.field<CharSequence>("mSubtitle"))
+    }
+
+    /** Reads [name] off the builder with the accessibility barrier lowered. */
+    private inline fun <reified T : Any> BiometricPrompt.PromptInfo.Builder.field(name: String): T {
+        val field = BiometricPrompt.PromptInfo.Builder::class.java.getDeclaredField(name)
         field.isAccessible = true
-        assertEquals("Use PIN", field.get(info))
+        @Suppress("UNCHECKED_CAST")
+        return field.get(this) as T
     }
 }

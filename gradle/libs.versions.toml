@@ -26,17 +26,19 @@ media3 = "1.11.1"
 # DB/vector store as separate engine-owned stores"). Room holds ONLY media
 # identity, revision, metadata-cache state and scan checkpoints --- face/CLIP
 # vectors and every other AI output stay in the engine-owned ML stores, so
-# this dependency must never grow into a vector store. 2.7.x requires
-# compileSdk 36, which the app already pins.
-androidx-room = "2.7.6"
+# this dependency must never grow into a vector store. Verified against the
+# Google mirror at integration: the 2.7.x line stops at 2.7.2 and 2.7.6 was
+# never published; 2.8.5 is the current 2.8.x release (compileSdk 36 pin
+# already satisfies it).
+androidx-room = "2.8.5"
 # KSP drives the Room compiler (KSP, not kapt --- the project has no kapt
-# plugin and AGP 9's built-in Kotlin pairs with KSP). KSP versions are
-# "<kotlin>-<ksp>" pairs tied to the compiler; this pin matches the catalog
-# Kotlin 2.3.10. PIN RISK: if the exact "2.3.10-2.0.4" build has not been
-# published to the mirrors at integration time, adjust this to the nearest
-# published KSP release for Kotlin 2.3.10 --- the Room code itself is
-# KSP-version agnostic.
-ksp = "2.3.10-2.0.4"
+# plugin and AGP 9's built-in Kotlin pairs with KSP). Verified against the
+# plugin portal at integration: KSP2 dropped the "<kotlin>-<ksp>" pair
+# versioning from 2.3.0 onwards --- releases are now bare "2.3.x" numbers
+# tracking the compiler they are built against (the legacy pair releases
+# such as 2.2.21-2.0.5 remain for pre-2.3 compilers). 2.3.10 exists for our
+# catalog Kotlin 2.3.10; 2.3.13 is the newest line.
+ksp = "2.3.10"
 # Testing (issue #20 privacy suite)
 junit = "4.13.2"
 androidx-test-runner = "1.6.2"

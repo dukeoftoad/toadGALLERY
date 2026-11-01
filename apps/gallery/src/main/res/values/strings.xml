@@ -290,7 +290,7 @@
     <string name="vault_biometric_prompt_subtitle">Confirm it\'s you to open the vault</string>
     <!-- The prompt's negative button (r10 device fix): androidx.biometric
          REQUIRES non-empty negative text whenever the prompt is not allowed
-         to fall back to device credential --- which is exactly our case,
+         to fall back to device credential, which is exactly our case,
          since the CryptoObject-bound BIOMETRIC_WEAK key cannot combine with
          DEVICE_CREDENTIAL. Without it PromptInfo.build() throws
          "Negative text must be set and non-empty." and the app crashes the

@@ -83,11 +83,19 @@ class CanonicalDecodePlannerTest {
     }
 
     @Test
-    fun `270-degree orientation behaves exactly like 90`() {
-        assertEquals(
-            CanonicalDecodePlanner.plan(3000, 4000, 90),
-            CanonicalDecodePlanner.plan(3000, 4000, 270),
-        )
+    fun `270-degree orientation produces the same upright geometry as 90`() {
+        // 90 and 270 swap dimensions the same way; only the rotation the
+        // decoder must apply differs --- the plan ECHOES that angle, so
+        // equality is asserted on the geometry fields, not the whole plan.
+        val quarter = CanonicalDecodePlanner.plan(3000, 4000, 90)!!
+        val threeQuarter = CanonicalDecodePlanner.plan(3000, 4000, 270)!!
+        assertEquals(90, quarter.orientationDegrees)
+        assertEquals(270, threeQuarter.orientationDegrees)
+        assertEquals(quarter.inSampleSize, threeQuarter.inSampleSize)
+        assertEquals(quarter.targetWidth, threeQuarter.targetWidth)
+        assertEquals(quarter.targetHeight, threeQuarter.targetHeight)
+        assertEquals(quarter.swapDimensionsForUpright, threeQuarter.swapDimensionsForUpright)
+        assertEquals(quarter.estimatedBitmapBytes, threeQuarter.estimatedBitmapBytes)
     }
 
     @Test

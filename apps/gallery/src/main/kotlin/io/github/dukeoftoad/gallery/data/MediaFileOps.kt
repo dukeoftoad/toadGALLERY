@@ -7,6 +7,7 @@ import android.os.Build
 import android.app.RecoverableSecurityException
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +105,9 @@ class MediaFileOps(private val resolver: ContentResolver) {
             if (updated > 0) {
                 FileOpResult(FileOpOutcome.Success)
             } else {
+                // W1: the row vanished between the read and the write ---
+                // same NOT_FOUND mapping, but now it says so on-device.
+                DiagLog.w(TAG, "rename: provider updated 0 rows")
                 FileOpResult(FileOpOutcome.Failure(FileOpFailureReason.NOT_FOUND))
             }
         } catch (e: IllegalArgumentException) {
@@ -186,7 +190,9 @@ class MediaFileOps(private val resolver: ContentResolver) {
                 // Same honesty rule as the vault restore: a 0-row publish is
                 // NOT a success. Surface it as an IO failure so the pending
                 // row is cleaned up below and the caller never reports a
-                // copy that stayed invisible in the gallery.
+                // copy that stayed invisible in the gallery. W1: WARN with
+                // the row count --- the two guards share one device story.
+                DiagLog.w(TAG, "copy: publish refused (rows=$published)")
                 throw IOException("provider did not publish the pending copy ($published rows)")
             }
             FileOpResult(FileOpOutcome.Success, createdUri = newUri)
@@ -333,6 +339,9 @@ class MediaFileOps(private val resolver: ContentResolver) {
                 if (updated > 0) {
                     FileOpResult(FileOpOutcome.Success)
                 } else {
+                    // W1: 0 rows = the row vanished mid-write; the same
+                    // honest NOT_FOUND, now with an on-device trace.
+                    DiagLog.w(TAG, "favorite: provider updated 0 rows")
                     FileOpResult(FileOpOutcome.Failure(FileOpFailureReason.NOT_FOUND))
                 }
             } catch (e: RecoverableSecurityException) {
@@ -532,6 +541,9 @@ class MediaFileOps(private val resolver: ContentResolver) {
         }
 
     private companion object {
+        /** Diagnostics tag for the file-ops seam (W1). */
+        const val TAG = "ToadOps"
+
         /** A row with a null DISPLAY_NAME (should not happen) duplicates as this. */
         const val FALLBACK_DISPLAY_NAME = "copy"
 

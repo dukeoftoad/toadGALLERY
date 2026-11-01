@@ -43,7 +43,9 @@ import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.search.SearchScreen
+import io.github.dukeoftoad.gallery.ui.settings.AboutScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
+import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 import io.github.dukeoftoad.gallery.ui.trash.TrashScreen
 import io.github.dukeoftoad.gallery.ui.vault.VaultScreen
@@ -99,6 +101,15 @@ object Destinations {
      */
     const val VAULT = "vault"
 
+    /**
+     * About sub-screen (roadmap Phase 3: appearance/About slice). Not
+     * top-level (sub-page UX); reached from the Settings entry. Identity,
+     * privacy posture, credits and the vault diagnostics + ring log live
+     * there; the probe runs against the SAME shell-scoped `VaultViewModel`
+     * session the vault screen uses.
+     */
+    const val ABOUT = "about"
+
     fun albumDetail(bucketId: Long): String = "album/$bucketId"
 
     /** Routes that show the bottom navigation bar. */
@@ -136,6 +147,13 @@ fun ToadGalleryApp() {
         // the `vault` sub-screen, so it lives in ONE activity-scoped
         // ViewModel like the picked set and the viewer window above.
         val vaultViewModel: VaultViewModel = viewModel()
+        // Appearance settings (roadmap Phase 3): ONE shell-scoped instance
+        // so a layout / photos-per-row / group-by change on the Settings
+        // tab propagates to the Photos timeline and album detail in the
+        // same session (SettingsScreen used to create its own ViewModel;
+        // the shell hoists it now, the picked/viewer/vault hand-off
+        // pattern).
+        val settingsViewModel: SettingsViewModel = viewModel()
         val openViewer: (window: List<MediaItem>, index: Int) -> Unit = { window, index ->
             viewerViewModel.open(window, index)
             navController.navigate(Destinations.VIEWER)
@@ -203,6 +221,7 @@ fun ToadGalleryApp() {
                     PhotosScreen(
                         onOpenViewer = openViewer,
                         vaultViewModel = vaultViewModel,
+                        settingsViewModel = settingsViewModel,
                     )
                 }
                 composable(Destinations.ALBUMS) {
@@ -223,6 +242,7 @@ fun ToadGalleryApp() {
                             bucketId = bucketId,
                             onBack = { navController.popBackStack() },
                             onOpenViewer = openViewer,
+                            settingsViewModel = settingsViewModel,
                         )
                     }
                 }
@@ -233,13 +253,17 @@ fun ToadGalleryApp() {
                 }
                 composable(Destinations.SETTINGS) {
                     // Issue #27: the real Settings screen (Photo Picker toggle,
-                    // pick entry point, fallback copy) replaces the placeholder.
+                    // pick entry point, fallback copy) replaces the placeholder;
+                    // the appearance section and About entry ride the SHELL-scoped
+                    // settingsViewModel so changes reach every grid live.
                     SettingsScreen(
                         pickedViewModel = pickedViewModel,
+                        settingsViewModel = settingsViewModel,
                         onBrowsePicked = { navController.navigate(Destinations.PICKED) },
                         onOpenTrash = { navController.navigate(Destinations.TRASH) },
                         vaultViewModel = vaultViewModel,
                         onOpenVault = { navController.navigate(Destinations.VAULT) },
+                        onOpenAbout = { navController.navigate(Destinations.ABOUT) },
                     )
                 }
                 composable(Destinations.PICKED) {
@@ -269,6 +293,15 @@ fun ToadGalleryApp() {
                     // session the Photos move-to-vault flow used.
                     VaultScreen(
                         viewModel = vaultViewModel,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Destinations.ABOUT) {
+                    // About sub-screen: identity, privacy, credits and the
+                    // vault diagnostics probed through the SAME shell-scoped
+                    // vault session (the vault screen's hand-off pattern).
+                    AboutScreen(
+                        vaultViewModel = vaultViewModel,
                         onBack = { navController.popBackStack() },
                     )
                 }

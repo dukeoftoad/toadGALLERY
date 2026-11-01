@@ -13,8 +13,10 @@ import androidx.compose.ui.unit.dp
 import io.github.dukeoftoad.gallery.data.MediaItem
 
 /**
- * The staggered media grid shared by the album detail view (Phase 3, issue
- * #29; the paged Photos timeline uses [MediaPagingGrid] with the same cell).
+ * The staggered media grid shared by the picked-photos and search
+ * surfaces (Phase 3, issue #29; the paged Photos timeline uses
+ * [MediaPagingGrid] with the same cell, and album detail has rendered its
+ * own grid with the same contract since issue #64).
  *
  * Aspect-ratio-aware since issue #34: `LazyVerticalStaggeredGrid` sizes each
  * cell from the item's clamped MediaStore dimensions instead of forcing
@@ -25,9 +27,16 @@ import io.github.dukeoftoad.gallery.data.MediaItem
  * Albums tab stay square. Keys on `uri.toString()` so recomposition and
  * recycling survive position changes.
  *
+ * The appearance settings slice (roadmap Phase 3) adds [uniformCells] for
+ * the GRID layout (Ente-style): every cell renders a `1f` square via
+ * [MediaThumb]'s `forceSquare`. No grouping parameter here by design: this
+ * grid backs the picked-photos and search surfaces in v1, whose lists are
+ * small enough that date headers would add noise, not orientation --- the
+ * timeline grouping stays a [MediaPagingGrid] feature.
+ *
  * Tap handling (issue #50): the optional [onItemTap] receives the item's
- * index within [items] plus the item itself; the album detail screen passes
- * it straight to the shell's viewer hand-off (the same `(window, index)`
+ * index within [items] plus the item itself; the search screen passes it
+ * straight to the shell's viewer hand-off (the same `(window, index)`
  * shape as the paged grid, so both call sites feed the viewer identically).
  * The default `null` keeps the grid inert --- the pre-#50 render --- for any
  * caller with no viewer to open.
@@ -41,6 +50,7 @@ fun MediaGrid(
     items: List<MediaItem>,
     modifier: Modifier = Modifier,
     columns: Int = 3,
+    uniformCells: Boolean = false,
     onItemTap: ((index: Int, item: MediaItem) -> Unit)? = null,
 ) {
     LazyVerticalStaggeredGrid(
@@ -57,10 +67,10 @@ fun MediaGrid(
                 Box(
                     modifier = Modifier.clickable { onItemTap(index, item) },
                 ) {
-                    MediaThumb(item = item)
+                    MediaThumb(item = item, forceSquare = uniformCells)
                 }
             } else {
-                MediaThumb(item = item)
+                MediaThumb(item = item, forceSquare = uniformCells)
             }
         }
     }

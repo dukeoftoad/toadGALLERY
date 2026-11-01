@@ -25,8 +25,12 @@ android {
         // vault biometric binding + thumbnails #57/#58, favorites +
         // sorting #66) plus the #69 vault thumbnail lock-race guard, on top
         // of the versionCode-8 slices (file ops #30, trash #31, vault #32,
-        // viewer #50 + follow-ups)
-        versionCode = 11
+        // viewer #50 + follow-ups).
+        // versionCode 12 (r8 round): the vault integrity round-2 fixes
+        // (#73: confirmed publication before vault-copy deletion,
+        // transactional setup) + the diagnostics logger and the
+        // appearance/about settings round.
+        versionCode = 12
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

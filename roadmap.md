@@ -379,6 +379,19 @@ the start.
 the ability to edit metadata in-place, with no network dependency. No
 Aves code is ported (ADR-0008).
 
+> **Planning input (2026-11):** the Phase 4 compatibility audit against
+> the Ente Photos on-device ML implementation concluded Phase 4 is
+> directionally suitable but needs contract changes (durable media
+> identity/revision, a byte-oriented read boundary, incremental change
+> detection, a canonical decode contract, an explicit persistence
+> boundary) before any Ente-derived gallery-AI work can build on it. The
+> full audit, the Phase 4 contract requirements and the standalone
+> Ente-derived AI implementation plan live in
+> `docs/phase-4/phase-4-contract-audit-and-ente-ai-plan.md`. Note its
+> working-scope naming: "Phase 5" there means the Ente-derived gallery
+> AI, not this roadmap's Phase 5 below --- reconciling the numbering is
+> an explicit pre-implementation decision.
+
 #### Tasks
 
 - Build a metadata service with a clear boundary between metadata

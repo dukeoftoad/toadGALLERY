@@ -24,7 +24,7 @@ class EditableExifCodecTest {
         EditableExifCodec.writesFor(field, MetadataEditInput(primary = primary, secondary = secondary))
 
     private fun validWrites(field: MediaEditField, primary: String, secondary: String = ""): List<ExifTagWrite> =
-        writes(field, primary, secondary) as FieldEditResult.Valid
+        (writes(field, primary, secondary) as FieldEditResult.Valid).writes
 
     // ---- DATE_TIME ----
 

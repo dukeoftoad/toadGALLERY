@@ -64,7 +64,10 @@ class WindowsRatingMathTest {
     @Test
     fun `stars to percent to stars round-trips for every star count`() {
         for (stars in 0..5) {
-            assertEquals(stars, WindowsRatingMath.ratingPercentToStars(WindowsRatingMath.starsToRatingPercent(stars)))
+            // starsToRatingPercent is Int? (out-of-range stars are refused);
+            // inside 0..5 it is never null, so the round-trip is total.
+            val percent = requireNotNull(WindowsRatingMath.starsToRatingPercent(stars))
+            assertEquals(stars, WindowsRatingMath.ratingPercentToStars(percent))
         }
     }
 

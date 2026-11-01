@@ -4,7 +4,7 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 12)
+## [0.4.1-alpha] — unreleased on main (versionCode 13)
 
 ### Added
 
@@ -256,6 +256,28 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Fixed
 
+- Vault setup works on real devices at last (#76, the r8 device finding):
+  the r8 DiagLog capture showed setup dying at the first seal with
+  `InvalidAlgorithmParameterException: Caller-provided IV not permitted` ---
+  AndroidKeyStore's default randomized-encryption policy rejects
+  caller-provided IVs on ENCRYPT, so `VaultCrypto`'s caller-generated IV
+  (fine on the JVM software keys the tests use) made EVERY real-device
+  vault setup fail since the original #32 slice. The seal init now uses
+  the canonical provider-IV pattern first (`init(ENCRYPT_MODE, key)` +
+  `Cipher.getIV()` --- the same pattern the biometric slice already used),
+  with a caller-IV fallback for exotic providers; the ADR-0017 envelope
+  and the decrypt side are byte-identical. 3 new JVM tests pin the
+  negotiated-IV contract.
+- The Photos timeline no longer crashes when a refresh lands mid-scroll
+  (#76, the r8 crash, symbolicated via the release `mapping.txt`):
+  `IndexOutOfBoundsException: Index: 60, Size: 60` --- the staggered grid
+  asked cell keys for indices from a layout range one frame staler than
+  the refresh-shrunk paging store, and the key lambda's
+  `LazyPagingItems.get` throws in exactly that window. Key/span/content
+  now read the row list and the snapshot bounds-checked
+  (`timelineCellKey`, new, generic, JVM-tested against the exact device
+  shape); stale intervals degrade to positional keys; the content leg
+  keeps the guarded presenter read that drives Paging's append hints.
 - Vault setup no longer dies on exotic StrongBox keystores (#74, the
   device bug): some OEM/custom-ROM keystores abort StrongBox key generation
   with a plain `ProviderException`/`KeyStoreException` instead of the

@@ -329,6 +329,49 @@ device, verify:
 - [ ] No new `AndroidRuntime` FATAL lines attributable to build 17
       (stale-buffer `r8-map-id` guidance as section 13).
 
+## 16. r15–r18 pass — the Phase 4 completion quadruple round (build 22, UNRELEASED)
+
+Four parallel rounds landed as one build: r15 metadata editing, r16 the
+on-device map, r17 filter chips, r18 the format-audit engine. Per the
+maintainer directive no release tags are cut until Phase 5 completes;
+build 22 rides CI from main. When it reaches the reference device,
+verify:
+
+- [ ] Upgrade path: install build 22 OVER the r13/r14 build (do not
+      uninstall) — Room v3 → v4 (the three location columns) must
+      migrate cleanly (non-destructive `MIGRATION_3_4`).
+- [ ] r15: open Details on a JPEG, edit the capture date (and offset),
+      save — the row re-renders with the new value; after the scan
+      pipeline reconciles (seconds), the timeline re-sorts the item to
+      the edited day (the documented eventual consistency).
+- [ ] r15: editing a file the app cannot write (another app's media on
+      Android 10+) shows the honest read-only / needs-grant states — on
+      API 30+ the system "allow editing" dialog appears and a grant
+      retries the write once; a denial never loops the dialog.
+- [ ] r15: keywords/rating rows show their "later round" states (the
+      pinned exifinterface cannot write those tags) — never a fake
+      success.
+- [ ] r16: the Map tab shows the bundled world outline fully offline
+      (no network tile fetch exists in the app). With location consent
+      granted, geotagged photos appear as dots after the scan indexes
+      them; tapping a dot lists that location's items and opens the
+      viewer.
+- [ ] r16: with consent OFF (API 29+) the map shows the honest
+      consent-off state pointing at Settings; dots for items first
+      scanned while ungranted appear only after their next content
+      change (the documented re-index limitation, surfaced as the
+      pending footnote).
+- [ ] r17: the Photos chips row filters the timeline on both paths —
+      toggle Photos/Videos/GIFs/Favorites shortly after a cold start
+      (MediaStore path) and again once warm (catalogue path); the
+      filtered empty state keeps the chips visible; clear-all restores
+      the full timeline; the Albums Collections cards hand off
+      pre-filtered.
+- [ ] r18: no visible surface by design (engine + audit document); the
+      Details MIME row still renders and no new FATALs occur.
+- [ ] No new `AndroidRuntime` FATAL lines attributable to build 22
+      (stale-buffer `r8-map-id` guidance as section 13).
+
 ---
 
 **Sign-off:** record results per section; any fail gets a logcat snippet

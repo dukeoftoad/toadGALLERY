@@ -80,7 +80,29 @@ android {
         // ACCESS_MEDIA_LOCATION consent state), plus the full EXIF block
         // in a collapsible tree --- and the ACCESS_MEDIA_LOCATION
         // permission flow (Settings section + a pure state machine).
-        versionCode = 18
+        // versionCode 19 (r15 round): the editable metadata fields ---
+        // EXIF write-back through androidx.exifinterface with a pure
+        // edit-capability gate, the API 30+ createWriteRequest
+        // escalation state machine, and Details-view edit affordances;
+        // fields the pinned library physically cannot write (Rating,
+        // XPKeywords) render honest later-round states.
+        // versionCode 20 (r16 round): the on-device map view --- a
+        // bundled Natural Earth 110m world outline (zero network tiles
+        // ever), the consent-gated Map tab with offline photo dots, and
+        // GPS persistence (Room v3 -> v4: latitude/longitude +
+        // provenance via a second ScanIndexHook location indexer).
+        // versionCode 21 (r17 round): collections + smart-filter chips
+        // --- a pure filter engine projected over both timeline paths
+        // (the Photos chips row: All/Photos/Videos/GIFs/Favorites) and
+        // the Albums Collections section; the folder chip stays
+        // engine-only until the catalogue gains a bucket column.
+        // versionCode 22 (r18 round): the format-support audit --- a
+        // magic-byte sniffer + capability catalogue with the cited
+        // Phase 4 format matrix (every platform claim carries a repo
+        // cite or an official-docs URL). With r15-r18 the four Phase 4
+        // still-open items are landed; per maintainer directive no
+        // release tags until Phase 5 completes.
+        versionCode = 22
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

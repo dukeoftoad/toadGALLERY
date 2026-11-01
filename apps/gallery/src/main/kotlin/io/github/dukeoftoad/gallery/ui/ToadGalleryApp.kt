@@ -41,6 +41,7 @@ import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
 import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
 import io.github.dukeoftoad.gallery.ui.details.DetailsScreen
+import io.github.dukeoftoad.gallery.ui.map.MapScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
@@ -68,6 +69,14 @@ object Destinations {
     const val ALBUMS = "albums"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
+
+    /**
+     * The Map tab (r16 round, Phase 4 still-open item "on-device map
+     * view"): the offline world map over the catalogue's persisted EXIF
+     * GPS. Top-level like the other tabs; zero network --- the outline is
+     * a bundled asset (docs/phase-4/on-device-map.md).
+     */
+    const val MAP = "map"
 
     /** Route pattern for the album detail sub-screen (issue #29). */
     const val ALBUM_DETAIL = "album/{bucketId}"
@@ -131,7 +140,7 @@ object Destinations {
         "details/$mediaId?uri=${Uri.encode(uri.toString())}"
 
     /** Routes that show the bottom navigation bar. */
-    val topLevel = setOf(PHOTOS, ALBUMS, SEARCH, SETTINGS)
+    val topLevel = setOf(PHOTOS, ALBUMS, SEARCH, SETTINGS, MAP)
 }
 
 private data class TopLevelDestination(
@@ -144,6 +153,9 @@ private val bottomNavItems = listOf(
     TopLevelDestination(Destinations.PHOTOS, R.drawable.ic_nav_photos, R.string.nav_photos),
     TopLevelDestination(Destinations.ALBUMS, R.drawable.ic_nav_albums, R.string.nav_albums),
     TopLevelDestination(Destinations.SEARCH, R.drawable.ic_nav_search, R.string.nav_search),
+    // r16: the Map tab rides the same drawable-icon mechanism as its
+    // siblings (see ic_nav_map for the shape's provenance).
+    TopLevelDestination(Destinations.MAP, R.drawable.ic_nav_map, R.string.nav_map),
     TopLevelDestination(Destinations.SETTINGS, R.drawable.ic_nav_settings, R.string.nav_settings),
 )
 
@@ -268,6 +280,27 @@ fun ToadGalleryApp() {
                     // Phase 3 (issue #62): real name search replaces the
                     // placeholder; results open the shared viewer hand-off.
                     SearchScreen(onOpenViewer = openViewer)
+                }
+                composable(Destinations.MAP) {
+                    // r16 (Phase 4 still-open item): the offline Map tab.
+                    // The viewer opens through the SAME shell-scoped
+                    // hand-off the grid screens use; the consent state's
+                    // "turn it on" action routes to the Settings tab, where
+                    // the r14 ACCESS_MEDIA_LOCATION row lives.
+                    MapScreen(
+                        onOpenViewer = openViewer,
+                        onOpenSettings = {
+                            navController.navigate(Destinations.SETTINGS) {
+                                // Same single-top-level-stack discipline as a
+                                // bottom-bar tap (see NavigationBarItem).
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
                 }
                 composable(Destinations.SETTINGS) {
                     // Issue #27: the real Settings screen (Photo Picker toggle,

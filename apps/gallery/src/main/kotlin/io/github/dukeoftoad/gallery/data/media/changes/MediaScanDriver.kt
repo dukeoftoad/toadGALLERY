@@ -127,6 +127,15 @@ object ScanDriverPolicy {
      * - [CatalogueRecord.lastSeenAtMillis] is stamped from [lastSeenAtMillis]
      *   --- the wall-clock moment of the scan that observed the row live,
      *   the driver's job per [MediaScanRow.toRecord]'s contract.
+     * - The DISPLAY/SHAPE ride-alongs (displayName, width, height,
+     *   durationMs, isFavorite) come from the FRESH row verbatim, via
+     *   [MediaScanRow.toRecord]: a CHANGED row's record mirrors its
+     *   last-seen provider row. An UNCHANGED row produces no record here at
+     *   all (the reconciler drops it into `unchangedCount` and the driver
+     *   upserts nothing), so its stored copy survives until the next
+     *   revision-visible change --- together with the reconciler's
+     *   revision-only comparison this is why display data refreshes for
+     *   free on real changes but never CAUSES one.
      */
     fun recordForAppliedChange(
         changed: CatalogueReconciler.ChangedRecord,

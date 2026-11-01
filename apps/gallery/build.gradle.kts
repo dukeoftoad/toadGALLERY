@@ -62,7 +62,18 @@ android {
         // and persisted onto the record (Room v1 -> v2, non-destructive
         // migration). No UI consumes the catalogue yet --- the timeline
         // switch is the next round.
-        versionCode = 16
+        // versionCode 17 (r13 round): the timeline adoption --- the Photos
+        // timeline now orders and groups by the EFFECTIVE capture date
+        // (resolved capture date when the indexer produced one, date_added
+        // otherwise). While the first scan populates the catalogue the
+        // timeline keeps the MediaStore windows unchanged; once populated,
+        // windowed reads come from the catalogue (Room v3: displayName +
+        // width/height/durationMs/isFavorite ride-along columns), ordered
+        // by COALESCE(resolvedCaptureDateMillis, dateAddedMillis) with a
+        // local-media-key tiebreak, invalidated by the catalogue's own
+        // change flow. Per maintainer directive: no release tags until
+        // Phase 5 completes; builds ride CI from main.
+        versionCode = 17
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

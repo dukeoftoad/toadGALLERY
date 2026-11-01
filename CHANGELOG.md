@@ -4,9 +4,44 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 16)
+## [0.4.1-alpha] — unreleased on main (versionCode 17)
 
 ### Added
+
+- **Timeline capture-date adoption** (r13 round; the roadmap's promised
+  behavior change --- the timeline's sort/group keys now use the
+  persisted capture dates):
+  - The Photos timeline orders and groups by the **effective capture
+    date**: the resolved EXIF capture instant when the r12 indexer
+    produced one, `date_added` otherwise. Day/month group headers
+    derive from the same effective instant (timezone-aware as before;
+    pre-1970 negatives are legitimate and land under their own day).
+  - **Catalogue-backed timeline windows**: once the first scan has
+    populated the catalogue, the timeline's windowed reads come from
+    the Room catalogue itself, ordered by
+    `COALESCE(resolvedCaptureDateMillis, dateAddedMillis)` with a
+    `localMediaKey` tiebreak (the stable-total-order discipline that
+    keeps windows tiling without duplicate grid keys). While the
+    catalogue is still empty (first cold start), the timeline keeps
+    the previous MediaStore windows unchanged --- no first-paint
+    regression, no waiting screen.
+  - **Room v2 -> v3** (non-destructive migration): the catalogue now
+    carries the display/shape fields a timeline cell needs ---
+    `displayName`, `width`, `height`, `durationMs`, `isFavorite` ---
+    projected by the scan walk as NON-REVISION ride-alongs (a shape
+    drift never triggers re-indexing; the known API-29-only favorites
+    staleness edge is documented in the row contract).
+  - Timeline invalidation while catalogue-driven rides the
+    catalogue's own change flow (one shared Room instance, held by the
+    Application, so invalidation reaches every observer) --- the
+    eventual-consistency contract is documented: a fresh camera shot
+    appears once the scan pipeline reconciles it, because the ordering
+    key itself is produced by the scan.
+  - 40 new JVM tests (catalogue window ordering/tiling, source-choice
+    state machine, TimelineRows effective-date grouping, comparator),
+    561 total green.
+
+### Pre-existing entries
 
 - **Phase 4 scan driver** (r12 round; the roadmap's "scan driver that
   wires the catalogue + change feed into app start" item):

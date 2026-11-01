@@ -12,15 +12,22 @@ import java.time.ZoneOffset
 import java.util.Locale
 
 /**
- * JVM tests for [TimelineRows] (roadmap Phase 3: appearance settings slice).
+ * JVM tests for [TimelineRows] (roadmap Phase 3: appearance settings slice;
+ * effective-instant grouping since r13).
  *
  * No emulator, no Robolectric (ADR-0016) --- and no `MediaItem`: it embeds
  * `android.net.Uri`, which a plain JVM test cannot construct, so (exactly
  * like `WindowPagingSourceTest`/`ViewerWindowTest`, issues #28/#50) every
  * rule below drives the GENERIC [buildTimelineRows] core with `List<Long>`
- * epoch-second stand-ins and the identity extractor. The production
+ * epoch-MILLI stand-ins and the identity extractor. The production
  * `MediaItem` overload is a one-line delegate onto that core (see its
  * KDoc), so pinning the core pins the timeline the grid renders.
+ *
+ * Since r13 the seam takes the EFFECTIVE instant in millis; the r13 section
+ * drives it with `(captureDateMillis, dateAddedSec)` pairs and the
+ * production extractor (`captureDateMillis ?: dateAddedSec * 1000`) to pin
+ * capture-date precedence, the null fallback, and pre-1970 (negative)
+ * instants.
  *
  * All dates use fixed zones --- never the system default --- so the grouping
  * math is deterministic on any machine (and the Asia/Tokyo boundary rule
@@ -28,8 +35,11 @@ import java.util.Locale
  */
 class TimelineRowsTest {
 
-    /** UTC midnight of [date], as an epoch second (the test item payload). */
+    /** UTC midnight of [date], as an epoch second (the dateAdded unit). */
     private fun secOf(date: LocalDate): Long = date.atStartOfDay(ZoneOffset.UTC).toEpochSecond()
+
+    /** UTC midnight of [date], as an epoch MILLI (the effective-instant unit). */
+    private fun millisOf(date: LocalDate): Long = secOf(date) * 1000
 
     /** Groups [items] (nulls = not-yet-loaded paging placeholders). */
     private fun rows(
@@ -37,6 +47,24 @@ class TimelineRowsTest {
         groupBy: GroupBy,
         zone: ZoneId = ZoneOffset.UTC,
     ): List<TimelineRow> = buildTimelineRows(items, { it }, groupBy, zone)
+
+    /**
+     * The production payload shape since r13: a resolved capture date
+     * (nullable) plus the MediaStore `dateAddedSec` it falls back to.
+     */
+    private data class DatedItem(val captureDateMillis: Long?, val dateAddedSec: Long)
+
+    /** Groups [items] by the production effective-instant rule. */
+    private fun effectiveRows(
+        items: List<DatedItem?>,
+        groupBy: GroupBy,
+        zone: ZoneId = ZoneOffset.UTC,
+    ): List<TimelineRow> = buildTimelineRows(
+        items,
+        { it.captureDateMillis ?: it.dateAddedSec * 1000 },
+        groupBy,
+        zone,
+    )
 
     // ------------------------------------------------------------------
     // NONE: the flat pre-slice timeline
@@ -79,7 +107,7 @@ class TimelineRowsTest {
         val day2 = LocalDate.of(2026, 3, 6)
         val rows = rows(
             // Same-day captures land under one header even at different times.
-            listOf(secOf(day1) + 3_600, secOf(day1) + 7_200, secOf(day2), secOf(day2) + 60),
+            listOf(millisOf(day1) + 3_600_000, millisOf(day1) + 7_200_000, millisOf(day2), millisOf(day2) + 60_000),
             GroupBy.DAY,
         )
         assertEquals(
@@ -99,7 +127,7 @@ class TimelineRowsTest {
     fun `DAY single day emits exactly one header before all cells`() {
         val day = LocalDate.of(2026, 3, 5)
         val rows = rows(
-            listOf(secOf(day), secOf(day) + 86_399, secOf(day) + 1),
+            listOf(millisOf(day), millisOf(day) + 86_399_000, millisOf(day) + 1),
             GroupBy.DAY,
         )
         assertEquals(4, rows.size) // 1 header + 3 cells, no interleaved repeats
@@ -111,7 +139,7 @@ class TimelineRowsTest {
     fun `DAY header epochDay and groupKey are stable across rebuilds`() {
         // The paging grid recomputes rows as windows append; equal inputs
         // must yield equal rows (LazyLayout keys rely on this).
-        val items = listOf(secOf(LocalDate.of(2026, 3, 5)), secOf(LocalDate.of(2026, 3, 7)))
+        val items = listOf(millisOf(LocalDate.of(2026, 3, 5)), millisOf(LocalDate.of(2026, 3, 7)))
         assertEquals(rows(items, GroupBy.DAY), rows(items, GroupBy.DAY))
         val header = rows(items, GroupBy.DAY).first() as TimelineRow.Header
         assertEquals(LocalDate.of(2026, 3, 5).toEpochDay(), header.epochDay)
@@ -128,7 +156,7 @@ class TimelineRowsTest {
         val feb = LocalDate.of(2026, 2, 20)
         val mar1 = LocalDate.of(2026, 3, 1)
         val mar31 = LocalDate.of(2026, 3, 31)
-        val rows = rows(listOf(secOf(feb), secOf(mar1), secOf(mar31)), GroupBy.MONTH)
+        val rows = rows(listOf(millisOf(feb), millisOf(mar1), millisOf(mar31)), GroupBy.MONTH)
         assertEquals(
             listOf(
                 TimelineRow.Header("m2026-2", LocalDate.of(2026, 2, 1).toEpochDay(), isMonth = true),
@@ -146,7 +174,7 @@ class TimelineRowsTest {
     fun `MONTH separates same month names in different years`() {
         val thisYear = LocalDate.of(2026, 3, 5)
         val nextYear = LocalDate.of(2027, 3, 5)
-        val headers = rows(listOf(secOf(thisYear), secOf(nextYear)), GroupBy.MONTH)
+        val headers = rows(listOf(millisOf(thisYear), millisOf(nextYear)), GroupBy.MONTH)
             .filterIsInstance<TimelineRow.Header>()
         assertEquals(listOf("m2026-3", "m2027-3"), headers.map { it.groupKey })
         assertEquals(listOf(true, true), headers.map { it.isMonth })
@@ -161,7 +189,7 @@ class TimelineRowsTest {
         val day1 = LocalDate.of(2026, 3, 5)
         val day2 = LocalDate.of(2026, 3, 6)
         // A null BETWEEN two same-day items must not split the day group.
-        val rows = rows(listOf(secOf(day1), null, secOf(day1)), GroupBy.DAY)
+        val rows = rows(listOf(millisOf(day1), null, millisOf(day1)), GroupBy.DAY)
         assertEquals(
             listOf(
                 TimelineRow.Header("d${day1.toEpochDay()}", day1.toEpochDay(), false),
@@ -175,7 +203,7 @@ class TimelineRowsTest {
     @Test
     fun `null placeholders never trigger a new group in MONTH mode`() {
         val mar = LocalDate.of(2026, 3, 5)
-        val rows = rows(listOf(null, null, secOf(mar), null), GroupBy.MONTH)
+        val rows = rows(listOf(null, null, millisOf(mar), null), GroupBy.MONTH)
         assertEquals(
             listOf(
                 TimelineRow.Header("m2026-3", LocalDate.of(2026, 3, 1).toEpochDay(), true),
@@ -193,7 +221,7 @@ class TimelineRowsTest {
     fun `same epoch second falls on different days in different zones`() {
         // 2026-03-05T20:00Z is still 5 March in UTC but already 6 March in
         // Asia/Tokyo (UTC+9): the header must follow the rendered zone.
-        val instant = Instant.parse("2026-03-05T20:00:00Z").epochSecond
+        val instant = Instant.parse("2026-03-05T20:00:00Z").toEpochMilli()
         val utc = rows(listOf(instant), GroupBy.DAY, ZoneOffset.UTC).first() as TimelineRow.Header
         val tokyo = rows(
             listOf(instant),
@@ -208,13 +236,147 @@ class TimelineRowsTest {
     @Test
     fun `month groups also follow the rendered zone`() {
         // 2026-04-30T20:00Z is April in UTC but already 1 May in Tokyo.
-        val instant = Instant.parse("2026-04-30T20:00:00Z").epochSecond
+        val instant = Instant.parse("2026-04-30T20:00:00Z").toEpochMilli()
         val tokyo = rows(
             listOf(instant),
             GroupBy.MONTH,
             ZoneId.of("Asia/Tokyo"),
         ).first() as TimelineRow.Header
         assertEquals("m2026-5", tokyo.groupKey)
+    }
+
+    // ------------------------------------------------------------------
+    // The r13 effective instant: capture-date precedence, null fallback,
+    // negative (pre-1970) instants
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `capture date wins over dateAdded for the day header boundary`() {
+        // Two photos imported the SAME day (identical dateAdded), captured
+        // on different days: the capture dates split the groups --- the
+        // r13 behavior change in one rule.
+        val added = LocalDate.of(2026, 3, 5)
+        val capturedA = LocalDate.of(2026, 3, 4)
+        val capturedB = LocalDate.of(2026, 3, 6)
+        val rows = effectiveRows(
+            listOf(
+                DatedItem(captureDateMillis = millisOf(capturedA), dateAddedSec = secOf(added)),
+                DatedItem(captureDateMillis = millisOf(capturedB), dateAddedSec = secOf(added)),
+            ),
+            GroupBy.DAY,
+        )
+        assertEquals(
+            listOf(
+                TimelineRow.Header("d${capturedA.toEpochDay()}", capturedA.toEpochDay(), isMonth = false),
+                TimelineRow.Cell(0),
+                TimelineRow.Header("d${capturedB.toEpochDay()}", capturedB.toEpochDay(), isMonth = false),
+                TimelineRow.Cell(1),
+            ),
+            rows,
+        )
+    }
+
+    @Test
+    fun `same capture day merges items added on different days`() {
+        // Capture precedence collapses the boundary: both items were
+        // CAPTURED on day1 even though one was imported on day2, so they
+        // share day1's header (a dateAdded grouping would have split them).
+        val day1 = LocalDate.of(2026, 3, 5)
+        val day2 = LocalDate.of(2026, 3, 6)
+        val rows = effectiveRows(
+            listOf(
+                DatedItem(captureDateMillis = millisOf(day1), dateAddedSec = secOf(day1)),
+                DatedItem(captureDateMillis = millisOf(day1), dateAddedSec = secOf(day2)),
+            ),
+            GroupBy.DAY,
+        )
+        assertEquals(
+            listOf(
+                TimelineRow.Header("d${day1.toEpochDay()}", day1.toEpochDay(), false),
+                TimelineRow.Cell(0),
+                TimelineRow.Cell(1),
+            ),
+            rows,
+        )
+    }
+
+    @Test
+    fun `null capture date falls back to dateAdded`() {
+        // Unresolved (null) capture: the item groups under its dateAdded
+        // day, exactly like the pre-r13 render --- and it lands WITH a
+        // resolved item whose capture (not dateAdded) points at that day.
+        val day1 = LocalDate.of(2026, 3, 5)
+        val day2 = LocalDate.of(2026, 3, 6)
+        val rows = effectiveRows(
+            listOf(
+                DatedItem(captureDateMillis = null, dateAddedSec = secOf(day2)),
+                DatedItem(captureDateMillis = millisOf(day2), dateAddedSec = secOf(day1)),
+            ),
+            GroupBy.DAY,
+        )
+        assertEquals(
+            listOf(
+                TimelineRow.Header("d${day2.toEpochDay()}", day2.toEpochDay(), false),
+                TimelineRow.Cell(0),
+                TimelineRow.Cell(1),
+            ),
+            rows,
+        )
+    }
+
+    @Test
+    fun `a negative pre-1970 capture instant lands under its own epochDay`() {
+        // A scanned archive photo captured in 1930 (negative epoch millis
+        // and negative epochDay) must not crash the math nor fold into the
+        // 2026 group: it gets its own header with a negative day key.
+        val scanned = LocalDate.of(1930, 1, 15)
+        val modern = LocalDate.of(2026, 3, 5)
+        assertTrue("fixture guard: pre-1970 epochDay is negative", scanned.toEpochDay() < 0)
+        val rows = effectiveRows(
+            listOf(
+                DatedItem(captureDateMillis = millisOf(scanned), dateAddedSec = secOf(modern)),
+                DatedItem(captureDateMillis = null, dateAddedSec = secOf(modern)),
+            ),
+            GroupBy.DAY,
+        )
+        assertEquals(
+            listOf(
+                TimelineRow.Header("d${scanned.toEpochDay()}", scanned.toEpochDay(), false),
+                TimelineRow.Cell(0),
+                TimelineRow.Header("d${modern.toEpochDay()}", modern.toEpochDay(), false),
+                TimelineRow.Cell(1),
+            ),
+            rows,
+        )
+    }
+
+    @Test
+    fun `month grain follows the effective instant too`() {
+        // Same two rules at month grain: a capture date in a different
+        // month than dateAdded splits the group (capture wins), and the
+        // pre-1970 capture lands under its own (negative-epochDay) month.
+        val scannedFeb1930 = LocalDate.of(1930, 2, 10)
+        val addedMar2026 = LocalDate.of(2026, 3, 5)
+        val capturedFeb2026 = LocalDate.of(2026, 2, 20)
+        val rows = effectiveRows(
+            listOf(
+                DatedItem(captureDateMillis = millisOf(scannedFeb1930), dateAddedSec = secOf(addedMar2026)),
+                DatedItem(captureDateMillis = millisOf(capturedFeb2026), dateAddedSec = secOf(addedMar2026)),
+                DatedItem(captureDateMillis = null, dateAddedSec = secOf(addedMar2026)),
+            ),
+            GroupBy.MONTH,
+        )
+        assertEquals(
+            listOf(
+                TimelineRow.Header("m1930-2", LocalDate.of(1930, 2, 1).toEpochDay(), isMonth = true),
+                TimelineRow.Cell(0),
+                TimelineRow.Header("m2026-2", LocalDate.of(2026, 2, 1).toEpochDay(), isMonth = true),
+                TimelineRow.Cell(1),
+                TimelineRow.Header("m2026-3", LocalDate.of(2026, 3, 1).toEpochDay(), isMonth = true),
+                TimelineRow.Cell(2),
+            ),
+            rows,
+        )
     }
 
     // ------------------------------------------------------------------

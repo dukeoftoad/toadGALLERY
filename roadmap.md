@@ -444,14 +444,25 @@ evidence (through the MediaReadHandle boundary, eligible public media
 only) and persisted onto the record (Room v1 -> v2, non-destructive
 migration, v2 schema committed). Still no UI consumes the catalogue.
 
+#### Status — r13 round (versionCode 17): the timeline reads capture dates
+
+The promised adoption landed: the Photos timeline orders and groups by
+the EFFECTIVE capture date (resolved EXIF instant when the indexer
+produced one, `date_added` otherwise). Once the first scan populates
+the catalogue, the timeline's windowed reads are served by the
+catalogue itself (`COALESCE(resolvedCaptureDateMillis,
+dateAddedMillis)` + `localMediaKey` tiebreak; Room v3 adds the
+display/shape ride-alongs `displayName`/`width`/`height`/`durationMs`/
+`isFavorite`), invalidated by the catalogue's own change flow; while
+the catalogue is empty the timeline keeps the legacy MediaStore
+windows, so first paint never regresses. Per maintainer directive
+(2026-11-01) rounds land on main WITHOUT release tags until Phase 5
+completes; device builds come from CI.
+
 **Still open in Phase 4:** the metadata Details view + editable fields
 (EXIF write-back, then our IPTC/XMP wrappers), the on-device map view,
 collections/smart-filter chips, the format-support audit deliverable,
-and the ACCESS_MEDIA_LOCATION permission flow; the timeline's
-sort/group keys still need switching to the persisted capture dates
-(the r12 round persisted them; the behavior change rides the next
-round, after the build-16 device pass proves the pipeline on real
-volumes).
+and the ACCESS_MEDIA_LOCATION permission flow.
 
 #### Tasks
 

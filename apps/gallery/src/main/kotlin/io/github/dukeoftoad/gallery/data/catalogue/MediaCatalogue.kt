@@ -1,6 +1,7 @@
 package io.github.dukeoftoad.gallery.data.catalogue
 
 import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The persistent media catalogue of Phase 4 (ADR-0006's Room persistence
@@ -15,7 +16,10 @@ import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
  * .CatalogueReconciler]), which is why the surface is deliberately small:
  * upsert, point-read, bulk-read, tombstone, checkpoint, purge --- plus the
  * r12 capture-date partial update ([updateCaptureDate]), the one targeted
- * write the scan's index pass needs.
+ * write the scan's index pass needs, and the r13 timeline surface
+ * ([timelineWindow] / [liveItemCount] / [changes]), the windowed reads the
+ * Photos timeline is switching onto (the roadmap's "timeline's sort/group
+ * keys switch to the persisted capture dates").
  *
  * DELETES ARE TOMBSTONES, never hard erasures of history: [tombstone]
  * removes the live record but leaves a dated tombstone behind so that (a) a
@@ -92,6 +96,80 @@ interface MediaCatalogue {
     /** [allRecords] as key -> record; tombstoned keys are excluded. */
     suspend fun recordsMap(): Map<String, CatalogueRecord>
 
+    // --- timeline surface (r13 round) --------------------------------------
+
+    /**
+     * Window [offset, offset+limit) of LIVE records in the timeline's total order.
+     *
+     * THE ORDER (the timeline's row supply contract): records are ordered by
+     * their EFFECTIVE instant ---
+     * `COALESCE(resolvedCaptureDateMillis, dateAddedMillis)` --- in
+     * [direction], tiebroken by [CatalogueRecord.localMediaKey] in the SAME
+     * direction. The capture date wins over the provider's date_added
+     * wherever one was resolved (that is the entire point of the r12
+     * provenance columns); the date_added fallback keeps pre-index rows and
+     * genuinely undateable items in a stable place.
+     *
+     * THE TIEBREAK IS REQUIRED, exactly like `TimelineSort`'s `_id` tiebreak:
+     * many items share one instant (burst shots at one EXIF second;
+     * date_added-second granularity on the fallback), and a window boundary
+     * can fall between them. Without a total order the implementation would
+     * be free to reorder tied rows between window reads, and the windows
+     * would then TILE badly --- the same row surfacing in two windows (a
+     * DUPLICATE LazyGrid key crash) or none (a silently skipped photo). The
+     * key is unique per record, so (effective instant, key) is a genuine
+     * total order and consecutive windows cover the sequence exactly once,
+     * with no gaps and no overlaps, in both directions.
+     *
+     * Argument discipline: a negative [offset] or non-positive [limit]
+     * yields an empty list (never a whole-table read --- SQLite treats a
+     * negative LIMIT as "unbounded"); an offset at/after the end likewise
+     * yields an empty list. Windows are read against a snapshot of the live
+     * set; pair them with [changes] to know when to re-read.
+     */
+    suspend fun timelineWindow(
+        offset: Int,
+        limit: Int,
+        direction: TimelineDirection,
+    ): List<CatalogueRecord>
+
+    /**
+     * Number of live (non-tombstoned) records.
+     *
+     * The denominator of the timeline's windowed reads: callers pair it with
+     * [timelineWindow] to compute page counts and "end reached" signals.
+     * Tombstoned keys are not in the live set at all, so they are excluded
+     * by construction.
+     */
+    suspend fun liveItemCount(): Int
+
+    /**
+     * Emits after every catalogue mutation batch (Room invalidation / in-memory hook).
+     *
+     * The signal a timeline consumer collects to know its windows may be
+     * stale: every mutation that can change the live set or its ORDER emits
+     * --- [upsertAll] (non-empty batch), [updateCaptureDate] (a resolved
+     * capture date moves a record's effective instant, i.e. reorders the
+     * timeline) and [tombstone] (non-empty list). Purge
+     * ([purgeTombstonesOlderThan]) and checkpoint saves never emit: they
+     * cannot change the live set or its order.
+     *
+     * Hot-signal semantics, deliberately identical in both implementations:
+     * there is NO initial emission on collection and NO replay of emissions
+     * that fired while nobody was collecting (the Room implementation drops
+     * its flow query's built-in initial result for exactly this reason) ---
+     * callers perform their initial read independently and treat this as a
+     * pure invalidation signal, e.g. `changes().collectLatest { re-read }`.
+     * Conflated delivery is acceptable (the payload is Unit: "something
+     * changed, re-read"), so a burst of scan mutations may collapse into
+     * one delivered emission. The one accepted divergence: tombstoning keys
+     * that have no live record emits on the in-memory reference (it writes
+     * tombstone rows) but not on Room (no live-row write fires the observed
+     * table's invalidation) --- over-emission is a harmless redundant
+     * re-read, while every change to the LIVE set emits in both.
+     */
+    fun changes(): Flow<Unit>
+
     /**
      * Moves the given keys from the live set into the tombstone table at
      * [atMillis] (epoch millis, the moment the authoritative scan that
@@ -145,3 +223,29 @@ data class ScanCheckpoint(
     /** Epoch millis of the scan's completion. */
     val scannedAtMillis: Long,
 )
+
+/**
+ * The direction of [MediaCatalogue.timelineWindow]'s total order.
+ *
+ * Mirrors `TimelineSort`'s two directions (the UI's existing sort menu) but
+ * lives here, on the catalogue, because the ordering decision --- effective
+ * instant, key tiebreak --- is the DATA layer's to make now that the
+ * catalogue is the timeline's row supply. Pure JVM by the `TimelineSort`
+ * convention: no android.* imports, so the ordering rules are unit-testable
+ * without an emulator.
+ */
+enum class TimelineDirection {
+    /**
+     * Newest effective instant first; ties break on descending
+     * `localMediaKey` (the same-direction tiebreak that keeps windows
+     * tiling --- see [MediaCatalogue.timelineWindow]).
+     */
+    NEWEST_FIRST,
+
+    /**
+     * Oldest effective instant first; ties break on ascending
+     * `localMediaKey` --- ascending the timeline is the same total order
+     * walked backwards, so paging stays stable in both directions.
+     */
+    OLDEST_FIRST,
+}

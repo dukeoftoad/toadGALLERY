@@ -11,6 +11,17 @@ package io.github.dukeoftoad.gallery.data
  * in-memory ordering for the pre-R snapshot paths, so plain JVM tests pin
  * both halves without an emulator or Robolectric.
  *
+ * ## Two orderings, one discipline (r13)
+ * The MediaStore paths order by `date_added` ([sortOrder] / [sortItems])
+ * and stay exactly as they were --- they are the FALLBACK the timeline
+ * keeps while the first scan populates the catalogue, and the order of
+ * every MediaStore-fed surface. The catalogue-backed timeline instead
+ * orders by the EFFECTIVE instant (resolved capture date, else
+ * `dateAdded`); the Room half of that order is the catalogue's
+ * `effectiveOrderSql` (owned by the catalogue package), and
+ * [effectiveComparator] below is its in-memory twin --- same total-order
+ * discipline, pinned on the plain JVM.
+ *
  * ## The `_id` tiebreak is REQUIRED in both directions
  * Many rows share one `date_added` second (burst shots, screenshots), and a
  * window boundary can fall between them; without a total order the provider
@@ -69,5 +80,39 @@ enum class TimelineSort {
         OLDEST_FIRST -> items.sortedWith(
             compareBy(dateAddedSec).thenBy(id),
         )
+    }
+
+    /**
+     * The catalogue path's in-memory ordering twin (r13): orders by the
+     * EFFECTIVE instant ([dateOf], already `captureDateMillis ?:
+     * dateAddedSec * 1000`, in MILLIS) with [keyOf] --- the stable local
+     * media key --- as the tiebreak, BOTH keys in this direction. This is
+     * to the catalogue's `effectiveOrderSql` what [sortItems] is to
+     * [sortOrder]: the production catalogue windows arrive pre-ordered by
+     * the Room query (that SQL owns the total order), and this comparator
+     * is the JVM-pinned statement of the same discipline for tests and any
+     * future in-memory catalogue path.
+     *
+     * The tiebreak discipline is the `_id` rule transposed to the
+     * catalogue's identity: many items share one effective instant (burst
+     * shots, imports), and a window boundary can fall between them; the
+     * local-media-key tiebreak --- not `_id`, which the catalogue key
+     * already embeds --- pins every window to the same sequence in BOTH
+     * directions (OLDEST_FIRST is the same total order walked backwards,
+     * exactly like [sortItems]). Keys are ASCII `volume:id[:page]`
+     * strings, so Kotlin's lexicographic [String] comparison and SQLite's
+     * BINARY collation agree on every real key.
+     *
+     * Generic over the element for the same JVM-purity reason as
+     * [sortItems]: production instantiates it with catalogue records or
+     * their lightweight stand-ins, never with `MediaItem` (which embeds
+     * `android.net.Uri`).
+     */
+    fun <T> effectiveComparator(
+        dateOf: (T) -> Long,
+        keyOf: (T) -> String,
+    ): Comparator<T> = when (this) {
+        NEWEST_FIRST -> compareByDescending(dateOf).thenByDescending(keyOf)
+        OLDEST_FIRST -> compareBy(dateOf).thenBy(keyOf)
     }
 }

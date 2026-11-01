@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.media.identity.MediaIdentity
 
 /**
@@ -53,6 +54,15 @@ interface MediaScanRowSource {
  *   Images + Video collections are walked under the single external volume
  *   name, and rows carry no per-row generation token (the column does not
  *   exist below R anyway).
+ *
+ * Projection (r13 round): besides the revision contract (_ID, MIME_TYPE,
+ * SIZE, DATE_MODIFIED, DATE_ADDED, GENERATION_MODIFIED on R+), each walk
+ * also projects the DISPLAY/SHAPE ride-alongs --- DISPLAY_NAME, WIDTH,
+ * HEIGHT, DURATION where the collection has the column, and IS_FAVORITE
+ * where the provider has it (Q+) --- so a record mirrors its last-seen
+ * provider row well enough to render a timeline cell. They ride along on
+ * every row and NEVER enter the reconciler's revision comparison (see the
+ * MediaScanRow field-group note).
  *
  * One known one-time cost, accepted: keys below Q are `external:id` while
  * Q+ keys are `external_primary:id`, so an OS upgrade re-sights the whole
@@ -108,6 +118,11 @@ class AndroidMediaScanRowSource(
                 ),
                 fallbackMime = FALLBACK_MIME_FILES,
                 includePerRowGeneration = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
+                // The unified Files collection carries the video duration
+                // column (NULL for stills) and --- from Q, which is exactly
+                // the floor of this leg --- the favorite flag.
+                includeDuration = true,
+                includeFavorite = true,
                 out = out,
             )
         } else {
@@ -118,6 +133,12 @@ class AndroidMediaScanRowSource(
                 selectionArgs = null,
                 fallbackMime = FALLBACK_MIME_IMAGES,
                 includePerRowGeneration = false,
+                // Below Q: the Images collection has no DURATION column and
+                // the provider has no is_favorite column at all (favorites
+                // are a Q+ surface --- `Favorites`); images therefore ride
+                // with durationMs = 0 / isFavorite = false.
+                includeDuration = false,
+                includeFavorite = false,
                 out = out,
             )
             walk(
@@ -127,6 +148,10 @@ class AndroidMediaScanRowSource(
                 selectionArgs = null,
                 fallbackMime = FALLBACK_MIME_VIDEOS,
                 includePerRowGeneration = false,
+                // The Video collection has had DURATION since API 1; still no
+                // favorite column below Q.
+                includeDuration = true,
+                includeFavorite = false,
                 out = out,
             )
         }
@@ -134,13 +159,23 @@ class AndroidMediaScanRowSource(
     }
 
     /**
-     * One cursor walk, appended into [out]. The projection is the
-     * revision contract exactly: `_ID` (identity), `MIME_TYPE`,
-     * `SIZE`, `DATE_MODIFIED`, `DATE_ADDED` (observed revision +
-     * bookkeeping) and --- API 30+ only --- the row's OWN
-     * `GENERATION_MODIFIED` stamp ([MediaScanRow.generationToken]; NEVER
-     * the per-volume `MediaStore.getGeneration` checkpoint, see the audit
-     * finding C note on [MediaScanRow]).
+     * One cursor walk, appended into [out]. The projection is the revision
+     * contract --- `_ID` (identity), `MIME_TYPE`, `SIZE`, `DATE_MODIFIED`,
+     * `DATE_ADDED` (observed revision + bookkeeping) and, on API 30+, the
+     * row's OWN `GENERATION_MODIFIED` stamp ([MediaScanRow.generationToken];
+     * NEVER the per-volume `MediaStore.getGeneration` checkpoint, see the
+     * audit finding C note on [MediaScanRow]) --- PLUS the display/shape
+     * ride-alongs the r13 timeline renders from: `DISPLAY_NAME`, `WIDTH`,
+     * `HEIGHT`, and `DURATION` / `IS_FAVORITE` where the walked collection
+     * has those columns ([includeDuration] / [includeFavorite] --- a
+     * projection naming a column the provider rejects throws before a
+     * cursor is ever returned, so absence is decided HERE, at the call
+     * sites, while a column the provider silently drops is absorbed by the
+     * `getColumnIndexOrNull` reads below).
+     *
+     * Transport-thin by design (ADR-0016): no interpretation of any value
+     * happens here --- widths/durations coerce through the cursor's typed
+     * getters exactly as `MediaStoreSource` reads them for the UI today.
      */
     private fun walk(
         collection: Uri,
@@ -149,6 +184,8 @@ class AndroidMediaScanRowSource(
         selectionArgs: Array<String>?,
         fallbackMime: String,
         includePerRowGeneration: Boolean,
+        includeDuration: Boolean,
+        includeFavorite: Boolean,
         out: ArrayList<MediaScanRow>,
     ) {
         val projection = buildList {
@@ -157,6 +194,23 @@ class AndroidMediaScanRowSource(
             add(MediaStore.MediaColumns.SIZE)
             add(MediaStore.MediaColumns.DATE_MODIFIED)
             add(MediaStore.MediaColumns.DATE_ADDED)
+            // Display/shape ride-alongs. WIDTH/HEIGHT use the
+            // Images.ImageColumns string constants --- available far below
+            // the API 29 MediaColumns aliases and honored by every
+            // collection here because they share the underlying files table
+            // (the same convention MediaStoreSource reads them with).
+            add(MediaStore.MediaColumns.DISPLAY_NAME)
+            add(MediaStore.Images.ImageColumns.WIDTH)
+            add(MediaStore.Images.ImageColumns.HEIGHT)
+            if (includeDuration) {
+                add(MediaStore.Video.VideoColumns.DURATION)
+            }
+            if (includeFavorite) {
+                // The literal, not MediaColumns.IS_FAVORITE: that SDK
+                // constant only exists from API 30 while the column itself
+                // is Q+ (see Favorites.COLUMN_IS_FAVORITE's KDoc).
+                add(Favorites.COLUMN_IS_FAVORITE)
+            }
             if (includePerRowGeneration) {
                 add(MediaStore.MediaColumns.GENERATION_MODIFIED)
             }
@@ -169,6 +223,25 @@ class AndroidMediaScanRowSource(
                 val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
                 val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
                 val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+                // The display/shape columns go through the same
+                // absence-tolerant reads MediaStoreSource uses: a column the
+                // provider dropped from the projection simply yields the
+                // row's zero/none/false defaults instead of failing the walk.
+                val displayNameCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.DISPLAY_NAME)
+                val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
+                val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
+                val durationCol =
+                    if (includeDuration) {
+                        cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                    } else {
+                        -1
+                    }
+                val favoriteCol =
+                    if (includeFavorite) {
+                        cursor.getColumnIndexOrNull(Favorites.COLUMN_IS_FAVORITE)
+                    } else {
+                        -1
+                    }
                 val generationCol =
                     if (includePerRowGeneration) {
                         cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.GENERATION_MODIFIED)
@@ -204,10 +277,29 @@ class AndroidMediaScanRowSource(
                         } else {
                             null
                         },
+                        // Display/shape ride-alongs (non-revision; see the
+                        // MediaScanRow field-group note): width/height are
+                        // string columns read through the typed getter, a
+                        // NULL duration (stills in the Files walk) reads as
+                        // 0, and a missing favorite column is `false`.
+                        displayName =
+                        if (displayNameCol >= 0) {
+                            cursor.getString(displayNameCol)
+                        } else {
+                            null
+                        },
+                        width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
+                        height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
+                        durationMs = if (durationCol >= 0) cursor.getLong(durationCol) else 0L,
+                        isFavorite = favoriteCol >= 0 && cursor.getInt(favoriteCol) == 1,
                     )
                 }
             }
     }
+
+    /** The MediaStoreSource absence discipline: -1 for a column this cursor does not carry. */
+    private fun android.database.Cursor.getColumnIndexOrNull(name: String): Int =
+        try { getColumnIndexOrThrow(name) } catch (_: IllegalArgumentException) { -1 }
 
     private companion object {
         /** The classic pre-Q external volume name (see [volumes]). */

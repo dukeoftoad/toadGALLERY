@@ -41,7 +41,11 @@ jobs:
   release:
     name: Build + publish signed pre-release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 was the Phase-0 budget; the r10 Room+KSP round makes the release
+    # build longer (R8 now compiles the Room-generated code), and a resource
+    # exhaustion hang must still leave room for gradle to print its failure
+    # report instead of being killed mid-stack.
+    timeout-minutes: 45
     # Creating the tag (dispatch path) and the GitHub release needs write
     # access to repo contents.
     permissions:

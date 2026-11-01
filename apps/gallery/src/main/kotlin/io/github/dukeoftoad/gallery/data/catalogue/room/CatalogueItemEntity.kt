@@ -26,6 +26,16 @@ import androidx.room.PrimaryKey
  * defaulted columns, plain `ALTER TABLE ... ADD COLUMN` additions in
  * [MediaCatalogueDatabase.MIGRATION_2_3], and --- as on the record ---
  * NON-REVISION state that never participates in reconciliation.
+ *
+ * The r16 location provenance columns (latitude, longitude,
+ * locationSource) follow the r12 capture-date pattern (nullable derived
+ * state, `ADD COLUMN` only in [MediaCatalogueDatabase.MIGRATION_3_4]) but
+ * deliberately have NO counterpart on
+ * [CatalogueRecord][io.github.dukeoftoad.gallery.data.catalogue
+ * .CatalogueRecord] this round: the map surface reads them through a
+ * dedicated projection (see `CatalogueDao`'s r16 section), and widening the
+ * record + [io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue]
+ * interface is the Phase 5 Places index's contract to settle.
  */
 @Entity(tableName = "catalogue_items")
 data class CatalogueItemEntity(
@@ -90,4 +100,49 @@ data class CatalogueItemEntity(
 
     /** The MediaStore `is_favorite` flag as the last scan saw it (r13 ride-along, non-revision). */
     val isFavorite: Boolean,
+
+    /**
+     * EXIF GPS latitude in signed decimal degrees (r16 round), or `null`.
+     * Nullable for the same honest reasons as
+     * [resolvedCaptureDateMillis]: rows scanned before the location
+     * indexer existed were never resolved, and rows whose GPS block was
+     * absent/unreadable/withheld resolve to no location at all ---
+     * `null` means "no persisted location", whichever reason produced
+     * it. NON-REVISION derived state (like the capture-date provenance
+     * columns): a location re-read never participates in reconciliation.
+     *
+     * DEFAULTS TO `null` (like its siblings) because
+     * [CatalogueRecord][io.github.dukeoftoad.gallery.data.catalogue
+     * .CatalogueRecord] carries no location fields this round: the
+     * record->row mapper constructs the entity WITHOUT them, so a scan
+     * upsert writes the honest "no persisted location" and the location
+     * index pass re-fills the row right after the batch (the same
+     * wipe-and-refill sequencing the capture-date columns ride). Kotlin
+     * default values are invisible to Room (the generated CREATE TABLE
+     * and the v4 schema JSON declare no column default), so this is a
+     * construction-site convenience, not schema.
+     */
+    val latitude: Double? = null,
+
+    /**
+     * EXIF GPS longitude in signed decimal degrees; `null` whenever
+     * [latitude] is `null` (a real GPS fix always writes both). Defaults
+     * to `null` for the reason [latitude]'s KDoc gives.
+     */
+    val longitude: Double? = null,
+
+    /**
+     * Where the location outcome came from, as the
+     * [ItemLocationSource][io.github.dukeoftoad.gallery.data.media.location
+     * .ItemLocationSource] enum's [name][kotlin.Enum.name] string --- the
+     * same stringly-enum convention as [resolvedCaptureDateSource], for
+     * the same reason. `EXIF_GPS` for a parsed fix; the special
+     * `MEDIA_LOCATION_UNGRANTED` value marks rows first scanned while
+     * the platform redacts EXIF location (API 29+ without
+     * ACCESS_MEDIA_LOCATION) --- exactly the set a grant-triggered
+     * re-pass would target; `null` for every other no-location outcome
+     * (no GPS block, unreadable, unsupported format, never indexed).
+     * Defaults to `null` for the reason [latitude]'s KDoc gives.
+     */
+    val locationSource: String? = null,
 )

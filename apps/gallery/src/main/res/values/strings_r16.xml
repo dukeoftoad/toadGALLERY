@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r16 round: the on-device Map tab's strings (Phase 4 still-open item
+     "on-device map view"). Per the round's scope rules every NEW UI string
+     lives in this file — the shared strings.xml is untouched so the
+     parallel r15/r17 branches merge cleanly. Copy conventions follow
+     strings.xml: honest plain-language states, escaped apostrophes. -->
+<resources>
+
+    <!-- Bottom navigation -->
+    <string name="nav_map">Map</string>
+
+    <!-- Screen states (the pure MapContentPolicy decides which one shows) -->
+
+    <!-- Consent-off state: the r14 ACCESS_MEDIA_LOCATION display gate says
+         GPS may not be shown (API 29+, ungranted). The action routes to the
+         Settings tab, where the r14 request row lives. -->
+    <string name="map_state_consent_title">Location access is off</string>
+    <string name="map_state_consent_body">Android hides photo locations from apps until you allow location data. Your photos\' GPS coordinates stay private either way — they never leave this device.</string>
+    <string name="map_state_consent_action">Open Settings</string>
+
+    <!-- Honest empty state: consent is fine, nothing carries a readable
+         location yet (no GPS in the library, or the first scan is still
+         filling the map). -->
+    <string name="map_state_empty_title">No locations on the map yet</string>
+    <string name="map_state_empty_body">Photos that carry GPS information appear here as the library is scanned. Everything stays on this device — the map is drawn from a bundled outline, with no internet.</string>
+
+    <!-- TalkBack description of the interactive world map canvas. -->
+    <string name="map_canvas_description">World map with your photos\' locations. Tap a dot to list the photos there.</string>
+
+    <!-- The location sheet (tap a dot) -->
+    <string name="map_sheet_title">At this location</string>
+    <plurals name="map_sheet_item_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+
+    <!-- The honest re-index footnote (LocationConsentReindexPolicy's v1
+         semantics: items first scanned while location access was off
+         resolve on their next content change; the grant-triggered full
+         re-pass lands with the Phase 5 Places index). -->
+    <plurals name="map_note_pending_locations">
+        <item quantity="one">%1$d photo was scanned while location access was off. It appears here after its next change.</item>
+        <item quantity="other">%1$d photos were scanned while location access was off. They appear here after their next change.</item>
+    </plurals>
+</resources>

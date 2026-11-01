@@ -235,7 +235,15 @@ class RoomMediaCatalogue(
                 "ORDER BY COALESCE(resolvedCaptureDateMillis, dateAddedMillis) $directionWord, " +
                 "localMediaKey $directionWord " +
                 "LIMIT ? OFFSET ?"
-        val args = where.args.toTypedArray() + arrayOf(limit, offset)
+        // Built as one explicitly-typed Array<Any?>: a plain
+        // `Array<Any> + Array<Int>` is an overload-resolution ambiguity
+        // (plus(element) vs plus(elements)), and SimpleSQLiteQuery takes
+        // Array<out Any?> anyway.
+        val args: Array<Any?> = buildList {
+            addAll(where.args)
+            add(limit)
+            add(offset)
+        }.toTypedArray()
         return dao.timelineWindowFiltered(
             androidx.sqlite.db.SimpleSQLiteQuery(sql, args),
         ).map { it.toRecord() }

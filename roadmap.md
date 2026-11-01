@@ -459,10 +459,21 @@ windows, so first paint never regresses. Per maintainer directive
 (2026-11-01) rounds land on main WITHOUT release tags until Phase 5
 completes; device builds come from CI.
 
-**Still open in Phase 4:** the metadata Details view + editable fields
-(EXIF write-back, then our IPTC/XMP wrappers), the on-device map view,
-collections/smart-filter chips, the format-support audit deliverable,
-and the ACCESS_MEDIA_LOCATION permission flow.
+#### Status — r14 round (versionCode 18): the Details view + location consent
+
+Two user-facing Phase 4 items landed: the **metadata Details view**
+(read path --- dimensions, size, MIME, capture date with explicit
+timezone semantics, camera, exposure triangle, GPS decimal + DMS, and
+the full EXIF block in a collapsible tree; every availability state
+renders honestly, nothing is faked) and the **ACCESS_MEDIA_LOCATION
+permission flow** (a pure JVM-tested state machine, a Settings
+"Location data" section, and Details-view GPS rows display-gated on
+the consent state via `MediaLocationDisplayRules.Default`).
+
+**Still open in Phase 4:** the editable metadata fields (EXIF
+write-back via `androidx.exifinterface`, then our IPTC/XMP wrappers),
+the on-device map view, collections/smart-filter chips, and the
+format-support audit deliverable.
 
 #### Tasks
 

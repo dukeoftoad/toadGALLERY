@@ -4,9 +4,49 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 17)
+## [0.4.1-alpha] — unreleased on main (versionCode 18)
 
 ### Added
+
+- **Metadata Details view (read path)** (r14 round; the first
+  user-facing Phase 4 deliverable):
+  - A new Details screen, reachable from the viewer's info sheet
+    (`Full details`), presenting: dimensions, file size, MIME type,
+    capture date with the timezone semantics stated explicitly (the
+    instant rendered in the file's own recorded zone, the zone
+    provenance, and the winning source), camera make/model/lens, the
+    full exposure triangle, and GPS coordinates in decimal + DMS.
+  - Availability is never flattened: PRESENT / ABSENT ("no block") /
+    UNSUPPORTED (a capability statement) / UNREADABLE (corrupt) each
+    render their own honest state; IPTC/XMP render as their format
+    matrix capability ("not supported for this format yet" for the
+    wrappers that are a later round) --- nothing is faked.
+  - The complete EXIF block sits in a collapsible tree. All parsing
+    runs off the main thread; the parsed snapshot is cached per item
+    for the screen's lifetime. Vault/trashed/revoked items are refused
+    by the same type-level eligibility gate the scan pipeline uses ---
+    an unreadable item shows the honest "can't be read" state, never a
+    partial read.
+- **ACCESS_MEDIA_LOCATION permission flow** (r14 round; the other
+  roadmap still-open item):
+  - A pure, JVM-tested permission state machine (NOT_REQUIRED on
+    <29 / UNKNOWN / GRANTED / DENIED) behind a thin production impl;
+    the runtime request lives in a new Settings "Location data"
+    section with an honest explanation (coordinates never leave the
+    device; there is no network surface to carry them).
+  - GPS rows in the Details view are DISPLAY-GATED on the consent
+    state (`MediaLocationDisplayRules.Default`): hidden on an
+    ungranted 29+ device, shown with a grant, always shown below 29
+    (where the platform never redacted anything). A hidden PRESENT
+    block stays availability-PRESENT with a pointer to Settings ---
+    the availability statement is never faked. A live state observer
+    re-renders the open Details screen when the grant flips.
+  - The manifest declares ACCESS_MEDIA_LOCATION unconditionally (there
+    is no minimum-API form; pre-29 devices ignore the unknown name and
+    the runtime request is gated in code); a privacy-policy test pins
+    the declaration.
+
+### Pre-existing entries
 
 - **Timeline capture-date adoption** (r13 round; the roadmap's promised
   behavior change --- the timeline's sort/group keys now use the

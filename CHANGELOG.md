@@ -4,10 +4,45 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 13)
+## [0.4.1-alpha] — unreleased on main (versionCode 14)
 
 ### Added
 
+- Phase 4 contract foundation (the audit-mandated prerequisite slice, all
+  JVM-tested pure Kotlin + thin untested Android adapters per ADR-0016,
+  no UI yet): the media identity/eligibility keel (`MediaIdentity`, a
+  volume-aware durable local media key where path/display name are never
+  identity, plus `MediaEligibility` whose only positive product is the
+  `EligiblePublicMedia` wrapper --- vault, trashed, permission-revoked,
+  unsupported and corrupt media are unrepresentable at future AI call
+  sites); revision tracking (`MediaRevision.diff` classifying UNCHANGED /
+  METADATA_CHANGED (metadata re-read only, AI outputs kept) /
+  CONTENT_CHANGED (all downstream outputs invalidated)); the timezone-
+  aware capture-date resolver (EXIF original > EXIF digitized > XMP >
+  container > MediaStore precedence with subsecond precision and a
+  sources-disagree flag); the metadata seams (`MetadataAvailability`
+  distinguishing PRESENT/ABSENT/UNSUPPORTED/UNREADABLE,
+  `MediaMetadataSnapshot`, `ExifMath` + `ParsedExif` assembly over a thin
+  `androidx.exifinterface` reader, container parses for video
+  rotation/duration/zone-aware dates, and `MetadataFormatMatrix` --- the
+  audit's parser capability matrix in data, not format promises); the
+  Room media catalogue (`MediaCatalogue` over Room 2.8.5/KSP with
+  entities, DAO, non-destructive migrations and per-volume scan
+  checkpoints; an in-memory reference implementation carries the
+  semantics on the JVM); the change feed (`MediaChangeFeed`: per-volume
+  MediaStore generation on API 30+, ContentObserver fallback on 26-29,
+  feeding `CatalogueReconciler` --- added/changed/unchanged/removed
+  classification that tombstones deletions instead of hard-deleting, and
+  treats a generation bump with identical size+date as a change, while
+  in-app metadata writes alone never trigger re-indexing); the
+  byte-oriented read boundary (`MediaReadHandle` + `MediaAccess`,
+  openable ONLY for `EligiblePublicMedia`, permission re-checked at
+  open, no plaintext temp files); and the canonical decode contract
+  (`CanonicalDecodePlanner` power-of-two sampling with upright swaps and
+  a deterministic memory-budget refusal instead of OOM roulette, plus
+  the thin `AndroidBitmapDecoder`). 174 new JVM tests pin the contracts;
+  no UI consumes any of this yet --- that is deliberate (the audit's
+  "contracts before Ente integration" gate).
 - On-device diagnostics (#74, the device round): every vault failure that
   used to swallow into a generic snackbar now leaves a trace. A new
   dependency-free ring-buffer logger `DiagLog` (CAP 400, thread-safe,
@@ -256,6 +291,21 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Fixed
 
+- The biometric unlock sheet no longer crashes the app (#78, the r9
+  device finding, build 13): tapping "Unlock with biometrics" died with
+  `IllegalArgumentException: Negative text must be set and non-empty.`
+  from androidx.biometric's `PromptInfo.Builder.build()` --- a
+  CryptoObject-bound `BIOMETRIC_WEAK` prompt cannot combine with
+  `DEVICE_CREDENTIAL` (the Keystore handshake only authorizes a biometric
+  round), so the negative button is library-mandated, and the prompt
+  never set one. It now carries a "Use PIN" negative button --- the
+  truthful label, since the ERROR_NEGATIVE_BUTTON path was already wired
+  to the silent CANCELLED outcome that drops the user back on the PIN
+  screen. The builder configuration is isolated in
+  `VaultBiometrics.promptInfoBuilder` and pinned on the JVM via
+  reflection (2 new tests); `build()` itself calls `android.text.TextUtils`,
+  which the unit-test stub does not implement, so the library's runtime
+  enforcement stays on the r10 device checklist.
 - Vault setup works on real devices at last (#76, the r8 device finding):
   the r8 DiagLog capture showed setup dying at the first seal with
   `InvalidAlgorithmParameterException: Caller-provided IV not permitted` ---

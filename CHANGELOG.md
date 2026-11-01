@@ -4,10 +4,46 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 14)
+## [0.4.1-alpha] — unreleased on main (versionCode 15)
 
 ### Added
 
+- PR #81 audit-hardening slice (the implementable findings from
+  `docs/CRASH_INVESTIGATION_PLAN.md`, landed alongside the r11
+  biometric fix):
+  - **Vault backup exclusion** (audit A): new `res/xml/backup_rules.xml`
+    (pre-31 fullBackupContent) and `res/xml/data_extraction_rules.xml`
+    (31+, cloud-backup AND device-transfer) exclude `filesDir/vault`
+    (`pin.bin`, `index.bin`, `blobs/`, `biometric.binding`) from backup
+    --- the AndroidKeyStore key is non-exportable, so restored
+    ciphertext would be permanently unopenable, and vault state must
+    not leave the device (ADR-0014; debt pre-tracked in
+    `docs/integration-decisions.md`). A JVM test pins the rules.
+  - **Room transactions** (audit D): the tombstone and resurrection
+    transitions are now single `@Transaction` composite DAO methods
+    (`removeItemsAndWriteTombstones` / `upsertItemsAndClearTombstones`);
+    the in-memory reference was already atomic and now documents the
+    equivalence, pinned by a deterministic interleaving test.
+  - **Room schema export** (audit K): `exportSchema = true` +
+    `room.schemaLocation`; the v1 schema snapshot (3 entities) is
+    committed under `apps/gallery/schemas/` with a review-gate README.
+  - **Decode planner overflow** (audit J): the memory-budget check is
+    now a multiplication-free exact inequality --- adversarial
+    dimensions that would overflow Long are refused deterministically,
+    negative budgets refuse everything; 6 new boundary tests.
+  - **Pre-1970 capture dates** (audit F): negative epoch timestamps are
+    valid instants (scanned film/historical archives); only
+    UNKNOWN-source candidates are discarded; the cross-source
+    disagreement gap check is overflow-safe; 6 new tests.
+  - **EXIF date metadata** (audit I, EXIF half): the extractor now also
+    reads DateTimeDigitized, OffsetTimeOriginal/OffsetTimeDigitized and
+    SubSecTimeOriginal (offset-aware epoch math with a documented UTC
+    anchor when no/malformed offset; decimal-fraction subsecond
+    convention, >3 digits truncated); `ParsedExif.captureDateCandidates()`
+    emits both EXIF_ORIGINAL and EXIF_DIGITIZED candidates feeding the
+    already-built MediaDateResolver; XMP stays UNSUPPORTED this round.
+  Verification: 491 JVM tests green (34 new), lintDebug green,
+  assembleDebug + assembleRelease (R8+KSP) green.
 - Phase 4 contract foundation (the audit-mandated prerequisite slice, all
   JVM-tested pure Kotlin + thin untested Android adapters per ADR-0016,
   no UI yet): the media identity/eligibility keel (`MediaIdentity`, a
@@ -33,7 +69,10 @@ All notable changes to toadGALLERY are documented here. The format follows
   MediaStore generation on API 30+, ContentObserver fallback on 26-29,
   feeding `CatalogueReconciler` --- added/changed/unchanged/removed
   classification that tombstones deletions instead of hard-deleting, and
-  treats a generation bump with identical size+date as a change, while
+  treats a generation bump with identical size+date as a change (superseded
+  by the audit-C semantics correction in this same unreleased line: the
+  per-item token is the row's own generation-modified value, not the
+  volume checkpoint), while
   in-app metadata writes alone never trigger re-indexing); the
   byte-oriented read boundary (`MediaReadHandle` + `MediaAccess`,
   openable ONLY for `EligiblePublicMedia`, permission re-checked at
@@ -279,6 +318,17 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Changed
 
+- Catalogue revision semantics corrected (PR #81 audit C, landing in the
+  same unreleased 0.4.1 line as the Phase 4 foundation that introduced
+  it): the per-item revision token is the row's own
+  `MediaColumns.GENERATION_MODIFIED`, never the per-volume
+  `getGeneration` checkpoint (which stays the scan-checkpoint-only
+  input). The reconciler test that had pinned the full-re-index-storm
+  behavior (generation bump with identical size+date = changed) is
+  replaced by the corrected pair: one row's per-row token bump marks
+  THAT row changed, unrelated rows stay unchanged. Contract KDocs
+  corrected across MediaRevision / MediaChangeFeed / MediaScanRow /
+  CatalogueRecord / CatalogueReconciler.
 - Lint is a hard CI gate (#52): the 19 pre-existing NewApi errors from the
   file-ops slice are resolved (documented `@Suppress("NewApi")` on the
   Q-guard invariant; `@RequiresApi(R)` on the consent builders) and
@@ -291,6 +341,32 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Fixed
 
+- The biometric unlock sheet still crashed --- the authenticator class,
+  not the missing negative text, was the real defect (#78 follow-up,
+  the r11 device finding, build 14): one androidx.biometric validation
+  after r10's fix, the same tap died with `IllegalArgumentException:
+  Crypto-based authentication is not supported for Class 2 (Weak)
+  biometrics.` from androidx.biometric 1.1.0's
+  `BiometricPrompt.authenticate(PromptInfo, CryptoObject)`. Root cause
+  (verified against the library sources): the vault's prompt binds a
+  CryptoObject (the auth-per-use AndroidKeyStore key, ADR-0019/#57)
+  while requesting `BIOMETRIC_WEAK`, and the library rejects that
+  combination unconditionally --- it tests the REQUESTED authenticator
+  flags, not the device's sensor class (the error's "Class 2" wording
+  names the requested class, not the test device's sensor), so the path
+  crashed on EVERY device, not only Class-2-sensor devices. The prompt
+  now requests `BIOMETRIC_STRONG` and the readiness probe uses
+  `canAuthenticate(BIOMETRIC_STRONG)`: devices without a Class 3
+  sensor/enrollment land in the existing `Unsupported` readiness ---
+  PIN-only, no biometric UI --- the honest degradation, since a Class 2
+  biometric cannot authorize an auth-per-use AndroidKeyStore key at
+  all. The r10 "Use PIN" negative button stays (still mandatory for a
+  biometric-only crypto prompt). The same honest JVM limitation as r10
+  continues: the library's `build()`/TextUtils enforcement is
+  device-checklist territory (r11 checklist, section 13), while the JVM
+  suite pins the builder fields via reflection (negative text +
+  `BIOMETRIC_STRONG`, plus a new bit-math regression test against the
+  library's own `isWeakBiometricAllowed` check).
 - The biometric unlock sheet no longer crashes the app (#78, the r9
   device finding, build 13): tapping "Unlock with biometrics" died with
   `IllegalArgumentException: Negative text must be set and non-empty.`

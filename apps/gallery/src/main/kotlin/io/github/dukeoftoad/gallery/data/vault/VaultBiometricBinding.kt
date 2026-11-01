@@ -99,13 +99,16 @@ object VaultBiometricBinding {
 /**
  * The vault screen's biometric readiness state machine (issue #57, ADR-0019),
  * kept PURE (booleans in, state out) so the gating rules are JVM-testable:
- * the Android inputs --- `BiometricManager.canAuthenticate(BIOMETRIC_WEAK)`
+ * the Android inputs --- `BiometricManager.canAuthenticate(BIOMETRIC_STRONG)`
  * and [VaultStore.hasBiometricBinding] --- are read by the ViewModel seam and
  * fed in here.
  *
  * [Unsupported] covers both "no usable biometric hardware" and "hardware
  * present but no biometrics enrolled on the device": either way the PIN is
- * the only path and the UI shows nothing biometric. [Supported] with
+ * the only path and the UI shows nothing biometric. [Unsupported] also
+ * covers "biometric hardware present but only Class 2 (Weak)" --- a Class 2
+ * biometric cannot authorize the vault's auth-per-use AndroidKeyStore key,
+ * so the PIN is the only honest unlock path. [Supported] with
  * `bindingEnrolled` drives the two affordances: the unlock button (locked
  * screen) and the settings-style toggle (unlocked screen).
  */
@@ -122,7 +125,7 @@ sealed interface VaultBiometricReadiness {
 object VaultBiometricSupport {
 
     /**
-     * [hardwareCanPrompt] is `canAuthenticate(BIOMETRIC_WEAK) == SUCCESS`
+     * [hardwareCanPrompt] is `canAuthenticate(BIOMETRIC_STRONG) == SUCCESS`
      * (computed by the Android seam); [bindingEnrolled] is the store's
      * `biometric.binding` presence. Hardware wins: without a usable prompt
      * the enrollment flag is moot (a stale binding from before the user

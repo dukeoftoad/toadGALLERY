@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.metadata.exif
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -321,6 +322,154 @@ class ExifMathTest {
     fun `exif datetime rejects null and blank input`() {
         assertNull(ExifMath.parseExifDateTime(null))
         assertNull(ExifMath.parseExifDateTime("   "))
+    }
+
+    @Test
+    fun `exif datetime rejects the exif placeholder`() {
+        // "  :  :  " is the "no date" placeholder some writers put in
+        // every datetime field; wrong length, so the strict parse drops it.
+        assertNull(ExifMath.parseExifDateTime("  :  :  "))
+        assertNull(ExifMath.parseExifDateTimeWithOffset("  :  :  ", 120))
+    }
+
+    // ------------------------------------------------------------------
+    // OffsetTime parsing (audit finding I)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `exif offset time parses plus and minus forms to minutes`() {
+        assertEquals(120, ExifMath.parseExifOffsetTime("+02:00"))
+        assertEquals(-450, ExifMath.parseExifOffsetTime("-07:30"))
+        assertEquals(0, ExifMath.parseExifOffsetTime("+00:00"))
+        assertEquals(-30, ExifMath.parseExifOffsetTime("-00:30"))
+        assertEquals(825, ExifMath.parseExifOffsetTime("+13:45"))
+        assertEquals(840, ExifMath.parseExifOffsetTime("+14:00"))
+        // Whitespace padding, same tolerance as the datetime tags.
+        assertEquals(120, ExifMath.parseExifOffsetTime(" +02:00 "))
+    }
+
+    @Test
+    fun `exif offset time rejects malformed forms`() {
+        assertNull(ExifMath.parseExifOffsetTime(null))
+        assertNull(ExifMath.parseExifOffsetTime(""))
+        assertNull(ExifMath.parseExifOffsetTime("   "))
+        // Missing sign: the spec requires an explicit +/-.
+        assertNull(ExifMath.parseExifOffsetTime("02:00"))
+        assertNull(ExifMath.parseExifOffsetTime("+2:00"))
+        assertNull(ExifMath.parseExifOffsetTime("+0200"))
+        assertNull(ExifMath.parseExifOffsetTime("+02"))
+        assertNull(ExifMath.parseExifOffsetTime("++02:00"))
+        assertNull(ExifMath.parseExifOffsetTime("+02 00"))
+        assertNull(ExifMath.parseExifOffsetTime("+02:60"))
+        // 14 h is the real-world ISO 8601 maximum; beyond is corrupt.
+        assertNull(ExifMath.parseExifOffsetTime("+15:00"))
+        assertNull(ExifMath.parseExifOffsetTime("-23:00"))
+        assertNull(ExifMath.parseExifOffsetTime("+ab:00"))
+    }
+
+    // ------------------------------------------------------------------
+    // Datetime + offset combination (audit finding I)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `exif datetime with offset interprets the naive local time as that zone`() {
+        // 2024-05-17 09:30:00 at +02:00 is 07:30:00Z --- computed here via
+        // OffsetDateTime (a different java.time path than the parser) as a
+        // hand-checkable cross-check.
+        val expected = java.time.OffsetDateTime
+            .of(2024, 5, 17, 9, 30, 0, 0, java.time.ZoneOffset.ofHours(2))
+            .toInstant().toEpochMilli()
+        assertEquals(
+            java.lang.Long.valueOf(expected),
+            ExifMath.parseExifDateTimeWithOffset("2024:05:17 09:30:00", 120),
+        )
+    }
+
+    @Test
+    fun `exif datetime with a negative offset shifts the utc instant forward`() {
+        // 2024-01-01 00:30:00 at -07:30 is 08:00:00Z on the same day
+        // (west-of-UTC zones read a later UTC clock for the same instant).
+        val expected = java.time.OffsetDateTime
+            .of(2024, 1, 1, 0, 30, 0, 0, java.time.ZoneOffset.ofHoursMinutes(-7, -30))
+            .toInstant().toEpochMilli()
+        assertEquals(
+            java.lang.Long.valueOf(expected),
+            ExifMath.parseExifDateTimeWithOffset("2024:01:01 00:30:00", -450),
+        )
+    }
+
+    @Test
+    fun `exif datetime with a zero offset matches the utc anchor`() {
+        val text = "2024:05:17 09:30:00"
+        val baseline = ExifMath.parseExifDateTime(text)
+        assertNotNull(baseline)
+        assertEquals(
+            java.lang.Long.valueOf(baseline!!),
+            ExifMath.parseExifDateTimeWithOffset(text, 0),
+        )
+    }
+
+    @Test
+    fun `exif datetime without offset stays at the utc anchor`() {
+        val expected = LocalDateTime.of(2024, 5, 17, 9, 30, 0)
+            .toInstant(ZoneOffset.UTC).toEpochMilli()
+        assertEquals(
+            java.lang.Long.valueOf(expected),
+            ExifMath.parseExifDateTimeWithOffset("2024:05:17 09:30:00", null),
+        )
+    }
+
+    @Test
+    fun `exif datetime with offset still rejects malformed input and bad offsets`() {
+        // The offset never rescues a malformed datetime...
+        assertNull(ExifMath.parseExifDateTimeWithOffset("2024-05-17 09:30:00", 120))
+        assertNull(ExifMath.parseExifDateTimeWithOffset("2024:02:30 09:30:00", 120))
+        assertNull(ExifMath.parseExifDateTimeWithOffset(null, 120))
+        assertNull(ExifMath.parseExifDateTimeWithOffset("   ", 120))
+        // ...and an offset beyond java.time's own 18 h bound is refused
+        // rather than thrown (the parser caps at 14 h; this guards direct
+        // callers only).
+        assertNull(ExifMath.parseExifDateTimeWithOffset("2024:05:17 09:30:00", 1081))
+        assertNull(ExifMath.parseExifDateTimeWithOffset("2024:05:17 09:30:00", -1081))
+    }
+
+    // ------------------------------------------------------------------
+    // SubSecTimeOriginal (audit finding I)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `exif subsecond parses the decimal fraction convention`() {
+        assertEquals(123, ExifMath.parseExifSubsecond("123"))
+        // Fewer than three digits: zero-pad on the RIGHT ("12" = 0.12 s).
+        assertEquals(120, ExifMath.parseExifSubsecond("12"))
+        assertEquals(100, ExifMath.parseExifSubsecond("1"))
+        assertEquals(790, ExifMath.parseExifSubsecond("79"))
+        assertEquals(0, ExifMath.parseExifSubsecond("0"))
+        assertEquals(0, ExifMath.parseExifSubsecond("000"))
+        assertEquals(999, ExifMath.parseExifSubsecond("999"))
+        // Whitespace padding is tolerated, as on every other tag.
+        assertEquals(123, ExifMath.parseExifSubsecond(" 123 "))
+    }
+
+    @Test
+    fun `exif subsecond truncates beyond three digits`() {
+        // 0.9994 s is 999.4 ms; truncating keeps the result inside the
+        // 0..999 domain where rounding to 1000 would escape it.
+        assertEquals(123, ExifMath.parseExifSubsecond("1234"))
+        assertEquals(999, ExifMath.parseExifSubsecond("9999"))
+        assertEquals(999, ExifMath.parseExifSubsecond("99999999"))
+    }
+
+    @Test
+    fun `exif subsecond rejects blank and non-digit input`() {
+        assertNull(ExifMath.parseExifSubsecond(null))
+        assertNull(ExifMath.parseExifSubsecond(""))
+        assertNull(ExifMath.parseExifSubsecond("   "))
+        assertNull(ExifMath.parseExifSubsecond("abc"))
+        assertNull(ExifMath.parseExifSubsecond("1a3"))
+        assertNull(ExifMath.parseExifSubsecond("12.5"))
+        assertNull(ExifMath.parseExifSubsecond("-12"))
+        assertNull(ExifMath.parseExifSubsecond("+12"))
     }
 
     // ------------------------------------------------------------------

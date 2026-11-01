@@ -1,5 +1,8 @@
 package io.github.dukeoftoad.gallery.data.catalogue
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -202,4 +205,68 @@ class InMemoryMediaCatalogueTest {
         assertEquals(1, catalogue.allRecords().size)
         assertTrue(catalogue.tombstonedKeys().isEmpty())
     }
+
+    /**
+     * Pins the Phase-4-audit (finding D) atomicity contract: the paired
+     * tombstone and resurrection transitions each take effect as ONE step,
+     * so a reader interleaved with the writer never observes a half-applied
+     * transition --- the key is at every instant either live or tombstoned,
+     * never both ("ghost" key) and never neither (vanished key). The Room
+     * implementation must deliver the same all-or-nothing behavior via its
+     * transactions; the Room runtime side itself is integration/device
+     * territory per ADR-0016, so this JVM test pins the reference instead.
+     *
+     * The interleaving is DETERMINISTIC: the writer hands the baton to the
+     * reader after each whole transition and waits for the observation back
+     * (channel handoff, no scheduler luck). A free-running race would be
+     * flaky here --- kotlinx Mutex is unfair, so a tight writer loop can
+     * starve the reader into zero observations (observed on 2 vCPUs) --- and
+     * a mid-transition observation is unobservable by construction anyway:
+     * every transition holds the catalogue's single mutex, which IS the
+     * atomicity guarantee this test pins from the outside.
+     */
+    @Test
+    fun `a reader interleaved with the writer never observes a half-applied tombstone or resurrection`() =
+        runBlocking {
+            val catalogue = InMemoryMediaCatalogue()
+            val key = "external_primary:1"
+            val item = record(key = key)
+            catalogue.upsertAll(listOf(item))
+
+            val rounds = 300
+            val readerTurn = Channel<Unit>(Channel.UNLIMITED)
+            val writerTurn = Channel<Unit>(Channel.UNLIMITED)
+            val writer = launch(Dispatchers.Default) {
+                repeat(rounds) { round ->
+                    catalogue.tombstone(listOf(key), atMillis = round.toLong())
+                    readerTurn.send(Unit)
+                    writerTurn.receive()
+                    catalogue.upsertAll(listOf(item))
+                    readerTurn.send(Unit)
+                    writerTurn.receive()
+                }
+                readerTurn.close()
+            }
+
+            var observations = 0
+            var violations = 0
+            for (signal in readerTurn) {
+                val live = catalogue.recordsMap().containsKey(key)
+                val dead = catalogue.tombstonedKeys().contains(key)
+                observations++
+                // Exactly one of live/dead must hold at every observation.
+                if (live == dead) violations++
+                writerTurn.send(Unit)
+            }
+            writer.join()
+
+            // Exactly two observations per round: one after the tombstone,
+            // one after the resurrection.
+            assertEquals(rounds * 2, observations)
+            assertEquals(0, violations)
+            // The final transition is the writer's resurrect: end state is
+            // live with NO tombstone (never a residual death record).
+            assertEquals(item, catalogue.record(key))
+            assertFalse(catalogue.tombstonedKeys().contains(key))
+        }
 }

@@ -1,5 +1,7 @@
 package io.github.dukeoftoad.gallery.metadata.exif
 
+import io.github.dukeoftoad.gallery.data.media.dates.CaptureDateSource
+import io.github.dukeoftoad.gallery.data.media.dates.DateCandidate
 import io.github.dukeoftoad.gallery.metadata.CameraInfo
 import io.github.dukeoftoad.gallery.metadata.ExposureInfo
 import io.github.dukeoftoad.gallery.metadata.GpsCoordinates
@@ -235,6 +237,125 @@ class ParsedExifTest {
         ).toSnapshot(fileSizeBytes = 1L, mimeType = "image/jpeg")
         assertEquals(MetadataAvailability.UNREADABLE, snapshot.captureDates.exif)
         assertNull(snapshot.exifCaptureDateMillis)
+    }
+
+    // ------------------------------------------------------------------
+    // Capture-date candidates (audit finding I)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `assembly emits both exif date candidates with offsets and subsecond`() {
+        val parsed = ParsedExif(
+            mapOf(
+                ExifTags.DATE_TIME_ORIGINAL to "2024:05:17 09:30:00",
+                ExifTags.OFFSET_TIME_ORIGINAL to "+02:00",
+                ExifTags.SUBSEC_TIME_ORIGINAL to "123",
+                ExifTags.DATE_TIME_DIGITIZED to "2024:05:17 09:30:01",
+                ExifTags.OFFSET_TIME_DIGITIZED to "+02:00",
+            ),
+        )
+        val expectedOriginal = java.time.OffsetDateTime
+            .of(2024, 5, 17, 9, 30, 0, 0, java.time.ZoneOffset.ofHours(2))
+            .toInstant().toEpochMilli()
+        val expectedDigitized = java.time.OffsetDateTime
+            .of(2024, 5, 17, 9, 30, 1, 0, java.time.ZoneOffset.ofHours(2))
+            .toInstant().toEpochMilli()
+        assertEquals(
+            listOf(
+                DateCandidate(
+                    source = CaptureDateSource.EXIF_ORIGINAL,
+                    epochMillis = expectedOriginal,
+                    timezoneOffsetMinutes = 120,
+                    subsecondMillis = 123,
+                ),
+                DateCandidate(
+                    source = CaptureDateSource.EXIF_DIGITIZED,
+                    epochMillis = expectedDigitized,
+                    timezoneOffsetMinutes = 120,
+                    subsecondMillis = 0,
+                ),
+            ),
+            parsed.captureDateCandidates(),
+        )
+    }
+
+    @Test
+    fun `assembly emits a digitized-only candidate when original is missing`() {
+        // Export tools strip DateTimeOriginal but keep CreateDate; the
+        // digitized tag still feeds the resolver (rank 1).
+        val parsed = ParsedExif(
+            mapOf(ExifTags.DATE_TIME_DIGITIZED to "2023:11:02 23:59:58"),
+        )
+        assertEquals(
+            listOf(
+                DateCandidate(
+                    source = CaptureDateSource.EXIF_DIGITIZED,
+                    // No offset tag: null = "extractor made no zone
+                    // decision", UTC anchor applied, assumption recorded
+                    // downstream per the MediaDates contract.
+                    epochMillis = java.time.LocalDateTime
+                        .of(2023, 11, 2, 23, 59, 58)
+                        .toInstant(java.time.ZoneOffset.UTC).toEpochMilli(),
+                    timezoneOffsetMinutes = null,
+                    subsecondMillis = 0,
+                ),
+            ),
+            parsed.captureDateCandidates(),
+        )
+    }
+
+    @Test
+    fun `assembly emits no candidate for placeholder or garbage dates`() {
+        val parsed = ParsedExif(
+            mapOf(
+                ExifTags.DATE_TIME_ORIGINAL to "  :  :  ",
+                ExifTags.DATE_TIME_DIGITIZED to "not a date",
+            ),
+        )
+        assertEquals(emptyList<DateCandidate>(), parsed.captureDateCandidates())
+    }
+
+    @Test
+    fun `assembly ignores a malformed offset and falls back to the utc anchor`() {
+        val parsed = ParsedExif(
+            mapOf(
+                ExifTags.DATE_TIME_ORIGINAL to "2024:05:17 09:30:00",
+                ExifTags.OFFSET_TIME_ORIGINAL to "+0200", // no colon
+            ),
+        )
+        val candidate = parsed.captureDateCandidates().single()
+        assertEquals(CaptureDateSource.EXIF_ORIGINAL, candidate.source)
+        assertNull(candidate.timezoneOffsetMinutes)
+        // Unparseable offset -> UTC anchor, same as no offset tag at all.
+        assertEquals(
+            java.time.LocalDateTime.of(2024, 5, 17, 9, 30, 0)
+                .toInstant(java.time.ZoneOffset.UTC).toEpochMilli(),
+            candidate.epochMillis,
+        )
+    }
+
+    @Test
+    fun `assembly tolerates a blank subsecond tag`() {
+        val parsed = ParsedExif(
+            mapOf(ExifTags.DATE_TIME_ORIGINAL to "2024:05:17 09:30:00"),
+        )
+        val candidate = parsed.captureDateCandidates().single()
+        assertEquals(0, candidate.subsecondMillis)
+        assertNull(candidate.timezoneOffsetMinutes)
+    }
+
+    @Test
+    fun `assembly emits no candidates and keeps the snapshot intact when no date tags exist`() {
+        val parsed = ParsedExif(
+            mapOf(
+                ExifTags.MAKE to "Google",
+                ExifTags.OFFSET_TIME_ORIGINAL to "+02:00", // offset without a date
+            ),
+        )
+        assertEquals(emptyList<DateCandidate>(), parsed.captureDateCandidates())
+        val snapshot = parsed.toSnapshot(fileSizeBytes = 1L, mimeType = "image/jpeg")
+        assertNull(snapshot.exifCaptureDateMillis)
+        assertEquals(MetadataAvailability.ABSENT, snapshot.captureDates.exif)
     }
 
     // ------------------------------------------------------------------

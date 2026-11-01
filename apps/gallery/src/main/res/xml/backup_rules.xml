@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Pre-API-31 cloud backup rules (android:fullBackupContent).
+
+    The vault (filesDir/vault: PIN record, index, sealed blobs,
+    biometric.binding) is excluded from cloud backup: its AndroidKeyStore key
+    is non-exportable, so a restored ciphertext would be permanently
+    unopenable, and vault state must not leave the device (ADR-0014).
+    Everything else (preferences, diagnostics) stays backable.
+-->
+<full-backup-content>
+    <exclude domain="file" path="vault" />
+</full-backup-content>

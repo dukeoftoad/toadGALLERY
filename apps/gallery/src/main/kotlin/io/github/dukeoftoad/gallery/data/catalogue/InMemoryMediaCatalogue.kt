@@ -22,6 +22,19 @@ import kotlinx.coroutines.sync.withLock
  * tombstone/resurrect interleavings) the day a real caller races an
  * observer-triggered reconcile against a foreground scan.
  *
+ * Transactional equivalence (Phase 4 audit finding D): each paired
+ * transition here is ONE synchronized step under the mutex --- [tombstone]
+ * removes the rows and writes the tombstones together, [upsertAll] writes
+ * the whole batch and clears its tombstones together --- which is exactly
+ * the guarantee the Room implementation gives via
+ * `CatalogueDao.removeItemsAndWriteTombstones` /
+ * `CatalogueDao.upsertItemsAndClearTombstones` (one Room transaction per
+ * call; a reader/interrupter can never observe a tombstoned-but-live or
+ * live-but-still-tombstoned intermediate state in either implementation).
+ * The JVM tests pin this equivalence --- including a concurrent reader
+ * observing only whole transitions --- because the Room runtime side is
+ * verifiable only by integration/device checks (ADR-0016).
+ *
  * Semantics recap (full rationale on [MediaCatalogue]):
  * - [upsertAll] replaces per key and CLEARS that key's tombstone (a row
  *   seen in a scan is live, by definition of an authoritative scan).
@@ -46,6 +59,9 @@ class InMemoryMediaCatalogue : MediaCatalogue {
 
     override suspend fun upsertAll(records: List<CatalogueRecord>) {
         if (records.isEmpty()) return
+        // Whole batch inside one mutex hold --- the in-memory analogue of
+        // Room's batch-level transaction in upsertItemsAndClearTombstones:
+        // no reader can observe some records resurrected and others not.
         mutex.withLock {
             for (record in records) {
                 this.records[record.localMediaKey] = record
@@ -70,6 +86,10 @@ class InMemoryMediaCatalogue : MediaCatalogue {
 
     override suspend fun tombstone(localMediaKeys: List<String>, atMillis: Long) {
         if (localMediaKeys.isEmpty()) return
+        // Single mutex hold = one atomic transition, the in-memory
+        // analogue of Room's removeItemsAndWriteTombstones transaction:
+        // remove first, record the death --- no reader can observe a key
+        // simultaneously live and tombstoned, or in neither state.
         mutex.withLock {
             for (key in localMediaKeys) {
                 // Remove first: a key must never be simultaneously live and

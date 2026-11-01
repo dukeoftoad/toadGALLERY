@@ -12,8 +12,11 @@ import org.junit.Test
  * "Incremental discovery"; ADR-0016: pure JVM, no android.* types).
  *
  * The two rules most worth guarding forever:
- * - a generation-token bump with IDENTICAL size and date must be CHANGED
- *   (that is the entire reason the token is part of the revision), and
+ * - a bump of ONE row's per-row generation-modified value (with identical
+ *   size and date) must mark THAT row CHANGED --- and only that row: the
+ *   per-volume scan checkpoint never enters per-item comparison, so
+ *   changing one item must not invalidate unrelated items on the same
+ *   volume (audit finding C), and
  * - a metadataWriteRevision-only delta must be UNCHANGED (an in-app EXIF
  *   write is not an external edit; re-indexing on it would burn the
  *   battery and the embedding store for bytes that never moved).
@@ -116,17 +119,44 @@ class CatalogueReconcilerTest {
     }
 
     @Test
-    fun `generation token bump with identical size and date is reported as changed`() {
-        // THE reason the generation token is part of the revision: an
-        // external edit (or a whole-volume event) can bump the generation
-        // while per-row size and date_modified look untouched. A reconciler
-        // that compared only size+date would skip the re-index entirely.
+    fun `one row's generation-modified bump with identical size and date marks THAT row changed`() {
+        // THE reason the per-row generation stamp is part of the revision:
+        // an external in-place edit can bump a row's own
+        // GENERATION_MODIFIED while per-row size and date_modified look
+        // untouched. A reconciler that compared only size+date would skip
+        // the re-index entirely.
         val result = CatalogueReconciler.reconcile(
             scanRows = listOf(row(generationToken = "18")),
             catalogueRecords = mapOf("external_primary:1" to recordOf(generationToken = "17")),
         )
         assertEquals(1, result.changed.size)
+        assertEquals("external_primary:1", result.changed.single().new.localMediaKey)
         assertEquals(0, result.unchangedCount)
+    }
+
+    @Test
+    fun `unrelated rows stay unchanged when only another row's generation moved`() {
+        // AUDIT FINDING C REGRESSION GUARD: editing item 1 advances the
+        // per-volume scan checkpoint (MediaStore.getGeneration moves on ANY
+        // change anywhere on the volume), but the checkpoint never enters
+        // per-item comparison --- only each row's own generation-modified
+        // value does. Item 2, whose per-row token is unchanged, must stay
+        // UNCHANGED even though the volume checkpoint advanced; otherwise
+        // every single edit would re-index the whole volume.
+        val result = CatalogueReconciler.reconcile(
+            scanRows = listOf(
+                row(key = "external_primary:1", generationToken = "18"), // edited item
+                row(key = "external_primary:2", generationToken = "17"), // untouched item
+            ),
+            catalogueRecords = mapOf(
+                "external_primary:1" to recordOf(key = "external_primary:1", generationToken = "17"),
+                "external_primary:2" to recordOf(key = "external_primary:2", generationToken = "17"),
+            ),
+        )
+        assertEquals(listOf("external_primary:1"), result.changed.map { it.new.localMediaKey })
+        assertEquals(1, result.unchangedCount)
+        assertTrue(result.added.isEmpty())
+        assertTrue(result.removedKeys.isEmpty())
     }
 
     @Test

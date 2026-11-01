@@ -26,11 +26,18 @@ import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
  * - A row whose [MediaScanRow.sizeBytes], [MediaScanRow.dateModifiedMillis]
  *   or [MediaScanRow.generationToken] differs from the cached record is
  *   CHANGED --- the provider row moved and downstream AI outputs are
- *   invalidated. The generation token participates even though size and
- *   date usually move with it: some external edits (and whole-volume
- *   events like a restore) bump the generation while leaving per-row size
- *   and date untouched, and the audit's revision token exists precisely to
- *   catch those.
+ *   invalidated. The token compared here is each row's OWN per-row
+ *   generation-modified value (`MediaStore.MediaColumns
+ *   .GENERATION_MODIFIED`, API 30+), NOT the per-volume
+ *   `MediaStore.getGeneration` scan checkpoint: some external edits
+ *   rewrite bytes in place while leaving per-row size and date untouched,
+ *   and the row's own generation stamp catches those --- while the volume
+ *   checkpoint advances whenever ANY item on the volume changes, so
+ *   stamping or comparing it per row would report every item as changed
+ *   after every edit anywhere (audit finding C). The volume checkpoint
+ *   lives in `ScanCheckpoint` / `MediaChangeFeed.currentGeneration` and
+ *   never enters this comparison: a volume-generation advance with all
+ *   per-row revisions identical leaves every row UNCHANGED.
  * - Everything else is UNCHANGED --- including rows whose ONLY delta is
  *   [CatalogueRecord.metadataWriteRevision] (that counter is written by
  *   this app's own metadata edits; treating it as an external change would
@@ -139,9 +146,13 @@ object CatalogueReconciler {
 
     /**
      * The revision comparison, isolated so its exact field set is legible
-     * and auditable: size, date_modified, generation token --- nothing
-     * else, deliberately. See the object KDoc for why metadataWriteRevision
-     * and the access-handle fields are excluded.
+     * and auditable: size, date_modified, the row's OWN per-row
+     * generation-modified token (`MediaColumns.GENERATION_MODIFIED`) ---
+     * nothing else, deliberately. The token is a PER-ITEM value: it must
+     * never be the per-volume `MediaStore.getGeneration` scan checkpoint,
+     * which moves whenever any item on the volume changes (audit finding
+     * C). See the object KDoc for why metadataWriteRevision and the
+     * access-handle fields are excluded.
      */
     private fun MediaScanRow.changedVersus(record: CatalogueRecord): Boolean =
         sizeBytes != record.sizeBytes ||

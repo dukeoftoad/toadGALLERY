@@ -58,6 +58,16 @@ object ExifMath {
     private const val LONGITUDE_LIMIT = 180.0
 
     /**
+     * Largest zone offset the offset-time parser accepts: 14 hours, the
+     * real-world ISO 8601 maximum (Kiribati's +14:00). Real cameras never
+     * write beyond it, so a wider value is a corrupt tag, not a zone.
+     */
+    private const val MAX_OFFSET_HOURS = 14
+
+    /** java.time's own zone-offset bound (18 h), applied defensively to the offset-combining parser. */
+    private const val MAX_OFFSET_TOTAL_MINUTES = 18 * 60
+
+    /**
      * Exposures at or faster than this cutoff (1/4 s) render as fractions
      * --- the camera convention ("1/250 s"); anything slower renders as
      * decimal seconds ("0.5 s", "1.6 s", "30 s") because "1/2 s" reads
@@ -226,27 +236,117 @@ object ExifMath {
      * colon-separated form, strictly 19 characters) to epoch millis, or
      * `null` on anything malformed: wrong separators, single-digit
      * fields, impossible dates (Feb 30, month 13, a non-leap Feb 29),
-     * hour 24, or a leap second (`23:59:60` --- EXIF has no sub-second or
-     * leap representation; the separate SubSecTimeOriginal tag is out of
-     * scope this round). Null/blank input is `null`, never an exception.
+     * hour 24, a leap second (`23:59:60`), or the EXIF placeholder
+     * `"  :  :  "` (wrong length, so rejected by the same rule). The
+     * optional fractional part lives in the separate SubSecTimeOriginal
+     * tag and is parsed by [parseExifSubsecond], never inline here.
+     * Null/blank input is `null`, never an exception.
      *
-     * EXIF datetimes are naive LOCAL times with no timezone. This returns
-     * them anchored at UTC purely so callers get a deterministic,
-     * cacheable/comparable Long --- the value is deliberately labeled
-     * "raw EXIF" in [MediaMetadataSnapshot][io.github.dukeoftoad.gallery.metadata.MediaMetadataSnapshot.exifCaptureDateMillis]
+     * EXIF datetimes are naive LOCAL times with no timezone. With no
+     * offset this returns them anchored at UTC purely so callers get a
+     * deterministic, cacheable/comparable Long --- the value is
+     * deliberately labeled "raw EXIF" in
+     * [MediaMetadataSnapshot][io.github.dukeoftoad.gallery.metadata.MediaMetadataSnapshot.exifCaptureDateMillis]
      * and the timezone-aware MediaDates resolver (audit item 3) will
-     * supersede it.
+     * supersede it. When the file's OffsetTime* tag parsed, callers
+     * should use [parseExifDateTimeWithOffset] instead.
      */
-    fun parseExifDateTime(text: String?): Long? {
+    fun parseExifDateTime(text: String?): Long? = parseExifDateTimeWithOffset(text, null)
+
+    /**
+     * An EXIF datetime string plus the parsed `OffsetTime*` value (see
+     * [parseExifOffsetTime]) to epoch millis.
+     *
+     * Offset semantics, exactly:
+     *  - [offsetMinutes] `null` (tag absent or unparseable): the naive
+     *    local time is anchored at UTC --- the pre-existing convention,
+     *    kept byte-for-byte so every existing caller and test stays
+     *    stable; the timezone assumption stays auditable downstream.
+     *  - [offsetMinutes] non-null: the naive local time IS that zone ---
+     *    `2024:05:17 09:30:00` with `+02:00` is `07:30:00Z`, not
+     *    `09:30:00Z`. Minutes east of UTC, negative west.
+     *
+     * All datetime validation is identical to [parseExifDateTime]
+     * (strict format, impossible dates rejected, placeholder rejected);
+     * the offset never rescues a malformed datetime. An [offsetMinutes]
+     * outside java.time's own +/-18 h bound returns `null` rather than
+     * throwing --- the parser itself caps at 14 h, so this only guards
+     * direct callers. `null` on any datetime failure, never an exception.
+     */
+    fun parseExifDateTimeWithOffset(text: String?, offsetMinutes: Int?): Long? {
         if (text.isNullOrBlank()) return null
         val trimmed = text.trim()
         if (trimmed.length != 19) return null
+        if (offsetMinutes != null &&
+            (offsetMinutes < -MAX_OFFSET_TOTAL_MINUTES || offsetMinutes > MAX_OFFSET_TOTAL_MINUTES)
+        ) {
+            return null
+        }
         val parsed: LocalDateTime = try {
             LocalDateTime.parse(trimmed, EXIF_DATE_TIME_FORMAT)
         } catch (e: DateTimeParseException) {
             return null
         }
-        return parsed.toInstant(ZoneOffset.UTC).toEpochMilli()
+        val zone = if (offsetMinutes == null) {
+            ZoneOffset.UTC
+        } else {
+            ZoneOffset.ofTotalSeconds(offsetMinutes * 60)
+        }
+        return parsed.toInstant(zone).toEpochMilli()
+    }
+
+    /**
+     * An EXIF `OffsetTime*` string (`±HH:MM`, e.g. `+02:00`, the exact
+     * 6-character sign-prefixed form the EXIF 2.3.1 spec defines for
+     * OffsetTimeOriginal and OffsetTimeDigitized) to signed minutes east of UTC: `+02:00` ->
+     * `120`, `-07:30` -> `-450`, `+00:00` -> `0`.
+     *
+     * Validation, all returning `null`: the sign character is REQUIRED
+     * (`02:00` is malformed, not implied-positive), both fields are
+     * exactly two digits, minutes are 00..59, and hours are 00..14 ---
+     * the real-world ISO 8601 maximum, so a wider value is a corrupt tag
+     * rather than a zone anyone has ever lived in. Surrounding whitespace
+     * is tolerated (some writers pad, same as the datetime tags).
+     * Null/blank input is `null`, never an exception.
+     */
+    fun parseExifOffsetTime(text: String?): Int? {
+        if (text.isNullOrBlank()) return null
+        val trimmed = text.trim()
+        if (trimmed.length != 6 || trimmed[3] != ':') return null
+        val sign: Int = when (trimmed[0]) {
+            '+' -> 1
+            '-' -> -1
+            else -> return null
+        }
+        val hours = trimmed.substring(1, 3).toIntOrNull() ?: return null
+        val minutes = trimmed.substring(4, 6).toIntOrNull() ?: return null
+        if (hours !in 0..MAX_OFFSET_HOURS || minutes !in 0..59) return null
+        return sign * (hours * 60 + minutes)
+    }
+
+    /**
+     * An EXIF `SubSecTimeOriginal` string to fractional milliseconds.
+     *
+     * CONVENTION (documented because the tag spec does not pin one): the
+     * value is a decimal fraction of a second --- `"123"` means 0.123 s.
+     * Parsing therefore takes the digit string as the fraction's digits:
+     * the first three digits zero-padded to three, anything beyond three
+     * digits TRUNCATED (not rounded, so the result can never round up to
+     * 1000 and escape the 0..999 millis domain):
+     *  - `"123"` -> 123 ms, `"12"` -> 120 ms, `"1"` -> 100 ms
+     *  - `"9999"` -> 999 ms (truncated), `"0"`/`"000"` -> 0 ms
+     *
+     * `null` on blank input, non-digit characters (including a sign or a
+     * decimal point --- the tag is digits only), or the empty string.
+     * A parsed `0` is indistinguishable from "no subsecond tag" once it
+     * lands in a DateCandidate's `subsecondMillis` (default 0); that
+     * ambiguity is inherent to the tag and accepted.
+     */
+    fun parseExifSubsecond(text: String?): Int? {
+        if (text.isNullOrBlank()) return null
+        val trimmed = text.trim()
+        if (trimmed.any { it < '0' || it > '9' }) return null
+        return trimmed.take(3).padEnd(3, '0').toInt()
     }
 
     /**

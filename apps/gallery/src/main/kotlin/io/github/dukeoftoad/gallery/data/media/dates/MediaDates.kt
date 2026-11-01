@@ -76,7 +76,11 @@ enum class CaptureDateSource {
  *   so a later pass can reinterpret or correct the instant without
  *   re-reading the file's bytes.
  * - [captureDateMillis] is the already-interpreted instant produced by
- *   [MediaDateResolver]; [captureDateSource] says which tag won.
+ *   [MediaDateResolver]; [captureDateSource] says which tag won. It can
+ *   legitimately be NEGATIVE epoch millis: pre-1970 capture dates
+ *   (scanned film archives, historical photos) are real instants, not
+ *   malformed values --- the resolver keeps them, and only UNKNOWN-source
+ *   candidates are ever discarded (audit finding F).
  * - [subsecondMillis] is the fractional part of the capture instant,
  *   kept SEPARATE from [captureDateMillis] because EXIF subsecond tags
  *   are optional and every other source has second granularity only ---

@@ -45,10 +45,20 @@ data class CatalogueRecord(
     /** Provider `date_added` in epoch millis; ordering/diagnostics only. */
     val dateAddedMillis: Long,
     /**
-     * The MediaStore per-volume generation token (API 30+), part of the
-     * observed revision. `null` below API 30 --- absence is a platform
-     * property, not "no revision", which is why the field is nullable and
-     * the reconciler compares it as a plain value.
+     * The media item's OWN per-row MediaStore generation stamp ---
+     * `MediaStore.MediaColumns.GENERATION_MODIFIED` of THIS row (API 30+),
+     * part of the observed revision. `null` below API 30 --- absence is a
+     * platform property, not "no revision", which is why the field is
+     * nullable and the reconciler compares it as a plain value.
+     *
+     * Deliberately NOT the per-volume `MediaStore.getGeneration` value:
+     * that is the SCAN CHECKPOINT (see
+     * [io.github.dukeoftoad.gallery.data.media.changes.MediaChangeFeed
+     * .currentGeneration]) and moves whenever ANY item on the volume
+     * changes --- stamping it per row would report every item on the
+     * volume as changed after every edit anywhere (audit finding C).
+     * Only the per-row generation-modified value participates in
+     * per-item revision comparison.
      */
     val generationToken: String? = null,
     /**

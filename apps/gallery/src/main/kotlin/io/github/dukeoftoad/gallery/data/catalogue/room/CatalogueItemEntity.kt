@@ -35,7 +35,7 @@ data class CatalogueItemEntity(
     val dateModifiedMillis: Long,
     /** Provider `date_added` in epoch millis. */
     val dateAddedMillis: Long,
-    /** MediaStore per-volume generation token; `null` below API 30. */
+    /** MediaStore per-row generation token (`MediaColumns.GENERATION_MODIFIED` of THIS row); `null` below API 30. */
     val generationToken: String?,
     /** In-app metadata write counter; excluded from scan reconciliation. */
     val metadataWriteRevision: Int,

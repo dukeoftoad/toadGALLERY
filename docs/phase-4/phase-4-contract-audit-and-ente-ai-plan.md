@@ -140,7 +140,7 @@ audit.
 | --- | --- | --- | --- |
 | Media identity | URI + MediaStore `_id` in ADR-0006; current `MediaItem` has id + Uri | Stable file key for face rows, CLIP vectors, clustering and incremental indexing | PARTIAL --- add volumeName + canonical URI + durable local media key; never use display name/path |
 | Dates | ADR-0006 three-date idea; current model only `dateAddedSec` | Creation/capture time used for chronological clustering; robust Moments and media ordering | GAP --- store added, modified, capture date, source tag, timezone offset and confidence |
-| Revision tracking | Not explicit in Phase 4 deliverables | Detect replacement/edit/metadata change and re-run relevant models | GAP --- revision token: volume generation + row id + size + dateModified + metadata revision; content hash only where justified |
+| Revision tracking | Not explicit in Phase 4 deliverables | Detect replacement/edit/metadata change and re-run relevant models | GAP --- revision token: per-row MediaStore generation-modified + size + dateModified + metadata revision (the per-VOLUME generation is the scan checkpoint only, never a per-item revision input); content hash only where justified |
 | Media bytes | `MediaStoreSource` is URI-first; no dedicated AI read contract | Decode full-resolution pixels with deterministic preprocessing | GAP --- `MediaReadHandle` opens original bytes/descriptor; re-check permission; support bytes bridge |
 | Image normalization | Not explicitly specified | Ente detector and encoders expect specific tensor shape, orientation, channel order and normalization | GAP --- define canonical upright RGB decode contract and test pixel parity |
 | Metadata breadth | EXIF + new IPTC/XMP wrappers; details view | Dates, GPS, dimensions/orientation, video timestamps and reliable media classification | PARTIAL --- add video/container metadata and parser capability matrix; distinguish absent/unsupported/corrupt |
@@ -161,8 +161,9 @@ Details UI feature before the first AI vertical slice.
 1. **MediaIdentity**: volumeName, MediaStore `_id`, canonical content Uri,
    optional page/embedded-item identity. URI remains the access handle;
    path is never a primary key.
-2. **MediaRevision**: sizeBytes, dateModifiedMillis, MediaStore generation
-   token when supported, metadataWriteRevision, and optional lightweight
+2. **MediaRevision**: sizeBytes, dateModifiedMillis, the per-row MediaStore
+   generation-modified token when supported (never the per-volume generation
+   checkpoint), metadataWriteRevision, and optional lightweight
    content fingerprint. A changed revision invalidates only affected AI
    outputs.
 3. **MediaDates**: dateAdded, dateModified, captureDate,

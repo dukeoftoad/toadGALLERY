@@ -288,6 +288,16 @@
     <string name="vault_biometric_section_body">Optional. Unlock the vault with your fingerprint or face instead of the PIN. Your biometric data stays in this phone\'s secure hardware and never leaves the device. The PIN always keeps working.</string>
     <string name="vault_biometric_prompt_title">Unlock the hidden vault</string>
     <string name="vault_biometric_prompt_subtitle">Confirm it\'s you to open the vault</string>
+    <!-- The prompt's negative button (r10 device fix): androidx.biometric
+         REQUIRES non-empty negative text whenever the prompt is not allowed
+         to fall back to device credential --- which is exactly our case,
+         since the CryptoObject-bound BIOMETRIC_WEAK key cannot combine with
+         DEVICE_CREDENTIAL. Without it PromptInfo.build() throws
+         "Negative text must be set and non-empty." and the app crashes the
+         moment the biometric sheet is shown. "Use PIN" is the truthful
+         label: the cancel path (ERROR_NEGATIVE_BUTTON) is silent and drops
+         the user back on the PIN screen. -->
+    <string name="vault_biometric_prompt_negative">Use PIN</string>
     <string name="vault_biometric_enabled">Biometric unlock enabled.</string>
     <string name="vault_biometric_disabled">Biometric unlock turned off.</string>
     <string name="vault_biometric_error">Biometric unlock didn\'t work. Use your PIN instead.</string>

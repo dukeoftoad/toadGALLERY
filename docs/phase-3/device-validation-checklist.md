@@ -1,16 +1,21 @@
-# Phase 3 device-validation checklist — v0.4.1-alpha (r9)
+# Phase 3 device-validation checklist — v0.4.1-alpha (r10)
 
-**Status:** pending device validation (the Phase 3 exit work; see
-`roadmap.md`'s Phase 3 progress note).\
-**Target build:** `toadGALLERY-0.4.1-alpha-r9.apk` from the
-`v0.4.1-alpha-r9` pre-release (versionCode 13). r9 fixes the two r8
-device findings: the AndroidKeyStore caller-IV seal rejection (the
-actual "vault PIN creating failed" root cause) and the grid
-stale-index crash. Sections 1–11 carry over (8 from r7, 3 from r8).\
+**Status:** pending device validation (the Phase 3 exit work + the r10
+fix; see `roadmap.md`'s Phase 3 progress note).\
+**Target build:** `toadGALLERY-0.4.1-alpha-r10.apk` from the
+`v0.4.1-alpha-r10` pre-release (versionCode 14). r10 fixes the single
+r9 device finding — the biometric-sheet crash
+(`IllegalArgumentException: Negative text must be set and non-empty.`)
+— and ships the Phase 4 contract foundation, which has NO user-facing
+surface yet (no UI consumes it; regressions there would surface as
+startup/surface crashes, which section 12's smoke pass covers).
+Sections 1–11 carry over from r8/r9 (8 from r7, 3 from r8, 1 fixed in
+r9's round).\
 **Reference device:** the Xiaomi device used for the 2026-10-30/31 and
 11-01 logcat reviews (`c2.qti.hevc.decoder` hardware; 10-bit HEVC Main10
 sample in MKV; `getFrameAtTime` NULL-frame samples; the build-11/12
-"vault PIN creating failed" and the r8 `Index: 60, Size: 60` crash).\
+"vault PIN creating failed", the r8 `Index: 60, Size: 60` crash and
+the r9 `Negative text must be set` biometric crash).\
 **Method:** install over the previous build, run each section, note
 pass/fail + a logcat snippet for anything unexpected. For vault/diagnostic
 sections also capture the in-app log: `adb logcat -s ToadDiag ToadVault`
@@ -66,14 +71,22 @@ Sections 1–8 map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
 - [ ] A delete from album detail lands in Settings → Recycle bin and
       restores to the same album.
 
-## 5. Vault biometric unlock (#57, ADR-0019)
+## 5. Vault biometric unlock (#57, ADR-0019; the r10 fix)
 
+- [ ] **The r10 regression check first (build 13 crashed here):** with
+      biometrics enrolled and the binding ON, tapping "Unlock with
+      biometrics" shows the biometric sheet — NOT a crash. The sheet
+      carries a **Use PIN** negative button (new in r10; required by
+      androidx.biometric because the CryptoObject-bound BIOMETRIC_WEAK
+      prompt has no device-credential fallback).
 - [ ] With biometrics enrolled, the vault setup offers the opt-in
       (default OFF); enabling it prompts the hardware keyguard and
-      succeeds.
+      succeeds — the ENROLL sheet also shows the Use PIN button and
+      does not crash.
 - [ ] Locked vault shows "Unlock with biometrics"; a successful prompt
       opens the same unlocked session a correct PIN does.
-- [ ] The prompt's negative/"use PIN" fallback still unlocks via PIN.
+- [ ] The prompt's Use PIN button returns to the PIN screen silently
+      (no error snackbar; the CANCELLED path is quiet by design).
 - [ ] Adding a new fingerprint in system settings invalidates the
       binding on next biometric attempt: the app removes the dead
       binding and shows the re-enable nudge (PIN still works).
@@ -161,6 +174,26 @@ Sections 1–8 map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
       group's first cell (correct boundaries across month/year edges);
       None (default) shows none.
 - [ ] Choices survive an app restart.
+
+## 12. r10 smoke pass — the Phase 4 foundation is invisible by design
+
+The r10 round also lands the Phase 4 contract foundation (media
+identity/eligibility, revision + date resolution, metadata seams, the
+Room media catalogue, the MediaStore change feed, the read boundary,
+the canonical decode plan). None of it has UI or a scan driver yet, so
+there is nothing feature-shaped to probe — this section is a pure
+regression smoke pass.
+
+- [ ] App starts, grid loads, scrolling is smooth, no new
+      `AndroidRuntime` FATAL lines in logcat across the whole session
+      (the new code must be inert until a consumer wires it up).
+- [ ] About → Diagnostics: the vault state probe and the log ring still
+      work; the build line reads `0.4.1-alpha (build 14)`.
+- [ ] The r9 vault behaviors still hold on this build: setup commits
+      (`ToadVault: setup: committed`), unlock with PIN works, the
+      auto-lock timer fires, and section 5's biometric round passes.
+- [ ] No unexpected process restarts while browsing/editing/moving
+      items (the Phase 4 code adds zero startup hooks on purpose).
 
 ---
 

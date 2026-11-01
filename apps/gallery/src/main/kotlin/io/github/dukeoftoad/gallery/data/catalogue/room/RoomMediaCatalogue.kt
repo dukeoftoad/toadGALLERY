@@ -4,7 +4,11 @@ import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
 import io.github.dukeoftoad.gallery.data.catalogue.MetadataCacheState
 import io.github.dukeoftoad.gallery.data.catalogue.ScanCheckpoint
+import io.github.dukeoftoad.gallery.data.catalogue.TimelineDirection
 import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 
 /**
  * The production [MediaCatalogue]: a THIN mapper over [CatalogueDao].
@@ -42,6 +46,14 @@ import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
  * assert that a concurrent reader never observes a half-applied
  * transition. If the two implementations ever disagree, THIS class is the
  * bug.
+ *
+ * Timeline surface (r13 round): the windowed reads delegate to the DAO's
+ * two fixed ORDER BY statements (one per direction --- never concatenated
+ * SQL), the count is a plain COUNT, and [changes] rides Room's
+ * InvalidationTracker through a Flow over the live-rows table. Ordering
+ * equivalence with the reference implementation is the contract the
+ * in-memory suite pins; the SQL itself is Android-adjacent and therefore
+ * untested here (ADR-0016).
  */
 class RoomMediaCatalogue(
     private val dao: CatalogueDao,
@@ -91,6 +103,42 @@ class RoomMediaCatalogue(
 
     override suspend fun recordsMap(): Map<String, CatalogueRecord> =
         dao.allItems().associateBy { it.localMediaKey }.mapValues { it.value.toRecord() }
+
+    /**
+     * The windowed timeline read: the `when` picks ONE of the DAO's two
+     * fixed ORDER BY statements --- no SQL is built here, only chosen. The
+     * guards run BEFORE the DAO call because SQLite reads a negative LIMIT
+     * as "unbounded" (an accidental full-table window) and both
+     * implementations must answer invalid arguments identically: empty.
+     */
+    override suspend fun timelineWindow(
+        offset: Int,
+        limit: Int,
+        direction: TimelineDirection,
+    ): List<CatalogueRecord> {
+        if (offset < 0 || limit <= 0) return emptyList()
+        val window = when (direction) {
+            TimelineDirection.NEWEST_FIRST -> dao.timelineWindowNewestFirst(offset, limit)
+            TimelineDirection.OLDEST_FIRST -> dao.timelineWindowOldestFirst(offset, limit)
+        }
+        return window.map { it.toRecord() }
+    }
+
+    /** A plain COUNT over the live-rows table; tombstones never enter it. */
+    override suspend fun liveItemCount(): Int = dao.liveItemCount()
+
+    /**
+     * The invalidation signal, Room-style: a flow query over the live-rows
+     * table re-emits after every write to it (Room's InvalidationTracker
+     * observes the table the query touches). Room flow queries emit their
+     * current result once on collection; [drop] removes that initial value
+     * so the signal stays "mutations only", exactly like the in-memory
+     * reference (which never emits before its first mutation) --- a
+     * collector that subscribes mid-stream misses earlier mutations in BOTH
+     * implementations and must re-read independently. [map] discards the
+     * count: the payload is deliberately Unit, "something changed".
+     */
+    override fun changes(): Flow<Unit> = dao.liveItemCountChanges().drop(1).map { }
 
     /**
      * The atomic remove/tombstone transition: the live rows are deleted
@@ -158,6 +206,11 @@ private fun CatalogueRecord.toEntity(): CatalogueItemEntity =
         resolvedCaptureDateMillis = resolvedCaptureDateMillis,
         resolvedCaptureDateZoneOffsetMinutes = resolvedCaptureDateZoneOffsetMinutes,
         resolvedCaptureDateSource = resolvedCaptureDateSource,
+        displayName = displayName,
+        width = width,
+        height = height,
+        durationMs = durationMs,
+        isFavorite = isFavorite,
     )
 
 /**
@@ -182,6 +235,11 @@ private fun CatalogueItemEntity.toRecord(): CatalogueRecord =
         resolvedCaptureDateMillis = resolvedCaptureDateMillis,
         resolvedCaptureDateZoneOffsetMinutes = resolvedCaptureDateZoneOffsetMinutes,
         resolvedCaptureDateSource = resolvedCaptureDateSource,
+        displayName = displayName,
+        width = width,
+        height = height,
+        durationMs = durationMs,
+        isFavorite = isFavorite,
     )
 
 /** Row -> checkpoint; a straight field copy. */

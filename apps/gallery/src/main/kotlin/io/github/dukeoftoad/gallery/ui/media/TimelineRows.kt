@@ -46,10 +46,27 @@ sealed interface TimelineRow {
  *    indices preserved, no headers --- the flat timeline this app shipped
  *    with (issues #25/#28), row-for-row.
  *  - [GroupBy.DAY]: a [TimelineRow.Header] before the first cell of each new
- *    day of `dateAddedSec` in [zone] (`groupKey = "d<epochDay>"`).
+ *    day of the EFFECTIVE instant ([effectiveDateMillisOf], in [zone])
+ *    (`groupKey = "d<epochDay>"`).
  *  - [GroupBy.MONTH]: the same with [YearMonth] groups; the header's
  *    [TimelineRow.Header.epochDay] is the month's FIRST day
  *    (`groupKey = "m<year>-<month>"`, unpadded month).
+ *
+ * ## The effective instant (r13)
+ * [effectiveDateMillisOf] returns the instant that orders and groups the
+ * timeline IN EPOCH MILLIS. The production rule is the EFFECTIVE instant:
+ * the resolved capture date when the catalogue populated one (`MediaItem
+ * .captureDateMillis`), else the MediaStore `date_added` instant
+ * (`dateAddedSec * 1000`) --- capture-date precedence is the whole r13
+ * behavior change (a photo imported today but captured last year groups
+ * under last year). A `null` capture date simply falls back to `dateAdded`;
+ * MediaStore-fed surfaces never populate the capture field, so they keep
+ * the exact pre-r13 grouping.
+ *
+ * NEGATIVE instants are legitimate (pre-1970 captures from scanned
+ * archives): `Instant.atZone(zone).toLocalDate()` handles them like any
+ * other instant, and the resulting epochDay is simply negative --- the
+ * `"d<epochDay>"` key and label math stay correct unchanged.
  *
  * Null (not-yet-loaded paging placeholder) items are skipped entirely: they
  * produce no cell and never trigger a header, so an appended window that
@@ -65,11 +82,11 @@ sealed interface TimelineRow {
  * overload below, but `MediaItem` embeds `android.net.Uri`, which a plain
  * JVM test cannot construct --- so, exactly like `WindowPagingSource` and
  * `ViewerWindow` (issues #28/#50), the logic is generic over the payload and
- * `TimelineRowsTest` pins it with `List<Long>` epoch-second stand-ins.
+ * `TimelineRowsTest` pins it with `List<Long>` epoch-MILLI stand-ins.
  */
 fun <T> buildTimelineRows(
     items: List<T?>,
-    dateAddedSecOf: (T) -> Long,
+    effectiveDateMillisOf: (T) -> Long,
     groupBy: GroupBy,
     zone: ZoneId = ZoneId.systemDefault(),
 ): List<TimelineRow> {
@@ -84,7 +101,7 @@ fun <T> buildTimelineRows(
             var currentDay = Long.MIN_VALUE // no LocalDate can equal this sentinel
             for ((index, item) in items.withIndex()) {
                 if (item == null) continue
-                val day = Instant.ofEpochSecond(dateAddedSecOf(item))
+                val day = Instant.ofEpochMilli(effectiveDateMillisOf(item))
                     .atZone(zone)
                     .toLocalDate()
                     .toEpochDay()
@@ -100,7 +117,7 @@ fun <T> buildTimelineRows(
             for ((index, item) in items.withIndex()) {
                 if (item == null) continue
                 val month = YearMonth.from(
-                    Instant.ofEpochSecond(dateAddedSecOf(item)).atZone(zone).toLocalDate()
+                    Instant.ofEpochMilli(effectiveDateMillisOf(item)).atZone(zone).toLocalDate()
                 )
                 if (month != currentMonth) {
                     rows.add(
@@ -121,14 +138,27 @@ fun <T> buildTimelineRows(
 
 /**
  * The production [buildTimelineRows]: groups a `LazyPagingItems` snapshot
- * (`List<MediaItem?>`) by each item's `dateAddedSec`. A trivial delegate to
- * the generic core above; the grouping rules and their tests live there.
+ * (`List<MediaItem?>`) by each item's EFFECTIVE instant --- the resolved
+ * capture date when the catalogue-backed timeline populated one, else the
+ * `dateAddedSec` instant (`captureDateMillis ?: dateAddedSec * 1000`, the
+ * rule documented on `MediaItem.captureDateMillis`). MediaStore-fed
+ * surfaces never populate the capture field, so their grouping is
+ * byte-identical to the pre-r13 render. A trivial delegate to the generic
+ * core above; the grouping rules and their tests live there.
  */
 fun buildTimelineRows(
     items: List<MediaItem?>,
     groupBy: GroupBy,
     zone: ZoneId = ZoneId.systemDefault(),
-): List<TimelineRow> = buildTimelineRows(items, { it.dateAddedSec }, groupBy, zone)
+): List<TimelineRow> = buildTimelineRows(
+    items,
+    // The effective-instant rule (r13): capture-date precedence, dateAdded
+    // fallback --- identical to `it.dateAddedSec * 1000` whenever
+    // captureDateMillis is null (every MediaStore-fed item).
+    { it.captureDateMillis ?: it.dateAddedSec * 1000 },
+    groupBy,
+    zone,
+)
 
 /**
  * The grid key of one cell row (the r8 device-crash fix): the media key

@@ -299,6 +299,36 @@ consumes the catalogue, so the device proof is diagnostics + stability:
       the v1→v2 migration must not lose data or crash (non-destructive
       policy, `MIGRATION_1_2`).
 
+## 15. r13 pass — the timeline reads capture dates (build 17, UNRELEASED)
+
+Per the maintainer directive (2026-11-01) no release tags are cut until
+Phase 5 completes; build 17 rides CI from main (or a local
+`assembleDebug`/`assembleRelease`). When it reaches the reference
+device, verify:
+
+- [ ] First cold start on a fresh install: grid paints immediately
+      (the MediaStore fallback path while the first scan populates the
+      catalogue) --- no blank timeline waiting on the scan.
+- [ ] After the first scan completes (seconds on a populated library),
+      leave and re-enter Photos: the timeline is now catalogue-driven;
+      scrolling is smooth with no duplicate/missing items at window
+      boundaries.
+- [ ] An item whose EXIF capture date differs from its import date
+      (e.g. a scanned or re-saved photo) now sorts/groups under its
+      CAPTURE day, not the import day (enable Settings → Appearance →
+      Group by → Day to see headers).
+- [ ] With Group by → Day, headers agree with the effective dates;
+      a pre-1970 scan (if available) lands under its own day header.
+- [ ] Camera shot while browsing: appears after the scan reconciles it
+      (typically seconds --- the documented eventual consistency), and
+      the grid does not jump or duplicate.
+- [ ] Favorites badge still shows (the ride-along column round-trips),
+      video duration chips show, COLLAGE aspect layout still correct.
+- [ ] Room v2 → v3 upgrade over an r12 install is clean (install build
+      17 over build 16, do not uninstall).
+- [ ] No new `AndroidRuntime` FATAL lines attributable to build 17
+      (stale-buffer `r8-map-id` guidance as section 13).
+
 ---
 
 **Sign-off:** record results per section; any fail gets a logcat snippet

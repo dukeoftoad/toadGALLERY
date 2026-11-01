@@ -8,6 +8,7 @@ import coil.decode.VideoFrameDecoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
 import io.github.dukeoftoad.gallery.data.catalogue.room.MediaCatalogueDatabase
 import io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
 import io.github.dukeoftoad.gallery.data.diag.DiagLog
@@ -90,6 +91,25 @@ import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityG
 class ToadGalleryApplication : Application(), ImageLoaderFactory {
 
     /**
+     * The process-wide [MediaCatalogue] (r13): ONE Room instance shared by
+     * the scan pipeline below and the catalogue-backed Photos timeline
+     * (`PhotosViewModel`). Lazy, so `onCreate` stays allocation-only until
+     * the first reader --- the scan driver's start or the timeline's first
+     * generation --- actually opens the database.
+     *
+     * Why the Application is the holder, not a second build: Room's
+     * invalidation (what the catalogue's `changes()` flow rides on) only
+     * reaches observers of the SAME database instance, so a second
+     * instance over the same file would silently miss every change the
+     * scan pipeline writes. "One per process, via whatever dependency
+     * holder the app settles on" (`MediaCatalogueDatabase.build`'s KDoc)
+     * settles on this.
+     */
+    val mediaCatalogue: MediaCatalogue by lazy {
+        RoomMediaCatalogue(MediaCatalogueDatabase.build(this).catalogueDao())
+    }
+
+    /**
      * Writes the W1 boot line (see the class KDoc): the build identity as
      * the diagnostics ring's first entry. Read from PackageManager for
      * this very package (it cannot be missing --- the process is running
@@ -123,15 +143,12 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
      */
     private fun startPhase4ScanPipeline() {
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        // ONE catalogue instance is shared by the driver and its downstream
-        // hook: both talk to the same Room database, and sharing the wrapper
-        // keeps the in-memory mutex/dispatch story single. The capture-date
-        // pass writes only its own three provenance columns (the targeted
-        // partial UPDATE), so the two writers cannot clobber each other even
-        // while a scan is still being applied.
-        val catalogue = RoomMediaCatalogue(
-            MediaCatalogueDatabase.build(this).catalogueDao(),
-        )
+        // The ONE process-wide catalogue instance (see [mediaCatalogue]):
+        // the driver, its downstream hook AND the Photos timeline's
+        // catalogue-backed path all talk to the same Room database through
+        // it, so the timeline's `changes()` collection sees every write the
+        // pipeline commits.
+        val catalogue = mediaCatalogue
         val scanIndexHook = CaptureDateIndexer(
             catalogue = catalogue,
             mediaAccess = ContentResolverMediaAccess(

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The data-access surface of the Phase 4 media catalogue (ADR-0006).
@@ -23,6 +24,18 @@ import androidx.room.Upsert
  * halves half-applied. `@Transaction` on suspend DAO methods is the
  * suspend-native spelling of `RoomDatabase.runInTransaction` and needs no
  * API beyond the already-present room-ktx coroutine support.
+ *
+ * The one deliberate exception to "no SQL-side logic" is the r13 timeline
+ * window pair ([timelineWindowNewestFirst] /
+ * [timelineWindowOldestFirst]): the ORDER BY --- effective instant with the
+ * same-direction key tiebreak --- is the timeline's row-supply contract
+ * (see [io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
+ * .timelineWindow]), and pushing the ordering into SQL is the only way the
+ * windowed reads stay O(window) instead of O(live set). Even those two
+ * statements stay free of policy: two fixed ORDER BY clauses, one per
+ * direction, chosen by a `when` in the catalogue wrapper --- never
+ * string-concatenated SQL, and nothing that a caller can parameterize
+ * beyond offset/limit.
  *
  * All functions are `suspend`: room-ktx dispatches them off the calling
  * thread, so callers never block the main thread on disk I/O.
@@ -47,6 +60,70 @@ interface CatalogueDao {
     /** Every live row. Tombstoned keys are not in this table at all. */
     @Query("SELECT * FROM catalogue_items")
     suspend fun allItems(): List<CatalogueItemEntity>
+
+    // --- timeline surface (r13 round) ---------------------------------------
+
+    /**
+     * The NEWEST_FIRST window of the timeline's total order:
+     * `COALESCE(resolvedCaptureDateMillis, dateAddedMillis) DESC,
+     * localMediaKey DESC`, sliced `LIMIT :limit OFFSET :offset`.
+     *
+     * The ORDER BY is the whole contract (see the class KDoc and
+     * [io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
+     * .timelineWindow]): the COALESCE makes the persisted capture date the
+     * primary key of the order (date_added is only the fallback), and the
+     * same-direction `localMediaKey` tiebreak turns it into a TOTAL order so
+     * consecutive windows tile --- zero gaps, zero overlaps, no row twice
+     * (the duplicate-LazyGrid-key crash) and no row never (the silently
+     * skipped photo). `localMediaKey` is the primary key, hence unique, so
+     * the tiebreak is guaranteed to fire on at most one row pair and always
+     * decides. Callers reach this via
+     * [io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
+     * .timelineWindow], which owns the offset/limit guards.
+     */
+    @Query(
+        "SELECT * FROM catalogue_items " +
+            "ORDER BY COALESCE(resolvedCaptureDateMillis, dateAddedMillis) DESC, " +
+            "localMediaKey DESC " +
+            "LIMIT :limit OFFSET :offset",
+    )
+    suspend fun timelineWindowNewestFirst(offset: Int, limit: Int): List<CatalogueItemEntity>
+
+    /**
+     * The OLDEST_FIRST window of the timeline's total order --- the exact
+     * mirror of [timelineWindowNewestFirst]: both sort keys ascending, so
+     * ascending the timeline walks the same total order backwards and
+     * windows tile identically. Same contract, same tiebreak rationale.
+     */
+    @Query(
+        "SELECT * FROM catalogue_items " +
+            "ORDER BY COALESCE(resolvedCaptureDateMillis, dateAddedMillis) ASC, " +
+            "localMediaKey ASC " +
+            "LIMIT :limit OFFSET :offset",
+    )
+    suspend fun timelineWindowOldestFirst(offset: Int, limit: Int): List<CatalogueItemEntity>
+
+    /**
+     * The live-row count (the timeline's denominator); tombstoned keys are
+     * not in this table at all, so they are excluded by construction.
+     */
+    @Query("SELECT COUNT(*) FROM catalogue_items")
+    suspend fun liveItemCount(): Int
+
+    /**
+     * The invalidation backbone of [io.github.dukeoftoad.gallery.data
+     * .catalogue.MediaCatalogue.changes]: a Flow over the live-rows table,
+     * so Room's InvalidationTracker re-emits after every catalogue_items
+     * write --- upserts, capture-date updates, tombstone deletes. A COUNT
+     * query keeps each re-emission's cost trivial. Room flow queries emit
+     * their current result once on collection; the catalogue wrapper drops
+     * that initial emission to keep the signal "mutations only", matching
+     * the in-memory reference. The tombstone/checkpoint tables are
+     * deliberately NOT observed: purges and checkpoint saves cannot change
+     * the live set or its order.
+     */
+    @Query("SELECT COUNT(*) FROM catalogue_items")
+    fun liveItemCountChanges(): Flow<Int>
 
     /**
      * Removes the live rows for [localMediaKeys] (the tombstone half of the

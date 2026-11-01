@@ -33,6 +33,19 @@ package io.github.dukeoftoad.gallery.data.catalogue
  * data holder --- it neither re-runs the resolver nor interprets the source
  * string (stored as the enum's [name][kotlin.Enum.name] exactly so no enum
  * parse can fail on a value this build predates).
+ *
+ * DISPLAY/SHAPE ride-alongs ([displayName], [width], [height],
+ * [durationMs], [isFavorite]; r13 round): the timeline renders from the
+ * catalogue now, so the record carries the fields the grid and viewer
+ * previously re-read from the MediaStore projection --- with the record,
+ * key + canonicalUri + mimeType + these five are together sufficient to
+ * render a timeline CELL (thumb via the Uri, aspect via width/height,
+ * duration overlay, favorite heart, filename caption). They are
+ * NON-REVISION state exactly like mimeType/canonicalUri: they mirror the
+ * row's last-seen provider values, they ride along on every record write,
+ * and they NEVER participate in reconciliation --- a favorite toggle or a
+ * dimension refresh must not cost an embedding recompute (see the
+ * `MediaScanRow` field-group note for the accepted Q-only staleness edge).
  */
 data class CatalogueRecord(
     /**
@@ -113,6 +126,39 @@ data class CatalogueRecord(
      * [resolvedCaptureDateMillis]).
      */
     val resolvedCaptureDateSource: String? = null,
+    // --- display/shape ride-alongs (r13 round) -----------------------------
+
+    /**
+     * The provider `_display_name` as the last scan saw it (e.g.
+     * "IMG_20240101_120000.jpg"); `null` when the provider reported none or
+     * the row predates this field. NON-REVISION --- see the class KDoc.
+     */
+    val displayName: String? = null,
+
+    /**
+     * Pixel width as the last scan saw it; `0` means "unknown" (the same
+     * convention as `MediaItem.width` --- the grid falls back to a
+     * square-aspect cell). NON-REVISION.
+     */
+    val width: Int = 0,
+
+    /** Pixel height as the last scan saw it; `0` means "unknown". NON-REVISION. */
+    val height: Int = 0,
+
+    /**
+     * Video duration in milliseconds as the last scan saw it; `0` for
+     * stills / "unknown". Feeds the duration overlay. NON-REVISION.
+     */
+    val durationMs: Long = 0,
+
+    /**
+     * The MediaStore `is_favorite` flag as the last scan saw it (Q+; `false`
+     * wherever the walk does not project the column). System-managed state
+     * mirrored for rendering --- NOT app-private storage (see `Favorites`).
+     * NON-REVISION, with the accepted Q-only staleness edge documented on
+     * `MediaScanRow`.
+     */
+    val isFavorite: Boolean = false,
 )
 
 /**

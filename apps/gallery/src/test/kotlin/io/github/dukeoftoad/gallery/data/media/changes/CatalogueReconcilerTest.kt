@@ -31,6 +31,11 @@ class CatalogueReconcilerTest {
         mimeType: String = "image/jpeg",
         canonicalUri: String = "content://media/external/images/1",
         generationToken: String? = null,
+        displayName: String? = null,
+        width: Int = 0,
+        height: Int = 0,
+        durationMs: Long = 0L,
+        isFavorite: Boolean = false,
     ): MediaScanRow =
         MediaScanRow(
             localMediaKey = key,
@@ -40,6 +45,11 @@ class CatalogueReconcilerTest {
             dateModifiedMillis = dateModifiedMillis,
             dateAddedMillis = dateAddedMillis,
             generationToken = generationToken,
+            displayName = displayName,
+            width = width,
+            height = height,
+            durationMs = durationMs,
+            isFavorite = isFavorite,
         )
 
     private fun recordOf(
@@ -53,6 +63,11 @@ class CatalogueReconcilerTest {
         metadataWriteRevision: Int = 0,
         metadataCacheState: MetadataCacheState = MetadataCacheState.CACHED,
         lastSeenAtMillis: Long = 5_000L,
+        displayName: String? = null,
+        width: Int = 0,
+        height: Int = 0,
+        durationMs: Long = 0L,
+        isFavorite: Boolean = false,
     ): CatalogueRecord =
         CatalogueRecord(
             localMediaKey = key,
@@ -65,6 +80,11 @@ class CatalogueReconcilerTest {
             metadataWriteRevision = metadataWriteRevision,
             metadataCacheState = metadataCacheState,
             lastSeenAtMillis = lastSeenAtMillis,
+            displayName = displayName,
+            width = width,
+            height = height,
+            durationMs = durationMs,
+            isFavorite = isFavorite,
         )
 
     // --- added ---------------------------------------------------------------
@@ -224,6 +244,41 @@ class CatalogueReconcilerTest {
         )
         assertEquals(0, result.changed.size)
         assertEquals(1, result.unchangedCount)
+    }
+
+    @Test
+    fun `display and shape drift alone is unchanged (no embedding recompute)`() {
+        // R13 REGRESSION GUARD: the display/shape ride-alongs ride on every
+        // scan row, and the whole point of them being NON-REVISION is that
+        // they never re-enter changedVersus(). A favorite toggle, a
+        // provider dimension back-fill or a display-name change must NOT
+        // re-index bytes that never moved --- if this test fails, a favorite
+        // tap now costs an embedding recompute (and, below R where no
+        // generation exists, every scan re-writes the whole library).
+        val result = CatalogueReconciler.reconcile(
+            scanRows = listOf(
+                row(
+                    displayName = "IMG_0001_renamed.jpg",
+                    width = 4_000,
+                    height = 3_000,
+                    durationMs = 12_345L,
+                    isFavorite = true,
+                ),
+            ),
+            catalogueRecords = mapOf(
+                "external_primary:1" to recordOf(
+                    displayName = "IMG_0001.jpg",
+                    width = 0,
+                    height = 0,
+                    durationMs = 0L,
+                    isFavorite = false,
+                ),
+            ),
+        )
+        assertEquals(0, result.changed.size)
+        assertEquals(1, result.unchangedCount)
+        assertTrue(result.added.isEmpty())
+        assertTrue(result.removedKeys.isEmpty())
     }
 
     // --- removed -----------------------------------------------------------------

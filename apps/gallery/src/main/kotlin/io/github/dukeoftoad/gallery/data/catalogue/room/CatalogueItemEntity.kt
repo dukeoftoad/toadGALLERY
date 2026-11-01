@@ -20,6 +20,12 @@ import androidx.room.PrimaryKey
  * Scope guard (audit): face/CLIP vectors and all engine-owned AI state are
  * NOT columns here and never will be --- they live in the ML stores keyed
  * by `localMediaKey`.
+ *
+ * The r13 display/shape ride-alongs (displayName, width, height,
+ * durationMs, isFavorite) mirror the record's same-named fields: nullable /
+ * defaulted columns, plain `ALTER TABLE ... ADD COLUMN` additions in
+ * [MediaCatalogueDatabase.MIGRATION_2_3], and --- as on the record ---
+ * NON-REVISION state that never participates in reconciliation.
  */
 @Entity(tableName = "catalogue_items")
 data class CatalogueItemEntity(
@@ -69,4 +75,19 @@ data class CatalogueItemEntity(
      * name copy here since the record's field is already a string).
      */
     val resolvedCaptureDateSource: String?,
+
+    /** The provider `_display_name`; `null` when the provider reported none (r13 ride-along). */
+    val displayName: String?,
+
+    /** Pixel width; `0` means "unknown" (r13 ride-along, non-revision). */
+    val width: Int,
+
+    /** Pixel height; `0` means "unknown" (r13 ride-along, non-revision). */
+    val height: Int,
+
+    /** Video duration in milliseconds; `0` for stills / "unknown" (r13 ride-along, non-revision). */
+    val durationMs: Long,
+
+    /** The MediaStore `is_favorite` flag as the last scan saw it (r13 ride-along, non-revision). */
+    val isFavorite: Boolean,
 )

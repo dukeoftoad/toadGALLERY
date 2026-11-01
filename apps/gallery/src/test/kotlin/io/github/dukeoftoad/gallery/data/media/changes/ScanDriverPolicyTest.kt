@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.data.media.changes
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.MetadataCacheState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -141,6 +142,9 @@ class ScanDriverPolicyTest {
     private fun oldRecord(
         metadataWriteRevision: Int = 3,
         metadataCacheState: MetadataCacheState = MetadataCacheState.CACHED,
+        displayName: String? = "IMG_0001.jpg",
+        width: Int = 100,
+        isFavorite: Boolean = false,
     ): CatalogueRecord =
         CatalogueRecord(
             localMediaKey = "external_primary:1",
@@ -153,6 +157,11 @@ class ScanDriverPolicyTest {
             metadataWriteRevision = metadataWriteRevision,
             metadataCacheState = metadataCacheState,
             lastSeenAtMillis = 5_000L,
+            displayName = displayName,
+            width = width,
+            height = 75,
+            durationMs = 0L,
+            isFavorite = isFavorite,
         )
 
     private fun changedRow(
@@ -169,6 +178,11 @@ class ScanDriverPolicyTest {
             dateModifiedMillis = dateModifiedMillis,
             dateAddedMillis = 500L,
             generationToken = generationToken,
+            displayName = "IMG_0001_edited.jpg",
+            width = 4000,
+            height = 3000,
+            durationMs = 0L,
+            isFavorite = true,
         ),
     )
 
@@ -233,5 +247,58 @@ class ScanDriverPolicyTest {
             lastSeenAtMillis = 9_000L,
         )
         assertEquals(MetadataCacheState.EMPTY, merged.metadataCacheState)
+    }
+
+    // --- recordForAppliedChange: display/shape ride-alongs (r13 round) --------
+
+    @Test
+    fun `changed record refreshes the display and shape fields from the fresh row`() {
+        // A CHANGED row's record must mirror its last-seen provider row: the
+        // fresh name, dimensions and favorite flag travel through
+        // toRecord(), while the revision fields come from the same fresh
+        // row --- one consistent snapshot, not a mix of old and new.
+        val merged = ScanDriverPolicy.recordForAppliedChange(changedRow(), lastSeenAtMillis = 9_000L)
+
+        assertEquals("IMG_0001_edited.jpg", merged.displayName)
+        assertEquals(4_000, merged.width)
+        assertEquals(3_000, merged.height)
+        // This row is an image: duration stays the unknown zero-point.
+        assertEquals(0L, merged.durationMs)
+        assertTrue(merged.isFavorite)
+    }
+
+    @Test
+    fun `unchanged rows produce no record so the stored shape fields survive`() {
+        // The other half of the carry-through contract: display-only drift
+        // (favorite toggled, dimensions back-filled, name tweak) never makes
+        // a row CHANGED --- the reconciler says UNCHANGED, the driver
+        // upserts nothing, and the catalogue keeps its stored copy until a
+        // REAL revision change refreshes it. Pinning that here means the
+        // display fields can never accidentally leak into changedVersus()
+        // (the embedding-recompute regression this whole design avoids).
+        val unchangedRecord = oldRecord(displayName = "IMG_0001.jpg", width = 100, isFavorite = false)
+        val displayOnlyDrift = MediaScanRow(
+            localMediaKey = "external_primary:1",
+            canonicalUri = "content://media/external/images/1",
+            mimeType = "image/jpeg",
+            // Revision contract identical --- only the ride-alongs moved.
+            sizeBytes = unchangedRecord.sizeBytes,
+            dateModifiedMillis = unchangedRecord.dateModifiedMillis,
+            dateAddedMillis = 500L,
+            generationToken = unchangedRecord.generationToken,
+            displayName = "IMG_0001_renamed.jpg",
+            width = 4000,
+            height = 3000,
+            isFavorite = true,
+        )
+
+        val result = CatalogueReconciler.reconcile(
+            scanRows = listOf(displayOnlyDrift),
+            catalogueRecords = mapOf("external_primary:1" to unchangedRecord),
+        )
+
+        assertEquals(0, result.changed.size)
+        assertEquals(1, result.unchangedCount)
+        assertTrue(result.added.isEmpty())
     }
 }

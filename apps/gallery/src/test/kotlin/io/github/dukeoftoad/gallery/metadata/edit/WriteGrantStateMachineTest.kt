@@ -59,10 +59,12 @@ class WriteGrantStateMachineTest {
         val machine = WriteGrantStateMachine()
         machine.onWriteBlocked(true)
         assertEquals(WriteGrantState.REQUESTED, machine.onRequestLaunched())
-        // Ignored in every other state (a stray launch cannot invent state).
+        // Ignored in every other state (a stray launch cannot invent state);
+        // NEEDS_GRANT is NOT here --- it is the one state that transitions
+        // (pinned above), and REQUESTED re-launching is a harmless no-op.
         for (state in listOf(
             WriteGrantState.IDLE,
-            WriteGrantState.NEEDS_GRANT,
+            WriteGrantState.REQUESTED,
             WriteGrantState.GRANTED,
             WriteGrantState.DENIED,
             WriteGrantState.READ_ONLY,

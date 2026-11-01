@@ -72,6 +72,26 @@ class PrivacyPolicyTest {
         )
     }
 
+    /**
+     * Phase 4 (metadata layer / audit decision #1): the EXIF-location
+     * consent permission is declared deliberately. It is a runtime
+     * permission that EXISTS only from API 29; there is no maxSdk form
+     * for a minimum API range, so the source manifest declares it
+     * unconditionally (pre-29 devices ignore the unknown name) and the
+     * runtime request is gated in code (MediaLocationAccess.required()).
+     * Deliberate addition to the pinned set: location consent is a
+     * display gate only (ADR-0014) --- coordinates never leave the device.
+     */
+    @Test
+    fun `source manifest declares ACCESS_MEDIA_LOCATION for the Phase 4 location flow`() {
+        val manifest = moduleFile("src/main/AndroidManifest.xml").readText()
+        assertTrue(
+            "Phase 4 manifest must declare 'android.permission.ACCESS_MEDIA_LOCATION' " +
+                "(EXIF location consent; see data/media/location and ExifReader's KDoc).",
+            manifest.contains("android.permission.ACCESS_MEDIA_LOCATION"),
+        )
+    }
+
     @Test
     fun `INTERNET allowlist is empty by default`() {
         val allowlist = moduleFile("internet-permission-allowlist.txt")

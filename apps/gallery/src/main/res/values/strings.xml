@@ -82,6 +82,15 @@
     <string name="settings_photo_picker_pre33_body">The system Photo Picker needs Android 13 or newer. On this device your library loads through the usual access flow instead.</string>
     <string name="settings_pick_photos">Pick photos to browse</string>
     <string name="settings_browse_picked">Browse picked photos</string>
+
+    <!-- Phase 4: location consent (ACCESS_MEDIA_LOCATION display gate) -->
+    <string name="settings_location_title">Location data</string>
+    <string name="settings_location_body">Used only to decide whether GPS coordinates are shown; coordinates never leave the device.</string>
+    <string name="settings_location_state_granted">Allowed — GPS coordinates can be shown.</string>
+    <string name="settings_location_state_unknown">Not requested yet.</string>
+    <string name="settings_location_request">Allow location data</string>
+    <string name="settings_location_state_denied">Denied — GPS coordinates stay hidden.</string>
+    <string name="settings_location_pre_q_body">Not needed on this Android version.</string>
     <string name="picked_title">Picked photos</string>
     <string name="state_picked_empty_title">No picked photos yet</string>
     <string name="state_picked_empty_body">Pick a selection from Settings and browse it here without granting full library access.</string>
@@ -162,6 +171,7 @@
     <string name="viewer_info_date_added">Date added</string>
     <string name="viewer_info_uri">Content URI</string>
     <string name="viewer_info_unknown">Unknown</string>
+    <string name="viewer_info_open_full_details">Full details</string>
     <string name="viewer_share_unavailable">No app available to share this item</string>
 
     <!-- Recycle bin (issue #31) -->
@@ -361,4 +371,45 @@
         <item quantity="one">%1$d sealed item — %2$s</item>
         <item quantity="other">%1$d sealed items — %2$s</item>
     </plurals>
+    <!-- Metadata Details view (roadmap Phase 4: "Metadata Details view with
+         read"). Every unavailable state gets its OWN string — the Phase 4
+         audit forbids one ambiguous "unknown" standing for absent,
+         unreadable and unsupported alike. -->
+    <string name="details_title">Details</string>
+    <string name="details_unavailable_title">This item can\'t be read</string>
+    <string name="details_unavailable_body">The item is not part of the readable gallery (hidden, in the recycle bin, or access was revoked), so its metadata is not shown.</string>
+    <string name="details_no_catalogue_record">This item has not been catalogued yet — some provenance details are unavailable until the next scan.</string>
+    <string name="details_section_file">File</string>
+    <string name="details_section_capture_date">Capture date</string>
+    <string name="details_section_camera">Camera</string>
+    <string name="details_section_exposure">Exposure</string>
+    <string name="details_section_gps">Location</string>
+    <string name="details_section_blocks">Metadata blocks</string>
+    <string name="details_label_mime_type">Type</string>
+    <string name="details_label_file_size">File size</string>
+    <string name="details_label_dimensions">Dimensions</string>
+    <string name="details_label_capture_date">Capture date</string>
+    <string name="details_label_capture_zone">Timezone</string>
+    <string name="details_label_capture_source">Source</string>
+    <string name="details_label_camera_make">Make</string>
+    <string name="details_label_camera_model">Model</string>
+    <string name="details_label_camera_lens">Lens</string>
+    <string name="details_label_aperture">Aperture</string>
+    <string name="details_label_shutter">Shutter</string>
+    <string name="details_label_iso">ISO</string>
+    <string name="details_label_focal_length">Focal length</string>
+    <string name="details_label_flash">Flash</string>
+    <string name="details_label_gps_decimal">Coordinates</string>
+    <string name="details_label_gps_dms">Degrees/minutes/seconds</string>
+    <string name="details_label_exif_block">EXIF</string>
+    <string name="details_label_iptc_block">IPTC</string>
+    <string name="details_label_xmp_block">XMP</string>
+    <string name="details_state_absent">None</string>
+    <string name="details_state_unsupported">Not supported for this format yet</string>
+    <string name="details_state_unreadable">Unreadable — the block exists but is corrupt</string>
+    <string name="details_state_extracted">Extracted</string>
+    <string name="details_capture_date_absent">No capture date found</string>
+    <string name="details_blocks_expand">Show metadata blocks</string>
+    <string name="details_blocks_collapse">Hide metadata blocks</string>
+    <string name="details_gps_hidden">Hidden — allow Location data in Settings to show coordinates</string>
 </resources>

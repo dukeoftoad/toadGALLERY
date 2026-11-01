@@ -248,6 +248,57 @@ class RoomMediaCatalogue(
             androidx.sqlite.db.SimpleSQLiteQuery(sql, args),
         ).map { it.toRecord() }
     }
+    // =====================================================================
+    // --- r16 round: the on-device map view's location surface -------------
+    // (additive end-of-class section; nothing above this line changes and
+    // the [MediaCatalogue] interface members are untouched --- these members
+    // exist only on the concrete class, which is why the r16 map screen and
+    // the location indexer's writer seam type against `RoomMediaCatalogue`
+    // directly. A sibling branch adds its own clearly-fenced section; keep
+    // additions contiguous.)
+    // =====================================================================
+
+    /**
+     * The targeted location write behind the r16 indexer's
+     * [io.github.dukeoftoad.gallery.data.media.location.ItemLocationWriter]
+     * seam: one partial UPDATE statement ([CatalogueDao.updateLocationColumns])
+     * that touches only the three location columns --- the same "cannot
+     * clobber concurrent writers, cannot resurrect a dead row" guarantee
+     * [updateCaptureDate] documents. Deliberately NOT an interface member:
+     * widening [MediaCatalogue] is the Phase 5 Places index's contract
+     * (its in-memory reference implementation would have to grow the same
+     * surface, and that file is outside this round's editable scope).
+     */
+    suspend fun updateItemLocation(
+        localMediaKey: String,
+        latitude: Double?,
+        longitude: Double?,
+        sourceName: String?,
+    ) {
+        dao.updateLocationColumns(
+            localMediaKey = localMediaKey,
+            latitude = latitude,
+            longitude = longitude,
+            sourceName = sourceName,
+        )
+    }
+
+    /**
+     * The map's pin supply (r16): every live row with a persisted location,
+     * newest-first in the timeline's total order --- the catalogue-backed
+     * map dots and each location's item sheet both read this one projection.
+     */
+    suspend fun geotaggedRows(): List<CatalogueLocationRow> = dao.geotaggedItems()
+
+    /**
+     * How many rows were first scanned while the platform redacts EXIF
+     * location (the `MEDIA_LOCATION_UNGRANTED` provenance) --- the input the
+     * pure re-index policy consumes to decide whether a location re-pass
+     * could change anything (see
+     * [io.github.dukeoftoad.gallery.data.media.location
+     * .LocationConsentReindexPolicy]).
+     */
+    suspend fun pendingUngrantedLocations(): Int = dao.ungrantedLocationCount()
 }
 
 // --- entity <-> record mappers (the ONLY translation point) ---------------

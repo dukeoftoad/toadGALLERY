@@ -272,4 +272,112 @@ interface CatalogueDao {
     suspend fun timelineWindowFiltered(
         query: androidx.sqlite.db.SupportSQLiteQuery,
     ): List<CatalogueItemEntity>
+    // =====================================================================
+    // --- r16 round: the on-device map view's location surface -------------
+    // (additive end-of-file section; nothing above this line changes. A
+    // sibling branch adds its own end-of-file section --- keep additions
+    // contiguous and clearly fenced.)
+    // =====================================================================
+
+    /**
+     * The targeted location write (r16 round): updates ONLY the three
+     * location provenance columns of the row, leaving every other column
+     * untouched --- the same partial-UPDATE discipline as
+     * [updateCaptureDateColumns] (no read-modify-write, so a concurrent
+     * UI-side write to other columns cannot be clobbered, and a no-op on
+     * an unknown/tombstoned key can never resurrect a row).
+     *
+     * Consumers reach this through
+     * [RoomMediaCatalogue.updateItemLocation], which the r16
+     * [io.github.dukeoftoad.gallery.data.media.location.LocationIndexer]
+     * consumes through its narrow
+     * [io.github.dukeoftoad.gallery.data.media.location.ItemLocationWriter]
+     * seam.
+     */
+    @Query(
+        "UPDATE catalogue_items SET " +
+            "latitude = :latitude, " +
+            "longitude = :longitude, " +
+            "locationSource = :sourceName " +
+            "WHERE localMediaKey = :localMediaKey",
+    )
+    suspend fun updateLocationColumns(
+        localMediaKey: String,
+        latitude: Double?,
+        longitude: Double?,
+        sourceName: String?,
+    )
+
+    /**
+     * The map's pin projection (r16): the timeline-relevant columns of
+     * every live row that carries a persisted location, NEWEST-FIRST in
+     * the timeline's total order (`COALESCE(resolvedCaptureDateMillis,
+     * dateAddedMillis) DESC, localMediaKey DESC` --- the same ORDER BY as
+     * [timelineWindowNewestFirst]; the map lists a location's items in the
+     * order the timeline would).
+     *
+     * A plain POJO, not the entity: Room maps the query's columns onto
+     * this class by name, and keeping it distinct from
+     * [CatalogueItemEntity] makes the projection's scope (what the map
+     * needs, nothing more --- no revision fields, no cache state) visible
+     * at the type level. Both coordinate columns are required non-null in
+     * the WHERE clause: a real GPS fix always writes both
+     * ([CatalogueItemEntity.latitude]'s KDoc), and the projection math
+     * needs the pair.
+     */
+    @Query(
+        "SELECT localMediaKey, canonicalUri, mimeType, dateAddedMillis, " +
+            "resolvedCaptureDateMillis, displayName, width, height, " +
+            "durationMs, isFavorite, latitude, longitude " +
+            "FROM catalogue_items " +
+            "WHERE latitude IS NOT NULL AND longitude IS NOT NULL " +
+            "ORDER BY COALESCE(resolvedCaptureDateMillis, dateAddedMillis) DESC, " +
+            "localMediaKey DESC",
+    )
+    suspend fun geotaggedItems(): List<CatalogueLocationRow>
+
+    /**
+     * How many live rows carry the `MEDIA_LOCATION_UNGRANTED` provenance
+     * (r16): rows first scanned while the platform redacts EXIF location,
+     * i.e. exactly the set a grant-triggered location re-pass would
+     * target. Consumed by the pure
+     * [io.github.dukeoftoad.gallery.data.media.location
+     * .LocationConsentReindexPolicy] through
+     * [RoomMediaCatalogue.pendingUngrantedLocations].
+     */
+    @Query("SELECT COUNT(*) FROM catalogue_items WHERE locationSource = 'MEDIA_LOCATION_UNGRANTED'")
+    suspend fun ungrantedLocationCount(): Int
 }
+
+/**
+ * One geotagged row for the map surface (r16; see
+ * [CatalogueDao.geotaggedItems] for the projection rationale). Pure data
+ * by design: no Room annotations, no android.* --- the same class serves
+ * the DAO, the map's clustering math and the location sheet unchanged.
+ */
+data class CatalogueLocationRow(
+    /** The stable local media key; identity + the viewer-window key. */
+    val localMediaKey: String,
+    /** The resolved content `Uri` string; the ACCESS handle. */
+    val canonicalUri: String,
+    /** MIME type as reported by the provider. */
+    val mimeType: String,
+    /** Provider `date_added` in epoch millis; the ordering fallback. */
+    val dateAddedMillis: Long,
+    /** The resolved capture instant in epoch millis, or `null`. */
+    val resolvedCaptureDateMillis: Long?,
+    /** The provider `_display_name`; `null` when the provider reported none. */
+    val displayName: String?,
+    /** Pixel width; `0` means "unknown". */
+    val width: Int,
+    /** Pixel height; `0` means "unknown". */
+    val height: Int,
+    /** Video duration in milliseconds; `0` for stills / "unknown". */
+    val durationMs: Long,
+    /** The MediaStore `is_favorite` flag as the last scan saw it. */
+    val isFavorite: Boolean,
+    /** EXIF GPS latitude, signed decimal degrees; non-null by the query. */
+    val latitude: Double,
+    /** EXIF GPS longitude, signed decimal degrees; non-null by the query. */
+    val longitude: Double,
+)

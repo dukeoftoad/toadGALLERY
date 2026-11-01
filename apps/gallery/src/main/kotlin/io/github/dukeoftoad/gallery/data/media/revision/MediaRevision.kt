@@ -5,7 +5,11 @@ package io.github.dukeoftoad.gallery.data.media.revision
  * one media item (Phase 4 contract,
  * `docs/phase-4/phase-4-contract-audit-and-ente-ai-plan.md`: "revision
  * token: volume generation + row id + size + dateModified + metadata
- * revision; content hash only where justified").
+ * revision; content hash only where justified" --- with the audit's
+ * "volume generation" CORRECTED to the row's own per-item
+ * `GENERATION_MODIFIED` value; see the [generationToken] KDoc and audit
+ * finding C for why the per-volume checkpoint must never be stamped per
+ * row).
  *
  * The revision is what makes incremental indexing honest: the catalogue
  * persists the last observed revision next to every derived artifact and
@@ -18,9 +22,18 @@ package io.github.dukeoftoad.gallery.data.media.revision
  * - [sizeBytes] and [dateModifiedMillis] come straight from the
  *   MediaStore row and catch the overwhelming majority of real edits ---
  *   any rewrite of the bytes moves at least one of them.
- * - [generationToken] is the MediaStore per-volume generation value,
- *   which only exists on API 30+ --- hence nullable. `null` means "not
- *   observable on this device", never "changed".
+ * - [generationToken] is the media item's OWN per-row generation stamp ---
+ *   the `MediaStore.MediaColumns.GENERATION_MODIFIED` value of THIS row
+ *   (API 30+), hence nullable. `null` means "not observable on this
+ *   device", never "changed". It is deliberately NOT the per-VOLUME
+ *   `MediaStore.getGeneration(context, volume)` value that
+ *   [io.github.dukeoftoad.gallery.data.media.changes.MediaChangeFeed
+ *   .currentGeneration] provides as the scan checkpoint: the volume
+ *   generation moves whenever ANY item on the volume changes, so stamping
+ *   it per row would make every single item report CONTENT_CHANGED after
+ *   every edit anywhere on the volume --- a full re-index storm (audit
+ *   finding C). Per-item revision compares only each row's own
+ *   generation-modified value.
  * - [metadataWriteRevision] counts THIS APP's own EXIF/IPTC/XMP writes.
  *   MediaStore cannot see in-place metadata rewrites that preserve size
  *   and mtime, so the writer bumps this counter itself (audit item 9).
@@ -51,7 +64,10 @@ data class MediaRevision(
      * Concretely:
      * - [sizeBytes], [dateModifiedMillis], or two PRESENT
      *   [generationToken]s / [contentFingerprint]s that disagree force
-     *   CONTENT_CHANGED.
+     *   CONTENT_CHANGED. The token comparison is PER-ITEM: only this
+     *   row's own generation-modified value participates --- never the
+     *   per-volume scan checkpoint (see the field KDoc for the
+     *   audit-finding-C story).
      * - A token or fingerprint that merely APPEARS or DISAPPEARS (an OS
      *   upgrade exposing generations, a lazily backfilled hash) is new
      *   information about the same bytes, not evidence of a change ---

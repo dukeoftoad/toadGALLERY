@@ -16,28 +16,50 @@ import io.github.dukeoftoad.gallery.data.catalogue.ScanCheckpoint
  * .InMemoryMediaCatalogue]; any divergence between the two is a bug in THIS
  * class.
  *
- * Sequencing detail: [upsertAll] writes the item rows and then clears the
- * tombstones of the upserted keys. That order matters --- if the item write
- * fails, no resurrection happened; if the tombstone clear fails after the
- * items landed, the worst case is a live record that still looks dead to
- * `tombstonedKeys()`, which the next authoritative scan heals (the item
- * will be reported "unchanged" and re-upserted). The reverse order could
- * leave a cleared tombstone with NO live record --- an item that fell out
- * of the catalogue entirely and would be re-indexed from scratch.
- * Room runs each DAO call in its own transaction; a future change can wrap
- * the pair in `androidx.room.withTransaction` if the heal-on-next-scan
- * window is ever deemed too wide.
+ * Transactional guarantees (Phase 4 audit finding D): the two paired
+ * live-row/tombstone transitions each run inside ONE Room transaction ---
+ * [tombstone] via [CatalogueDao.removeItemsAndWriteTombstones] (delete +
+ * tombstone upsert atomic) and [upsertAll] via
+ * [CatalogueDao.upsertItemsAndClearTombstones] (item upsert + tombstone
+ * clear atomic). A process interruption can therefore leave the catalogue
+ * in exactly two states per transition --- both halves applied, or
+ * neither --- never a tombstoned-but-live or live-but-still-tombstoned
+ * intermediate state on disk. Both transitions are also idempotent:
+ * replaying the same call converges to the same state, which is what lets
+ * the next authoritative scan heal any state a retry re-observes.
+ * [upsertAll] wraps its WHOLE batch in one transaction (batch-level
+ * atomicity), matching the in-memory reference, which holds its mutex for
+ * the entire batch.
+ *
+ * Honest JVM limitation (ADR-0016): the Room runtime behavior of these
+ * transactions --- actual interruption/rollback under a killed process ---
+ * CANNOT be exercised by this repo's JVM suite (no Robolectric, no
+ * android.* on the unit-test classpath). It is verified by integration /
+ * device checks only. What the JVM suite pins is the contract the Room
+ * implementation must match: [InMemoryMediaCatalogue] performs the same
+ * transitions as single serialized steps under its mutex, and its tests
+ * assert that a concurrent reader never observes a half-applied
+ * transition. If the two implementations ever disagree, THIS class is the
+ * bug.
  */
 class RoomMediaCatalogue(
     private val dao: CatalogueDao,
 ) : MediaCatalogue {
 
+    /**
+     * The atomic upsert/restore transition: the whole batch lands (rows
+     * upserted AND their tombstones cleared) in one Room transaction, via
+     * [CatalogueDao.upsertItemsAndClearTombstones] --- see the class KDoc
+     * for the guarantee and its verification limits.
+     */
     override suspend fun upsertAll(records: List<CatalogueRecord>) {
         if (records.isEmpty()) return
-        dao.upsertItems(records.map { it.toEntity() })
-        // Resurrect: an upserted key is live by definition of an
-        // authoritative scan; drop any stale death record.
-        dao.deleteTombstonesByLocalMediaKey(records.map { it.localMediaKey })
+        dao.upsertItemsAndClearTombstones(
+            items = records.map { it.toEntity() },
+            // Resurrect: an upserted key is live by definition of an
+            // authoritative scan; drop any stale death record.
+            clearedLocalMediaKeys = records.map { it.localMediaKey },
+        )
     }
 
     override suspend fun record(localMediaKey: String): CatalogueRecord? =
@@ -49,16 +71,17 @@ class RoomMediaCatalogue(
     override suspend fun recordsMap(): Map<String, CatalogueRecord> =
         dao.allItems().associateBy { it.localMediaKey }.mapValues { it.value.toRecord() }
 
+    /**
+     * The atomic remove/tombstone transition: the live rows are deleted
+     * AND their tombstones written in one Room transaction, via
+     * [CatalogueDao.removeItemsAndWriteTombstones] --- see the class KDoc
+     * for the guarantee and its verification limits.
+     */
     override suspend fun tombstone(localMediaKeys: List<String>, atMillis: Long) {
         if (localMediaKeys.isEmpty()) return
-        // Order matters here too, and for the same reason as in upsertAll:
-        // remove the live row first, then record the death. A crash in
-        // between can leave a live row without a tombstone (healed by the
-        // next scan re-tombstoning it), never a tombstone without the live
-        // row having been removed (which would double-report the key).
-        dao.deleteItemsByLocalMediaKey(localMediaKeys)
-        dao.upsertTombstones(
-            localMediaKeys.map {
+        dao.removeItemsAndWriteTombstones(
+            localMediaKeys = localMediaKeys,
+            tombstones = localMediaKeys.map {
                 CatalogueTombstoneEntity(
                     localMediaKey = it,
                     tombstonedAtMillis = atMillis,

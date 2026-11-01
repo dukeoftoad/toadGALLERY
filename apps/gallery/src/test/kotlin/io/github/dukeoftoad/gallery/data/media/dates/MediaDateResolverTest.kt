@@ -14,9 +14,10 @@ import org.junit.Test
  * timezone semantics must be defined before Moments or chronological
  * clustering is built).
  *
- * The resolver is pinned on precedence, the disagreement flag, malformed
- * input survival and the empty/fallback contract --- the exact behaviors
- * a mis-built timeline would silently get wrong.
+ * The resolver is pinned on precedence, the disagreement flag, pre-1970
+ * (negative) instants surviving the filter, unknown-source survival and
+ * the empty/fallback contract --- the exact behaviors a mis-built
+ * timeline would silently get wrong.
  */
 class MediaDateResolverTest {
 
@@ -137,23 +138,107 @@ class MediaDateResolverTest {
     }
 
     @Test
-    fun `malformed negative epochs are skipped without crashing`() {
+    fun `negative epochs are valid pre-1970 instants and win precedence normally`() {
+        // 1969-07-20T20:17:40Z (Apollo 11 landing) = -14182940 epoch
+        // seconds --- a NEGATIVE instant the old `epochMillis >= 0` filter
+        // discarded, silently dropping pre-1970 items out of the timeline
+        // (audit finding F).
+        val apollo11 = -14_182_940_000L
         val resolved = MediaDateResolver.resolve(
             listOf(
-                DateCandidate(CaptureDateSource.EXIF_ORIGINAL, -1L),
+                DateCandidate(CaptureDateSource.EXIF_ORIGINAL, apollo11),
                 DateCandidate(CaptureDateSource.XMP, t0),
             ),
             fallbackDateAddedMillis = null,
         )
-        assertEquals(CaptureDateSource.XMP, resolved.source)
-        assertEquals(t0, resolved.epochMillis)
-        // All candidates malformed + a fallback: the fallback wins.
-        val fallenBack = MediaDateResolver.resolve(
-            listOf(DateCandidate(CaptureDateSource.EXIF_ORIGINAL, -5L)),
-            fallbackDateAddedMillis = t0 + 86_400_000L,
+        assertEquals(CaptureDateSource.EXIF_ORIGINAL, resolved.source)
+        assertEquals(apollo11, resolved.epochMillis)
+        // The pre-1970 winner still wins precedence normally; the flag
+        // honestly reports that the sources DO disagree here: 1969 vs the
+        // t0 baseline is a ~1.7e12 ms gap, far beyond the 2 s tolerance.
+        assertTrue(resolved.sourcesDisagree)
+    }
+
+    @Test
+    fun `an early-1900s instant resolves from every source in the chain`() {
+        // 1903-12-17T10:35:00Z = -2084102700 epoch seconds; each ranked
+        // source must be able to carry (and win with) a pre-1970 value.
+        val kittyHawk = -2_084_102_700_000L
+        for (source in listOf(
+            CaptureDateSource.EXIF_ORIGINAL,
+            CaptureDateSource.EXIF_DIGITIZED,
+            CaptureDateSource.XMP,
+            CaptureDateSource.CONTAINER,
+            CaptureDateSource.MEDIASTORE,
+        )) {
+            val resolved = MediaDateResolver.resolve(
+                listOf(DateCandidate(source, kittyHawk)),
+                fallbackDateAddedMillis = null,
+            )
+            assertEquals("source $source", source, resolved.source)
+            assertEquals("source $source", kittyHawk, resolved.epochMillis)
+        }
+    }
+
+    @Test
+    fun `all-negative candidates resolve without falling back`() {
+        // Even with a fallback in hand, usable pre-1970 candidates outrank
+        // it: the fallback is for ABSENT provenance, not old dates.
+        val resolved = MediaDateResolver.resolve(
+            listOf(
+                DateCandidate(CaptureDateSource.XMP, -14_182_940_000L),
+                DateCandidate(CaptureDateSource.EXIF_ORIGINAL, -2_084_102_700_000L),
+            ),
+            fallbackDateAddedMillis = t0,
         )
-        assertEquals(CaptureDateSource.MEDIASTORE, fallenBack.source)
-        assertEquals(t0 + 86_400_000L, fallenBack.epochMillis)
+        assertEquals(CaptureDateSource.EXIF_ORIGINAL, resolved.source)
+        assertEquals(-2_084_102_700_000L, resolved.epochMillis)
+    }
+
+    @Test
+    fun `the epoch itself is a valid instant, not a sentinel`() {
+        // The contract defines no 0-as-unknown sentinel here: EXIF's
+        // unparseable "  :  :  " strings never become candidates at all
+        // (the extractors emit nothing for a parse failure), so 0 wins
+        // exactly like any other instant.
+        val resolved = MediaDateResolver.resolve(
+            listOf(
+                DateCandidate(CaptureDateSource.EXIF_ORIGINAL, 0L),
+                DateCandidate(CaptureDateSource.MEDIASTORE, t0),
+            ),
+            fallbackDateAddedMillis = null,
+        )
+        assertEquals(0L, resolved.epochMillis)
+        assertEquals(CaptureDateSource.EXIF_ORIGINAL, resolved.source)
+    }
+
+    @Test
+    fun `negative and positive instants within tolerance agree across the epoch`() {
+        val resolved = MediaDateResolver.resolve(
+            listOf(
+                DateCandidate(CaptureDateSource.EXIF_ORIGINAL, -1_000L),
+                DateCandidate(CaptureDateSource.MEDIASTORE, 500L),
+            ),
+            fallbackDateAddedMillis = null,
+        )
+        assertEquals(-1_000L, resolved.epochMillis)
+        assertFalse(resolved.sourcesDisagree)
+    }
+
+    @Test
+    fun `an extreme cross-epoch delta flags disagreement without wrapping`() {
+        // abs(MAX_VALUE - MIN_VALUE) wraps in Long math (and abs of
+        // MIN_VALUE is MIN_VALUE); the overflow-safe gap check must still
+        // flag the disagreement instead of reporting a ~1 ms near-equality.
+        val resolved = MediaDateResolver.resolve(
+            listOf(
+                DateCandidate(CaptureDateSource.EXIF_ORIGINAL, Long.MIN_VALUE),
+                DateCandidate(CaptureDateSource.MEDIASTORE, Long.MAX_VALUE),
+            ),
+            fallbackDateAddedMillis = null,
+        )
+        assertEquals(Long.MIN_VALUE, resolved.epochMillis)
+        assertTrue(resolved.sourcesDisagree)
     }
 
     @Test
@@ -167,6 +252,13 @@ class MediaDateResolverTest {
         )
         assertEquals(CaptureDateSource.CONTAINER, resolved.source)
         assertEquals(t0, resolved.epochMillis)
+        // ALL candidates UNKNOWN + a fallback: the fallback is what wins.
+        val fallenBack = MediaDateResolver.resolve(
+            listOf(DateCandidate(CaptureDateSource.UNKNOWN, t0 + 86_400_000L)),
+            fallbackDateAddedMillis = t0,
+        )
+        assertEquals(CaptureDateSource.MEDIASTORE, fallenBack.source)
+        assertEquals(t0, fallenBack.epochMillis)
     }
 
     @Test

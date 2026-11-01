@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.ui.settings
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
+import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +51,15 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         )
     )
     val appearance: StateFlow<Appearance> = _appearance.asStateFlow()
+
+    /**
+     * Phase 4 location consent (ACCESS_MEDIA_LOCATION): the shell-scoped
+     * state holder the Settings "Location data" section renders and the
+     * Details view's display gate observes. Seeds its state from the OS
+     * at construction (one cheap `checkSelfPermission`); below API 29 it
+     * sits in NOT_REQUIRED forever.
+     */
+    val mediaLocation: AndroidMediaLocationAccess = AndroidMediaLocationAccess(app)
 
     fun setUsePhotoPicker(enabled: Boolean) {
         _usePhotoPicker.value = enabled

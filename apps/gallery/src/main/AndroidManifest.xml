@@ -3,13 +3,26 @@
 
     <!-- Phase 3: media access for the Photos timeline (issue #25).
          API 33+ uses the granular READ_MEDIA_* permissions; pre-33 falls back
-         to READ_EXTERNAL_STORAGE capped at maxSdkVersion=32. ACCESS_MEDIA_LOCATION
-         is deferred to Phase 4 (metadata layer). No INTERNET, ever (ADR-0014). -->
+         to READ_EXTERNAL_STORAGE capped at maxSdkVersion=32.
+         No INTERNET, ever (ADR-0014). -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <!-- Phase 4: EXIF location consent (audit decision #1; see the
+         data/media/location package and ExifReader's KDoc). A runtime
+         ("dangerous") permission from API 29 only; there is no
+         maxSdkVersion form for a MINIMUM API range, so it is declared
+         unconditionally and pre-29 devices simply ignore the unknown
+         name. The runtime request is gated in code
+         (MediaLocationAccess.required(), false below 29), so nothing is
+         ever ASKED on devices where the permission does not exist. The
+         grant decides only whether GPS coordinates are DISPLAYED; the
+         coordinates never leave the device and no network surface exists
+         to carry them (ADR-0014). -->
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
 
     <!-- Phase 3 grid UX (issue #33): the Application registers Coil's
          VideoFrameDecoder for video thumbnails; see ToadGalleryApplication. -->

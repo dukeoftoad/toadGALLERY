@@ -21,6 +21,22 @@ compose-bom = "2024.12.01"
 coil-compose = "2.7.0"
 # In-app video playback for the viewer (issue #50; roadmap L608 sanctions media3)
 media3 = "1.11.1"
+# Room: the ADR-0006 persistence layer for the Phase 4 media catalogue
+# (Phase 4 audit, "Database" row: "land Room catalogue; keep Ente ML
+# DB/vector store as separate engine-owned stores"). Room holds ONLY media
+# identity, revision, metadata-cache state and scan checkpoints --- face/CLIP
+# vectors and every other AI output stay in the engine-owned ML stores, so
+# this dependency must never grow into a vector store. 2.7.x requires
+# compileSdk 36, which the app already pins.
+androidx-room = "2.7.6"
+# KSP drives the Room compiler (KSP, not kapt --- the project has no kapt
+# plugin and AGP 9's built-in Kotlin pairs with KSP). KSP versions are
+# "<kotlin>-<ksp>" pairs tied to the compiler; this pin matches the catalog
+# Kotlin 2.3.10. PIN RISK: if the exact "2.3.10-2.0.4" build has not been
+# published to the mirrors at integration time, adjust this to the nearest
+# published KSP release for Kotlin 2.3.10 --- the Room code itself is
+# KSP-version agnostic.
+ksp = "2.3.10-2.0.4"
 # Testing (issue #20 privacy suite)
 junit = "4.13.2"
 androidx-test-runner = "1.6.2"
@@ -68,6 +84,13 @@ coil-gif = { module = "io.coil-kt:coil-gif", version.ref = "coil-compose" }
 # URIs only --- media3 declares no INTERNET permission, the ADR-0014 gate holds
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
+# Phase 4 media catalogue (ADR-0006): Room runtime + suspend-DAO coroutine
+# support (room-ktx); the schema compiler runs through the KSP plugin (see
+# [plugins]). Pure on-device storage --- Room declares no INTERNET permission,
+# so the ADR-0014 merged-manifest privacy gate is unaffected.
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "androidx-room" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "androidx-room" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "androidx-room" }
 # NOTE: org.fossify:commons removed per ADR-0008 (no upstream code ports).
 # Testing (issue #20 privacy suite) --- compose test artifacts via compose-bom
 junit = { module = "junit:junit", version.ref = "junit" }
@@ -81,4 +104,8 @@ android = { id = "com.android.application", version.ref = "gradlePlugins-agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 # Compose compiler plugin ships with Kotlin 2.0+ (ADR-0009)
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# KSP for the Room compiler (Phase 4 media catalogue): annotation processing
+# without kapt. Declared here and applied in apps/gallery alongside the
+# room-compiler artifact.
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 

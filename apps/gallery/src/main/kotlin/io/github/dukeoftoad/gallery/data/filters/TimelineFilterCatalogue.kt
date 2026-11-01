@@ -22,8 +22,9 @@ package io.github.dukeoftoad.gallery.data.filters
  *    `CatalogueTimelineItem.isVideo` derives `startsWith("video/")` from
  *    the record's mime), so chip and grid can never disagree. "Photos" is
  *    the complement (`NOT LIKE 'video/%'`), which also catches the
- *    `image/*` / `application/octet-stream` fallback mimes the scan writes
- *    for null-mime rows.
+ *    `image/`-prefixed and `application/octet-stream` fallback mimes the
+ *    scan writes for null-mime rows (Kotlin block comments nest, so the
+ *    literal `image/`-star glob is deliberately spelled out this way).
  *  - **Favorites** is served from `isFavorite` (the r13 ride-along).
  *  - **Date range** is served from `dateAddedMillis` (divided back to
  *    seconds so it matches the MediaStore projection's granularity).

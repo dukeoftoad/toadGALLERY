@@ -63,7 +63,7 @@ enum class FilterMediaType {
     /** Still images (everything not a video), GIFs included. */
     PHOTOS,
 
-    /** Videos (`media_type` VIDEO / `video/*` MIME). */
+    /** Videos (`media_type` VIDEO; MIME prefix `video/`). */
     VIDEOS,
 
     /** Animated GIFs --- a SUBSET of [PHOTOS] (`image/gif`). */

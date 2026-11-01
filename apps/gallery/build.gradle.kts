@@ -52,7 +52,17 @@ android {
         // probe now use BIOMETRIC_STRONG, Class-2-only devices honestly
         // get PIN-only, plus the audit's Room transactional and
         // schema-export hardening.
-        versionCode = 15
+        // versionCode 16 (r12 round): the Phase 4 scan driver --- the
+        // catalogue + change feed + reconciliation pipeline now runs from
+        // app start (per-volume MediaStore walks with trashed rows
+        // excluded, generation-token checkpoints, ContentObserver-driven
+        // rescans, tombstoning), and the capture-date resolver is adopted
+        // into the pipeline: every added/changed row gets its
+        // timezone-aware capture date resolved once from EXIF evidence
+        // and persisted onto the record (Room v1 -> v2, non-destructive
+        // migration). No UI consumes the catalogue yet --- the timeline
+        // switch is the next round.
+        versionCode = 16
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

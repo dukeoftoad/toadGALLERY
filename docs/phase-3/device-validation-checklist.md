@@ -1,18 +1,16 @@
-# Phase 3 device-validation checklist — v0.4.1-alpha (r11)
+# Phase 3 device-validation checklist — v0.4.1-alpha (r12)
 
 **Status:** pending device validation (the Phase 3 exit work + the r11
 fix; see `roadmap.md`'s Phase 3 progress note).\
-**Target build:** `toadGALLERY-0.4.1-alpha-r11.apk` from the
-`v0.4.1-alpha-r11` pre-release (versionCode 15). r10's fix moved the
-same crash one validation later — build 14 still died on the same tap,
-now with `Crypto-based authentication is not supported for Class 2
-(Weak) biometrics.` — and r11 fixes the authenticator class itself
-(`BIOMETRIC_STRONG` end to end; see section 5's r11 addendum and
-section 13). The Phase 4 contract foundation still has NO user-facing
-surface (no UI consumes it; regressions there would surface as
-startup/surface crashes, which section 12's smoke pass covers).
-Sections 1–11 carry over from r8/r9 (8 from r7, 3 from r8, 1 fixed in
-r9's round); section 12 is the r10 smoke pass.\
+**Target build:** `toadGALLERY-0.4.1-alpha-r12.apk` from the
+`v0.4.1-alpha-r12` pre-release (versionCode 16). r11 fixed the
+authenticator class (`BIOMETRIC_STRONG` end to end; section 13); r12
+makes the Phase 4 pipeline live at app start for the first time (the
+scan driver + capture-date adoption, section 14) — still with no UI
+consuming the catalogue, so the pipeline's device proof is the
+diagnostics ring and the no-new-FATAL scan. Sections 1–11 carry over
+from r8/r9 (8 from r7, 3 from r8, 1 fixed in r9's round); section 12
+is the r10 smoke pass; section 13 is the r11 pass.\
 **Reference device:** the Xiaomi device used for the 2026-10-30/31 and
 11-01 logcat reviews (`c2.qti.hevc.decoder` hardware; 10-bit HEVC Main10
 sample in MKV; `getFrameAtTime` NULL-frame samples; the build-11/12
@@ -203,7 +201,7 @@ regression smoke pass.
       `AndroidRuntime` FATAL lines in logcat across the whole session
       (the new code must be inert until a consumer wires it up).
 - [ ] About → Diagnostics: the vault state probe and the log ring still
-      work; the build line reads `0.4.1-alpha (build 15)`.
+      work; the build line reads `0.4.1-alpha (build 16)` (r12 bump).
 - [ ] The r9 vault behaviors still hold on this build: setup commits
       (`ToadVault: setup: committed`), unlock with PIN works, the
       auto-lock timer fires, and section 5's biometric round passes.
@@ -264,6 +262,42 @@ Class 2 branch (no Class 3 sensor, or no Class 3-enrolled fingerprint):
       identified by the per-frame `r8-map-id` hash (all frames of one
       APK share one id; compare against the current build's), so old
       map-ids do NOT count as current-build findings.
+
+## 14. r12 pass — the scan pipeline's first live run (build 16)
+
+r12 wires the Phase 4 scan driver into app start: per-volume MediaStore
+walks, reconciler diffs against the Room catalogue, generation-token
+checkpoints, ContentObserver rescans, tombstoning — plus the
+capture-date indexer that reads EXIF evidence once per added/changed
+row and persists the resolved instant onto the record. Still NO UI
+consumes the catalogue, so the device proof is diagnostics + stability:
+
+- [ ] Cold start succeeds and the grid loads normally; no new
+      `AndroidRuntime` FATAL lines attributable to build 16 (same
+      stale-buffer `r8-map-id` guidance as section 13).
+- [ ] About → Diagnostics ring contains BOTH boot lines: the W1 build
+      line and `ToadApp: phase 4 scan driver started (catalogue +
+      change feed + capture-date indexer wired)`. A boot line without
+      the pipeline line pins a construction failure to the wiring seam.
+- [ ] First run on a populated library: within a few seconds the
+      pipeline performs its initial full scan. There is no
+      catalogue-browsing UI yet, so the observable proxy is the ABSENCE
+      of scan-related FATALs/ANRs and no main-thread jank at startup
+      (the pipeline runs on Dispatchers.Default by design).
+- [ ] Add a photo (camera or file copy) while the app is alive, then
+      background and foreground the app (or wait for the observer):
+      the process stays alive and stable — the observer-driven rescan
+      path is exercised without a visible surface.
+- [ ] Delete a photo, repeat the foreground cycle: stable, no FATAL
+      (the tombstone path is exercised).
+- [ ] Reboot the device and repeat a cold start: the second pass must
+      be CHEAP (same generation token → skip decision), observable as
+      a normal-speed startup with no scan-related log spam.
+- [ ] Room migration: upgrading from the r11 build (versionCode 15,
+      catalogue DB v1) to this build keeps the app healthy — install
+      r12 OVER r11 (do not uninstall), start once, run this section;
+      the v1→v2 migration must not lose data or crash (non-destructive
+      policy, `MIGRATION_1_2`).
 
 ---
 

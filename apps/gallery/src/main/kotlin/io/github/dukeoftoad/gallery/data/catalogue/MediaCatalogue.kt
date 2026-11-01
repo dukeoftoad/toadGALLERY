@@ -1,5 +1,7 @@
 package io.github.dukeoftoad.gallery.data.catalogue
 
+import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
+
 /**
  * The persistent media catalogue of Phase 4 (ADR-0006's Room persistence
  * layer; audit contract items "Room catalogue" and "MediaChangeFeed" ---
@@ -11,7 +13,9 @@ package io.github.dukeoftoad.gallery.data.catalogue
  * what to tombstone --- is derived by diffing a fresh scan against this
  * state (see [io.github.dukeoftoad.gallery.data.media.changes
  * .CatalogueReconciler]), which is why the surface is deliberately small:
- * upsert, point-read, bulk-read, tombstone, checkpoint, purge.
+ * upsert, point-read, bulk-read, tombstone, checkpoint, purge --- plus the
+ * r12 capture-date partial update ([updateCaptureDate]), the one targeted
+ * write the scan's index pass needs.
  *
  * DELETES ARE TOMBSTONES, never hard erasures of history: [tombstone]
  * removes the live record but leaves a dated tombstone behind so that (a) a
@@ -47,6 +51,37 @@ interface MediaCatalogue {
      * the tombstone is dropped, because the item demonstrably exists again.
      */
     suspend fun upsertAll(records: List<CatalogueRecord>)
+
+    /**
+     * The targeted capture-date write (r12 round): persists the capture
+     * date resolved by the scan's index pass
+     * ([CaptureDateIndexer][io.github.dukeoftoad.gallery.data.media.dates
+     * .CaptureDateIndexer]) onto the live row for [localMediaKey] ---
+     * ONLY the three provenance fields
+     * ([CatalogueRecord.resolvedCaptureDateMillis],
+     * [CatalogueRecord.resolvedCaptureDateZoneOffsetMinutes],
+     * [CatalogueRecord.resolvedCaptureDateSource]); every other column of
+     * the row is left exactly as it is. `date == null` clears the
+     * provenance (the item was indexed and its metadata carried no
+     * trustworthy capture-date tag).
+     *
+     * WHY A TARGETED PARTIAL UPDATE INSTEAD OF A WHOLE-RECORD UPSERT: the
+     * indexer runs from the scan driver while UI-driven writes (favorites,
+     * metadata-write revision bumps, future cache-state updates) may touch
+     * the same rows concurrently. The catalogue's concurrency guarantee is
+     * transaction-PER-CALL --- never read-modify-write atomicity --- so a
+     * read-copy-upsert round trip here would silently clobber whatever the
+     * other writer changed between this caller's read and write. A partial
+     * update that does not carry the other columns cannot clobber them;
+     * the cost (an extra surface member) is the honest price of that
+     * safety.
+     *
+     * An unknown or tombstoned key is a NO-OP, never a resurrection: the
+     * indexer's evidence can be older than a tombstone (the item was
+     * deleted between the scan walk and the index pass), and only an
+     * authoritative scan's [upsertAll] may bring a key back to life.
+     */
+    suspend fun updateCaptureDate(localMediaKey: String, date: ResolvedCaptureDate?)
 
     /** The live record for [localMediaKey], or `null` if unknown/tombstoned. */
     suspend fun record(localMediaKey: String): CatalogueRecord?

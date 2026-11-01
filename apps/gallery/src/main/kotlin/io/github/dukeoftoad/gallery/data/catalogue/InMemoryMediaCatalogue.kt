@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.data.catalogue
 
+import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -69,6 +70,24 @@ class InMemoryMediaCatalogue : MediaCatalogue {
                 // keep reporting it dead to callers and compaction.
                 tombstones.remove(record.localMediaKey)
             }
+        }
+    }
+
+    /**
+     * One mutex hold, one row copied with ONLY the three provenance fields
+     * replaced --- the reference semantics of the Room implementation's
+     * targeted UPDATE ([CatalogueDao.updateCaptureDateColumns]). Unknown
+     * and tombstoned keys are no-ops (a tombstoned key is not in the live
+     * map), matching the interface's never-resurrect rule.
+     */
+    override suspend fun updateCaptureDate(localMediaKey: String, date: ResolvedCaptureDate?) {
+        mutex.withLock {
+            val existing = records[localMediaKey] ?: return
+            records[localMediaKey] = existing.copy(
+                resolvedCaptureDateMillis = date?.epochMillis,
+                resolvedCaptureDateZoneOffsetMinutes = date?.timezoneOffsetMinutes,
+                resolvedCaptureDateSource = date?.source?.name,
+            )
         }
     }
 

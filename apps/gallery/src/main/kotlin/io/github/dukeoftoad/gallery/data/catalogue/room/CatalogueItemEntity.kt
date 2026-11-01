@@ -46,4 +46,27 @@ data class CatalogueItemEntity(
     val metadataCacheState: String,
     /** Epoch millis of the last scan that observed this row live. */
     val lastSeenAtMillis: Long,
+    /**
+     * Resolved capture instant in epoch millis (see the matching
+     * [CatalogueRecord] field); `null` when never resolved or when the
+     * item's metadata carried no trustworthy tag. Legitimately negative
+     * for pre-1970 capture dates.
+     */
+    val resolvedCaptureDateMillis: Long?,
+    /**
+     * Zone assumption (minutes east of UTC) used to interpret the winning
+     * naive tag; `null` for epoch-based winning sources and when
+     * [resolvedCaptureDateMillis] is `null`.
+     */
+    val resolvedCaptureDateZoneOffsetMinutes: Int?,
+    /**
+     * The winning
+     * [CaptureDateSource][io.github.dukeoftoad.gallery.data.media.dates
+     * .CaptureDateSource] as its [name][kotlin.Enum.name] string --- the
+     * same stringly-enum convention as [metadataCacheState], for the same
+     * reason (no global TypeConverter for a single field; the mapping
+     * lives next to its reverse in [RoomMediaCatalogue] and is a straight
+     * name copy here since the record's field is already a string).
+     */
+    val resolvedCaptureDateSource: String?,
 )

@@ -5,7 +5,20 @@ import android.os.Build
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.VideoFrameDecoder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import io.github.dukeoftoad.gallery.data.catalogue.room.MediaCatalogueDatabase
+import io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
 import io.github.dukeoftoad.gallery.data.diag.DiagLog
+import io.github.dukeoftoad.gallery.data.media.access.ContentResolverMediaAccess
+import io.github.dukeoftoad.gallery.data.media.access.MediaReadPermissionGate
+import io.github.dukeoftoad.gallery.data.media.changes.AndroidMediaScanRowSource
+import io.github.dukeoftoad.gallery.data.media.changes.AndroidMediaStoreChangeFeed
+import io.github.dukeoftoad.gallery.data.media.changes.MediaScanDriver
+import io.github.dukeoftoad.gallery.data.media.dates.AndroidCaptureDateCandidateSource
+import io.github.dukeoftoad.gallery.data.media.dates.CaptureDateIndexer
+import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityGate
 
 /**
  * toadGALLERY's [Application]; exists to wire Coil's video frame decoder into
@@ -29,6 +42,33 @@ import io.github.dukeoftoad.gallery.data.diag.DiagLog
  * The manifest names this class via `android:name` on the `<application>`
  * tag; Android instantiates it before any activity, so every `AsyncImage`
  * finds it through `context.imageLoader`.
+ *
+ * ## Phase 4 scan pipeline (r12)
+ * [onCreate] also STARTS the scan driver
+ * ([MediaScanDriver.start]), the orchestration layer that wires the r10
+ * Phase 4 contracts together: the Room media catalogue
+ * ([RoomMediaCatalogue] over [MediaCatalogueDatabase]) is the persistent
+ * "what did the media world look like" cache, [AndroidMediaStoreChangeFeed]
+ * supplies the per-volume MediaStore generation tokens (API 30+) and the
+ * ContentObserver signals (API 26-29), and [AndroidMediaScanRowSource] is
+ * the authoritative cursor walk. The driver's first APP_START pass compares
+ * the saved scan checkpoints against the live generation tokens, then
+ * reconciles whatever moved into the catalogue (adds, changes, tombstones)
+ * and stamps fresh checkpoints; every later media change arrives through
+ * the observers and triggers a coalesced re-scan. App start is the right
+ * trigger because only a checkpoint-vs-live-token comparison can tell what
+ * happened while the process was dead --- see [MediaScanDriver] for the
+ * full pipeline rationale.
+ *
+ * [onCreate] itself stays CHEAP: constructing the database (a Room builder
+ * does no I/O until first use), the feed and the driver is object
+ * allocation only, and `start()` moves the observer registration and the
+ * first scan onto a background `Dispatchers.Default` scope --- nothing
+ * heavy touches the main thread. The downstream `ScanIndexHook`
+ * (`io.github.dukeoftoad.gallery.data.media.changes.ScanIndexHook`) is
+ * deliberately left `null` in this wiring round: the driver's downstream
+ * indexing stage (the capture-date indexer) lands as a follow-up and
+ * inserts here without touching the rest of the pipeline.
  *
  * ## Diagnostics boot line (W1)
  * [onCreate] writes the diagnostics ring's FIRST entry --- one INFO line
@@ -67,6 +107,49 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
             info.versionCode.toLong()
         }
         DiagLog.i(TAG, "process start ${info.versionName ?: "unknown"} (build $build)")
+        startPhase4ScanPipeline()
+    }
+
+    /**
+     * Constructs and starts the Phase 4 scan pipeline (see the class KDoc
+     * section). One process-lifetime [CoroutineScope] with a
+     * [SupervisorJob]: a failed scan coroutine must never cancel sibling
+     * work, and the scope outlives every Activity by design --- the
+     * catalogue is process state, not screen state.
+     *
+     * The diagnostics ring gets a start line too: a device report that
+     * shows the boot line but NOT this line pins a pipeline-construction
+     * failure to the exact seam (the W1 lesson --- see the boot-line KDoc).
+     */
+    private fun startPhase4ScanPipeline() {
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        // ONE catalogue instance is shared by the driver and its downstream
+        // hook: both talk to the same Room database, and sharing the wrapper
+        // keeps the in-memory mutex/dispatch story single. The capture-date
+        // pass writes only its own three provenance columns (the targeted
+        // partial UPDATE), so the two writers cannot clobber each other even
+        // while a scan is still being applied.
+        val catalogue = RoomMediaCatalogue(
+            MediaCatalogueDatabase.build(this).catalogueDao(),
+        )
+        val scanIndexHook = CaptureDateIndexer(
+            catalogue = catalogue,
+            mediaAccess = ContentResolverMediaAccess(
+                resolver = contentResolver,
+                permissionGate = MediaReadPermissionGate(this),
+            ),
+            candidateSource = AndroidCaptureDateCandidateSource(),
+            eligibilityGate = CatalogueRecordEligibilityGate(),
+        )
+        val scanDriver = MediaScanDriver(
+            rowSource = AndroidMediaScanRowSource(this),
+            catalogue = catalogue,
+            changeFeed = AndroidMediaStoreChangeFeed(this),
+            scanIndexHook = scanIndexHook,
+            scanScope = appScope,
+        )
+        scanDriver.start(appScope)
+        DiagLog.i(TAG, "phase 4 scan driver started (catalogue + change feed + capture-date indexer wired)")
     }
 
     /**

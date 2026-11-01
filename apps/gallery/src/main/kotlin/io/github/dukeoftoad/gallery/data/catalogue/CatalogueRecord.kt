@@ -24,6 +24,15 @@ package io.github.dukeoftoad.gallery.data.catalogue
  * and deliberately does NOT participate in scan reconciliation, otherwise
  * every in-app edit would masquerade as an external edit and trigger a full
  * re-index of bytes that never changed.
+ *
+ * Capture-date provenance ([resolvedCaptureDateMillis] and friends, r12
+ * round): the timezone-aware capture date resolved by
+ * [io.github.dukeoftoad.gallery.data.media.dates.MediaDateResolver] during
+ * the scan's index pass is persisted ON the row so the future timeline/
+ * Moments UI never has to re-read the item's bytes. The record stays a dumb
+ * data holder --- it neither re-runs the resolver nor interprets the source
+ * string (stored as the enum's [name][kotlin.Enum.name] exactly so no enum
+ * parse can fail on a value this build predates).
  */
 data class CatalogueRecord(
     /**
@@ -74,6 +83,36 @@ data class CatalogueRecord(
      * year" when choosing tombstone-purge cutoffs.
      */
     val lastSeenAtMillis: Long = 0L,
+    /**
+     * The resolved capture instant in epoch millis (the winning candidate
+     * of [io.github.dukeoftoad.gallery.data.media.dates.MediaDateResolver]),
+     * or `null`. Nullable for TWO honest reasons, not one: rows written by
+     * scans that predate the capture-date indexer were never resolved, and
+     * rows whose file carried no trustworthy tag (metadata ABSENT,
+     * UNREADABLE or UNSUPPORTED per
+     * [io.github.dukeoftoad.gallery.metadata.MetadataAvailability]) resolve
+     * to no capture date at all --- `null` deliberately means "no persisted
+     * capture date", whichever reason produced it. Can be NEGATIVE:
+     * pre-1970 instants are legitimate (see the MediaDates contract).
+     */
+    val resolvedCaptureDateMillis: Long? = null,
+    /**
+     * The zone assumption (minutes east of UTC) that interpreted the
+     * winning NAIVE tag --- the same auditability rule as
+     * [io.github.dukeoftoad.gallery.data.media.dates.DateCandidate
+     * .timezoneOffsetMinutes]. `null` when the winning source was
+     * epoch-based (no zone decision was made) or when
+     * [resolvedCaptureDateMillis] itself is `null`.
+     */
+    val resolvedCaptureDateZoneOffsetMinutes: Int? = null,
+    /**
+     * The [io.github.dukeoftoad.gallery.data.media.dates.CaptureDateSource]
+     * that won the resolution, stored as the enum's [name][kotlin.Enum.name]
+     * string so this holder needs no dependency on the dates package's enum
+     * at read time. `null` when no capture date was resolved (see
+     * [resolvedCaptureDateMillis]).
+     */
+    val resolvedCaptureDateSource: String? = null,
 )
 
 /**

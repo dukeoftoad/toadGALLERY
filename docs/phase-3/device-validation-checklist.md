@@ -1,16 +1,20 @@
-# Phase 3 device-validation checklist — v0.4.1-alpha (r7)
+# Phase 3 device-validation checklist — v0.4.1-alpha (r8)
 
 **Status:** pending device validation (the Phase 3 exit work; see
 `roadmap.md`'s Phase 3 progress note).\
-**Target build:** `toadGALLERY-0.4.1-alpha-r7.apk` from the
-`v0.4.1-alpha-r7` pre-release (versionCode 11, built from `ab79a1d`).\
+**Target build:** `toadGALLERY-0.4.1-alpha-r8.apk` from the
+`v0.4.1-alpha-r8` pre-release (versionCode 12). Sections 1–8 carry over
+from the r7 checklist unchanged; sections 9–11 are new for the r8 device
+round (#73 vault integrity + #74 diagnostics/appearance).\
 **Reference device:** the Xiaomi device used for the 2026-10-30/31 logcat
 reviews (`c2.qti.hevc.decoder` hardware; 10-bit HEVC Main10 sample in MKV;
-`getFrameAtTime` NULL-frame samples).\
+`getFrameAtTime` NULL-frame samples; the r7 "vault PIN creating failed"
+silent failure).\
 **Method:** install over the previous build, run each section, note
-pass/fail + a logcat snippet for anything unexpected
-(`adb logcat -s ExoPlayerImpl MediaCodec Coil CCodec AndroidRuntime`).
-Sections map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
+pass/fail + a logcat snippet for anything unexpected. For vault/diagnostic
+sections also capture the in-app log: `adb logcat -s ToadDiag ToadVault`
+(or copy the ring from Settings → About → Diagnostics).
+Sections 1–8 map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
 
 ---
 
@@ -109,6 +113,48 @@ Sections map 1:1 to the Phase 3 wave-1/wave-2 issues (#62–#69).
       of the above (the APK holds no INTERNET permission — verify once
       with `aapt dump badging` or an install-time check if convenient).
 - [ ] No new ANRs/crashes in logcat during the whole pass.
+
+## 9. Vault setup failure scenario + integrity round 2 (#73/#74) — the r7 defect report
+
+- [ ] On the SAME device where r7 showed "vault PIN creating failed":
+      vault setup now SUCCEEDS (the StrongBox leg falls back to the TEE
+      keystore on any keystore exception instead of aborting).
+- [ ] If it still fails: Settings → About → Diagnostics shows the exact
+      failure (op + exception chain) under the vault state probe, and
+      `adb logcat -s ToadDiag ToadVault` carries the two-line story —
+      paste that ring into the issue instead of a bare "failed".
+- [ ] Diagnostics state probe matches disk truth: NotConfigured before
+      first setup (pin/index absent), Configured after (both present,
+      blob count 0), counts grow with moves and shrink with restores.
+- [ ] Setup survives an app restart mid-flow only at completed points:
+      killing the app DURING setup (if you can catch it) leaves either a
+      clean NotConfigured (rollback held) or a working Configured — never
+      a half-configured vault (the pre-#73 pin-only residue).
+- [ ] If the device carried pin-only residue from a pre-#73 build: first
+      launch of r8 self-heals it and setup works (check the ToadVault INFO
+      line for the sweep).
+
+## 10. On-device diagnostics (#74)
+
+- [ ] Process start line in logcat: `adb logcat -s ToadDiag` shows the
+      `versionName (build 12)` line at cold start — attribution anchor.
+- [ ] Settings → About → Diagnostics: ring renders entries oldest-first,
+      Copy puts the full ring on the clipboard (paste somewhere to
+      verify), Clear empties it.
+- [ ] Ring privacy: nothing in the ring or logcat ever contains the PIN
+      value, key material, or vault entry display names — op names,
+      counts, ids, exception classes only.
+
+## 11. Appearance settings (#74)
+
+- [ ] Settings → Appearance: Layout COLLAGE↔GRID switches the Photos
+      timeline immediately; COLLAGE (default) is byte-identical to r7's
+      render; GRID shows uniform cells.
+- [ ] Photos per row steppers clamp at 2 and 6 and apply live.
+- [ ] Group by Day/Month renders full-line section headers before each
+      group's first cell (correct boundaries across month/year edges);
+      None (default) shows none.
+- [ ] Choices survive an app restart.
 
 ---
 

@@ -1,6 +1,11 @@
 package io.github.dukeoftoad.gallery.ui.details
 
+import android.Manifest
+import android.app.Activity
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,14 +20,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
@@ -40,9 +49,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.metadata.MetadataAvailability
+import io.github.dukeoftoad.gallery.metadata.edit.EditableExifCodec
+import io.github.dukeoftoad.gallery.metadata.edit.FieldEditResult
+import io.github.dukeoftoad.gallery.metadata.edit.FieldInvalidReason
+import io.github.dukeoftoad.gallery.metadata.edit.MediaEditCapability
+import io.github.dukeoftoad.gallery.metadata.edit.MediaEditField
+import io.github.dukeoftoad.gallery.metadata.edit.MetadataEditInput
+import io.github.dukeoftoad.gallery.metadata.edit.WriteRefusalReason
 import io.github.dukeoftoad.gallery.ui.details.DetailsPresentation.DetailRow
 import io.github.dukeoftoad.gallery.ui.details.DetailsPresentation.DetailsField
 import io.github.dukeoftoad.gallery.ui.details.DetailsPresentation.DetailsSection
+import io.github.dukeoftoad.gallery.ui.details.DetailsPresentation.EditableFieldRow
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 
 /**
@@ -51,6 +68,14 @@ import io.github.dukeoftoad.gallery.ui.media.LoadingState
  * capture date with its timezone provenance, camera block, full exposure
  * triangle, GPS coordinates (decimal + DMS, display-only this round ---
  * the map view is a later round) and the metadata-block tree.
+ *
+ * r15 adds the WRITE half: an "Editable fields" section (one row per
+ * roadmap field, its capability state narrated by the pure gate) and the
+ * per-field editor dialog (live-validated by the pure codec, the same
+ * pattern as the rename dialogs). The system dialogs the write path may
+ * need --- the API 30+ write-grant request and the ACCESS_MEDIA_LOCATION
+ * runtime request --- launch from here through the two activity-result
+ * launchers below, exactly like the file-ops consent rounds.
  *
  * Every row's text comes from the pure [DetailsPresentation] mapper or is
  * an availability label resolved below, so the audited four-way states
@@ -83,6 +108,34 @@ fun DetailsScreen(
     // snapshot is cached inside the ViewModel for the screen's life.
     LaunchedEffect(mediaId, uri) { viewModel.load(mediaId, uri) }
     val state by viewModel.state.collectAsState()
+    val editorState by viewModel.editor.collectAsState()
+
+    // The two activity-result seams of the write path (r15), wired like
+    // the file-ops consent launchers: the system write-grant dialog
+    // (API 30+) answers through onWriteGrantResult, the location-consent
+    // request (the GPS field's dimension) through onLocationConsentResult.
+    val writeGrantLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        viewModel.onWriteGrantResult(result.resultCode == Activity.RESULT_OK)
+    }
+    val locationConsentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        viewModel.onLocationConsentResult(granted)
+    }
+    LaunchedEffect(Unit) {
+        viewModel.editEvents.collect { event ->
+            when (event) {
+                is MetadataEditEvent.RequestWriteGrant -> writeGrantLauncher.launch(
+                    IntentSenderRequest.Builder(event.intentSender).build(),
+                )
+                MetadataEditEvent.RequestLocationConsent -> locationConsentLauncher.launch(
+                    Manifest.permission.ACCESS_MEDIA_LOCATION,
+                )
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -127,9 +180,25 @@ fun DetailsScreen(
             is DetailsUiState.Ready -> DetailsRows(
                 rows = s.rows,
                 recordFound = s.recordFound,
+                editRows = s.editRows,
+                onEditField = viewModel::openEditor,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
+            )
+        }
+
+        // The editor dialog rides above whatever state the screen is in
+        // (a post-write reload flickers through Loading; the editor is
+        // closed by then, but the placement keeps any transient state from
+        // dismissing a dialog mid-grant-round-trip).
+        val openEditor = editorState as? MetadataEditorState.Open
+        if (openEditor != null) {
+            MetadataEditorDialog(
+                state = openEditor,
+                onSave = viewModel::submitEdit,
+                onDismiss = viewModel::closeEditor,
+                onRequestLocationConsent = viewModel::requestLocationConsent,
             )
         }
     }
@@ -138,12 +207,19 @@ fun DetailsScreen(
 /**
  * The ordered rows grouped under their section headers. The METADATA_BLOCKS
  * section collapses behind a header toggle (the "complete EXIF block"
- * tree); every other section renders inline. Grouping is a plain fold over
- * the mapper's ordered list --- the mapper owns the order, the composable
- * only renders it.
+ * tree); every other section renders inline. The r15 "Editable fields"
+ * section follows the block tree (one row per roadmap field with its
+ * honest capability). Grouping is a plain fold over the mapper's ordered
+ * list --- the mapper owns the order, the composable only renders it.
  */
 @Composable
-private fun DetailsRows(rows: List<DetailRow>, recordFound: Boolean, modifier: Modifier = Modifier) {
+private fun DetailsRows(
+    rows: List<DetailRow>,
+    recordFound: Boolean,
+    editRows: List<EditableFieldRow>,
+    onEditField: (MediaEditField) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var blocksExpanded by rememberSaveable { mutableStateOf(false) }
     LazyColumn(
         modifier = modifier,
@@ -179,6 +255,21 @@ private fun DetailsRows(rows: List<DetailRow>, recordFound: Boolean, modifier: M
                 continue
             }
             item(key = "${row.section}_${row.field}") { DetailRowItem(row = row) }
+        }
+        if (editRows.isNotEmpty()) {
+            item(key = "header_edit") {
+                SectionHeader(
+                    titleRes = R.string.details_section_edit,
+                    expandable = false,
+                    expanded = false,
+                    onToggle = {},
+                )
+            }
+            for (editRow in editRows) {
+                item(key = "edit_${editRow.field}") {
+                    EditableFieldRowItem(row = editRow, onEdit = onEditField)
+                }
+            }
         }
     }
 }
@@ -305,3 +396,300 @@ private fun availabilityLabel(field: DetailsField, availability: MetadataAvailab
         MetadataAvailability.UNREADABLE ->
             R.string.details_state_unreadable
     }
+
+// ------------------------------------------------------------------
+// Editable fields (r15 write round)
+// ------------------------------------------------------------------
+
+/**
+ * One "Editable fields" row: the field's label, its current value (or the
+ * honest state text the capability dictates), and the edit affordance.
+ * Only actionable capabilities are tappable --- [MediaEditCapability.EDITABLE]
+ * opens the input dialog, [MediaEditCapability.CONSENT_REQUIRED] opens the
+ * consent view; every refusal row stays plain and lets its state text do
+ * the talking (an edit affordance on a read-only field would promise a
+ * dialog the gate refuses to open).
+ */
+@Composable
+private fun EditableFieldRowItem(row: EditableFieldRow, onEdit: (MediaEditField) -> Unit) {
+    val actionable = row.capability == MediaEditCapability.EDITABLE ||
+        row.capability == MediaEditCapability.CONSENT_REQUIRED
+    val label = stringResource(editFieldLabel(row.field))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (actionable) Modifier.clickable { onEdit(row.field) } else Modifier)
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = editRowText(row),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (row.valueText != null) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+        if (actionable) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.cd_details_edit_field, label),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
+}
+
+/**
+ * The text under one editable-field row's label: the current value when
+ * there is one, the honest "not set" / "current value unreadable" split
+ * for an EDITABLE field with no value (see [EditableFieldRow.valuesReadable]),
+ * and the capability's own refusal text for everything the gate refused.
+ */
+@Composable
+private fun editRowText(row: EditableFieldRow): String = when {
+    row.valueText != null -> row.valueText
+    row.capability == MediaEditCapability.EDITABLE && !row.valuesReadable ->
+        stringResource(R.string.details_edit_prefill_unavailable)
+    row.capability == MediaEditCapability.EDITABLE ->
+        stringResource(R.string.details_edit_state_not_set)
+    else -> stringResource(editCapabilityLabel(row.capability))
+}
+
+/** The label string for one editable field. */
+@StringRes
+private fun editFieldLabel(field: MediaEditField): Int = when (field) {
+    MediaEditField.DATE_TIME -> R.string.details_edit_field_date_time
+    MediaEditField.GPS -> R.string.details_edit_field_gps
+    MediaEditField.COPYRIGHT -> R.string.details_edit_field_copyright
+    MediaEditField.COMMENT -> R.string.details_edit_field_comment
+    MediaEditField.KEYWORDS -> R.string.details_edit_field_keywords
+    MediaEditField.RATING -> R.string.details_edit_field_rating
+    MediaEditField.COLOUR_LABEL -> R.string.details_edit_field_colour_label
+}
+
+/**
+ * The honest state text per capability. The EDITABLE entry is only
+ * reachable through [editRowText]'s explicit branches above (a set value
+ * or one of the two no-value splits); it maps to the "not set" string so
+ * the table stays total.
+ */
+@StringRes
+private fun editCapabilityLabel(capability: MediaEditCapability): Int = when (capability) {
+    MediaEditCapability.EDITABLE -> R.string.details_edit_state_not_set
+    MediaEditCapability.READ_ONLY -> R.string.details_edit_state_read_only
+    MediaEditCapability.UNSUPPORTED_FORMAT -> R.string.details_edit_state_unsupported_format
+    MediaEditCapability.UNSUPPORTED_FIELD -> R.string.details_edit_state_unsupported_field
+    MediaEditCapability.CONSENT_REQUIRED -> R.string.details_edit_state_consent_required
+    MediaEditCapability.NOT_ELIGIBLE -> R.string.details_edit_state_not_eligible
+}
+
+/**
+ * The per-field editor dialog (r15): live-validated by the pure
+ * [EditableExifCodec] --- the confirm button is enabled only for a
+ * [FieldEditResult.Valid], the same contract as the rename dialogs ---
+ * and honest about the write's phase: in flight (inputs locked,
+ * "Saving…"), refused (the reason's own text, input stays editable,
+ * Retry re-submits), or the system grant dialog declined (terminal for
+ * the session). For the GPS field without location consent it becomes
+ * the consent view that offers the ACCESS_MEDIA_LOCATION request (the
+ * same runtime flow the Settings row drives, launched through the
+ * screen's permission launcher).
+ */
+@Composable
+private fun MetadataEditorDialog(
+    state: MetadataEditorState.Open,
+    onSave: (MetadataEditInput) -> Unit,
+    onDismiss: () -> Unit,
+    onRequestLocationConsent: () -> Unit,
+) {
+    // Re-seeds when a NEW editor session opens (field + prefill change);
+    // typing survives the phase round-trips (Saving -> Failed -> Retry)
+    // because the state lives here, above the phase branches.
+    var primary by remember(state.field, state.prefill) {
+        mutableStateOf(state.prefill.primary)
+    }
+    var secondary by remember(state.field, state.prefill) {
+        mutableStateOf(state.prefill.secondary)
+    }
+
+    if (state.capability == MediaEditCapability.CONSENT_REQUIRED) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = {
+                TextButton(onClick = onRequestLocationConsent) {
+                    Text(stringResource(R.string.details_edit_action_allow_location))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.details_edit_action_close))
+                }
+            },
+            title = { Text(stringResource(editFieldLabel(state.field))) },
+            text = { Text(stringResource(R.string.details_edit_state_consent_required)) },
+        )
+        return
+    }
+
+    val input = MetadataEditInput(primary = primary, secondary = secondary)
+    val check = remember(state.field, primary, secondary) {
+        EditableExifCodec.writesFor(state.field, input)
+    }
+    val invalid = check as? FieldEditResult.Invalid
+    val saving = state.phase == MetadataEditorPhase.Saving
+    val inputsEnabled = !saving
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            when (state.phase) {
+                MetadataEditorPhase.Input -> TextButton(
+                    onClick = { onSave(input) },
+                    enabled = check is FieldEditResult.Valid,
+                ) {
+                    Text(stringResource(R.string.details_edit_action_save))
+                }
+                MetadataEditorPhase.Saving -> Unit
+                is MetadataEditorPhase.Failed -> TextButton(onClick = { onSave(input) }) {
+                    Text(stringResource(R.string.details_edit_action_retry))
+                }
+                MetadataEditorPhase.Denied -> Unit
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.details_edit_action_close))
+            }
+        },
+        title = { Text(stringResource(editFieldLabel(state.field))) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                when (val phase = state.phase) {
+                    is MetadataEditorPhase.Failed -> Text(
+                        text = stringResource(writeRefusalText(phase.reason)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    MetadataEditorPhase.Denied -> Text(
+                        text = stringResource(R.string.details_edit_denied),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    MetadataEditorPhase.Input -> Unit
+                    MetadataEditorPhase.Saving -> Text(
+                        text = stringResource(R.string.details_edit_saving),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (!state.valuesAvailable) {
+                    // The writer's read-back failed: the prefill is empty
+                    // NOT because the tags are unset --- say so.
+                    Text(
+                        text = stringResource(R.string.details_edit_prefill_unavailable),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                when (state.field) {
+                    MediaEditField.DATE_TIME -> {
+                        OutlinedTextField(
+                            value = primary,
+                            onValueChange = { primary = it },
+                            enabled = inputsEnabled,
+                            label = { Text(stringResource(R.string.details_edit_label_datetime)) },
+                            placeholder = { Text(stringResource(R.string.details_edit_hint_datetime)) },
+                            isError = invalid?.reason == FieldInvalidReason.DATETIME,
+                            singleLine = true,
+                            supportingText = {
+                                if (invalid?.reason == FieldInvalidReason.DATETIME) {
+                                    Text(stringResource(R.string.details_edit_invalid_datetime))
+                                }
+                            },
+                        )
+                        OutlinedTextField(
+                            value = secondary,
+                            onValueChange = { secondary = it },
+                            enabled = inputsEnabled,
+                            label = { Text(stringResource(R.string.details_edit_label_offset)) },
+                            placeholder = { Text(stringResource(R.string.details_edit_hint_offset)) },
+                            isError = invalid?.reason == FieldInvalidReason.OFFSET,
+                            singleLine = true,
+                            supportingText = {
+                                if (invalid?.reason == FieldInvalidReason.OFFSET) {
+                                    Text(stringResource(R.string.details_edit_invalid_offset))
+                                }
+                            },
+                        )
+                    }
+                    MediaEditField.GPS -> {
+                        OutlinedTextField(
+                            value = primary,
+                            onValueChange = { primary = it },
+                            enabled = inputsEnabled,
+                            label = { Text(stringResource(R.string.details_edit_label_latitude)) },
+                            isError = invalid?.reason == FieldInvalidReason.LATITUDE,
+                            singleLine = true,
+                            supportingText = {
+                                if (invalid?.reason == FieldInvalidReason.LATITUDE) {
+                                    Text(stringResource(R.string.details_edit_invalid_latitude))
+                                }
+                            },
+                        )
+                        OutlinedTextField(
+                            value = secondary,
+                            onValueChange = { secondary = it },
+                            enabled = inputsEnabled,
+                            label = { Text(stringResource(R.string.details_edit_label_longitude)) },
+                            isError = invalid?.reason == FieldInvalidReason.LONGITUDE,
+                            singleLine = true,
+                            supportingText = {
+                                if (invalid?.reason == FieldInvalidReason.LONGITUDE) {
+                                    Text(stringResource(R.string.details_edit_invalid_longitude))
+                                } else {
+                                    Text(stringResource(R.string.details_edit_gps_clear_hint))
+                                }
+                            },
+                        )
+                    }
+                    MediaEditField.COPYRIGHT, MediaEditField.COMMENT -> OutlinedTextField(
+                        value = primary,
+                        onValueChange = { primary = it },
+                        enabled = inputsEnabled,
+                        label = { Text(stringResource(editFieldLabel(state.field))) },
+                        isError = invalid != null,
+                    )
+                    // The gate refuses these before an editor can open
+                    // (UNSUPPORTED_FIELD); the codec's defensive refusal is
+                    // the second line, never a dialog.
+                    MediaEditField.KEYWORDS,
+                    MediaEditField.RATING,
+                    MediaEditField.COLOUR_LABEL,
+                    -> Unit
+                }
+            }
+        },
+    )
+}
+
+/** The honest failure text per refusal reason (one string per truth). */
+@StringRes
+private fun writeRefusalText(reason: WriteRefusalReason): Int = when (reason) {
+    WriteRefusalReason.READ_ONLY_PLATFORM ->
+        R.string.details_edit_failed_read_only_platform
+    WriteRefusalReason.READ_ONLY_STILL_BLOCKED ->
+        R.string.details_edit_failed_read_only_still_blocked
+    WriteRefusalReason.UNSUPPORTED_FORMAT ->
+        R.string.details_edit_failed_unsupported_format
+    WriteRefusalReason.IO -> R.string.details_edit_failed_io
+}

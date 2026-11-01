@@ -1,0 +1,71 @@
+package io.github.dukeoftoad.gallery.data.catalogue.room
+
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+
+/**
+ * The Room database of the Phase 4 media catalogue (ADR-0006's persistence
+ * layer; audit item "Room catalogue").
+ *
+ * Migration policy --- deliberate and non-negotiable: NO destructive
+ * migration. The catalogue is a CACHE (it can always be rebuilt from a full
+ * MediaStore scan), but its tombstones and scan checkpoints are the only
+ * record of what the AI engines should forget, so a silent
+ * `fallbackToDestructiveMigration` would trade a crash today for invisible
+ * index corruption tomorrow. Future schema versions must ship explicit
+ * `Migration` objects, and version 1's schema below is the baseline they
+ * migrate from.
+ *
+ * `exportSchema = false` is acceptable ONLY because no schema-export
+ * directory is wired into the build yet; it must be revisited before the
+ * first schema-changing release, when the exported JSON becomes the input
+ * to automated migration testing. TODO(phase-4): configure
+ * `room.schemaLocation` (via the KSP argument) and flip this to `true`
+ * before version 2 exists.
+ *
+ * Untested Android-adjacent code per ADR-0016; behavior is pinned by the
+ * pure-type tests around [io.github.dukeoftoad.gallery.data.catalogue
+ * .InMemoryMediaCatalogue] and the reconciler.
+ */
+@Database(
+    entities = [
+        CatalogueItemEntity::class,
+        CatalogueTombstoneEntity::class,
+        ScanCheckpointEntity::class,
+    ],
+    version = 1,
+    exportSchema = false,
+)
+abstract class MediaCatalogueDatabase : RoomDatabase() {
+
+    /** The catalogue's only DAO; see [CatalogueDao] for the surface. */
+    abstract fun catalogueDao(): CatalogueDao
+
+    companion object {
+        /**
+         * App-private database file. Not `allowBackup`-sensitive --- the
+         * catalogue is rebuildable device-local state --- but deliberately
+         * distinct from any future engine-owned ML database file so the
+         * audit's "separate stores" boundary is visible on disk too.
+         */
+        private const val DATABASE_NAME = "media_catalogue.db"
+
+        /**
+         * Builds the singleton-scope database for the app. Callers own the
+         * instance lifetime (one per process, via whatever dependency
+         * holder the app settles on); [context.applicationContext] is used
+         * so no Activity can leak through the builder.
+         */
+        fun build(context: Context): MediaCatalogueDatabase =
+            Room.databaseBuilder(
+                context.applicationContext,
+                MediaCatalogueDatabase::class.java,
+                DATABASE_NAME,
+                // No fallbackToDestructiveMigration here, ever --- see the
+                // class KDoc. An incompatible future schema must fail loud
+                // (IllegalStateException on open), not wipe silently.
+            ).build()
+    }
+}

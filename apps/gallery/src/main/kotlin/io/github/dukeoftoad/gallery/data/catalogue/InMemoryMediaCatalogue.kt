@@ -1,6 +1,9 @@
 package io.github.dukeoftoad.gallery.data.catalogue
 
 import io.github.dukeoftoad.gallery.data.media.dates.ResolvedCaptureDate
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -44,6 +47,17 @@ import kotlinx.coroutines.sync.withLock
  * - [purgeTombstonesOlderThan] drops tombstones STRICTLY older than the
  *   cutoff; a tombstone exactly AT the cutoff survives (the cutoff is "the
  *   oldest age still worth keeping").
+ *
+ * Timeline surface (r13 round; the reference the Room implementation must
+ * match): [timelineWindow] re-sorts the live map into the direction's
+ * total order --- effective instant
+ * (`resolvedCaptureDateMillis ?: dateAddedMillis`), then `localMediaKey` in
+ * the same direction --- and slices `[offset, offset+limit)` out of it.
+ * Re-sorting per call is the reference implementation's price for staying
+ * dumb and pure; production ordering lives in the DAO's SQL. [changes] is a
+ * conflation-friendly [MutableSharedFlow] hook fired after every mutating
+ * call that can change the live set or its order (see the interface KDoc
+ * for the exact emission table).
  */
 class InMemoryMediaCatalogue : MediaCatalogue {
 
@@ -58,6 +72,39 @@ class InMemoryMediaCatalogue : MediaCatalogue {
     /** volumeName -> last checkpoint. */
     private val checkpoints = LinkedHashMap<String, ScanCheckpoint>()
 
+    /**
+     * The in-memory [changes] hook: zero replay (no initial emission, no
+     * missed-mutation replay), one slot of buffer with DROP_OLDEST so a
+     * burst of mutations conflates instead of suspending the mutator ---
+     * the payload is Unit, so conflation loses no information ("something
+     * changed" is idempotent).
+     */
+    private val changeSignals = MutableSharedFlow<Unit>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    override fun changes(): Flow<Unit> = changeSignals
+
+    /**
+     * Fires the invalidation signal AFTER the mutating call's mutex block:
+     * never under the lock (a slow collector must never block mutations)
+     * and only for calls that can change the live set or its order.
+     */
+    private fun notifyChanged() {
+        changeSignals.tryEmit(Unit)
+    }
+
+    /**
+     * The EFFECTIVE instant of a record --- the in-memory spelling of the
+     * DAO's `COALESCE(resolvedCaptureDateMillis, dateAddedMillis)`. A
+     * capture date resolved by the scan's index pass outranks the
+     * provider's date_added; undateable and pre-index rows fall back.
+     */
+    private fun CatalogueRecord.effectiveInstantMillis(): Long =
+        resolvedCaptureDateMillis ?: dateAddedMillis
+
     override suspend fun upsertAll(records: List<CatalogueRecord>) {
         if (records.isEmpty()) return
         // Whole batch inside one mutex hold --- the in-memory analogue of
@@ -71,6 +118,9 @@ class InMemoryMediaCatalogue : MediaCatalogue {
                 tombstones.remove(record.localMediaKey)
             }
         }
+        // One emission per batch, not per record: the signal is "re-read
+        // your windows", and a batch is the unit the scan driver applies.
+        notifyChanged()
     }
 
     /**
@@ -89,6 +139,11 @@ class InMemoryMediaCatalogue : MediaCatalogue {
                 resolvedCaptureDateSource = date?.source?.name,
             )
         }
+        // The capture date IS the timeline's primary sort key: writing one
+        // reorders windows and must invalidate. Unknown/tombstoned keys
+        // returned above without a write, matching Room's zero-row UPDATE
+        // (no row trigger, no invalidation).
+        notifyChanged()
     }
 
     override suspend fun record(localMediaKey: String): CatalogueRecord? {
@@ -102,6 +157,43 @@ class InMemoryMediaCatalogue : MediaCatalogue {
     override suspend fun recordsMap(): Map<String, CatalogueRecord> {
         mutex.withLock { return records.toMap() }
     }
+
+    /**
+     * The windowed timeline read, as a slice of the live map's sorted view.
+     * The order is the interface's total order (effective instant, then key,
+     * both in [direction]); the tiebreak makes the sequence stable across
+     * calls so windows tile with zero gaps/overlaps. See
+     * [MediaCatalogue.timelineWindow] for the full contract.
+     */
+    override suspend fun timelineWindow(
+        offset: Int,
+        limit: Int,
+        direction: TimelineDirection,
+    ): List<CatalogueRecord> {
+        // Guards first, identically to the Room implementation: SQLite
+        // reads a negative LIMIT as "unbounded", so invalid arguments must
+        // never reach a windowing mechanism --- they deterministically read
+        // empty in both implementations.
+        if (offset < 0 || limit <= 0) return emptyList()
+        mutex.withLock {
+            val ordered = records.values.sortedWith(
+                when (direction) {
+                    TimelineDirection.NEWEST_FIRST ->
+                        compareByDescending<CatalogueRecord> { it.effectiveInstantMillis() }
+                            .thenByDescending { it.localMediaKey }
+                    TimelineDirection.OLDEST_FIRST ->
+                        compareBy<CatalogueRecord> { it.effectiveInstantMillis() }
+                            .thenBy { it.localMediaKey }
+                },
+            )
+            if (offset >= ordered.size) return emptyList()
+            val end = minOf(offset + limit, ordered.size)
+            return ordered.subList(offset, end)
+        }
+    }
+
+    /** Live rows only --- tombstones are not in [records] to begin with. */
+    override suspend fun liveItemCount(): Int = mutex.withLock { records.size }
 
     override suspend fun tombstone(localMediaKeys: List<String>, atMillis: Long) {
         if (localMediaKeys.isEmpty()) return
@@ -118,6 +210,7 @@ class InMemoryMediaCatalogue : MediaCatalogue {
                 tombstones[key] = atMillis
             }
         }
+        notifyChanged()
     }
 
     override suspend fun tombstonedKeys(): Set<String> {
@@ -148,5 +241,8 @@ class InMemoryMediaCatalogue : MediaCatalogue {
             // the newest one still inside the retention window.
             tombstones.entries.removeAll { it.value < cutoffMillis }
         }
+        // Deliberately NO change signal: purging tombstones cannot change
+        // the live set or its order, so a timeline re-read would be pure
+        // waste (Room agrees --- the tombstone table is not observed).
     }
 }

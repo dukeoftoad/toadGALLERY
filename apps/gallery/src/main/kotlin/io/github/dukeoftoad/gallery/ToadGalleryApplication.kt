@@ -8,11 +8,11 @@ import coil.decode.VideoFrameDecoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
 import io.github.dukeoftoad.gallery.data.catalogue.room.MediaCatalogueDatabase
 import io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
 import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.access.ContentResolverMediaAccess
+import io.github.dukeoftoad.gallery.data.media.access.MediaAccess
 import io.github.dukeoftoad.gallery.data.media.access.MediaReadPermissionGate
 import io.github.dukeoftoad.gallery.data.media.changes.AndroidMediaScanRowSource
 import io.github.dukeoftoad.gallery.data.media.changes.AndroidMediaStoreChangeFeed
@@ -20,6 +20,12 @@ import io.github.dukeoftoad.gallery.data.media.changes.MediaScanDriver
 import io.github.dukeoftoad.gallery.data.media.dates.AndroidCaptureDateCandidateSource
 import io.github.dukeoftoad.gallery.data.media.dates.CaptureDateIndexer
 import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityGate
+import io.github.dukeoftoad.gallery.data.media.location.AndroidGpsCandidateSource
+import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
+import io.github.dukeoftoad.gallery.data.media.location.CompositeScanIndexHook
+import io.github.dukeoftoad.gallery.data.media.location.ItemLocationWriter
+import io.github.dukeoftoad.gallery.data.media.location.LocationIndexer
+import io.github.dukeoftoad.gallery.data.media.location.LocationReadGate
 
 /**
  * toadGALLERY's [Application]; exists to wire Coil's video frame decoder into
@@ -65,11 +71,12 @@ import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityG
  * does no I/O until first use), the feed and the driver is object
  * allocation only, and `start()` moves the observer registration and the
  * first scan onto a background `Dispatchers.Default` scope --- nothing
- * heavy touches the main thread. The downstream `ScanIndexHook`
- * (`io.github.dukeoftoad.gallery.data.media.changes.ScanIndexHook`) is
- * deliberately left `null` in this wiring round: the driver's downstream
- * indexing stage (the capture-date indexer) lands as a follow-up and
- * inserts here without touching the rest of the pipeline.
+ * heavy touches the main thread. The downstream indexing stage
+ * (`ScanIndexHook`) is wired as a [CompositeScanIndexHook] of the two
+ * indexers the pipeline owns so far --- the capture-date indexer (r12) and
+ * the EXIF-GPS location indexer (r16, feeding the Map tab's Room v4
+ * location columns) --- with per-hook failure isolation, so one indexer
+ * throwing can never starve its sibling or the scan itself.
  *
  * ## Diagnostics boot line (W1)
  * [onCreate] writes the diagnostics ring's FIRST entry --- one INFO line
@@ -91,11 +98,12 @@ import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityG
 class ToadGalleryApplication : Application(), ImageLoaderFactory {
 
     /**
-     * The process-wide [MediaCatalogue] (r13): ONE Room instance shared by
-     * the scan pipeline below and the catalogue-backed Photos timeline
-     * (`PhotosViewModel`). Lazy, so `onCreate` stays allocation-only until
-     * the first reader --- the scan driver's start or the timeline's first
-     * generation --- actually opens the database.
+     * The process-wide media catalogue (r13): ONE Room instance shared by
+     * the scan pipeline below, the catalogue-backed Photos timeline
+     * (`PhotosViewModel`) and the r16 Map tab (`MapViewModel`). Lazy, so
+     * `onCreate` stays allocation-only until the first reader --- the scan
+     * driver's start or the timeline's first generation --- actually opens
+     * the database.
      *
      * Why the Application is the holder, not a second build: Room's
      * invalidation (what the catalogue's `changes()` flow rides on) only
@@ -104,8 +112,17 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
      * scan pipeline writes. "One per process, via whatever dependency
      * holder the app settles on" (`MediaCatalogueDatabase.build`'s KDoc)
      * settles on this.
+     *
+     * r16: the declared type is the CONCRETE [RoomMediaCatalogue], not the
+     * [io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue] interface
+     * --- the map's location surface (the geotagged-row projection, the
+     * targeted location-column write) exists only on the Room
+     * implementation this round (the interface + in-memory reference are
+     * the Phase 5 Places index's contract to widen). Every existing
+     * consumer that types against the interface keeps compiling unchanged
+     * (the Room implementation implements it).
      */
-    val mediaCatalogue: MediaCatalogue by lazy {
+    val mediaCatalogue: RoomMediaCatalogue by lazy {
         RoomMediaCatalogue(MediaCatalogueDatabase.build(this).catalogueDao())
     }
 
@@ -144,29 +161,59 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
     private fun startPhase4ScanPipeline() {
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         // The ONE process-wide catalogue instance (see [mediaCatalogue]):
-        // the driver, its downstream hook AND the Photos timeline's
-        // catalogue-backed path all talk to the same Room database through
-        // it, so the timeline's `changes()` collection sees every write the
-        // pipeline commits.
+        // the driver, its downstream hooks AND the Photos/Map screens all
+        // talk to the same Room database through it, so the timeline's and
+        // the map's `changes()` collections see every write the pipeline
+        // commits.
         val catalogue = mediaCatalogue
-        val scanIndexHook = CaptureDateIndexer(
+        // ONE read boundary shared by both indexers (r16): the capture-date
+        // and location passes each read the same rows' bytes; a single
+        // [MediaAccess] instance keeps the read-time permission re-check
+        // and handle minting in one place.
+        val mediaAccess: MediaAccess = ContentResolverMediaAccess(
+            resolver = contentResolver,
+            permissionGate = MediaReadPermissionGate(this),
+        )
+        // The eligibility gate is date-agnostic by construction ("may this
+        // process read this record's bytes"), so the location indexer
+        // reuses the same production gate as the capture-date pass.
+        val eligibilityGate = CatalogueRecordEligibilityGate()
+        val captureDateHook = CaptureDateIndexer(
             catalogue = catalogue,
-            mediaAccess = ContentResolverMediaAccess(
-                resolver = contentResolver,
-                permissionGate = MediaReadPermissionGate(this),
-            ),
+            mediaAccess = mediaAccess,
             candidateSource = AndroidCaptureDateCandidateSource(),
-            eligibilityGate = CatalogueRecordEligibilityGate(),
+            eligibilityGate = eligibilityGate,
+        )
+        // The r16 location pass: EXIF GPS through the same read boundary,
+        // persisted via the catalogue's targeted location write (Room v4).
+        // The read gate consults the SAME r14 consent machinery
+        // ([AndroidMediaLocationAccess]) the Settings row and the Details
+        // display gate use --- on API 29+ an ungranted ACCESS_MEDIA_LOCATION
+        // means the platform redacts EXIF location, so the indexer skips
+        // the bytes and persists the honest withheld provenance instead.
+        val locationAccess = AndroidMediaLocationAccess(this)
+        val locationHook = LocationIndexer(
+            locationWriter = ItemLocationWriter { key, latitude, longitude, sourceName ->
+                catalogue.updateItemLocation(key, latitude, longitude, sourceName)
+            },
+            mediaAccess = mediaAccess,
+            candidateSource = AndroidGpsCandidateSource(),
+            eligibilityGate = eligibilityGate,
+            locationReadGate = LocationReadGate { locationAccess.isGranted() },
         )
         val scanDriver = MediaScanDriver(
             rowSource = AndroidMediaScanRowSource(this),
             catalogue = catalogue,
             changeFeed = AndroidMediaStoreChangeFeed(this),
-            scanIndexHook = scanIndexHook,
+            scanIndexHook = CompositeScanIndexHook(listOf(captureDateHook, locationHook)),
             scanScope = appScope,
         )
         scanDriver.start(appScope)
-        DiagLog.i(TAG, "phase 4 scan driver started (catalogue + change feed + capture-date indexer wired)")
+        DiagLog.i(
+            TAG,
+            "phase 4 scan driver started " +
+                "(catalogue + change feed + capture-date and location indexers wired)",
+        )
     }
 
     /**

@@ -45,6 +45,20 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *   values (NULL name, 0 dimensions, 0 duration, false favorite) until the
  *   next authoritative scan refreshes them, which is exactly the record
  *   fields' documented default semantics.
+ * - v3 -> v4 (r16 round): the location provenance columns (`latitude`,
+ *   `longitude`, `locationSource`) added to `catalogue_items` by
+ *   [MIGRATION_3_4] --- three plain nullable columns, `ADD COLUMN` only,
+ *   the v1 -> v2 shape again. Existing rows read `NULL` for all three
+ *   ("no persisted location"), which is exactly the honest default: the
+ *   location indexer fills them on each row's next add/change sighting.
+ *
+ * The v4 schema snapshot (4.json) is hand-written in this round (no local
+ * KSP available); its `identityHash` was computed with Room 2.8.5's own
+ * algorithm (SchemaIdentityKey over entity id-keys; source:
+ * maven.google.com/androidx/room/room-compiler/2.8.5/
+ * room-compiler-2.8.5-sources.jar, androidx/room/vo/SchemaIdentityKey.kt et
+ * al.) and VALIDATED by reproducing the committed v1/v2/v3 hashes
+ * byte-for-byte with the same computation before extrapolating to v4.
  *
  * Untested Android-adjacent code per ADR-0016; behavior is pinned by the
  * pure-type tests around [io.github.dukeoftoad.gallery.data.catalogue
@@ -56,7 +70,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CatalogueTombstoneEntity::class,
         ScanCheckpointEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class MediaCatalogueDatabase : RoomDatabase() {
@@ -148,12 +162,47 @@ abstract class MediaCatalogueDatabase : RoomDatabase() {
         }
 
         /**
+         * v3 -> v4 (r16 round): adds the location provenance columns to
+         * `catalogue_items` (latitude/longitude in signed decimal degrees
+         * parsed from the item's EXIF GPS, plus the source provenance
+         * string). Three nullable columns, `ADD COLUMN` only --- the v1 ->
+         * v2 shape, no table rebuild, no data loss; existing rows keep
+         * every value and read `NULL` ("no persisted location"), which the
+         * location indexer overwrites on each row's next add/change
+         * sighting.
+         *
+         * `DEFAULT NULL` for the same reason as [MIGRATION_1_2]: it makes
+         * the migrated schema identical to the CREATE TABLE Room generates
+         * for the v4 entity (a nullable column with no declared default),
+         * so open-time schema validation passes without `@ColumnInfo
+         * (defaultValue = ...)` annotations. REAL affinity for the two
+         * coordinate columns matches Kotlin `Double` properties.
+         */
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE catalogue_items " +
+                        "ADD COLUMN latitude REAL DEFAULT NULL",
+                )
+                db.execSQL(
+                    "ALTER TABLE catalogue_items " +
+                        "ADD COLUMN longitude REAL DEFAULT NULL",
+                )
+                db.execSQL(
+                    "ALTER TABLE catalogue_items " +
+                        "ADD COLUMN locationSource TEXT DEFAULT NULL",
+                )
+            }
+        }
+
+        /**
          * Builds the singleton-scope database for the app. Callers own the
          * instance lifetime (one per process, via whatever dependency
          * holder the app settles on); [context.applicationContext] is used
          * so no Activity can leak through the builder. Explicit
-         * migrations only ([MIGRATION_1_2], [MIGRATION_2_3]) --- NO
-         * `fallbackToDestructiveMigration`, ever; see the class KDoc.
+         * migrations only ([MIGRATION_1_2], [MIGRATION_2_3],
+         * [MIGRATION_3_4]) --- NO `fallbackToDestructiveMigration`, ever;
+         * see the class KDoc.
          */
         fun build(context: Context): MediaCatalogueDatabase =
             Room.databaseBuilder(
@@ -164,7 +213,7 @@ abstract class MediaCatalogueDatabase : RoomDatabase() {
                 // class KDoc. An incompatible future schema must fail loud
                 // (IllegalStateException on open), not wipe silently.
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

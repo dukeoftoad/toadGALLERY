@@ -39,6 +39,50 @@ class PhotosTimelineSourceTest {
     }
 
     // ------------------------------------------------------------------
+    // timelineSource: the r17 filter-aware ladder
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `a filter the catalogue cannot serve keeps the MediaStore fallback`() {
+        // E.g. a bucket dimension (no catalogue column) or a non-Room
+        // catalogue binding: the fallback serves every engine dimension,
+        // so the generation stays honest instead of silently unfiltered.
+        assertEquals(
+            TimelineSource.MEDIA_STORE_FALLBACK,
+            timelineSource(
+                cataloguePopulated = true,
+                catalogueServesFilter = false,
+            ),
+        )
+        // An unpopulated catalogue always keeps the fallback regardless.
+        assertEquals(
+            TimelineSource.MEDIA_STORE_FALLBACK,
+            timelineSource(
+                cataloguePopulated = false,
+                catalogueServesFilter = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a serveable filter keeps the catalogue backend on a populated catalogue`() {
+        // The default parameter preserves the pre-r17 decision exactly;
+        // an explicit true (an inactive filter, or an active one the
+        // binding can serve) is the same choice.
+        assertEquals(
+            TimelineSource.CATALOGUE,
+            timelineSource(cataloguePopulated = true),
+        )
+        assertEquals(
+            TimelineSource.CATALOGUE,
+            timelineSource(
+                cataloguePopulated = true,
+                catalogueServesFilter = true,
+            ),
+        )
+    }
+
+    // ------------------------------------------------------------------
     // toCatalogueDirection: the sort menu -> catalogue window direction
     // ------------------------------------------------------------------
 

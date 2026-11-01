@@ -181,6 +181,12 @@ import kotlinx.coroutines.launch
 fun ViewerScreen(
     viewModel: ViewerViewModel,
     onBack: () -> Unit,
+    /**
+     * Phase 4: opens the metadata Details sub-screen for one item; wired
+     * from the info sheet's Full-details entry. Empty lambda default keeps
+     * every existing call site compiling unchanged.
+     */
+    onOpenDetails: (item: MediaItem) -> Unit = {},
 ) {
     // Immersive while the viewer is open: hide both system bars, transient on
     // swipe. Restored on dispose (back, or navigating to another screen).
@@ -469,7 +475,11 @@ fun ViewerScreen(
     // ---- Viewer dialogs & the info sheet (issue #63) ----
 
     infoTarget?.let { item ->
-        ViewerInfoSheet(item = item, onDismiss = { infoTarget = null })
+        ViewerInfoSheet(
+            item = item,
+            onDismiss = { infoTarget = null },
+            onOpenDetails = { onOpenDetails(item) },
+        )
     }
     renameTarget?.let { item ->
         ViewerRenameDialog(
@@ -503,7 +513,7 @@ fun ViewerScreen(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ViewerInfoSheet(item: MediaItem, onDismiss: () -> Unit) {
+private fun ViewerInfoSheet(item: MediaItem, onDismiss: () -> Unit, onOpenDetails: () -> Unit) {
     val context = LocalContext.current
     var lookup by remember(item.uri) { mutableStateOf<ViewerInfoLookup?>(null) }
     LaunchedEffect(item.uri) {
@@ -557,6 +567,13 @@ private fun ViewerInfoSheet(item: MediaItem, onDismiss: () -> Unit) {
                 label = stringResource(R.string.viewer_info_uri),
                 value = item.uri.toString(),
             )
+            // Phase 4: the full metadata Details sub-screen (dimensions,
+            // exposure triangle, GPS, the availability-honest block tree)
+            // opens from here; this sheet stays the light MediaStore-row
+            // summary.
+            TextButton(onClick = onOpenDetails) {
+                Text(stringResource(R.string.viewer_info_open_full_details))
+            }
         }
     }
 }

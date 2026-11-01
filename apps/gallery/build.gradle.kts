@@ -73,7 +73,14 @@ android {
         // local-media-key tiebreak, invalidated by the catalogue's own
         // change flow. Per maintainer directive: no release tags until
         // Phase 5 completes; builds ride CI from main.
-        versionCode = 17
+        // versionCode 18 (r14 round): the metadata Details view (read
+        // path) --- a new screen presenting dimensions, size, MIME,
+        // capture date with explicit timezone semantics, camera,
+        // exposure triangle and GPS (display-gated on the
+        // ACCESS_MEDIA_LOCATION consent state), plus the full EXIF block
+        // in a collapsible tree --- and the ACCESS_MEDIA_LOCATION
+        // permission flow (Settings section + a pure state machine).
+        versionCode = 18
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

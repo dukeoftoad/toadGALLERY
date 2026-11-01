@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ui
 
+import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +40,7 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
 import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
+import io.github.dukeoftoad.gallery.ui.details.DetailsScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
@@ -110,7 +112,23 @@ object Destinations {
      */
     const val ABOUT = "about"
 
+    /**
+     * Metadata Details sub-screen (roadmap Phase 4: "Metadata Details view
+     * with read"). Not top-level (sub-page UX); reached from the viewer's
+     * info sheet. Arguments follow the existing NavType conventions: the
+     * MediaStore `_id` as [NavType.LongType] (like album detail's
+     * bucketId) plus the content Uri string, percent-encoded by
+     * [details] --- the Uri is the ACCESS handle (ADR-0006), not identity,
+     * but it is what reconstructs the identity when the item is not in
+     * the catalogue yet.
+     */
+    const val DETAILS = "details/{mediaId}?uri={uri}"
+
     fun albumDetail(bucketId: Long): String = "album/$bucketId"
+
+    /** Builds the details route for [mediaId], encoding the [uri] argument. */
+    fun details(mediaId: Long, uri: Uri): String =
+        "details/$mediaId?uri=${Uri.encode(uri.toString())}"
 
     /** Routes that show the bottom navigation bar. */
     val topLevel = setOf(PHOTOS, ALBUMS, SEARCH, SETTINGS)
@@ -277,10 +295,35 @@ fun ToadGalleryApp() {
                 composable(Destinations.VIEWER) {
                     // Issue #50: full-screen viewer over the tap-time window;
                     // the SAME shell-scoped instance the grid screens wrote to.
+                    // Phase 4: the info sheet gains a Full-details entry that
+                    // opens the metadata Details sub-screen for THAT item.
                     ViewerScreen(
                         viewModel = viewerViewModel,
                         onBack = { navController.popBackStack() },
+                        onOpenDetails = { item ->
+                            navController.navigate(Destinations.details(item.id, item.uri))
+                        },
                     )
+                }
+                composable(
+                    route = Destinations.DETAILS,
+                    arguments = listOf(
+                        navArgument("mediaId") { type = NavType.LongType },
+                        navArgument("uri") { type = NavType.StringType },
+                    ),
+                ) { backStackEntry ->
+                    // Phase 4: the metadata Details sub-screen; its ViewModel
+                    // is screen-scoped (per-item state, unlike the shell
+                    // hand-offs above).
+                    val mediaId = backStackEntry.arguments?.getLong("mediaId")
+                    val uriText = backStackEntry.arguments?.getString("uri")
+                    if (mediaId != null && mediaId != 0L && uriText != null) {
+                        DetailsScreen(
+                            mediaId = mediaId,
+                            uri = Uri.parse(uriText),
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
                 composable(Destinations.TRASH) {
                     // Issue #31: recycle bin over MediaStore's IS_TRASHED rows.

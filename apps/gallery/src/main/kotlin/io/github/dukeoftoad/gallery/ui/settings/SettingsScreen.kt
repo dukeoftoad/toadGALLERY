@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ui.settings
 
+import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
+import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.trash.TrashUiState
 import io.github.dukeoftoad.gallery.ui.trash.TrashViewModel
@@ -152,6 +154,16 @@ fun SettingsScreen(
             pickedViewModel.onPicked(uris)
             onBrowsePicked()
         }
+    }
+
+    // Phase 4 location consent: the runtime answer lands straight in the
+    // shell-scoped state holder (no re-check needed --- the result IS the
+    // OS truth; refresh() covers the system-settings detour).
+    val locationState by settingsViewModel.mediaLocation.state.collectAsState()
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        settingsViewModel.mediaLocation.onPermissionResult(granted)
     }
 
     Column(
@@ -351,6 +363,64 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 16.dp),
                 )
             }
+        }
+
+        // ---- Location data (Phase 4: ACCESS_MEDIA_LOCATION consent) ----
+        // Renders the shell-scoped state holder; on API 29+ the row asks
+        // the OS (the grant is a DISPLAY gate for GPS coordinates only ---
+        // ADR-0014: coordinates never leave the device). Below 29 the
+        // permission does not exist and nothing was ever redactable, so
+        // the entry renders as inert copy (same shape as the pre-R
+        // recycle-bin entry).
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.settings_location_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.settings_location_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val locationStatus = when (locationState) {
+                MediaLocationState.GRANTED ->
+                    stringResource(R.string.settings_location_state_granted)
+                MediaLocationState.DENIED ->
+                    stringResource(R.string.settings_location_state_denied)
+                else -> stringResource(R.string.settings_location_state_unknown)
+            }
+            Text(
+                text = locationStatus,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            if (locationState == MediaLocationState.UNKNOWN ||
+                locationState == MediaLocationState.DENIED
+            ) {
+                Button(
+                    onClick = {
+                        locationPermissionLauncher.launch(
+                            Manifest.permission.ACCESS_MEDIA_LOCATION,
+                        )
+                    },
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_location_request"),
+                ) {
+                    Text(stringResource(R.string.settings_location_request))
+                }
+            }
+        } else {
+            Text(
+                text = stringResource(R.string.settings_location_pre_q_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
 
         // ---- Recycle bin (issue #31) ----

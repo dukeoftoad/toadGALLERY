@@ -1,7 +1,7 @@
 package io.github.dukeoftoad.gallery.ui.people
 
 import android.app.Application
-import androidx.annotation.StringRes
+import androidx.annotation.AnyRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -360,7 +360,12 @@ sealed interface PersonDetailState {
  */
 sealed interface PersonDetailEvent {
     data class ShowSnackbar(
-        @StringRes val messageRes: Int,
+        // @AnyRes, not @StringRes: the same field carries either a plain
+        // R.string (formatArgs path) or an R.plurals (pluralCount path)
+        // --- the FileOpsEvent.ShowSnackbar convention, whose @AnyRes is
+        // what lets the screen's getQuantityString/getString dual resolve
+        // without a lint ResourceType error.
+        @AnyRes val messageRes: Int,
         val formatArgs: List<String> = emptyList(),
         val pluralCount: Int = -1,
     ) : PersonDetailEvent

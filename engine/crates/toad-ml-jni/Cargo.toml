@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 ente-image.workspace = true
 ente-ml.workspace = true
+ente-photos-ml.workspace = true
 jni.workspace = true
 
 [dev-dependencies]

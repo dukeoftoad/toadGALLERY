@@ -689,6 +689,89 @@ fun SettingsScreen(
             null -> Unit
         }
 
+        // ---- Face indexing + clustering (r23 dogfood) ----
+        // The r23 slice of the same section: on-device face embeddings +
+        // a persistent app-private index + the vendored upstream
+        // clustering, over the 12 most recent on-device JPEGs. Same
+        // single-flight gating as the r22 actions (`aiState.busy`); live
+        // per-photo progress while the run walks the photos.
+        Text(
+            text = stringResource(R.string.settings_ai_index_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Button(
+            onClick = aiViewModel::runIndexCluster,
+            enabled = !aiState.busy,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .testTag("settings_ai_index_run"),
+        ) {
+            Text(stringResource(R.string.settings_ai_index_run))
+        }
+        Button(
+            onClick = aiViewModel::deleteFaceIndex,
+            enabled = !aiState.busy,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .testTag("settings_ai_index_delete"),
+        ) {
+            Text(stringResource(R.string.settings_ai_index_delete))
+        }
+        aiState.indexProgress?.let { progress ->
+            Text(
+                text = stringResource(
+                    R.string.settings_ai_index_progress,
+                    progress.photosProcessed,
+                    progress.totalPhotos,
+                    progress.facesIndexed,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+        when (val result = aiState.indexResult) {
+            AiDogfoodState.IndexResult.LibraryMissing -> Text(
+                text = stringResource(R.string.settings_ai_index_library_missing),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            AiDogfoodState.IndexResult.NoJpegFound -> Text(
+                text = stringResource(R.string.settings_ai_index_no_jpeg),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            is AiDogfoodState.IndexResult.Ok -> Text(
+                text = stringResource(
+                    R.string.settings_ai_index_done,
+                    result.photos,
+                    result.faces,
+                    result.clusters,
+                    result.elapsedMs,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            AiDogfoodState.IndexResult.Deleted -> Text(
+                text = stringResource(R.string.settings_ai_index_deleted),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            is AiDogfoodState.IndexResult.Failed -> Text(
+                text = stringResource(R.string.settings_ai_index_failed, result.message),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            null -> Unit
+        }
+
         // ---- About (appearance slice) ----
         Spacer(Modifier.height(24.dp))
         Text(

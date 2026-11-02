@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r23 slice: the face-index + clustering dogfood action inside the
+     Settings "AI engine" section (extends the r22 section; see
+     strings_r22.xml for the round-specific-strings-file convention).
+     Same copy rules: honest plain language, escaped apostrophes, and the
+     privacy posture spelled out — the index lives in app-private
+     storage and nothing leaves the device. No new permissions, no new
+     network code (r23 adds NO network surface at all). -->
+<resources>
+
+    <!-- The r23 action + its one-line honest description. -->
+    <string name="settings_ai_index_run">Index + cluster (r23 dogfood)</string>
+    <string name="settings_ai_index_body">Runs face detection + embeddings over the 12 most recent JPEGs, stores the face rows in app-private storage and clusters them on-device. No network access; deleting the index below erases everything.</string>
+
+    <!-- Live progress while the run walks the photos. -->
+    <string name="settings_ai_index_progress">Indexing %1$d of %2$d photos… (%3$d faces so far)</string>
+
+    <!-- Outcomes. The OK line is the "N photos · M faces · K people" shape. -->
+    <string name="settings_ai_index_library_missing">Engine library not in this build (build with the engine flag).</string>
+    <string name="settings_ai_index_no_jpeg">No JPEG on this device to index.</string>
+    <string name="settings_ai_index_failed">Indexing failed: %1$s</string>
+    <string name="settings_ai_index_deleted">Face index database deleted.</string>
+    <string name="settings_ai_index_done">Indexed %1$d photos · %2$d faces · %3$d clusters in %4$d ms</string>
+
+    <!-- Index reset (mirrors the r22 delete-models action pattern). -->
+    <string name="settings_ai_index_delete">Delete face index</string>
+</resources>

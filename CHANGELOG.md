@@ -4,11 +4,41 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 24; per maintainer
+## [0.4.1-alpha] — unreleased on main (versionCode 25; per maintainer
   directive no new device builds until Phase 5 completes)
 
 ### Added
 
+- **The Ente ML engine, vendored at a pinned commit** (r21 round; the Phase 5
+  AI engine workstream's first slice, `docs/phase-5/ente-pin.md`): the new
+  root-level `engine/` Rust workspace carries `crates/ente-ml` (YOLO face
+  detection + NMS, geometric alignment, MobileFaceNet embeddings, MobileCLIP
+  image/text encoders, the ONNX Runtime provider policy and the model
+  catalog), `crates/ente-assets` (asset download + verification + staged
+  install primitives) and `crates/ente-image` (byte-oriented decode incl.
+  HEIC/AVIF/JXL via the upstream git-pinned heic-decoder) — extracted from
+  `ente/ente` at `423b2d80d9ec89d45f5680cb1e1d777bac225f41`, byte-identical
+  except the recreated workspace root, the crate-directory renames and added
+  crate `license` fields, with every adaptation recorded in
+  `engine/NOTICE.md` and the provenance ledger
+  (Ente is AGPL-3.0; the ledger records the one-way-compatibility consequence
+  for distributed builds). CI gains an `engine` job running
+  `cargo check --workspace` (plus fmt/clippy) so the vendored engine can
+  never silently rot.
+- **The model-delivery core** (r21 round; ADR-0020, the maintainer's
+  Ente-style delivery decision): `ml/engine/ModelManifest.kt` pins ALL 11
+  model assets (5 core — face detection, face embedding, CLIP image, CLIP
+  text, BPE vocabulary — plus 6 pet-pack assets deliberately unprovisioned)
+  with byte sizes and SHA-256 digests transcribed from the pinned Rust
+  catalog, so no "latest" model can ever be fetched or silently swapped;
+  `ModelVerifier` verifies expected-size-then-streaming-SHA-256 without ever
+  buffering a model whole; `ModelProvisioner` implements the
+  verify-then-stage-then-commit install (temp file → verify → atomic rename →
+  receipt written last), per-capability readiness (Not/Partial/Ready), pin-
+  change invalidation and explicit invalidate calls, with the transport
+  abstracted behind `ModelDownloader` — the HTTP implementation, host
+  allowlist and INTERNET permission are r22 by ADR-0020's ordering, so this
+  round stays fully offline and the 9-test JVM suite runs hermetically.
 - **The combined single-read EXIF index pass** (r20 round; the
   r19-named follow-up, closed): one `MediaReadHandle` open + one
   byte read + one EXIF parse per row now serves BOTH provenance

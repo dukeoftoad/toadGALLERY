@@ -46,3 +46,6 @@ upstream/
 # Logs / temp
 *.log
 *.tmp
+
+# Vendored Rust engine build artifacts (r21)
+engine/target/

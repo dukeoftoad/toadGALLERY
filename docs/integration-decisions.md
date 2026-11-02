@@ -4,7 +4,10 @@
 choice. Decisions are never edited in place after acceptance — a superseding ADR is added.
 Statuses: `PROPOSED` (awaiting phase evidence) → `ACCEPTED` (evidence supports it) → `SUPERSEDED`.
 
-**Latest revision:** 2026-10-31 — ADR-0015 amended by the issue #38 review follow-ups: MediaStore
+**Latest revision:** 2026-11-02 — ADR-0020 introduced (on-device AI model delivery:
+pinned runtime download, offline-verified — the Phase 5 Ente engine workstream's
+delivery policy; the app holds no INTERNET permission until r22).
+Previously (2026-10-31): ADR-0015 amended by the issue #38 review follow-ups: MediaStore
 change notifications now drive a debounced `pagingSource.invalidate()` (a re-anchored generational
 refresh) instead of drifting appends, and the slice's Coil-packaging claim was corrected — Coil 2.x
 ships its HTTP fetcher in the default registry, so the offline guarantee rests on the ADR-0014
@@ -357,6 +360,14 @@ reverses that.
 ## ADR-0010 — On-device AI policy (NEW, v2.0 roadmap)
 
 **Status:** ACCEPTED (policy); **Date:** 2026-10-29 · **Application phases:** 5, 8.
+
+**Revision (2026-11-02, ADR-0020).** §2 ("All models ship in the APK") and §4 ("No model
+download at runtime") are refined for the Ente-derived engine workstream inside Phase 5
+only: that engine's models are fetched on demand at first enablement --- pinned,
+size- and SHA-256-verified, from the ADR-0020 allowlisted host --- and are NOT shipped
+in the APK by default; APK shipping survives only as ADR-0020 §7's offline release
+pack. The consent, on-device-inference and phase-mapping decisions here are unchanged
+(Phase 8's editor-AI models keep this ADR's bundling rules).
 
 **Context.** The v2 roadmap introduces on-device AI features in Phase 5 (People clustering,
 Things tagging, semantic search) and Phase 8 (magic erase, sky replacement, bokeh, opt-in
@@ -1062,6 +1073,102 @@ ADR-0014 forbids any dependency that could reintroduce network reach.
 
 ---
 
+## ADR-0020 — On-device AI model delivery: pinned runtime download, offline-verified (NEW)
+
+**Status:** ACCEPTED · **Date:** 2026-11-02 · **Application phase:** 5 (the
+Ente-derived AI engine workstream inside Phase 5; resolves the audit's
+"Runtime model-download policy conflict" and refines ADR-0010's model-asset
+wording for that engine; amends ADR-0014 for model fetches only — the
+INTERNET permission itself lands in r22).
+
+**Context.** The Phase 4 compatibility audit flagged a hard conflict: ADR-0010
+says AI models ship inside the APK, while the Ente engine we are porting
+downloads model weights at runtime (~239.4 MiB for the core face + semantic
+set), and ADR-0014's offline-by-construction gate forbids the INTERNET
+permission outright. Vendoring 239 MiB into every build was rejected by the
+maintainer (2026-11-02): the APK would balloon, and the download/verify/
+install path --- the exact code that must not break --- would never be
+exercised until release. The maintainer's direction: **follow Ente's model ---
+after install, the app downloads the models itself, on demand --- while CI
+retains the ability to ship an offline pack.**
+
+**Decision.**
+
+1. **Model-only download policy.** The app may hold the INTERNET permission
+   for exactly ONE purpose: fetching the pinned model assets. No account, no
+   telemetry, no crash reporting, no tile/vector/config fetches of any other
+   kind. The permission is added ONLY in the round that lands the HTTP
+   downloader (r22); until then the app stays offline (ADR-0014 Layer 1
+   intact).
+2. **Pinned manifest, never "latest".** The Kotlin `ModelManifest`
+   (`ml/engine/ModelManifest.kt`) is transcribed from the vendored Rust
+   catalog (`engine/crates/ente-ml/src/assets.rs`) at the pinned Ente commit:
+   all eleven assets carry the catalog's name, byte size and SHA-256 digest
+   exactly, pinned by the JVM suite (a transcription drift in the six pet
+   entries' file names was caught by the pre-merge cross-check against
+   `assets.rs` and corrected before this ADR landed).
+   A manifest change requires an engine re-pin (`engine/NOTICE.md` procedure)
+   and invalidates installed copies of the affected capability.
+3. **Verify-then-stage-then-commit.** Every asset is downloaded to a temp
+   file in the destination directory, verified against the pin (expected
+   size first, then streaming SHA-256), and only then atomically renamed into
+   place; the install receipt is written last. Interrupted or corrupted
+   transfers leave nothing behind and never touch an installed model
+   (`ModelProvisioner`, pinned by JVM tests).
+4. **Strict host allowlist.** The r22 downloader will fetch from a single
+   pinned host --- a public model-mirror repository under the project's
+   control (final host URL is pinned in the r22 slice; `models.ente.com` is
+   the documented fallback, and the only host the vendored upstream catalog
+   itself references). Nothing is enforced yet in r21: the single-constant
+   allowlist, its tests and the egress-suite coverage all land WITH the HTTP
+   downloader in r22, and until then the tree contains no network code at
+   all.
+5. **Per-capability opt-in and invalidation.** FACE and SEMANTIC are
+   provisioned independently (the provisioner takes a capability, never a
+   bundle) and only after the user enables the corresponding feature --- the
+   consent gate sits in the Phase 5 feature wiring ABOVE the provisioner,
+   not inside it (faces stay disabled by default, per ADR-0010's consent
+   direction); the pet pack is pinned but not provisioned in the first
+   delivery (`ModelManifest.firstDelivery`). Invalidation is
+   capability-scoped, with the r21 code owning the installed-copy half: a
+   pin change reads the affected copies as absent and re-provisions them,
+   while purging derived outputs --- a face-model change drops face
+   embeddings/clusters, a CLIP-model change drops image embeddings and the
+   vector index --- is the index coordinator's half and lands with it.
+6. **Egress gate extension.** When the INTERNET permission lands, the
+   existing privacy suites extend: the manifest allowlist test asserts the
+   downloader's host constant; the socket-egress probe asserts that no
+   connection outside the allowlisted host occurs during a provisioning run;
+   the merged-manifest privacy gate gains an INTERNET justification entry.
+   Until those tests exist, no HTTP code merges.
+7. **Offline CI pack preserved.** Release builds MAY vendor the verified
+   model pack (built by CI from the pinned manifest) as an alternative
+   distribution channel --- a release-time option only; no such CI target
+   exists yet (a named later deliverable, see `docs/phase-5/ente-pin.md`).
+   Both channels share the same verification code, and the offline build
+   never holds INTERNET.
+
+**Consequences.**
+
+- Pro: the APK stays small; the download path is dogfooded from the first
+  provisioning round on the maintainer's device; Ente's proven
+  verify-then-stage flow is reused rather than reinvented.
+- Pro: model updates become a manifest + engine re-pin, decoupled from app
+  releases (which stay frozen until Phase 5 completes).
+- Con: ADR-0014's headline "the app cannot access the network" weakens to
+  "the app can only fetch the pinned model pack from the allowlisted host"
+  once r22 lands. This ADR records that change EXPLICITLY --- the audit's
+  warning that the project "must not silently choose B while claiming the
+  existing cannot-access-network guarantee" is honored here.
+- Con: first-run People/Magic-Search enablement costs a one-time ~36 MiB
+  (FACE) / ~204 MiB (SEMANTIC; 213,397,048 bytes) transfer on the user's
+  connection; provisioning is resumable per asset and never partially
+  installed.
+- Neutral: inference remains 100% on-device; media, embeddings and indexes
+  never cross the network. Only inert, hash-verified model bytes are fetched.
+
+---
+
 ## ADR index
 
 | ADR | Title | Status |
@@ -1085,3 +1192,4 @@ ADR-0014 forbids any dependency that could reintroduce network reach.
 | 0017 | Hidden vault crypto: Keystore AES-256-GCM + PBKDF2 PIN (issue #32) | ACCEPTED |
 | 0018 | Release signing and the pre-release pipeline (issue #59) | ACCEPTED |
 | 0019 | Vault biometric unlock binding (issue #57) | ACCEPTED |
+| 0020 | On-device AI model delivery: pinned runtime download, offline-verified (Ente engine) | ACCEPTED (amends ADR-0014 for model fetches only) |

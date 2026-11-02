@@ -66,10 +66,12 @@ Driven by two user directives on 2026-10-29:
   complex RAW development, broad format promises without verified
   decoders.
 - **New invariant:** the core app manifest does not declare `INTERNET`.
-  Checked at build time.
+  Checked at build time. (Refined by ADR-0020, 2026-11-02: r22 adds
+  `INTERNET` solely for the pinned model fetch; enforcement then shifts to
+  the host allowlist + egress suite.)
 - **New invariant (v2.2):** no code is ported from any upstream. The
-  provenance ledger at `docs/licensing-and-attribution.md` §5 stays
-  empty.
+  provenance ledger at `docs/licensing-and-attribution.md` §5 stayed empty
+  until r21's ADR-0020 vendoring — the recorded exception.
 
 **ADR impact:** ADR-0008 (features-only), ADR-0009 (Compose),
 ADR-0010 (on-device AI), ADR-0011 (non-destructive pipeline),
@@ -104,7 +106,8 @@ libre, other features like Mi Gallery have."
    Gallery via a versioned content-URI contract, updatable independently.
 6. Keep the product private and offline-first: no mandatory account,
    cloud service, ads, analytics, or network access. No `INTERNET`
-   permission in the core manifest.
+   permission in the core manifest (until r22's model-fetch exception per
+   ADR-0020).
 7. Protect originals by default. Non-destructive editing pipeline;
    recycle bin; PIN/biometric hidden vault.
 8. Use **GitHub Actions as the canonical build and CI environment**.
@@ -546,6 +549,34 @@ pre-Q reduced-projection fallback on an API 26–28 device) stays
 open, now folded into the eventual Phase 5 completion build's
 checklist.
 
+#### Status — r21 round (versionCode 25): the Ente engine pin + model-provisioning core
+
+The Phase 5 AI engine workstream starts (audit workstream 2, first slice;
+`docs/phase-5/ente-pin.md`): the Ente Rust ML engine is **vendored at pinned
+commit `423b2d80d9ec89d45f5680cb1e1d777bac225f41`** as the new root-level
+`engine/` workspace — `crates/ente-ml` (YOLO face detection + NMS, alignment,
+MobileFaceNet embeddings, MobileCLIP, the model catalog), `crates/ente-assets`
+(download/verify/staged-install primitives) and `crates/ente-image`
+(byte-oriented decode incl. HEIC/AVIF/JXL) — byte-identical to upstream
+except the recreated workspace root, the crate-directory renames and
+crate-level `license` fields, all diffable and recorded in
+`engine/NOTICE.md`; a new cargo check + fmt + clippy CI job guards the
+workspace. Licensing is settled explicitly: Ente is **AGPL-3.0**, the ledger
+(`licensing-and-attribution.md` §2/§5) records the vendoring and its
+one-way-compatibility consequence for distributed builds. On the Kotlin side
+the model-delivery core lands per the maintainer's delivery decision
+(**ADR-0020**: models are downloaded on demand Ente-style, verified against
+the pin, never shipped in the APK by default; the offline pack remains a
+release-time option): `ml/engine/ModelManifest.kt` pins all 11 assets
+(5 core + 6 pet, deliberately unprovisioned) with sizes + SHA-256
+transcribed from the pinned `assets.rs` (all eleven name-for-name,
+test-pinned); `ModelVerifier` streams size-then-hash
+verification; `ModelProvisioner` does verify-then-stage-then-commit with a
+receipt written last, per-capability state and invalidation — pinned by
+hermetic JVM tests (transport faked; the HTTP downloader + INTERNET
+permission + JNI bridge spike are r22, exactly as ADR-0020 orders). No
+device build, per the Phase-5-completion directive.
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three
@@ -639,7 +670,10 @@ organisational affordances, all on-device.
   - **Places:** derived from GPS metadata already extracted in Phase 4.
     No reverse geocoding network call; labels use coarse on-device
     region buckets derived from coordinates.
-  - **Things:** on-device object/scene tagging. Model shipped in APK.
+  - **Things:** on-device object/scene tagging. Model shipped in APK
+    (superseded for the Ente engine workstream by ADR-0020: models are
+    fetched on demand at first enablement; the offline pack is a
+    release-time alternative).
 - **Smart search:** compose filters for filename, date range, media
   type, album/folder, favorites, metadata fields, tags, colour labels,
   and people clusters. Add an on-device semantic search bar that
@@ -663,7 +697,8 @@ organisational affordances, all on-device.
 - Documented indexing and cache invalidation behavior.
 - Search/query tests and performance measurements.
 - On-device ML model packaging for People and Things, with model
-  attribution and license (ADR-0010).
+  attribution and license (ADR-0010; delivery per ADR-0020 — on-demand
+  fetch by default, offline pack as release-time alternative).
 
 #### Exit criteria
 

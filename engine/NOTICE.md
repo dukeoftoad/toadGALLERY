@@ -58,16 +58,47 @@ manifest (the Kotlin `ModelManifest` must always match the pinned
 
 Deferred to a later round (tracked in `docs/phase-5/ente-pin.md`): extraction
 of `rust/crates/photos` `ml_db` / `ml_store` / `face_clustering` modules and
-`ente-vecdb` into a fourth vendored crate; the Android JNI/UniFFI bridge; the
-cargo-ndk ABI build wired into CI. When the ABI build lands, carry over the
-Android rustflags from upstream `rust/.cargo/config.toml` (16 KB page-size
-`max-page-size=16384` link args, required by Play Store from mid-2025) into
-`engine/.cargo/config.toml` — they are irrelevant to the host-target CI gates
-and therefore not vendored this round.
+`ente-vecdb` into a fourth vendored crate.
+
+## r22 additions (not from upstream)
+
+The r22 delivery round added three things to `engine/` that are **net-new
+toadGALLERY code, not vendored** — they carry no upstream provenance:
+
+1. `crates/toad-ml-jni/` — the JNI bridge crate (cdylib
+   `libtoad_ml_jni.so`, AGPL-3.0 via `license.workspace = true`): a
+   four-function surface over ente-ml's face pipeline. Its provenance,
+   ORT dylib discovery order and build flow are documented in
+   `crates/toad-ml-jni/README.md`.
+2. `.cargo/config.toml` — **upstream-derived** (the one r22 file with
+   upstream provenance): a subset of upstream `rust/.cargo/config.toml` @
+   `423b2d80` — the `CARGO_CFG_TARGET_FEATURE` env workaround, the
+   aarch64 `chacha20_force_neon` cfg, and the Android 16 KB page-size
+   `max-page-size=16384` link args for aarch64/armv7/x86_64 — carried
+   over so the Android ABI build links like upstream's own mobile build.
+   Everything else in the upstream file (aliases, non-Android targets)
+   is not vendored.
+3. `scripts/build-android.sh` — the cargo-ndk Android build (NDK
+   discovery + pinned fallback install, arm64-v8a / `--all` for x86_64)
+   plus the ONNX Runtime supply: `libonnxruntime.so` comes from
+   Microsoft's official 1.31.0 Android AAR on Maven Central
+   (sha256-pinned in the script — the exact version the ort-sys
+   2.0.0-rc.15 `api-31` bindings expect; the vendored crates use
+   load-dynamic, so ort-sys's own Android dist (a static `.a`) is not
+   usable and the shared library is a fetched supply, never a cargo
+   artifact). Verified in the r22 local build proof: both staged `.so`
+   files have 0x4000-aligned LOAD segments and the cdylib exports all
+   four JNI symbols.
+
+The workspace root gained the `jni` crate (pinned 0.21.1 in
+`[workspace.dependencies]`) and the `crates/toad-ml-jni` member; the three
+vendored crates are untouched (byte-identity per the adaptation list above
+still holds).
 
 ## Verification
 
 Verified at the pin from `engine/`: `cargo check --workspace --all-targets`,
 `cargo fmt --all -- --check`, and `cargo clippy --workspace` all pass (host
-target). CI runs exactly these three commands on every PR
-(`.github/workflows/ci.yml`, `engine` job).
+target; the r22 additions pass the same gates). CI runs exactly these three
+commands on every PR (`.github/workflows/ci.yml`, `engine` job), plus the
+`engine-android` job for the ABI build and an engine-enabled assemble.

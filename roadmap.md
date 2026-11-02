@@ -577,6 +577,41 @@ hermetic JVM tests (transport faked; the HTTP downloader + INTERNET
 permission + JNI bridge spike are r22, exactly as ADR-0020 orders). No
 device build, per the Phase-5-completion directive.
 
+#### Status — r22 round (versionCode 26): the Android engine bridge
+
+The two r21-named r22 deliverables of ADR-0020 land, closing that round's
+deferral list (`docs/phase-5/ente-pin.md`). **The HTTP model downloader**:
+`ml/engine/HttpModelDownloader.kt` — plain `HttpURLConnection`, zero new
+dependencies — pinned to the single allowlisted host `models.ente.com`
+(verified against the live host: all five core assets answer HTTP 200
+directly, no redirects, exact pinned content-lengths); fetch URLs are built
+from parts over a structurally guarded file name, redirects fail closed, and
+a content-length mismatch aborts before the first byte. The app's first
+network permission lands with it — the manifest declares INTERNET exactly
+once for the model fetch, bounded by the merged-manifest gate + allowlist
+protocol and the extended privacy suites (`PrivacyPolicyTest` on the JVM:
+permission-set pin, host-literal scan, URL surface for all eleven entries;
+`PrivacyEgressTest` on device: the grant present, non-allowlisted targets
+refused without a connection). **The JNI bridge**: the net-new AGPL crate
+`engine/crates/toad-ml-jni` (cdylib `libtoad_ml_jni.so`, four external
+functions behind the Kotlin `MlEngine`/`MlEngineJni` facade; a missing
+library is a graceful `LibraryMissing` state, never a crash), built for
+Android ABIs by `engine/scripts/build-android.sh` (cargo-ndk; upstream's
+16 KB page-size link args ride via `engine/.cargo/config.toml`) together
+with ONNX Runtime's official `libonnxruntime.so` (the sha256-pinned 1.31.0
+Android AAR from Maven Central — the exact version the ort-sys rc.15
+api-31 bindings expect; load-dynamic makes it a fetched supply, not a
+cargo artifact).
+Packaging is opt-in: Gradle `-PwithEngine` registers the `buildRustEngine`
+task and a build-dir jniLibs srcDir (nothing in the source tree; the
+default build stays byte-for-byte r21), and the new CI `engine-android`
+job gates the ABI build + an engine-enabled assembleDebug, verifying both
+native libraries land in the APK. The Settings "AI engine (r22 dogfood)"
+section dogfoods the whole path on a device: download the FACE assets
+(live per-asset presence updates; byte-level progress deliberately
+deferred), delete, and a one-JPEG face-detection self-test. No device
+build, per the Phase-5-completion directive.
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

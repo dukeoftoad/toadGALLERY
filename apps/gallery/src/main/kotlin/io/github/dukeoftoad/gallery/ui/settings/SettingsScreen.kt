@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
+import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.trash.TrashUiState
 import io.github.dukeoftoad.gallery.ui.trash.TrashViewModel
@@ -128,6 +129,14 @@ import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
  * About entry (appearance slice): the same row shape as the recycle bin,
  * opening the `about` sub-screen via [onOpenAbout] --- identity, privacy
  * posture, credits and vault diagnostics live there.
+ *
+ * AI engine section (r22 dogfood, ADR-0020): the maintainer's window into
+ * the model-delivery path --- FACE capability status + per-asset presence
+ * from the process-wide provisioner (ToadGalleryApplication), the real
+ * allowlisted-host download, deletion, and one JNI inference self-test
+ * over the first JPEG on the device. A developer section, honestly
+ * labeled: no user-facing feature consumes the engine yet (the Phase 5
+ * People/Magic-Search wiring lands later). See `AiEngineViewModel`.
  */
 @Composable
 fun SettingsScreen(
@@ -534,6 +543,150 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
+        }
+
+        // ---- AI engine (r22 dogfood, ADR-0020) ----
+        // The maintainer's window into the model-delivery path: FACE
+        // provisioning over the REAL allowlisted-host downloader, deletion,
+        // and one JNI inference self-test. Screen-scoped state holder (the
+        // recycle-bin section's `viewModel()` pattern); every presence row
+        // is the provisioner's own disk-backed derivation, never cached
+        // wishful thinking. Actions run on Dispatchers.IO inside the VM;
+        // the buttons sit disabled while one is in flight.
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.settings_ai_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.testTag("settings_ai_section"),
+        )
+        Text(
+            text = stringResource(R.string.settings_ai_section_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        val aiViewModel: AiEngineViewModel = viewModel()
+        val aiState by aiViewModel.state.collectAsState()
+        LaunchedEffect(Unit) { aiViewModel.refresh() }
+        Text(
+            text = stringResource(
+                if (aiState.engineLibraryPresent) {
+                    R.string.settings_ai_library_present
+                } else {
+                    R.string.settings_ai_library_missing
+                }
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            text = stringResource(
+                when (aiState.faceCapability) {
+                    ModelProvisioner.CapabilityState.NotProvisioned -> R.string.settings_ai_state_none
+                    is ModelProvisioner.CapabilityState.Partial -> R.string.settings_ai_state_partial
+                    ModelProvisioner.CapabilityState.Ready -> R.string.settings_ai_state_ready
+                }
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        aiState.assets.forEach { asset ->
+            Text(
+                text = asset.fileName + " — " + stringResource(
+                    if (asset.installed) {
+                        R.string.settings_ai_asset_installed
+                    } else {
+                        R.string.settings_ai_asset_missing
+                    }
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Button(
+            onClick = aiViewModel::downloadFaceModels,
+            enabled = !aiState.busy,
+            modifier = Modifier
+                .padding(top = 16.dp)
+                .testTag("settings_ai_download"),
+        ) {
+            Text(stringResource(R.string.settings_ai_download))
+        }
+        Button(
+            onClick = aiViewModel::deleteFaceModels,
+            enabled = !aiState.busy,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .testTag("settings_ai_delete"),
+        ) {
+            Text(stringResource(R.string.settings_ai_delete))
+        }
+        Button(
+            onClick = aiViewModel::runSelfTest,
+            enabled = !aiState.busy,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .testTag("settings_ai_selftest"),
+        ) {
+            Text(stringResource(R.string.settings_ai_selftest))
+        }
+        when (val note = aiState.note) {
+            AiDogfoodState.Note.Downloaded -> Text(
+                text = stringResource(R.string.settings_ai_download_done),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            is AiDogfoodState.Note.DownloadFailed -> Text(
+                text = stringResource(R.string.settings_ai_download_failed, note.reason),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            AiDogfoodState.Note.Deleted -> Text(
+                text = stringResource(R.string.settings_ai_deleted),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            null -> Unit
+        }
+        when (val result = aiState.selfTest) {
+            AiDogfoodState.SelfTestResult.LibraryMissing -> Text(
+                text = stringResource(R.string.settings_ai_selftest_library_missing),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            AiDogfoodState.SelfTestResult.NoJpegFound -> Text(
+                text = stringResource(R.string.settings_ai_selftest_no_jpeg),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            is AiDogfoodState.SelfTestResult.Ok -> Text(
+                text = pluralStringResource(
+                    R.plurals.settings_ai_selftest_faces,
+                    result.faces,
+                    result.fileName,
+                    result.faces,
+                    result.elapsedMs,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            is AiDogfoodState.SelfTestResult.Failed -> Text(
+                text = stringResource(R.string.settings_ai_selftest_failed, result.message),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            null -> Unit
         }
 
         // ---- About (appearance slice) ----

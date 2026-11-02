@@ -20,6 +20,12 @@ Adaptation record: `engine/NOTICE.md` (authoritative, diffable against the
 pin). Compliance record: `docs/licensing-and-attribution.md` §2/§5.
 Delivery policy for model assets: ADR-0020.
 
+r22 added a fourth crate to the same workspace — `engine/crates/toad-ml-jni` —
+which is **net-new toadGALLERY code** (the JNI bridge over `ente-ml`), NOT
+part of the pin and not vendored from upstream; its provenance is stated in
+the crate's own header. This document's byte-identity claims cover only the
+three vendored crates above.
+
 ## What this round pinned in Kotlin
 
 - `ml/engine/ModelManifest.kt` — the 11-asset catalog (5 core + 6 pet)
@@ -31,23 +37,56 @@ Delivery policy for model assets: ADR-0020.
   verify-then-stage-then-commit install mechanics (net-new Kotlin, upstream
   semantics), transport abstracted behind `ModelDownloader`.
 
+## r22 delivery (the deferred item 1, closed)
+
+Both halves of the r21 deferral landed in the r22 round:
+
+- **The HTTP downloader** — `ml/engine/HttpModelDownloader.kt`, NOT the
+  OkHttp implementation this document originally sketched
+  ("OkHttpModelDownloader"): plain `HttpURLConnection` behind the existing
+  `ModelDownloader` interface, zero new dependencies. The ADR-0020 host pin
+  settled on the documented fallback itself: **`models.ente.com`** — the
+  only host the vendored upstream catalog references — verified against
+  the live host before the pin (all five core assets answer HTTP 200
+  directly, no redirects, exact pinned content-lengths). Fetch URLs are
+  built from parts over a structurally guarded file name (path traversal /
+  absolute-URL / query / fragment injection is rejected before any socket
+  can exist), redirects fail closed, and a `Content-Length` that disagrees
+  with the pin aborts before the first byte. The INTERNET permission lands
+  with it (manifest + allowlist protocol + the extended `PrivacyPolicyTest`
+  and instrumented `PrivacyEgressTest` suites).
+- **The JNI bridge** — `engine/crates/toad-ml-jni` (net-new ours, see the
+  note above), a four-function surface (`nativeInit` / `nativeEngineInfo` /
+  `nativeDetectFacesJpeg` / `nativeRelease`) behind the Kotlin `MlEngine` /
+  `MlEngineJni` facade, where a missing `.so` is a graceful `LibraryMissing`
+  state, never a crash. Android ABIs are built by
+  `engine/scripts/build-android.sh` (cargo-ndk; arm64-v8a, `--all` adds
+  x86_64), packaging the cdylib together with ONNX Runtime's official
+  `libonnxruntime.so` (the 1.31.0 Android AAR from Maven Central,
+  sha256-pinned in the script — the exact version the ort-sys rc.15 api-31
+  bindings expect; the vendored crates use load-dynamic, so the runtime
+  library is a fetched supply, never a cargo artifact) into the app ONLY
+  under Gradle
+  `-PwithEngine`; CI's `engine-android` job gates the ABI build and an
+  engine-enabled assemble. The r22 device dogfood (Settings → "AI engine
+  (r22 dogfood)") drives the whole path: download FACE assets with live
+  per-asset presence updates, delete, and a one-JPEG face-detection
+  self-test (byte-level download progress deliberately deferred).
+
 ## Deferred (named, ordered)
 
-1. **r22 — HTTP downloader + JNI/UniFFI bridge spike.** `OkHttpModelDownloader`
-   behind the existing `ModelDownloader` interface with the ADR-0020 host
-   allowlist + egress tests; INTERNET permission lands HERE only; the Rust
-   `ente-ml` crate built for Android ABIs via cargo-ndk in CI; one
-   byte-input inference through a narrow JNI facade.
-2. **r22+ — photos-side extraction.** `rust/crates/photos` `ml_db`,
-   `ml_store`, `face_clustering` + `rust/crates/vecdb` vendored as a fourth
-   engine crate. Self-containment check at the pin, corrected by re-grep:
-   NOT fully self-contained — the trio's production code imports the host
-   crate's `db` module (`crate::db::{Connection, Database, OpenOptions, …}`
-   in `ml_db/mod.rs`, `ml_db/migrations.rs` and the `ml_db/queries/*`), with
-   more of the same inside `#[cfg(test)]` blocks — so the extraction must
-   vendor `db` (or the needed subset) alongside the trio, or port the trio
-   onto an engine-owned DB seam. `rust/crates/vecdb` exists at the pin.
-3. Later — model pack CI target for the offline release channel (ADR-0020 §7).
+1. **r22+ — photos-side extraction.** `rust/crates/photos` `ml_db`,
+   `ml_store`, `face_clustering` + `rust/crates/vecdb` vendored as a
+   further engine crate. Self-containment check at the pin, corrected by
+   re-grep: NOT fully self-contained — the trio's production code imports
+   the host crate's `db` module (`crate::db::{Connection, Database,
+   OpenOptions, …}` in `ml_db/mod.rs`, `ml_db/migrations.rs` and the
+   `ml_db/queries/*`), with more of the same inside `#[cfg(test)]` blocks
+   — so the extraction must vendor `db` (or the needed subset) alongside
+   the trio, or port the trio onto an engine-owned DB seam.
+   `rust/crates/vecdb` exists at the pin.
+2. Later — model pack CI target for the offline release channel
+   (ADR-0020 §7).
 
 ## Regeneration procedure (moving the pin)
 

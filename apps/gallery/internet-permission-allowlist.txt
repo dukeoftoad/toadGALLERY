@@ -17,7 +17,12 @@
 #   3. The entry is one line: `android.permission.INTERNET` (no other
 #      permission is governed by this file).
 #
-# The file ships EMPTY. An empty file means: any appearance of INTERNET in
-# any merged variant manifest fails the build.
+# The file shipped EMPTY through Phase 4: any appearance of INTERNET in
+# any merged variant manifest failed the build. Since r22 it carries
+# exactly ONE entry (issue #94): the first-party manifest declaration
+# behind ADR-0020's model downloads --- pinned host models.ente.com,
+# enforced by the egress gates named in that ADR's revision note.
 #
 # See docs/phase-2/privacy-gate.md for the full enforcement model.
+
+android.permission.INTERNET

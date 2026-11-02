@@ -4,10 +4,45 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 22)
+## [0.4.1-alpha] — unreleased on main (versionCode 23)
 
 ### Added
 
+- **Folder filter + catalogue bucket dimension** (r19 round; the
+  r17-named follow-up, closed):
+  - The catalogue persists the folder dimension as row-sourced
+    `bucketId`/`bucketDisplayName` columns (Room v4 → v5,
+    non-destructive; the hand-derived v5 identityHash was re-derived
+    from the Room 2.8.5 sources with the documented method and
+    matches byte-for-byte, with v1–v4 reproduced as control). Unlike
+    the EXIF-derived provenance columns, bucket values ride the
+    upsert itself — no wipe/refill cycle, so they survive every scan.
+  - The folder-filtered timeline window is served from the catalogue
+    (a `bucketId = ?` clause composed in the engine's fixed order)
+    and from both MediaStore legs (API 30+ Bundle-args in-query; the
+    pre-30 snapshot leg fails closed with the chips row still
+    reachable — the way back is never lost).
+  - The Photos chips row gains a leading **Folder** chip → a picker
+    sheet (folder names + live counts, honest Loading/Error/Empty
+    states, "All folders" clears only the folder dimension); the
+    selection survives sort and backend changes like every other
+    chip dimension. The r17 "folder chip stays engine-only" note is
+    retired.
+- **Honest error and permission states** (r19 round):
+  - Albums and AlbumDetail gain Error states with retry — the first
+    live call sites of the shared ErrorState component; a provider
+    hiccup no longer crashes the Albums tab (it previously escaped
+    `viewModelScope.launch` uncaught, the one screen in the app with
+    no error arm) and an AlbumDetail failure no longer disguises
+    itself as "folder is empty".
+  - The Search tab gains the Photos permission pattern
+    (PermissionNeeded with Grant + Settings deep-link instead of an
+    endless generic Error whose Retry can never succeed); a
+    mid-query `SecurityException` (revoked while composed) folds
+    into the same state.
+  - The vault's keystore-handle cache seam is wired: a
+    permanently-invalidated biometric key invalidates the cache and
+    reloads fresh instead of wedging the unlock flow.
 - **Editable metadata fields (EXIF write-back)** (r15 round; the Phase 4
   write path):
   - A pure edit-capability gate (`MediaEditCapability`: EDITABLE /
@@ -494,6 +529,34 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Changed
 
+- **Video playback is lifecycle-aware** (r19 round): ON_STOP pauses
+  the player (audio no longer bleeds into the background); ON_START
+  resumes only if the page was playing when stopped; a page that
+  stops being the current pager page pauses (the mirror of the
+  zoom-reset seam PhotoPage already had).
+- **Every media grid honors the "Photos per row" setting** (r19
+  round): Trash (previously a hardcoded 3-column staggered grid),
+  Search and the move-picker grids now consume the same appearance
+  setting as Photos/AlbumDetail.
+- **One revision rule in one place** (r19 round): CatalogueReconciler
+  now delegates to `MediaRevision.diff` — a generation-token
+  appear/disappear alone is UNCHANGED (observability, not content),
+  exactly as MediaRevision always documented; the reconciler test
+  that pinned the contradictory semantics is flipped to the
+  authoritative contract. Practical effect: a 29→30 upgrade day no
+  longer rewrites every catalogue row for a token flip.
+- **The Details view rides the shared process-wide catalogue** (r19
+  round): a second, per-visit RoomDatabase (a leaked SQLite
+  connection that would silently miss scan writes) is gone; the
+  record lookup is a keyed `canonicalUri` DAO query
+  (`recordsByCanonicalUri`) instead of a full-table `recordsMap()`
+  scan per Details open.
+- **Vault durability hardening** (r19 round): every mutating vault
+  operation serializes behind a store-level lock; the orphan sweep
+  defers blobs younger than a ten-minute grace window (deferred, not
+  skipped — the next sweep reclaims them); atomic writes fsync
+  before rename (power-loss durability); setup() rollback removes
+  staged `.tmp` residue on any staging failure.
 - Catalogue revision semantics corrected (PR #81 audit C, landing in the
   same unreleased 0.4.1 line as the Phase 4 foundation that introduced
   it): the per-item revision token is the row's own
@@ -517,6 +580,73 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Fixed
 
+- **The favorites/search `media_type` bug** (r19 round; the r17
+  round flagged it, the audit confirmed the blast radius):
+  `media_type IN (1, 2)` treated 2 as VIDEO — but 2 is AUDIO (3 is
+  VIDEO) — so the favorites pseudo-album silently dropped every
+  favorited video and could surface audio rows, and search's Videos
+  chip returned audio files. Both selections now pin images+videos
+  (`IN (1, 3)` / `= 3`), cross-checked against the filter engine's
+  constants by JVM tests so the literals cannot drift again.
+- **The vault unlock-vs-move data-loss race** (r19 round; audit P0
+  from two independent audits): a locked-state move-to-vault racing
+  an unlock's `sweepOrphans()` could have the sweep delete the
+  in-flight blob as an "orphan", the move's index write then
+  reference the deleted blob, and the original MediaStore row be
+  deleted — permanent, irreversible loss. The store-level mutex
+  closes every read-modify-write interleave (store vs store, delete
+  vs store, wipe vs store, unlock-sweep vs move); a parked-stream
+  JVM test pins the exact interleave with a blob deliberately aged
+  past the grace window so only the lock can save it.
+- **GPS editor NaN corruption** (r19 round): `toDoubleOrNull`
+  accepts "NaN" (and "0x1p3", "1.5d"); NaN passes the latitude
+  range check and the write path persists GPS (0,0) into the file's
+  EXIF. The editor now accepts a strict decimal grammar + finiteness
+  only; the refused-input corpus pins the exotic forms and the
+  round-trip canary pins that prefill-produced scientific notation
+  still re-parses.
+- **Viewer swipe-lock after delete-while-zoomed** (r19 round): the
+  zoom flag was remembered outside `key(window)`; deleting the
+  zoomed photo cancelled (not ran) the old page's reset effect and
+  the pager stayed swipe-locked until an accidental gesture. The
+  flag now re-seeds with the rebuilt window.
+- **Photos permission race** (r19 round): a debounced catalogue
+  change from the app-start scan could publish a Ready grid of
+  un-grantable thumbnails BEHIND the system permission dialog (a
+  later grant then early-returned and left the broken cells); a
+  denial could not cancel the in-flight generation, letting a stale
+  Ready overwrite PermissionNeeded. Denials now cancel and clear;
+  catalogue changes only auto-start when already Ready.
+- **Scan indexer per-row isolation** (r19 round): a throwing row in
+  CaptureDateIndexer/LocationIndexer aborted the whole indexing
+  batch — despite the KDoc promising otherwise — leaving every
+  remaining row's provenance NULL forever (later scans see the rows
+  UNCHANGED and never re-offer them). Per-row try/catch makes the
+  promise structural; the NULL-provenance healing pass stays a named
+  follow-up.
+- **Vault thumbnails authenticate the GCM tail** (r19 round):
+  `BitmapFactory.decodeStream` stops at end-of-image, so the
+  trailing GCM tag was never consumed and a tampered/truncated blob
+  could publish a (partial) thumbnail with no authentication
+  failure. The decoder now drains to EOF after the decode inside the
+  same `use` block; a drain failure yields the placeholder.
+- **Format sniffer major-brand rule** (r19 round): image brands were
+  consulted before video families over the mixed major+compatible
+  brand list, so an HEVC camcorder file (major `qt`/`isom`, compat
+  `hevc`) sniffed as a HEIF still image — wrong on every axis. The
+  major brand now decides the video families; compatible brands
+  classify images only.
+- **WebP editability drift** (r19 round): the format matrix said
+  WebP `editable=false` while the r15 write spine (and its tests)
+  made WebP EDITABLE — two declared truths disagreeing. The matrix
+  now agrees with the gate; the heic/heif rows carry their API-28
+  floor and the AVIF note its verified API-31 read floor.
+- **Pre-Q projection crash guard** (r19 round): the timeline and scan
+  queries project WIDTH/HEIGHT against pre-Q collections where the
+  columns may not exist (MediaColumns surface from API 29); a
+  rejecting provider threw out of `ContentResolver.query` with no
+  catch. A one-shot reduced-projection retry now degrades honestly
+  (width/height 0) instead of crashing API 26–28.
 - The biometric unlock sheet still crashed --- the authenticator class,
   not the missing negative text, was the real defect (#78 follow-up,
   the r11 device finding, build 14): one androidx.biometric validation

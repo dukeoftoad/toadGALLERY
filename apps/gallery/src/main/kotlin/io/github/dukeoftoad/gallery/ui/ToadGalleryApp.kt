@@ -279,7 +279,14 @@ fun ToadGalleryApp() {
                 composable(Destinations.SEARCH) {
                     // Phase 3 (issue #62): real name search replaces the
                     // placeholder; results open the shared viewer hand-off.
-                    SearchScreen(onOpenViewer = openViewer)
+                    // r19a: the shell's settingsViewModel rides along so the
+                    // results grid honors the photos-per-row / GRID layout
+                    // setting (the Photos-tab wiring); the screen's own
+                    // permission state rides the SAME shared machinery.
+                    SearchScreen(
+                        onOpenViewer = openViewer,
+                        settingsViewModel = settingsViewModel,
+                    )
                 }
                 composable(Destinations.MAP) {
                     // r16 (Phase 4 still-open item): the offline Map tab.
@@ -319,9 +326,12 @@ fun ToadGalleryApp() {
                 }
                 composable(Destinations.PICKED) {
                     // Issue #27: sub-screen over the shared picked set; the
-                    // shell hides the bottom bar (non-topLevel route).
+                    // shell hides the bottom bar (non-topLevel route). r19a:
+                    // the shell's settingsViewModel rides along so the grid
+                    // honors the photos-per-row / GRID layout setting.
                     PickedPhotosScreen(
                         pickedViewModel = pickedViewModel,
+                        settingsViewModel = settingsViewModel,
                         onBack = { navController.popBackStack() },
                     )
                 }
@@ -360,8 +370,11 @@ fun ToadGalleryApp() {
                 }
                 composable(Destinations.TRASH) {
                     // Issue #31: recycle bin over MediaStore's IS_TRASHED rows.
+                    // r19a: the shell's settingsViewModel rides along so the
+                    // grid honors the photos-per-row / GRID layout setting.
                     TrashScreen(
                         onBack = { navController.popBackStack() },
+                        settingsViewModel = settingsViewModel,
                     )
                 }
                 composable(Destinations.VAULT) {

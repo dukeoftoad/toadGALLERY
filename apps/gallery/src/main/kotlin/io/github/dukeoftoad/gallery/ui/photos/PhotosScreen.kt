@@ -1,6 +1,7 @@
 package io.github.dukeoftoad.gallery.ui.photos
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -124,7 +125,10 @@ import io.github.dukeoftoad.gallery.ui.vault.isConfigured
  *    action, plus an actions bar (`file_ops_actions`): Rename (single
  *    selection only), Copy (in-place duplicate), Move (album picker
  *    dialog), Delete (confirmation dialog with explicit "permanent, no
- *    recycle bin yet" wording);
+ *    recycle bin yet" wording). System back EXITS selection mode
+ *    (r19b) instead of leaving the app with the mode still live in the
+ *    ViewModel --- the count bar's Close action's twin, and the mirror
+ *    of AlbumDetailScreen's handler;
  *  - undo snackbars for rename/copy/move (delete has none) and a cancellable
  *    progress dialog (`file_ops_progress`, "Moving 3 of 12…") for batches
  *    above [FileOpsViewModel.PROGRESS_DIALOG_THRESHOLD] items;
@@ -165,18 +169,23 @@ import io.github.dukeoftoad.gallery.ui.vault.isConfigured
  * generation (see `PhotosViewModel`); the bar disappears in selection mode
  * exactly like the pre-#66 grid did, replaced by the count bar.
  *
- * ## Smart-filter chips (r17)
+ * ## Smart-filter chips (r17) + the folder picker (r19b)
  * Under the header bar the plain timeline carries [PhotosFilterChipsRow]:
  * All / Photos / Videos / GIFs / Favorites (multi-select; the last is Q+
  * only --- the provider column is Q+), plus a Clear action while any
- * filter is active. Chips write the ViewModel's [TimelineFilter] (one
- * fresh paging generation per change), so grid, empty state and item
- * count all reflect the SAME filtered slice on every data path. An empty
- * result under an active filter renders the honest "nothing matched"
- * state (with the chips row still on top --- the row's All/Clear
- * affordances are the way back from an over-narrow filter), not the
- * empty-library copy. The screen also consumes the Albums tab's
- * Collections hand-off ([PhotosFilterHandoff]) on every entry.
+ * filter is active --- and since r19b a Folder chip LEADS the row:
+ * "All folders" unselected, the picked folder's name selected, and a
+ * tap opens the picker sheet (a Material 3 modal bottom sheet listing
+ * the device's media folders the way the move picker does, with honest
+ * loading/error/empty states). Chips write the ViewModel's
+ * [TimelineFilter] (one fresh paging generation per change), so grid,
+ * empty state and item count all reflect the SAME filtered slice on
+ * every data path. An empty result under an active filter renders the
+ * honest "nothing matched" state (with the chips row still on top ---
+ * the row's All/Clear affordances are the way back from an over-narrow
+ * filter), not the empty-library copy. The screen also consumes the
+ * Albums tab's Collections hand-off ([PhotosFilterHandoff]) on every
+ * entry.
  *
  * ## Appearance settings (roadmap Phase 3 slice)
  * The shell-scoped [settingsViewModel] (shared with the Settings tab and
@@ -205,6 +214,9 @@ fun PhotosScreen(
     val state by viewModel.state.collectAsState()
     val sort by viewModel.sort.collectAsState()
     val filter by viewModel.filter.collectAsState()
+    // r19b: the folder chip's label name + the picker sheet's list state.
+    val selectedFolderName by viewModel.selectedFolderName.collectAsState()
+    val folders by viewModel.folders.collectAsState()
     val appearance by settingsViewModel.appearance.collectAsState()
     val fileOpsState by fileOpsViewModel.state.collectAsState()
     val vaultState by vaultViewModel.state.collectAsState()
@@ -374,6 +386,11 @@ fun PhotosScreen(
                             PhotosFilterChipsRow(
                                 filter = filter,
                                 onChange = viewModel::onFilterChange,
+                                selectedFolderName = selectedFolderName,
+                                folders = folders,
+                                onFoldersRefresh = viewModel::refreshFolders,
+                                onFolderPick = viewModel::onFolderSelected,
+                                onFolderClear = viewModel::onFolderCleared,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Box(modifier = Modifier.weight(1f)) {
@@ -399,6 +416,11 @@ fun PhotosScreen(
                     onSortChange = viewModel::onSortChange,
                     filter = filter,
                     onFilterChange = viewModel::onFilterChange,
+                    selectedFolderName = selectedFolderName,
+                    folders = folders,
+                    onFoldersRefresh = viewModel::refreshFolders,
+                    onFolderPick = viewModel::onFolderSelected,
+                    onFolderClear = viewModel::onFolderCleared,
                     fileOpsViewModel = fileOpsViewModel,
                     fileOpsState = fileOpsState,
                     vaultViewModel = vaultViewModel,
@@ -422,7 +444,9 @@ fun PhotosScreen(
  * ([PhotosHeaderBar] + [TimelineSortMenu]); since the appearance slice it
  * threads the shell's [Appearance] through to the grid; since r17 the
  * plain timeline also carries the smart-filter chips row
- * ([PhotosFilterChipsRow]) under the header bar.
+ * ([PhotosFilterChipsRow]) under the header bar, and since r19b the row's
+ * folder chip + picker sheet plumb through here (the ViewModel owns the
+ * state; this composable only forwards it).
  *
  * Grid refreshing after ops is NOT done by hand: MediaStore writes fire the
  * existing ContentObserver -> paging invalidation (issue #38); see the
@@ -436,6 +460,11 @@ private fun PhotosTimeline(
     onSortChange: (TimelineSort) -> Unit,
     filter: TimelineFilter,
     onFilterChange: (TimelineFilter) -> Unit,
+    selectedFolderName: String?,
+    folders: PhotosFoldersState,
+    onFoldersRefresh: () -> Unit,
+    onFolderPick: (Album) -> Unit,
+    onFolderClear: () -> Unit,
     fileOpsViewModel: FileOpsViewModel,
     fileOpsState: FileOpsUiState,
     vaultViewModel: VaultViewModel,
@@ -446,6 +475,17 @@ private fun PhotosTimeline(
 ) {
     val selection = fileOpsState as? FileOpsUiState.Selection
     val running = fileOpsState as? FileOpsUiState.Running
+
+    // r19b: while a selection is active, system back EXITS the selection
+    // instead of leaving the app with the mode still live in the ViewModel
+    // --- the count bar's Close action's twin, and the mirror of
+    // AlbumDetailScreen's handler. During a batch run `selection` is null
+    // (Running replaces Selection in the file-ops state machine), so back
+    // keeps its normal meaning there; `exitSelection` itself also guards
+    // Running (a no-op mid-batch), so the two guards agree.
+    BackHandler(enabled = selection != null) {
+        fileOpsViewModel.exitSelection()
+    }
 
     // Local dialog state: dialog visibility is screen-local, op runs live in
     // the ViewModel. Nothing here needs to survive process death --- an
@@ -519,9 +559,17 @@ private fun PhotosTimeline(
                 // count bar, and the chips would collide with the actions
                 // row). One tap = one ViewModel filter change = one fresh
                 // paging generation (see PhotosViewModel.onFilterChange).
+                // Since r19b the row also carries the LEADING folder chip;
+                // its picker sheet and the chip's name state thread through
+                // the same ViewModel plumbing.
                 PhotosFilterChipsRow(
                     filter = filter,
                     onChange = onFilterChange,
+                    selectedFolderName = selectedFolderName,
+                    folders = folders,
+                    onFoldersRefresh = onFoldersRefresh,
+                    onFolderPick = onFolderPick,
+                    onFolderClear = onFolderClear,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Box(modifier = Modifier.weight(1f)) {

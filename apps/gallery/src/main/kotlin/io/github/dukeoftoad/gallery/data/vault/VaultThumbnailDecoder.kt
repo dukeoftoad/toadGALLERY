@@ -21,7 +21,13 @@ import kotlin.math.roundToInt
  *    [VaultCrypto.decryptFrom] stream and let [BitmapFactory] decode with the
  *    [VaultThumbnailPolicy.inSampleSize] downsample --- bounded OUTPUT pixels
  *    (~256px edge), never the whole original buffer. Two passes over one
- *    mark/reset'd header buffer: bounds first, then the real decode.
+ *    mark/reset'd header buffer: bounds first, then the real decode, then a
+ *    tail drain to EOF: [BitmapFactory.decodeStream] stops at end-of-image
+ *    and closing a `CipherInputStream` does NOT run `doFinal`, so the drain
+ *    (not the decode, not the close) is the read that verifies the trailing
+ *    GCM tag --- without it a tampered or truncated blob could publish
+ *    pixels with NO authentication failure. A drain failure degrades to
+ *    the same placeholder as every other tier.
  *  - **Videos**: `MediaMetadataRetriever` cannot read a stream, so the
  *    plaintext streams into ONE temporary file inside app-private
  *    `cacheDir` (never external storage), a frame is extracted, and the temp
@@ -123,7 +129,26 @@ class VaultThumbnailDecoder(
                 DiagLog.i(TAG, "thumb: id=${entry.id} tier=$TIER_PHOTO_DECODE -> placeholder")
                 return null
             }
-            return scaleToTarget(decoded)
+            // The tail drain: decodeStream stops at end-of-image, so the
+            // trailing GCM tag was never consumed --- and closing a
+            // CipherInputStream does NOT run doFinal. Reading to EOF inside
+            // this same `use` block is the ONLY step that authenticates the
+            // tail; any throw there (AEADBadTagException, surfaced by the
+            // cipher stream as an IOException) means the blob was tampered
+            // or truncated, and the decoded pixels must NOT be published ---
+            // the class's tamper contract says placeholder, never
+            // half-truth.
+            return try {
+                val drain = ByteArray(DRAIN_BUFFER_BYTES)
+                while (buffered.read(drain) > 0) {
+                    // The final read is the authentication; nothing to do
+                    // with the drained bytes (they are tag/padding only).
+                }
+                scaleToTarget(decoded)
+            } catch (e: Exception) {
+                DiagLog.i(TAG, "thumb: id=${entry.id} tier=$TIER_PHOTO_TAIL -> placeholder")
+                null
+            }
         }
     }
 
@@ -197,6 +222,12 @@ class VaultThumbnailDecoder(
         /** Photo tier: the downsampled decode itself failed (W1). */
         const val TIER_PHOTO_DECODE = "photo-decode"
 
+        /**
+         * Photo tier: the post-decode tail drain failed GCM authentication
+         * --- the blob was tampered or truncated past end-of-image (W1).
+         */
+        const val TIER_PHOTO_TAIL = "photo-tail"
+
         /** Video tier: the frame extraction returned no frame (W1). */
         const val TIER_VIDEO_FRAME = "video-frame"
 
@@ -207,5 +238,12 @@ class VaultThumbnailDecoder(
          * item degrades to its placeholder.
          */
         const val HEADER_BUFFER_BYTES = 64 * 1024
+
+        /**
+         * The tail-drain buffer: small on purpose --- the drain exists only
+         * to push the cipher stream through its final GCM-tag read, never
+         * to hold the (tag-only) trailing bytes anywhere.
+         */
+        const val DRAIN_BUFFER_BYTES = 8 * 1024
     }
 }

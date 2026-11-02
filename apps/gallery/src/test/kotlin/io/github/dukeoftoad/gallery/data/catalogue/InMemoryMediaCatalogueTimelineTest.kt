@@ -29,6 +29,12 @@ import org.junit.Test
  *   in two windows (the duplicate-LazyGrid-key crash TimelineSort's `_id`
  *   tiebreak exists to prevent).
  *
+ * The r19 section pins the FOLDER-FILTERED window
+ * ([InMemoryMediaCatalogue.folderTimelineWindow]) --- the reference the
+ * Room catalogue's `WHERE bucketId = ?` filtered windows must match:
+ * bucket-id matching (null never matches), the same total order inside a
+ * folder, and the same window tiling.
+ *
  * Pure JUnit 4 / JVM: no android.* types; `runBlocking` drives the suspend
  * surface (the InMemoryMediaCatalogueTest convention).
  */
@@ -43,6 +49,8 @@ class InMemoryMediaCatalogueTimelineTest {
         height: Int = 0,
         durationMs: Long = 0L,
         isFavorite: Boolean = false,
+        bucketId: Long? = null,
+        bucketDisplayName: String? = null,
     ): CatalogueRecord =
         CatalogueRecord(
             localMediaKey = key,
@@ -57,6 +65,8 @@ class InMemoryMediaCatalogueTimelineTest {
             height = height,
             durationMs = durationMs,
             isFavorite = isFavorite,
+            bucketId = bucketId,
+            bucketDisplayName = bucketDisplayName,
         )
 
     /** The keys of a window, in order --- the timeline's row identity. */
@@ -295,6 +305,196 @@ class InMemoryMediaCatalogueTimelineTest {
         assertEquals(
             listOf("external_primary:1", "external_primary:2"),
             catalogue.timelineWindow(0, 10, TimelineDirection.NEWEST_FIRST).keys(),
+        )
+    }
+
+    // --- r19: the folder-filtered window --------------------------------------
+
+    @Test
+    fun `folderTimelineWindow narrows to the bucket's records in the same total order`() =
+        runBlocking {
+            // Interleaved folders: bucket 2 owns keys 1/3/5 with instants
+            // 500/300/700, bucket 7 owns the rest --- the folder window must
+            // slice ONLY bucket 2, in the SAME effective-instant order the
+            // unfiltered window serves it.
+            val catalogue = InMemoryMediaCatalogue()
+            catalogue.upsertAll(
+                listOf(
+                    record(
+                        key = "external_primary:1",
+                        dateAddedMillis = 500L,
+                        bucketId = 2L,
+                        bucketDisplayName = "Screenshots",
+                    ),
+                    record(
+                        key = "external_primary:2",
+                        dateAddedMillis = 100L,
+                        bucketId = 7L,
+                        bucketDisplayName = "Camera",
+                    ),
+                    record(
+                        key = "external_primary:3",
+                        dateAddedMillis = 300L,
+                        bucketId = 2L,
+                        bucketDisplayName = "Screenshots",
+                    ),
+                    record(
+                        key = "external_primary:4",
+                        dateAddedMillis = 900L,
+                        bucketId = 7L,
+                        bucketDisplayName = "Camera",
+                    ),
+                    record(
+                        key = "external_primary:5",
+                        dateAddedMillis = 700L,
+                        bucketId = 2L,
+                        bucketDisplayName = "Screenshots",
+                    ),
+                ),
+            )
+
+            assertEquals(
+                listOf("external_primary:5", "external_primary:1", "external_primary:3"),
+                catalogue.folderTimelineWindow(0, 10, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+                    .keys(),
+            )
+            assertEquals(
+                listOf("external_primary:3", "external_primary:1", "external_primary:5"),
+                catalogue.folderTimelineWindow(0, 10, TimelineDirection.OLDEST_FIRST, bucketId = 2L)
+                    .keys(),
+            )
+            // A folder window's records are the WHOLE records --- the
+            // bucket pair rides the read (the chip can label the filter
+            // from what the window itself returns).
+            assertEquals(
+                "Screenshots",
+                catalogue.folderTimelineWindow(0, 1, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+                    .single()
+                    .bucketDisplayName,
+            )
+        }
+
+    @Test
+    fun `records without a bucket are excluded from every folder window`() = runBlocking {
+        // The honest-null contract: SQL `=` never matches NULL, and neither
+        // does the reference --- a null bucketId (the reduced-projection
+        // fallback walk, a provider that dropped the column) belongs to NO
+        // folder window, never to a fake bucket 0 (0 is a real bucket id
+        // shape and would silently absorb the honestly-bucketless rows).
+        val catalogue = InMemoryMediaCatalogue()
+        catalogue.upsertAll(
+            listOf(
+                record(key = "external_primary:1", bucketId = 2L, bucketDisplayName = "Screenshots"),
+                record(key = "external_primary:2", bucketId = null, bucketDisplayName = null),
+            ),
+        )
+
+        val window = catalogue.folderTimelineWindow(0, 10, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+
+        assertEquals(listOf("external_primary:1"), window.keys())
+        // And a bucket-0 query matches nothing here: 0 is a value, not the
+        // null sentinel.
+        assertTrue(
+            catalogue.folderTimelineWindow(0, 10, TimelineDirection.NEWEST_FIRST, bucketId = 0L)
+                .isEmpty(),
+        )
+    }
+
+    @Test
+    fun `folder windows tile across pages inside a bucket in both directions`() = runBlocking {
+        // Five records in one bucket with an instant tie straddling the
+        // page boundary (page size 2 over five records -> 2 + 2 + 1):
+        // pages must tile the FILTERED total order with zero gaps and
+        // overlaps, exactly like the unfiltered windows.
+        val folderRecords = listOf(
+            record(key = "external_primary:1", dateAddedMillis = 100L, bucketId = 9L),
+            record(key = "external_primary:2", dateAddedMillis = 200L, bucketId = 9L),
+            record(key = "external_primary:3", dateAddedMillis = 200L, bucketId = 9L),
+            record(key = "external_primary:4", dateAddedMillis = 300L, bucketId = 9L),
+            record(key = "external_primary:5", dateAddedMillis = 400L, bucketId = 9L),
+        )
+        val catalogue = InMemoryMediaCatalogue()
+        catalogue.upsertAll(folderRecords + record(key = "external_primary:6", bucketId = 7L))
+
+        for (direction in TimelineDirection.entries) {
+            val full = catalogue.folderTimelineWindow(0, folderRecords.size, direction, bucketId = 9L)
+            val paged = (0..2).flatMap { page ->
+                catalogue.folderTimelineWindow(page * 2, 2, direction, bucketId = 9L)
+            }
+
+            assertEquals("direction=$direction", full.keys(), paged.keys())
+            assertEquals("direction=$direction", folderRecords.size, paged.size)
+        }
+    }
+
+    @Test
+    fun `tombstoned records never surface in a folder window`() = runBlocking {
+        val catalogue = InMemoryMediaCatalogue()
+        catalogue.upsertAll(
+            listOf(
+                record(key = "external_primary:1", bucketId = 2L),
+                record(key = "external_primary:2", bucketId = 2L),
+            ),
+        )
+
+        catalogue.tombstone(listOf("external_primary:1"), atMillis = 10_000L)
+
+        assertEquals(
+            listOf("external_primary:2"),
+            catalogue.folderTimelineWindow(0, 10, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+                .keys(),
+        )
+    }
+
+    @Test
+    fun `folder window invalid arguments and end offsets read empty`() = runBlocking {
+        // The same argument discipline as [timelineWindow]: a negative
+        // offset or non-positive limit is empty, never an unbounded read,
+        // and an offset at/after the folder's end reads empty.
+        val catalogue = InMemoryMediaCatalogue()
+        catalogue.upsertAll(listOf(record(key = "external_primary:1", bucketId = 2L)))
+
+        assertTrue(
+            catalogue.folderTimelineWindow(-1, 4, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+                .isEmpty(),
+        )
+        assertTrue(
+            catalogue.folderTimelineWindow(0, 0, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+                .isEmpty(),
+        )
+        assertTrue(
+            catalogue.folderTimelineWindow(0, -5, TimelineDirection.OLDEST_FIRST, bucketId = 2L)
+                .isEmpty(),
+        )
+        assertTrue(
+            catalogue.folderTimelineWindow(1, 4, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+                .isEmpty(),
+        )
+    }
+
+    @Test
+    fun `resolved capture dates order a folder window over dateAdded`() = runBlocking {
+        // The COALESCE rule inside a folder: a resolved capture date
+        // outranks a "newer" date_added exactly like the unfiltered
+        // timeline --- the folder window is a slice of the SAME total
+        // order, not a different one.
+        val catalogue = InMemoryMediaCatalogue()
+        catalogue.upsertAll(
+            listOf(
+                record(
+                    key = "external_primary:1",
+                    dateAddedMillis = 900_000L,
+                    resolvedCaptureDateMillis = 1_000L,
+                    bucketId = 2L,
+                ),
+                record(key = "external_primary:2", dateAddedMillis = 2_000L, bucketId = 2L),
+            ),
+        )
+
+        assertEquals(
+            listOf("external_primary:2", "external_primary:1"),
+            catalogue.folderTimelineWindow(0, 10, TimelineDirection.NEWEST_FIRST, bucketId = 2L)
+                .keys(),
         )
     }
 

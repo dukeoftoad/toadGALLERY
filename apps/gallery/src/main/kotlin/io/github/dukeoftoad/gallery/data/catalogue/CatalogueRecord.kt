@@ -46,6 +46,17 @@ package io.github.dukeoftoad.gallery.data.catalogue
  * and they NEVER participate in reconciliation --- a favorite toggle or a
  * dimension refresh must not cost an embedding recompute (see the
  * `MediaScanRow` field-group note for the accepted Q-only staleness edge).
+ *
+ * FOLDER/BUCKET ride-alongs ([bucketId], [bucketDisplayName]; r19 round):
+ * the folder dimension the timeline's folder filter matches, ROW-SOURCED
+ * from the provider's own `bucket_id` / `bucket_display_name` columns ---
+ * unlike the capture-date and location provenance (EXIF-derived, re-filled
+ * by a scan index hook AFTER the upsert) they ride the upsert itself and
+ * survive every write unchanged. Nullable for the honest "not resolvable
+ * on this API path" --- deliberately NOT a 0 sentinel --- and NON-REVISION
+ * exactly like the display/shape group above: a folder move must not cost
+ * an embedding recompute (see `MediaScanRow`'s r19 field-group note for
+ * how a move refreshes them in practice).
  */
 data class CatalogueRecord(
     /**
@@ -159,6 +170,31 @@ data class CatalogueRecord(
      * `MediaScanRow`.
      */
     val isFavorite: Boolean = false,
+
+    // --- folder/bucket ride-alongs (r19 round) -----------------------------
+
+    /**
+     * The provider `bucket_id` --- the folder/bucket dimension the
+     * timeline's folder filter matches (`WHERE bucketId = ?`; the same
+     * bucket-id-matching semantics as `MediaStoreSource`'s album queries).
+     * `null` is the honest "not resolvable on this API path" (the row
+     * source projects the column on every walk, but a provider that drops
+     * it, or the reduced-projection defensive fallback, leaves the row
+     * honestly bucketless) --- deliberately NOT a 0 sentinel, which would
+     * collide with a real bucket id. NON-REVISION ride-along; see the
+     * class KDoc.
+     */
+    val bucketId: Long? = null,
+
+    /**
+     * The bucket's display name as the provider reports it
+     * (`bucket_display_name`, the DATA-column-derived name --- NOT
+     * `_display_name`), or `null` when the provider reported none.
+     * Carried so a folder surface can label the filter without a second
+     * MediaStore round trip; the filter itself matches [bucketId] only.
+     * NON-REVISION ride-along; see the class KDoc.
+     */
+    val bucketDisplayName: String? = null,
 )
 
 /**

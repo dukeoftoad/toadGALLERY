@@ -102,7 +102,21 @@ android {
         // cite or an official-docs URL). With r15-r18 the four Phase 4
         // still-open items are landed; per maintainer directive no
         // release tags until Phase 5 completes.
-        versionCode = 22
+        // versionCode 23 (r19 round): the code-improvement round --- a
+        // whole-codebase audit (data, UI, metadata/vault) consolidated
+        // into seven slices: the media_type favorites/search bug fixed
+        // (audio leaked in, videos dropped out), the vault
+        // unlock-vs-move data-loss race closed (store-level mutex +
+        // sweep grace + GCM tail drain), GPS NaN input corruption, the
+        // viewer zoom-lock after delete, the Photos permission race,
+        // scan indexer per-row isolation, the sniffer major-brand
+        // rule, catalogue bucket columns (Room v4 -> v5) with the
+        // Photos folder chip surfaced on both paths, honest
+        // Albums/AlbumDetail/Search error + permission states,
+        // lifecycle-aware video pause, and every grid honoring the
+        // columns setting. Per maintainer directive (2026-11-02)
+        // releases resume: build 23 ships r13-r19.
+        versionCode = 23
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

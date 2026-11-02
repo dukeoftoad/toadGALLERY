@@ -42,6 +42,9 @@ import org.junit.Test
  * - ineligible records never reach the reader at all (vault gate by type);
  * - the changed-record path runs on the NEW row's key/uri;
  * - one unreadable item never aborts the batch;
+ * - a row whose indexing BLOWS UP (the Room-disk-error / parse-blowup
+ *   stand-in the per-row catch exists for) is logged and skipped while
+ *   the batch survives --- its provenance write never runs;
  * - the consent gate is consulted ONCE per hook call, not per row;
  * - a throwing hook in the composite fan-out never starves its sibling
  *   (the composite's failure isolation, exercised through DiagLog's
@@ -402,6 +405,63 @@ class LocationIndexerTest {
             val healthyWrite = writer.writes[1]
             assertEquals(37.7749, healthyWrite.latitude!!, 0.0)
             assertEquals("EXIF_GPS", healthyWrite.sourceName)
+        }
+
+    @Test
+    fun `a blowing-up row never aborts the batch - failure logged and skipped`() =
+        runBlocking {
+            val broken = record(
+                key = "external_primary:12",
+                canonicalUri = "content://media/external/images/12",
+            )
+            val healthy = record(
+                key = "external_primary:13",
+                canonicalUri = "content://media/external/images/13",
+            )
+            val brokenHandle = FakeHandle(byteArrayOf(1))
+            val healthyHandle = FakeHandle(byteArrayOf(1))
+            val writer = RecordingLocationWriter()
+            val access = FakeMediaAccess { media ->
+                if (media.identity.canonicalUri == broken.canonicalUri) brokenHandle
+                else healthyHandle
+            }
+            val source = FakeGpsSource { handle, _ ->
+                // A Room-disk-error / EXIF-parse-blowup stand-in: the seam
+                // contract says "never throws for an unreadable item", so
+                // a THROW here stands for the failure modes outside the
+                // seam's reach (the writer, the open, a future seam bug)
+                // --- exactly what the per-row catch must contain.
+                if (handle === brokenHandle) throw IllegalStateException("disk error")
+                GpsEvidence(sf, MetadataAvailability.PRESENT)
+            }
+            val indexer = LocationIndexer(
+                locationWriter = writer,
+                mediaAccess = access,
+                candidateSource = source,
+                eligibilityGate = FakeGate(setOf(broken.localMediaKey, healthy.localMediaKey)),
+                locationReadGate = FakeReadGate(readable = true),
+            )
+
+            // The per-row failure logs through DiagLog, whose default sink
+            // touches android.util.Log --- unmocked on the JVM. Swap it
+            // (the DiagLogTest pattern, as the composite test below does)
+            // and restore it no matter how the test ends.
+            val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+            DiagLog.sink = { _, _, _ -> }
+            try {
+                indexer.onRecordsApplied(listOf(broken, healthy), emptyList())
+            } finally {
+                DiagLog.sink = stockSink
+            }
+
+            // The healthy sibling's write landed; the broken row produced
+            // NO write at all (its existing provenance stands untouched,
+            // and because its revision did not move, no later scan
+            // re-offers it --- the NULL-provenance healing pass is the
+            // pinned later round).
+            assertEquals(1, writer.writes.size)
+            assertEquals(healthy.localMediaKey, writer.writes.single().localMediaKey)
+            assertEquals("EXIF_GPS", writer.writes.single().sourceName)
         }
 
     @Test

@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.data
 
+import io.github.dukeoftoad.gallery.data.filters.TimelineFilterMediaStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,22 +11,55 @@ import org.junit.Test
  * query's selection/sort SQL text (pinned exactly, the `SearchQuery`
  * convention) and the sentinel bucket-id resolution the album-detail route
  * relies on. Plain JVM per ADR-0016 --- no emulator, no Robolectric.
+ *
+ * Since r19 the selection pins also carry the media-type regression
+ * cross-checks: the platform numbers (MEDIA_TYPE_IMAGE = 1,
+ * MEDIA_TYPE_AUDIO = 2, MEDIA_TYPE_VIDEO = 3) are verified against the
+ * r17 filter engine's JVM-pure constants, so the pre-r19 `2 == video`
+ * drift cannot come back.
  */
 class FavoritesTest {
 
     @Test
     fun `selection filters to images and videos flagged favorite`() {
+        // Platform constants (MediaStore.Files.FileColumns):
+        // MEDIA_TYPE_IMAGE = 1, MEDIA_TYPE_AUDIO = 2, MEDIA_TYPE_VIDEO = 3;
+        // images+videos is therefore IN (1, 3).
         assertEquals(
-            "media_type IN (1, 2) AND is_favorite = 1",
+            "media_type IN (1, 3) AND is_favorite = 1",
             Favorites.FAVORITES_SELECTION,
         )
     }
 
     @Test
     fun `the media-type clause mirrors the timeline semantics`() {
-        // 1/2 are MEDIA_TYPE_IMAGE/MEDIA_TYPE_VIDEO; the clause must keep
+        // 1/3 are MEDIA_TYPE_IMAGE/MEDIA_TYPE_VIDEO; the clause must keep
         // non-media Files rows (downloads, documents) out of the favorites.
-        assertTrue(Favorites.FAVORITES_SELECTION.contains("media_type IN (1, 2)"))
+        assertTrue(Favorites.FAVORITES_SELECTION.contains("media_type IN (1, 3)"))
+    }
+
+    @Test
+    fun `the selection numbers match the filter engine's constants`() {
+        // Anti-drift cross-check: the r17 engine (TimelineFilterMediaStore)
+        // holds JVM-pure constants of the same platform values, so if
+        // either side ever changes alone, this pin breaks loudly.
+        assertEquals(
+            "media_type IN (" +
+                "${TimelineFilterMediaStore.MEDIA_TYPE_IMAGE}, " +
+                "${TimelineFilterMediaStore.MEDIA_TYPE_VIDEO}) AND is_favorite = 1",
+            Favorites.FAVORITES_SELECTION,
+        )
+    }
+
+    @Test
+    fun `audio is not favorites material`() {
+        // MEDIA_TYPE_AUDIO = 2: the pre-r19 selection read IN (1, 2) ---
+        // images+AUDIO --- so a favorited audio row would have surfaced in
+        // the pseudo-album while every actual video was missed. Pin the
+        // bug's shape out: audio's 2 belongs in NO media_type slot of the
+        // selection.
+        assertFalse(Favorites.FAVORITES_SELECTION.contains("(1, 2)"))
+        assertFalse(Favorites.FAVORITES_SELECTION.contains("= 2"))
     }
 
     @Test

@@ -26,11 +26,14 @@ package io.github.dukeoftoad.gallery.data.filters
  *    means "no restriction". All three are surfaced as chips.
  *  - **Favorites** ([favoritesOnly], composes as AND): surfaced as a chip.
  *  - **Album / folder** ([bucketId]): implemented + tested in ALL SQL
- *    projections, but NOT surfaced --- the catalogue has NO bucket column
- *    (`CatalogueItemEntity` persists key/uri/mime/revision/capture-date/
- *    display ride-alongs only), so a folder chip would work on the
- *    MediaStore path and LIE on the catalogue path during a warm start.
- *    Awaiting catalogue columns (Phase 5, alongside the smart-album work).
+ *    projections --- and since the r19 catalogue v5 (the `bucketId` /
+ *    `bucketDisplayName` columns, persisted by the scan and served by
+ *    [TimelineFilterCatalogue]) the CATALOGUE projection serves it too, so
+ *    the dimension is servable on EVERY timeline path. It is still NOT
+ *    surfaced as a chip: the folder chip's UI wiring is its own round
+ *    (the roadmap follow-up "a catalogue bucket column before the folder
+ *    chip can be surfaced" --- the column is what this engine change
+ *    unblocks).
  *  - **Date range** ([dateRange]): implemented + tested in all three
  *    projections, but NOT surfaced --- this round has no date-picker UI
  *    (Phase 5 smart-search surface). Bounded at SECOND granularity (see
@@ -146,13 +149,16 @@ data class TimelineFilter(
     /** Whether only favorited items match (composes as AND with [types]). */
     val favoritesOnly: Boolean = false,
     /**
-     * The folder/bucket dimension (MediaStore `bucket_id`). NOT surfaced in
-     * the r17 UI: the catalogue cannot serve it (no bucket column), and an
-     * honest subset beats a lying chip. In-memory evaluation of a bucket
-     * filter is impossible ([TimelineFilterFields] carries no bucket), so
-     * [matches] deliberately returns `false` for every item --- a VISIBLE
-     * empty result if a caller ever routes a bucket filter through memory,
-     * never a silent pass-through.
+     * The folder/bucket dimension (MediaStore `bucket_id`). Not surfaced in
+     * the r17 UI; the r19 catalogue v5 `bucketId`/`bucketDisplayName`
+     * columns made every SQL projection servable (see the dimension note
+     * above), so surfacing is now a pure UI round. In-memory evaluation of
+     * a bucket filter is impossible ([TimelineFilterFields] carries no
+     * bucket), so [matches] deliberately returns `false` for every item ---
+     * a VISIBLE empty result if a caller ever routes a bucket filter
+     * through memory, never a silent pass-through (the pre-R snapshot leg
+     * keeps that fail-closed guard; the catalogue leg now serves the
+     * dimension for real).
      */
     val bucketId: Long? = null,
     /** The added-instant range; see [FilterDateRange]. Not surfaced in r17. */

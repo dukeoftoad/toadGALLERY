@@ -7,7 +7,17 @@
     is non-exportable, so a restored ciphertext would be permanently
     unopenable, and vault state must not leave the device (ADR-0014).
     Everything else (preferences, diagnostics) stays backable.
+
+    r24: the face-index directory (filesDir/face-index: the ML-index SQLite
+    store with face embeddings + cluster assignments, and the queue's
+    index-state bookkeeping) is excluded too — the manifest's ADR-0020 note
+    promises embeddings and indexes never leave the device, and cloud backup
+    would carry face-derived biometric-adjacent data off it. Unlike the vault
+    nothing is KeyStore-bound (a restore would technically work); it is
+    excluded on principle, and the queue re-derives everything on-device if
+    the directory is absent.
 -->
 <full-backup-content>
     <exclude domain="file" path="vault" />
+    <exclude domain="file" path="face-index" />
 </full-backup-content>

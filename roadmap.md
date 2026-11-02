@@ -646,6 +646,39 @@ ADR: the crypto seam is recorded in `engine/NOTICE.md` and the pin doc,
 not duplicated into a decision record. No device build, per the
 Phase-5-completion directive.
 
+#### Status — r24 round (versionCode 28): the background queue round
+
+Workstream 5 of the Phase 5 plan
+(`docs/phase-5/background-queue.md`): the r23 12-photo dogfood slice is
+expanded into the full-library, **WorkManager-backed background indexing
+queue** — bounded batches, retry/resume across process death, and the
+`MediaRevision.diff()` invalidation wiring the Phase 4 contract promised.
+The JNI bridge's store surface gains the queue's maintenance pair
+(`nativeStoreIndexedFaceFileIds` via upstream's own
+`face_indexed_file_ids`, and `nativeStoreDeleteFacesForFiles` via
+upstream's own chunked `delete_face_index_for_files` — no new SQL), the
+Kotlin side gains the pure queue core (`FaceIndexQueuePlanner` mapping
+RevisionDelta to skip / re-index-delete-first / orphan-cleanup,
+`FaceIndexQueueProcessor` with whole-photo resumability and a
+once-per-drain clustering pass, and the atomic `FaceIndexStateFile`
+bookkeeping inside the face-index directory), and `FaceIndexWorker`
+(CoroutineWorker, one unique chain, self-re-enqueue while the plan
+outlives its batch, honest failure shapes) binds the real seams with
+candidates from the Phase 4 Room catalogue (external-primary volume only
+— the documented multi-volume boundary). The Settings card is replaced
+in kind with the r24 queue card: start / cancel / reset, live progress,
+terminal outcomes, and the clustering-threshold tuning control r23
+flagged for this round. The round's one new dependency is
+**androidx.work 2.10.1** (Apache-2.0, license-screened): its manifest
+injections are trimmed by two `tools:node="remove"` markers
+(ACCESS_NETWORK_STATE and FOREGROUND_SERVICE declined; WAKE_LOCK and
+RECEIVE_BOOT_COMPLETED accepted and documented in
+`docs/phase-2/privacy-gate.md`), the JVM privacy suite pins the removal
+set exactly, and the face-index directory is excluded from cloud backup
+and device transfer (face-derived data never leaves the device). 885 JVM
+tests + 526 vendored Rust tests + 12 JNI tests; versionCode 28, no
+device build per the Phase-5-completion directive.
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

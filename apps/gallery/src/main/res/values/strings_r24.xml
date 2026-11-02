@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r24 slice: the background face-index queue inside the Settings "AI
+     engine" section (extends the r22 section; see strings_r22.xml for the
+     round-specific-strings-file convention). This round REPLACES the r23
+     12-photo manual dogfood run (strings_r23.xml removed with it) with the
+     WorkManager-backed queue: revision-aware planning, bounded batches,
+     retry/resume across process death, live progress and the clustering
+     threshold tuning control. Same copy rules: honest plain language,
+     escaped apostrophes, and the privacy posture spelled out — the index
+     lives in app-private storage, nothing leaves the device, and the two
+     manifest permissions androidx.work injects are documented in
+     docs/phase-2/privacy-gate.md (no new network surface of any kind). -->
+<resources>
+
+    <!-- The r24 action + its one-line honest description. -->
+    <string name="settings_ai_queue_start">Start background index (r24 dogfood)</string>
+    <string name="settings_ai_queue_body">Indexes the whole library in the background: face detection + embeddings in bounded batches that survive app restarts, re-indexing only photos that actually changed and skipping the rest. Runs on-device in app-private storage; no network access. Reset below erases everything.</string>
+
+    <!-- The clustering threshold tuning control (r23 flagged this for r24). -->
+    <string name="settings_ai_queue_threshold">Clustering distance threshold: %1$s (upstream default 0.24 — lower is stricter, higher merges more)</string>
+
+    <!-- Queue lifecycle actions. -->
+    <string name="settings_ai_queue_cancel">Cancel indexing</string>
+    <string name="settings_ai_queue_reset">Reset face index</string>
+
+    <!-- Live states. -->
+    <string name="settings_ai_queue_enqueued">Indexing queued…</string>
+    <string name="settings_ai_queue_progress">Indexing %1$d of %2$d this run · %3$d left in queue · %4$d faces written</string>
+
+    <!-- Outcomes. -->
+    <string name="settings_ai_queue_done">Queue drained: indexed %1$d photos · %2$d faces · %3$d skipped as up-to-date · %4$d clusters · %5$d faces in store</string>
+    <string name="settings_ai_queue_done_no_cluster">Queue drained: indexed %1$d photos · %2$d faces · %3$d skipped as up-to-date · %4$d faces in store</string>
+    <string name="settings_ai_queue_failed">Indexing failed: %1$s</string>
+    <string name="settings_ai_queue_cancelled">Indexing cancelled — finished photos stay indexed; start again to resume the queue.</string>
+</resources>

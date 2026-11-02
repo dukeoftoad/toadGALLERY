@@ -26,6 +26,12 @@ import org.json.JSONObject
  * together with the engine by [release] (the Rust side closes the store
  * on `nativeRelease`), and re-openable after --- the same idempotency
  * rules the r22 session follows.
+ *
+ * r24 adds the store maintenance pair the background queue drives over
+ * the SAME open-store state machine: [indexedFaceFileIds] (which files
+ * carry current-model-version face rows --- the resumability read) and
+ * [deleteFacesForFiles] (the per-file invalidation delete behind
+ * revision-driven re-indexing and orphan cleanup).
  */
 class MlEngine(private val bridge: Bridge = JniBridge) {
 
@@ -109,6 +115,10 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         fun nativeStoreFaceCount(): Long
         fun nativeStoreCluster(distanceThreshold: Double): String
         fun nativeStoreClose(): Boolean
+
+        // ---- r24 ----
+        fun nativeStoreIndexedFaceFileIds(): LongArray
+        fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean
     }
 
     private object JniBridge : Bridge {
@@ -133,6 +143,13 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
             MlEngineJni.nativeStoreCluster(distanceThreshold)
 
         override fun nativeStoreClose(): Boolean = MlEngineJni.nativeStoreClose()
+
+        // ---- r24 ----
+        override fun nativeStoreIndexedFaceFileIds(): LongArray =
+            MlEngineJni.nativeStoreIndexedFaceFileIds()
+
+        override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean =
+            MlEngineJni.nativeStoreDeleteFacesForFiles(fileIds)
     }
 
     private var sessionOpen = false
@@ -310,6 +327,36 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         val closed = bridge.nativeStoreClose()
         faceIndexOpen = false
         return closed
+    }
+
+    /**
+     * The file IDs that currently carry face rows at the vendored pin's
+     * model version (r24), via upstream's own indexed-files read. An
+     * empty list means no indexed files --- including "every row is
+     * older than the current model version", which callers treat as
+     * un-indexed. Throws IllegalStateException when the store is not
+     * open (or the build is library-less).
+     */
+    @Synchronized
+    fun indexedFaceFileIds(): List<Long> {
+        requireFaceIndexOpen()
+        return bridge.nativeStoreIndexedFaceFileIds().toList()
+    }
+
+    /**
+     * Deletes every face row for [fileIds] (r24), via upstream's own
+     * chunked, transactional per-file delete. An empty array is a no-op
+     * returning true. This is the invalidation primitive the background
+     * queue drives: a CONTENT_CHANGED revision (or a file that left the
+     * eligible public listing) must drop its stale rows BEFORE any
+     * re-index, because [putFace] ordinals append rather than replace.
+     * Throws IllegalStateException when the store is not open (or the
+     * build is library-less).
+     */
+    @Synchronized
+    fun deleteFacesForFiles(fileIds: LongArray): Boolean {
+        requireFaceIndexOpen()
+        return bridge.nativeStoreDeleteFacesForFiles(fileIds)
     }
 
     internal companion object {

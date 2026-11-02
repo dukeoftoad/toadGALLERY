@@ -11,6 +11,12 @@
 //! (`MlStore::recluster_faces`, which drives upstream's
 //! `face_clustering::recluster` and persists assignments + cluster
 //! summaries + centroid vectors). No math is reimplemented here.
+//!
+//! r24 adds the two maintenance reads the background queue needs, both
+//! still upstream's own queries verbatim: `MlDb::face_indexed_file_ids`
+//! (which files currently carry face rows, filtered to the vendored
+//! [`FACE_ML_VERSION`]) and `MlDb::delete_face_index_for_files` (the
+//! per-file invalidation delete). No new SQL is authored here.
 
 use std::{
     collections::HashMap,
@@ -142,6 +148,46 @@ pub(crate) fn face_count() -> Result<i64, String> {
             .db()
             .get_total_face_count()
             .map_err(|error| format!("count face rows: {error}"))
+    })
+}
+
+/// The file IDs that currently carry face rows, via upstream's own
+/// `MlDb::face_indexed_file_ids` read with the vendored pin's
+/// [`FACE_ML_VERSION`] as the minimum (r24).
+///
+/// Rows written by an OLDER model version are deliberately NOT reported:
+/// upstream's own versioning rule marks them stale, so the caller's plan
+/// treats those files as un-indexed and re-runs them (delete first, then
+/// re-insert --- `put_face` ordinals would otherwise append duplicates).
+/// The ml_version half of upstream's map is dropped on the wire: the JNI
+/// surface only answers "does this file have CURRENT-version face rows".
+pub(crate) fn indexed_face_file_ids() -> Result<Vec<i64>, String> {
+    with_store(|store| {
+        store
+            .db()
+            .face_indexed_file_ids(FACE_ML_VERSION)
+            .map(|per_file| per_file.into_keys().collect())
+            .map_err(|error| format!("read indexed file ids: {error}"))
+    })
+}
+
+/// Deletes every face row for `file_ids`, via upstream's own
+/// `MlDb::delete_face_index_for_files` (chunked + transactional; r24).
+///
+/// This is the per-file invalidation primitive the background queue's
+/// revision wiring drives: a `CONTENT_CHANGED` revision (or a file that
+/// left the eligible public listing --- deleted, trashed, vault-moved)
+/// must drop its stale pixel-derived rows BEFORE any re-index, because
+/// `put_face` ordinals append rather than replace. An empty slice is a
+/// no-op (upstream's own early return). Cluster assignments and summaries
+/// are upstream-managed by the NEXT `cluster()` pass, exactly like the
+/// r23 dogfood flow.
+pub(crate) fn delete_faces_for_files(file_ids: &[i64]) -> Result<(), String> {
+    with_store(|store| {
+        store
+            .db()
+            .delete_face_index_for_files(file_ids)
+            .map_err(|error| format!("delete face index for files: {error}"))
     })
 }
 
@@ -280,6 +326,58 @@ mod tests {
         assert_eq!(face_count().unwrap(), 2);
         close();
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn indexed_file_ids_and_delete_for_files_round_trip() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        // Store ops before open fail (the NOT_OPEN leg for the r24 fns):
+        assert!(indexed_face_file_ids().is_err());
+        assert!(delete_faces_for_files(&[1]).is_err());
+
+        let dir = open_temp_store("r24-delete");
+        assert!(indexed_face_file_ids().unwrap().is_empty());
+
+        // Faces on files 1 (two faces), 2 (one) and 3 (one):
+        let mut a = [0.0f32; FACE_EMBEDDING_DIM];
+        a[0] = 1.0;
+        let mut b = [0.0f32; FACE_EMBEDDING_DIM];
+        b[1] = 1.0;
+        assert_eq!(put_face(1, &a).unwrap(), 1);
+        assert_eq!(put_face(1, &b).unwrap(), 2);
+        assert_eq!(put_face(2, &a).unwrap(), 1);
+        assert_eq!(put_face(3, &a).unwrap(), 1);
+
+        let mut indexed = indexed_face_file_ids().unwrap();
+        indexed.sort_unstable();
+        assert_eq!(indexed, vec![1, 2, 3]);
+
+        // The empty slice is upstream's own documented no-op:
+        assert!(delete_faces_for_files(&[]).is_ok());
+        assert_eq!(face_count().unwrap(), 4);
+
+        // Per-file invalidation: drop 1 and 3, keep 2:
+        assert!(delete_faces_for_files(&[1, 3]).is_ok());
+        assert_eq!(indexed_face_file_ids().unwrap(), vec![2]);
+        assert_eq!(face_count().unwrap(), 1);
+
+        // Re-index after delete restarts ordinals at 1 (no face_id PK
+        // collision with the deleted rows --- the delete-then-insert
+        // contract the background queue depends on):
+        assert_eq!(put_face(3, &b).unwrap(), 1);
+        assert_eq!(face_count().unwrap(), 2);
+        let mut indexed = indexed_face_file_ids().unwrap();
+        indexed.sort_unstable();
+        assert_eq!(indexed, vec![2, 3]);
+
+        // Deleting a file with no rows stays a no-op success:
+        assert!(delete_faces_for_files(&[99]).is_ok());
+        assert_eq!(face_count().unwrap(), 2);
+
+        close();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

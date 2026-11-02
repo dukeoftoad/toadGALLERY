@@ -169,7 +169,26 @@ android {
         // dependencies). Per maintainer directive (2026-11-02,
         // after build 23): NO new device builds until Phase 5 completes;
         // this and subsequent rounds ride CI from main only.
-        versionCode = 27
+        // versionCode 28 (r24 round): the background queue round (Workstream
+        // 5) --- the r23 12-photo dogfood expanded into the full-library,
+        // WorkManager-backed face-index queue: androidx.work (its manifest
+        // injections trimmed to WAKE_LOCK + RECEIVE_BOOT_COMPLETED via two
+        // tools:node=remove markers; ACCESS_NETWORK_STATE and
+        // FOREGROUND_SERVICE declined), the toad-ml-jni store maintenance
+        // pair (nativeStoreIndexedFaceFileIds +
+        // nativeStoreDeleteFacesForFiles over upstream's own queries), the
+        // pure queue core (FaceIndexQueuePlanner over MediaRevision.diff
+        // invalidation semantics, FaceIndexQueueProcessor bounded batches
+        // with whole-photo resumability, the atomic FaceIndexStateFile
+        // bookkeeping inside the face-index directory), FaceIndexWorker
+        // (CoroutineWorker, self-re-enqueue chain, retry/backoff) with
+        // live progress, and the Settings r24 card (start/cancel/reset +
+        // the clustering-threshold tuning control). The face-index
+        // directory is excluded from cloud backup and device transfer
+        // (face-derived data never leaves the device). Per maintainer
+        // directive: NO new device builds until Phase 5 completes; this
+        // and subsequent rounds ride CI from main only.
+        versionCode = 28
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
@@ -469,6 +488,16 @@ dependencies {
     // --- Phase 3: Paging 3 --- windowed timeline loads + LazyPagingItems grid (issue #28)
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
+    // --- Phase 5 r24: WorkManager --- the background face-index queue's
+    // scheduling + process-death persistence (Workstream 5 of the Phase 5
+    // plan: bounded batches, retry/backoff, progress, resume). Pure
+    // on-device scheduling library, no network code; its manifest merges
+    // WAKE_LOCK + RECEIVE_BOOT_COMPLETED into the MERGED manifest (library
+    // injections, documented in docs/phase-2/privacy-gate.md's r24 note ---
+    // the SOURCE manifest's pinned permission set is unchanged, still
+    // enforced by PrivacyPolicyTest, and the ADR-0014 INTERNET gate is
+    // unaffected: neither permission is a network permission).
+    implementation(libs.androidx.work.runtime)
     debugImplementation(libs.compose.ui.tooling)
 
     // --- Image loading (Compose-first per compose-migration.md)

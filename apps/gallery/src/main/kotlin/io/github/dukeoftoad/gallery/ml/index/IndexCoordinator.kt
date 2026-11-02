@@ -45,6 +45,10 @@ class IndexCoordinator(
      * JNI contract and state machine carry the r23 rules --- store ops
      * before `openFaceIndex` throw, embeddings are stride-197 flat
      * floats, etc.). The JVM suite binds fakes.
+     *
+     * r24 adds the store maintenance pair the background queue needs:
+     * [indexedFaceFileIds] (the resumability read) and
+     * [deleteFacesForFiles] (the per-file invalidation delete).
      */
     interface FaceIndexEngine {
         /** Face boxes + 192-float embeddings for one JPEG's bytes. */
@@ -58,6 +62,12 @@ class IndexCoordinator(
 
         /** Clusters the store's faces; returns the parsed summary. */
         fun clusterFaces(distanceThreshold: Double): MlEngine.ClusterSummary
+
+        /** File IDs that currently carry current-model-version face rows (r24). */
+        fun indexedFaceFileIds(): List<Long>
+
+        /** Deletes every face row for [fileIds]; the invalidation primitive (r24). */
+        fun deleteFacesForFiles(fileIds: LongArray): Boolean
     }
 
     /**
@@ -152,4 +162,9 @@ class MlEngineIndexEngine(private val engine: MlEngine = MlEngine()) :
 
     override fun clusterFaces(distanceThreshold: Double): MlEngine.ClusterSummary =
         engine.clusterFaces(distanceThreshold)
+
+    override fun indexedFaceFileIds(): List<Long> = engine.indexedFaceFileIds()
+
+    override fun deleteFacesForFiles(fileIds: LongArray): Boolean =
+        engine.deleteFacesForFiles(fileIds)
 }

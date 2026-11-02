@@ -1,7 +1,6 @@
 package io.github.dukeoftoad.gallery.data.filters
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,14 +9,18 @@ import org.junit.Test
  * JVM tests for the CATALOGUE WHERE projection of the r17 smart-filter
  * engine ([TimelineFilterCatalogue]): the exact SQL fragment + args over
  * ONLY the columns `CatalogueItemEntity` already persists (mimeType,
- * isFavorite, dateAddedMillis --- no bucket, no media_type), plus the
- * [TimelineFilterCatalogue.canServe] gate that keeps the honest-subset rule
- * honest.
+ * isFavorite, bucketId --- the r19 Room v5 column --- dateAddedMillis),
+ * plus the [TimelineFilterCatalogue.canServe] gate that keeps the
+ * honest-subset rule honest.
  *
  * The video-ness clause is pinned to match the catalogue timeline's own
  * rule (`CatalogueTimelineItem.isVideo` = `mimeType.startsWith("video/")`)
- * so the chip and the grid can never disagree; see
- * [TimelineFilterCatalogue]'s KDoc for the column inventory.
+ * so the chip and the grid can never disagree; the bucket clause is
+ * pinned to the same bucket-id-matching semantics as the MediaStore
+ * projection's `bucket_id = ?` (`TimelineFilterMediaStoreTest`'s value
+ * dimensions test --- the two projections must never disagree about
+ * which folder a filter means). See [TimelineFilterCatalogue]'s KDoc for
+ * the column inventory.
  */
 class TimelineFilterCatalogueTest {
 
@@ -103,14 +106,78 @@ class TimelineFilterCatalogueTest {
     }
 
     @Test
-    fun `a bucket filter cannot be served and fails closed`() {
-        // No bucket column in the schema: the gate says so, and a caller
-        // that ignores the gate gets the impossible clause --- a VISIBLE
-        // empty window, never a silently unfiltered one.
-        val bucketFilter = TimelineFilter(bucketId = 42L)
-        assertFalse(TimelineFilterCatalogue.canServe(bucketFilter))
+    fun `the folder bucket filter is served from the bucketId column`() {
+        // The r19 v5 column closes the honest-subset gap: the gate passes,
+        // and the projection binds the id as a BOUND arg (data, not
+        // vocabulary) with the SAME bucket-id-matching semantics as the
+        // MediaStore projection's `bucket_id = ?`. SQL `=` never matches
+        // NULL, so honestly-bucketless rows belong to no folder window.
+        val bucketFilter = TimelineFilter(bucketId = 4711L)
+        assertTrue(TimelineFilterCatalogue.canServe(bucketFilter))
         val where = whereOf(bucketFilter)
-        assertEquals("1 = 0", where.sql)
-        assertEquals(emptyList<Any>(), where.args)
+        assertEquals("bucketId = ?", where.sql)
+        assertEquals(listOf<Any>(4711L), where.args)
+    }
+
+    @Test
+    fun `a negative bucket id binds like any value`() {
+        // Parity with the MediaStore projection's -4711 case: the favorites
+        // pseudo-album sentinel (Favorites.FAVORITES_BUCKET_ID is negative)
+        // is a VALUE here, not a sentinel the engine interprets.
+        val where = whereOf(TimelineFilter(bucketId = -4711L))
+        assertEquals("bucketId = ?", where.sql)
+        assertEquals(listOf<Any>(-4711L), where.args)
+    }
+
+    @Test
+    fun `canServe passes for every dimension after the v5 bucket column`() {
+        // The honest-subset rule, re-verified: every dimension the engine
+        // can express reads a persisted column, so the backend ladder may
+        // route ANY filter to the catalogue. A future dimension that
+        // cannot be served must flip this gate (and extend this test).
+        val filters = listOf(
+            TimelineFilter(),
+            TimelineFilter(types = setOf(FilterMediaType.PHOTOS)),
+            TimelineFilter(favoritesOnly = true),
+            TimelineFilter(bucketId = 42L),
+            TimelineFilter(dateRange = FilterDateRange(startMillis = 0L, endMillis = 1L)),
+            TimelineFilter(
+                types = setOf(FilterMediaType.VIDEOS, FilterMediaType.GIFS),
+                favoritesOnly = true,
+                bucketId = 42L,
+                dateRange = FilterDateRange(startMillis = 0L, endMillis = 1L),
+            ),
+        )
+        filters.forEach { filter ->
+            assertTrue("filter=$filter", TimelineFilterCatalogue.canServe(filter))
+        }
+    }
+
+    @Test
+    fun `type, favorites, bucket and date range compose in the fixed clause order`() {
+        // The full-dimension composition: clause order type -> favorites
+        // -> bucket -> date range (the same order the MediaStore projection
+        // composes), args in placeholder order (bucket id, then the two
+        // second bounds) --- the exact contract FilteredWindowSql appends
+        // its LIMIT/OFFSET ints onto.
+        val where = whereOf(
+            TimelineFilter(
+                types = setOf(FilterMediaType.VIDEOS),
+                favoritesOnly = true,
+                bucketId = 7L,
+                dateRange = FilterDateRange(
+                    startMillis = 1_700_000_000_000L,
+                    endMillis = 1_700_008_640_000L,
+                ),
+            ),
+        )
+        assertEquals(
+            "mimeType LIKE 'video/%' AND " +
+                "isFavorite = 1 AND " +
+                "bucketId = ? AND " +
+                "(dateAddedMillis / 1000) BETWEEN ? AND ?",
+            where.sql,
+        )
+        assertEquals(listOf<Any>(7L, 1_700_000_000L, 1_700_008_640L), where.args)
     }
 }

@@ -64,6 +64,28 @@ interface MediaScanRowSource {
  * every row and NEVER enter the reconciler's revision comparison (see the
  * MediaScanRow field-group note).
  *
+ * Projection (r19 round): every walk ALSO projects the folder/bucket
+ * ride-alongs --- BUCKET_ID, BUCKET_DISPLAY_NAME --- so the catalogue's
+ * v5 bucket columns can serve the timeline's folder filter without a
+ * second MediaStore round trip. Both columns exist on every collection
+ * walked here (the Q+ unified Files collection and the pre-Q Images and
+ * Video collections have surfaced the provider's path-derived bucket
+ * columns since the gallery era --- `MediaStoreSource.queryCollection`
+ * projects the same pair on the same pre-Q legs today), so the pair is
+ * projected UNCONDITIONALLY, the DISPLAY_NAME/WIDTH/HEIGHT pattern; a
+ * provider that silently drops a column is absorbed by the
+ * `getColumnIndexOrNull` reads (the row rides an honest `null` bucket,
+ * never a 0 sentinel).
+ *
+ * DEFENSIVE pre-Q fallback (r19, a flagged audit risk): a provider that
+ * REJECTS an unknown projection column throws IllegalArgumentException
+ * before a cursor is ever returned. If that happens the walk retries ONCE
+ * with the REDUCED projection --- the revision-contract columns only ---
+ * and the ride-alongs (including the bucket pair) degrade to their honest
+ * null/zero/false defaults for that whole walk. Behavior is identical
+ * when the first query succeeds; when it throws, today's whole-volume
+ * failure becomes a degraded-but-complete walk.
+ *
  * One known one-time cost, accepted: keys below Q are `external:id` while
  * Q+ keys are `external_primary:id`, so an OS upgrade re-sights the whole
  * library as ADDED once. The tombstone/last-seen bookkeeping absorbs it,
@@ -171,7 +193,16 @@ class AndroidMediaScanRowSource(
      * projection naming a column the provider rejects throws before a
      * cursor is ever returned, so absence is decided HERE, at the call
      * sites, while a column the provider silently drops is absorbed by the
-     * `getColumnIndexOrNull` reads below).
+     * `getColumnIndexOrNull` reads below) --- PLUS the r19 folder/bucket
+     * ride-alongs `BUCKET_ID` / `BUCKET_DISPLAY_NAME` (see the class KDoc:
+     * every walked collection has the pair, so it is unconditional).
+     *
+     * A provider that rejects a projection column outright (the flagged
+     * pre-Q risk) throws IllegalArgumentException from the query itself;
+     * the walk then retries ONCE with [REDUCED_PROJECTION] --- the revision
+     * contract only --- and every non-contract read below degrades to its
+     * honest default (null name/bucket, 0 dimensions, false favorite, null
+     * token). Identical behavior when the first query succeeds.
      *
      * Transport-thin by design (ADR-0016): no interpretation of any value
      * happens here --- widths/durations coerce through the cursor's typed
@@ -202,6 +233,11 @@ class AndroidMediaScanRowSource(
             add(MediaStore.MediaColumns.DISPLAY_NAME)
             add(MediaStore.Images.ImageColumns.WIDTH)
             add(MediaStore.Images.ImageColumns.HEIGHT)
+            // Folder/bucket ride-alongs (r19): the same pair
+            // MediaStoreSource.queryCollection projects on every leg; see
+            // the walk KDoc for why it is unconditional.
+            add(MediaStore.MediaColumns.BUCKET_ID)
+            add(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
             if (includeDuration) {
                 add(MediaStore.Video.VideoColumns.DURATION)
             }
@@ -215,86 +251,126 @@ class AndroidMediaScanRowSource(
                 add(MediaStore.MediaColumns.GENERATION_MODIFIED)
             }
         }.toTypedArray()
-        context.contentResolver
-            .query(collection, projection, selection, selectionArgs, null)
-            ?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-                val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
-                val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
-                val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-                val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
-                // The display/shape columns go through the same
-                // absence-tolerant reads MediaStoreSource uses: a column the
-                // provider dropped from the projection simply yields the
-                // row's zero/none/false defaults instead of failing the walk.
-                val displayNameCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.DISPLAY_NAME)
-                val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
-                val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
-                val durationCol =
-                    if (includeDuration) {
-                        cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
-                    } else {
-                        -1
-                    }
-                val favoriteCol =
-                    if (includeFavorite) {
-                        cursor.getColumnIndexOrNull(Favorites.COLUMN_IS_FAVORITE)
-                    } else {
-                        -1
-                    }
-                val generationCol =
-                    if (includePerRowGeneration) {
-                        cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.GENERATION_MODIFIED)
-                    } else {
-                        -1
-                    }
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idCol)
-                    // The access handle (ADR-0006 URI-first): the walked
-                    // collection Uri plus the row id --- the same resolution
-                    // MediaStoreSource hands the UI.
-                    val uri = ContentUris.withAppendedId(collection, id).toString()
-                    out += MediaScanRow(
-                        localMediaKey = MediaIdentity(
-                            volumeName = volumeName,
-                            mediaStoreId = id,
-                            canonicalUri = uri,
-                        ).toKeyString(),
-                        canonicalUri = uri,
-                        // MIME_TYPE is nullable for some HEIC/RAW captures;
-                        // a generic fallback keeps the row shape total, and
-                        // a mime-only drift never counts as a revision
-                        // change (the reconciler ignores it).
-                        mimeType = cursor.getString(mimeCol) ?: fallbackMime,
-                        sizeBytes = cursor.getLong(sizeCol),
-                        // DATE_MODIFIED / DATE_ADDED are provider SECONDS;
-                        // the row contract is epoch millis.
-                        dateModifiedMillis = cursor.getLong(dateModifiedCol) * 1000L,
-                        dateAddedMillis = cursor.getLong(dateAddedCol) * 1000L,
-                        generationToken =
-                        if (generationCol >= 0) {
-                            cursor.getLong(generationCol).toString()
-                        } else {
-                            null
-                        },
-                        // Display/shape ride-alongs (non-revision; see the
-                        // MediaScanRow field-group note): width/height are
-                        // string columns read through the typed getter, a
-                        // NULL duration (stills in the Files walk) reads as
-                        // 0, and a missing favorite column is `false`.
-                        displayName =
-                        if (displayNameCol >= 0) {
-                            cursor.getString(displayNameCol)
-                        } else {
-                            null
-                        },
-                        width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
-                        height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
-                        durationMs = if (durationCol >= 0) cursor.getLong(durationCol) else 0L,
-                        isFavorite = favoriteCol >= 0 && cursor.getInt(favoriteCol) == 1,
-                    )
+        // The flagged pre-Q risk, made survivable: an OEM provider that
+        // rejects an unknown projection column throws before any cursor
+        // exists. Retry once with the revision contract alone --- the
+        // columns every provider since API 1 accepts --- and let the
+        // absence-tolerant reads below degrade honestly. A retry that
+        // throws too propagates to the driver's per-volume catch, exactly
+        // like today's total failure.
+        val queried = try {
+            context.contentResolver.query(collection, projection, selection, selectionArgs, null)
+        } catch (_: IllegalArgumentException) {
+            context.contentResolver
+                .query(collection, REDUCED_PROJECTION, selection, selectionArgs, null)
+        }
+        queried?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
+            val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+            val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+            val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            // The display/shape columns go through the same
+            // absence-tolerant reads MediaStoreSource uses: a column the
+            // provider dropped from the projection simply yields the
+            // row's zero/none/false defaults instead of failing the walk.
+            val displayNameCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.DISPLAY_NAME)
+            val widthCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.WIDTH)
+            val heightCol = cursor.getColumnIndexOrNull(MediaStore.Images.ImageColumns.HEIGHT)
+            val durationCol =
+                if (includeDuration) {
+                    cursor.getColumnIndexOrNull(MediaStore.Video.VideoColumns.DURATION)
+                } else {
+                    -1
                 }
+            val favoriteCol =
+                if (includeFavorite) {
+                    cursor.getColumnIndexOrNull(Favorites.COLUMN_IS_FAVORITE)
+                } else {
+                    -1
+                }
+            // Absence-tolerant too (r19): the reduced-projection fallback
+            // drops this column, and an absent token must read as the
+            // honest null --- never crash a walk that already survived a
+            // rejected projection.
+            val generationCol =
+                if (includePerRowGeneration) {
+                    cursor.getColumnIndexOrNull(MediaStore.MediaColumns.GENERATION_MODIFIED)
+                } else {
+                    -1
+                }
+            // Folder/bucket columns (r19): absence-tolerant like the display
+            // pair, and the id read is null-AWARE --- `getLong` on a NULL
+            // column coerces to 0, which is a REAL bucket id shape, so the
+            // honest "not resolvable" is spelled null here, never 0.
+            val bucketCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.BUCKET_ID)
+            val bucketNameCol =
+                cursor.getColumnIndexOrNull(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idCol)
+                // The access handle (ADR-0006 URI-first): the walked
+                // collection Uri plus the row id --- the same resolution
+                // MediaStoreSource hands the UI.
+                val uri = ContentUris.withAppendedId(collection, id).toString()
+                out += MediaScanRow(
+                    localMediaKey = MediaIdentity(
+                        volumeName = volumeName,
+                        mediaStoreId = id,
+                        canonicalUri = uri,
+                    ).toKeyString(),
+                    canonicalUri = uri,
+                    // MIME_TYPE is nullable for some HEIC/RAW captures;
+                    // a generic fallback keeps the row shape total, and
+                    // a mime-only drift never counts as a revision
+                    // change (the reconciler ignores it).
+                    mimeType = cursor.getString(mimeCol) ?: fallbackMime,
+                    sizeBytes = cursor.getLong(sizeCol),
+                    // DATE_MODIFIED / DATE_ADDED are provider SECONDS;
+                    // the row contract is epoch millis.
+                    dateModifiedMillis = cursor.getLong(dateModifiedCol) * 1000L,
+                    dateAddedMillis = cursor.getLong(dateAddedCol) * 1000L,
+                    generationToken =
+                    if (generationCol >= 0) {
+                        cursor.getLong(generationCol).toString()
+                    } else {
+                        null
+                    },
+                    // Display/shape ride-alongs (non-revision; see the
+                    // MediaScanRow field-group note): width/height are
+                    // string columns read through the typed getter, a
+                    // NULL duration (stills in the Files walk) reads as
+                    // 0, and a missing favorite column is `false`.
+                    displayName =
+                    if (displayNameCol >= 0) {
+                        cursor.getString(displayNameCol)
+                    } else {
+                        null
+                    },
+                    width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
+                    height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
+                    durationMs = if (durationCol >= 0) cursor.getLong(durationCol) else 0L,
+                    isFavorite = favoriteCol >= 0 && cursor.getInt(favoriteCol) == 1,
+                    // Folder/bucket ride-alongs (r19, non-revision; see
+                    // the MediaScanRow r19 field-group note): the id read
+                    // is null-AWARE (a NULL coerced to 0 by getLong would
+                    // be a fake-but-plausible bucket id), and the name is
+                    // the DATA-column-derived bucket name, never
+                    // _display_name.
+                    bucketId =
+                    if (bucketCol >= 0 && !cursor.isNull(bucketCol)) {
+                        cursor.getLong(bucketCol)
+                    } else {
+                        null
+                    },
+                    bucketDisplayName =
+                    if (bucketNameCol >= 0) {
+                        cursor.getString(bucketNameCol)
+                    } else {
+                        null
+                    },
+                )
             }
+        }
     }
 
     /** The MediaStoreSource absence discipline: -1 for a column this cursor does not carry. */
@@ -304,6 +380,23 @@ class AndroidMediaScanRowSource(
     private companion object {
         /** The classic pre-Q external volume name (see [volumes]). */
         const val PRE_Q_VOLUME_EXTERNAL = "external"
+
+        /**
+         * The reduced fallback projection (r19): the revision-contract
+         * columns alone --- `_ID`, `MIME_TYPE`, `SIZE`, `DATE_MODIFIED`,
+         * `DATE_ADDED`, every one a column the provider has accepted since
+         * API 1. The one-shot retry for a provider that REJECTED the full
+         * projection (see the walk's catch): the ride-alongs it drops
+         * degrade to their honest null/zero/false defaults through the
+         * walk's absence-tolerant reads.
+         */
+        private val REDUCED_PROJECTION = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.DATE_ADDED,
+        )
 
         /** MIME fallbacks; a mime drift is bookkeeping, never a revision. */
         const val FALLBACK_MIME_IMAGES = "image/*"

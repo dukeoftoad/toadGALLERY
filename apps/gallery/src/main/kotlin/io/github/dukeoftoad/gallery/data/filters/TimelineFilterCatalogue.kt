@@ -9,12 +9,13 @@ package io.github.dukeoftoad.gallery.data.filters
  *
  * ## Column inventory (the honest-subset rule)
  * The projection may only touch columns `CatalogueItemEntity` ALREADY
- * persists. The r13 schema carries: `localMediaKey`, `canonicalUri`,
+ * persists. The r19 schema carries: `localMediaKey`, `canonicalUri`,
  * `mimeType`, `sizeBytes`, `dateModifiedMillis`, `dateAddedMillis`,
  * `generationToken`, `metadataWriteRevision`, `metadataCacheState`,
- * `lastSeenAtMillis`, the three capture-date provenance columns, and the
+ * `lastSeenAtMillis`, the three capture-date provenance columns, the
  * display ride-alongs (`displayName`, `width`, `height`, `durationMs`,
- * `isFavorite`). Therefore:
+ * `isFavorite`), and the folder/bucket pair (`bucketId`,
+ * `bucketDisplayName`; Room v5). Therefore:
  *
  *  - **Media type** is served from `mimeType` --- there is NO `media_type`
  *    column. "Videos" is `mimeType LIKE 'video/%'`, which is the SAME
@@ -26,25 +27,30 @@ package io.github.dukeoftoad.gallery.data.filters
  *    scan writes for null-mime rows (Kotlin block comments nest, so the
  *    literal `image/`-star glob is deliberately spelled out this way).
  *  - **Favorites** is served from `isFavorite` (the r13 ride-along).
+ *  - **Album / folder** is served from `bucketId` (the r19 Room v5
+ *    column): `bucketId = ?` with the id as a BOUND arg --- the exact
+ *    bucket-id-matching semantics of the MediaStore projection's
+ *    `bucket_id = ?` ([TimelineFilterMediaStore]), so the two paths can
+ *    never disagree about which folder a filter means. Matching is
+ *    id-based by design; `bucketDisplayName` is persisted for
+ *    folder-surface labeling only and is deliberately NOT a filter column
+ *    (names collide across volumes, ids do not).
  *  - **Date range** is served from `dateAddedMillis` (divided back to
  *    seconds so it matches the MediaStore projection's granularity).
- *  - **Album / folder** has NO column --- [canServe] answers `false` for a
- *    bucket filter, and [where] renders the impossible clause (`1 = 0`) so
- *    a misrouted bucket filter is VISIBLY empty, never silently broad.
- *    Surfacing a folder chip therefore waits for catalogue columns
- *    (Phase 5); the MediaStore projection serves it, the UI does not show
- *    it, and the round report documents the gap.
  *
  * ## Column-name literals
  * Room column names equal the entity property names (no @ColumnInfo
- * renames on `CatalogueItemEntity`), so `mimeType`, `isFavorite` and
- * `dateAddedMillis` here are the persisted column names verbatim.
+ * renames on `CatalogueItemEntity`), so `mimeType`, `isFavorite`,
+ * `bucketId` and `dateAddedMillis` here are the persisted column names
+ * verbatim.
  *
  * ## Bound args
  * Literal-only clauses (type, favorites) carry fixed values from this
- * object; the date-range clause binds its two Long second-bounds. The
- * fragment order is FIXED (type, favorites, date range) and AND-joined ---
- * deterministic, pinned verbatim by `TimelineFilterCatalogueTest`.
+ * object; the VALUE-driven dimensions (bucket, date range) bind their args
+ * --- their values are data, not vocabulary. The fragment order is FIXED
+ * (type, favorites, bucket, date range --- the same order the MediaStore
+ * projection composes) and AND-joined --- deterministic, pinned verbatim
+ * by `TimelineFilterCatalogueTest`.
  *
  * Privacy (ADR-0006 / ADR-0014): the fragment only ever narrows a local
  * Room query over the on-device catalogue; no network path exists.
@@ -62,27 +68,32 @@ object TimelineFilterCatalogue {
     )
 
     /**
-     * Whether the catalogue can serve [filter] correctly. `false` exactly
-     * when a bucket is set (no bucket column in the schema --- see the
-     * class KDoc); the caller must then keep the generation on a backend
-     * that CAN serve it (the Photos ViewModel's `timelineSource` ladder).
+     * Whether the catalogue can serve [filter] correctly. Since the r19
+     * Room v5 bucket columns, EVERY dimension the engine defines is
+     * servable from persisted columns, so this answers `true` for every
+     * filter value --- the answer is not constant-by-laziness: it is the
+     * honest-subset rule RE-VERIFIED against the column inventory, and the
+     * gate stays because callers route on it (the Photos ViewModel's
+     * backend ladder; the DerivedCollections invariant). A future dimension
+     * the catalogue cannot serve must flip this back to `false` for
+     * exactly that dimension --- and update its [where] clause (see
+     * below).
      */
-    fun canServe(filter: TimelineFilter): Boolean = filter.bucketId == null
+    fun canServe(filter: TimelineFilter): Boolean = true
 
     /**
      * Projects [filter] onto the catalogue WHERE fragment.
      *
-     * Total by construction: a filter [canServe] rejects (bucket set)
-     * still projects --- to the impossible clause `1 = 0` --- so a caller
-     * that ignores the gate gets a VISIBLE empty window rather than a
-     * silently unfiltered one.
+     * Total by construction: every dimension projects onto a persisted
+     * column (see [canServe] --- the v5 bucket column closed the last
+     * gap), so every [TimelineFilter] value produces a fragment. Clause
+     * order is fixed (type, favorites, bucket, date range) and AND-joined,
+     * so the fragment for a given filter value is a deterministic string
+     * the tests pin verbatim.
      */
     fun where(filter: TimelineFilter): CatalogueFilterWhere {
-        if (!canServe(filter)) {
-            return CatalogueFilterWhere(sql = "1 = 0", args = emptyList())
-        }
-        val clauses = ArrayList<String>(3)
-        val args = ArrayList<Any>(2)
+        val clauses = ArrayList<String>(4)
+        val args = ArrayList<Any>(3)
         when (typeCoverageOf(filter.types)) {
             FilterTypeCoverage.ALL -> Unit
             FilterTypeCoverage.PHOTOS_ONLY ->
@@ -98,6 +109,17 @@ object TimelineFilterCatalogue {
         if (filter.favoritesOnly) {
             // Room maps the Boolean property to an INTEGER 0/1 column.
             clauses += "isFavorite = 1"
+        }
+        filter.bucketId?.let { bucket ->
+            // The v5 column: the folder dimension, matched by id with the
+            // id as a BOUND arg (a value, not vocabulary) --- the same
+            // bucket-id semantics as the MediaStore projection's
+            // `bucket_id = ?`. SQL `=` never matches NULL, which is
+            // exactly right: rows whose bucket is the honest "not
+            // resolvable on this API path" null belong to NO folder
+            // window, never to a fake bucket 0.
+            clauses += "bucketId = ?"
+            args += bucket
         }
         filter.dateRange?.let { range ->
             // dateAddedMillis is epoch MILLIS; divide back to seconds so

@@ -2,6 +2,7 @@ package io.github.dukeoftoad.gallery.data.vault
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -13,6 +14,10 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.security.SecureRandom
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 
@@ -21,15 +26,23 @@ import javax.crypto.SecretKey
  *
  * The store is pure JVM by design (`java.io` + the [VaultCrypto] seam), so
  * the EXACT production on-disk layout --- sealed PIN record, sealed index,
- * id-named sealed blobs, crash-safety orderings, the integrity sweep ---
- * runs under `testDebugUnitTest` against a temp directory and a locally
- * generated AES-256 key (no AndroidKeyStore, no emulator; ADR-0016). The
- * layout the tests reach into (`pin.bin`, `index.bin`, `blobs/<id>.bin`)
- * is the documented contract from the [VaultStore] KDoc.
+ * id-named sealed blobs, crash-safety orderings, the integrity sweep, the
+ * store's mutual exclusion and the sweep's grace window --- runs under
+ * `testDebugUnitTest` against a temp directory and a locally generated
+ * AES-256 key (no AndroidKeyStore, no emulator; ADR-0016). The layout the
+ * tests reach into (`pin.bin`, `index.bin`, `blobs/<id>.bin`) is the
+ * documented contract from the [VaultStore] KDoc.
  *
  * PBKDF2 budget: every [VaultStore.setup]/[VaultStore.verifyPin] call costs
  * one 210k-round derivation (~0.1-0.3 s JVM), so the suite derives about a
  * dozen times total instead of once per assertion.
+ *
+ * Concurrency rig (the unlock-vs-move race round): [ParkedInputStream]
+ * holds a [VaultStore.store] mid-copy INSIDE its serialized section while
+ * another thread races [VaultStore.sweepOrphans] or a second `store`
+ * against it --- every transition a latch, every await bounded, zero
+ * sleeps; the assertions hold under every schedule of the fixed code and
+ * fail against the pre-fix unsynchronized store.
  *
  * Privacy (ADR-0010/ADR-0014): everything here stays inside the temp
  * directory; the app holds no INTERNET permission, so no vault byte can
@@ -336,8 +349,13 @@ class VaultStoreTest {
             length = payload.size.toLong(),
         )
         // The crash shape from ADR-0017: a sealed blob whose index write
-        // never landed.
-        val orphan = File(fixture.blobDir, "42.bin").apply { writeBytes(ByteArray(32)) }
+        // never landed --- AGED here past the sweep's grace window, so this
+        // test pins the reclaim itself (the grace test below pins the
+        // deferral a fresh orphan gets).
+        val orphan = File(fixture.blobDir, "42.bin").apply {
+            writeBytes(ByteArray(32))
+            agePastSweepGrace()
+        }
         assertEquals(1, fixture.store.sweepOrphans())
         assertFalse(orphan.exists())
         // The indexed blob survives untouched.
@@ -348,9 +366,227 @@ class VaultStoreTest {
     @Test
     fun `the sweep also reclaims stale tmp files`() {
         val fixture = configuredFixture()
-        val stale = File(fixture.root, "index.bin.tmp").apply { writeBytes(ByteArray(8)) }
+        // "Stale" is the sweep's honest bar: a `.tmp` fresh enough to sit
+        // inside the grace window is deferred exactly like a fresh blob
+        // (an in-flight atomicWrite must not be yanked mid-write).
+        val stale = File(fixture.root, "index.bin.tmp").apply {
+            writeBytes(ByteArray(8))
+            agePastSweepGrace()
+        }
         assertEquals(1, fixture.store.sweepOrphans())
         assertFalse(stale.exists())
+    }
+
+    /**
+     * The sweep's grace window (see [VaultStore.sweepOrphans]): a FRESH
+     * orphan --- the crash-mid-move residue, or a blob written by any
+     * writer this store's monitor cannot serialize (a second instance, a
+     * future unlocked path) --- must be DEFERRED, never deleted; the same
+     * file becomes reclaimable once it ages past the window. Deferred is
+     * not kept: the second sweep reclaims it.
+     */
+    @Test
+    fun `a fresh orphan is deferred by the sweep grace and reclaimed once aged`() {
+        val fixture = configuredFixture()
+        val payload = randomBytes(1024)
+        val entry = fixture.store.store(
+            displayName = "a.jpg",
+            mimeType = "image/jpeg",
+            isVideo = false,
+            addedAtMillis = 1L,
+            bytes = ByteArrayInputStream(payload),
+            length = payload.size.toLong(),
+        )
+        val orphan = File(fixture.blobDir, "42.bin").apply { writeBytes(ByteArray(32)) }
+        val freshTmp = File(fixture.root, "pin.bin.tmp").apply { writeBytes(ByteArray(4)) }
+        // Fresh (mtime = now): deferred on both fronts --- blob and tmp.
+        // Deleting young files is exactly the unlock-vs-move data loss the
+        // grace window exists to close.
+        assertEquals(0, fixture.store.sweepOrphans())
+        assertTrue(orphan.isFile)
+        assertTrue(freshTmp.isFile)
+        assertTrue(fixture.blobOf(entry.id).isFile)
+        // Aged past the window: the next sweep reclaims both.
+        orphan.agePastSweepGrace()
+        freshTmp.agePastSweepGrace()
+        assertEquals(2, fixture.store.sweepOrphans())
+        assertFalse(orphan.exists())
+        assertFalse(freshTmp.exists())
+        // The indexed blob survives both sweeps untouched.
+        assertTrue(fixture.blobOf(entry.id).isFile)
+        assertEquals(listOf(entry), fixture.store.entries())
+    }
+
+    // ---- Concurrency (the P0 unlock-vs-move race) ----------------------
+
+    /**
+     * THE audit finding: a [VaultStore.sweepOrphans] that runs while a
+     * [VaultStore.store] is parked mid-copy must not delete the in-flight
+     * blob. The blob is deliberately AGED past the sweep's grace window
+     * before the sweeper starts, so ONLY the store's serialization --- not
+     * the grace --- can save it: against the pre-fix unsynchronized store
+     * the sweep reads the OLD index mid-move, judges the aged blob an
+     * orphan, deletes it, and the move then commits an index entry
+     * pointing at nothing while the caller deletes the original
+     * MediaStore row --- permanent loss.
+     *
+     * Deterministic by construction: every transition is a latch (no
+     * sleeps), and the parked mover holds the store monitor from the
+     * moment [ParkedInputStream] opens its park latch until the test
+     * resumes it, so the sweeper can only run strictly BEFORE the store's
+     * index read (nothing fresh to delete) or strictly AFTER its index
+     * commit (the blob is known).
+     */
+    @Test
+    fun `a sweep concurrent with a parked store cannot delete the in-flight blob`() {
+        val fixture = configuredFixture()
+        val payload = randomBytes(64)
+        val midCopy = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        val moveDone = CountDownLatch(1)
+        val sweepEntered = CountDownLatch(1)
+        val sweepDone = CountDownLatch(1)
+        val swept = AtomicInteger(-1)
+        val moveFailure = AtomicReference<Throwable?>(null)
+        val mover = Thread {
+            try {
+                fixture.store.store(
+                    displayName = "a.jpg",
+                    mimeType = "image/jpeg",
+                    isVideo = false,
+                    addedAtMillis = 1L,
+                    bytes = ParkedInputStream(payload, midCopy, resume),
+                    length = payload.size.toLong(),
+                )
+            } catch (t: Throwable) {
+                moveFailure.set(t)
+            } finally {
+                moveDone.countDown()
+            }
+        }.apply { isDaemon = true }
+        try {
+            mover.start()
+            // The mover now sits mid-copy INSIDE the store's serialized
+            // section: the blob file is open on disk (its leading IV
+            // written) while the index still knows nothing about it --- the
+            // exact shape the pre-fix sweep judged "orphan".
+            assertTrue(midCopy.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            // Age the in-flight blob past the grace window: the lock, not
+            // the grace, must be what saves it (KDoc above).
+            fixture.blobDir.listFiles()!!.single().agePastSweepGrace()
+            val sweeper = Thread {
+                sweepEntered.countDown()
+                swept.set(fixture.store.sweepOrphans())
+                sweepDone.countDown()
+            }.apply { isDaemon = true }
+            sweeper.start()
+            // The sweeper is at the monitor's door while the mover is parked
+            // inside; letting the mover finish releases exactly one of the
+            // two legal orders (never the mid-move one).
+            assertTrue(sweepEntered.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            resume.countDown()
+            assertTrue(moveDone.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertTrue(sweepDone.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+        } finally {
+            // Even a failed await must never strand the parked mover.
+            resume.countDown()
+        }
+        assertNull(moveFailure.get())
+        assertEquals(0, swept.get())
+        // The blob survived the concurrent sweep and the entry committed.
+        val entry = fixture.store.entries().single()
+        assertTrue(fixture.blobOf(entry.id).isFile)
+        val opened = fixture.store.open(entry).use { it.readBytes() }
+        assertTrue(
+            "the move's blob must stream back its exact plaintext",
+            payload.contentEquals(opened),
+        )
+    }
+
+    /**
+     * The MOVE-vs-MOVE interleave of the same mutual-exclusion story (see
+     * [VaultStore]'s KDoc): unsynchronized, two concurrent stores read the
+     * same index, computed the same [VaultIndex.nextId], and the second
+     * store overwrote the first's blob while its index write dropped the
+     * first's entry. Serialized, the second store runs strictly after the
+     * first's index commit: distinct ids, both blobs intact, both entries
+     * listed. Same latch rig as the sweep test above.
+     */
+    @Test
+    fun `two concurrent stores serialize and both entries land intact`() {
+        val fixture = configuredFixture()
+        val first = randomBytes(64)
+        val second = randomBytes(48)
+        val midCopyA = CountDownLatch(1)
+        val resumeA = CountDownLatch(1)
+        val midCopyB = CountDownLatch(1)
+        val resumeB = CountDownLatch(1)
+        val doneA = CountDownLatch(1)
+        val doneB = CountDownLatch(1)
+        val failureA = AtomicReference<Throwable?>(null)
+        val failureB = AtomicReference<Throwable?>(null)
+        val moverA = Thread {
+            try {
+                fixture.store.store(
+                    displayName = "a.jpg",
+                    mimeType = "image/jpeg",
+                    isVideo = false,
+                    addedAtMillis = 1L,
+                    bytes = ParkedInputStream(first, midCopyA, resumeA),
+                    length = first.size.toLong(),
+                )
+            } catch (t: Throwable) {
+                failureA.set(t)
+            } finally {
+                doneA.countDown()
+            }
+        }.apply { isDaemon = true }
+        val moverB = Thread {
+            try {
+                fixture.store.store(
+                    displayName = "b.jpg",
+                    mimeType = "image/jpeg",
+                    isVideo = false,
+                    addedAtMillis = 2L,
+                    bytes = ParkedInputStream(second, midCopyB, resumeB),
+                    length = second.size.toLong(),
+                )
+            } catch (t: Throwable) {
+                failureB.set(t)
+            } finally {
+                doneB.countDown()
+            }
+        }.apply { isDaemon = true }
+        try {
+            moverA.start()
+            // A is parked mid-copy holding the monitor; B then queues on it.
+            assertTrue(midCopyA.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            moverB.start()
+            resumeA.countDown()
+            assertTrue(doneA.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            // B owns the monitor now; it parks mid-copy in its turn.
+            assertTrue(midCopyB.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            resumeB.countDown()
+            assertTrue(doneB.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+        } finally {
+            resumeA.countDown()
+            resumeB.countDown()
+        }
+        assertNull(failureA.get())
+        assertNull(failureB.get())
+        // Insertion order is guaranteed (A's whole store precedes B's read),
+        // the ids are distinct, and each blob round-trips its own payload.
+        val entries = fixture.store.entries()
+        assertEquals(2, entries.size)
+        assertEquals(listOf("a.jpg", "b.jpg"), entries.map { it.displayName })
+        assertTrue(
+            "serialized stores must allocate distinct ids",
+            entries[0].id != entries[1].id,
+        )
+        val firstOpened = fixture.store.open(entries[0]).use { it.readBytes() }
+        assertTrue(first.contentEquals(firstOpened))
+        val secondOpened = fixture.store.open(entries[1]).use { it.readBytes() }
+        assertTrue(second.contentEquals(secondOpened))
     }
 
     // ---- Delete / restoreOut -------------------------------------------
@@ -494,6 +730,17 @@ class VaultStoreTest {
 
     // ---- Helpers -------------------------------------------------------
 
+    /**
+     * Stamps this file's mtime 24 h into the past --- far beyond the
+     * sweep's documented 10-minute grace window (see
+     * [VaultStore.sweepOrphans]), so the helper never couples to the exact
+     * constant. The grace runs on the file clock, and tests age files
+     * through the same JVM-pure `File` API the gate reads.
+     */
+    private fun File.agePastSweepGrace() {
+        assertTrue(setLastModified(System.currentTimeMillis() - AGED_MTIME_MILLIS))
+    }
+
     /** Emits a few bytes, then dies: the shape of a provider stream failing mid-copy. */
     private class ExplodingInputStream(private val goodBytes: Int = 10) : InputStream() {
         private var served = 0
@@ -507,9 +754,56 @@ class VaultStoreTest {
             }
     }
 
+    /**
+     * Serves [payload] byte by byte (through the stock array-form loop, like
+     * [ExplodingInputStream]), then --- exactly once, at the first read
+     * past the payload --- opens [park] and blocks on [resume] before
+     * serving EOF: the deterministic shape of a provider stream stalling
+     * mid-copy (a large video over a slow provider), letting a test hold a
+     * [VaultStore.store] INSIDE its serialized section while another
+     * thread races a mutation against it. Latches only --- no sleeps, and
+     * every await is bounded by [LATCH_TIMEOUT_SECONDS] so a wedged test
+     * fails loudly instead of hanging the runner.
+     */
+    private class ParkedInputStream(
+        private val payload: ByteArray,
+        private val park: CountDownLatch,
+        private val resume: CountDownLatch,
+    ) : InputStream() {
+        private var served = 0
+        private var parkedOnce = false
+
+        override fun read(): Int {
+            if (served < payload.size) {
+                return payload[served++].toInt() and 0xFF
+            }
+            if (!parkedOnce) {
+                parkedOnce = true
+                park.countDown()
+                check(resume.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    "parked mid-copy read was never resumed"
+                }
+            }
+            return -1
+        }
+    }
+
     private companion object {
         const val PIN = "8642"
         const val DISPLAY_NAME = "IMG_20261030_101010.jpg"
         const val ADDED_AT = 1_768_000_000_000L
+
+        /**
+         * Generous but bounded latch budget for the concurrency rig: every
+         * `await` is an assertion (a wedged thread fails the test), never an
+         * unbounded hang.
+         */
+        const val LATCH_TIMEOUT_SECONDS = 10L
+
+        /**
+         * The `agePastSweepGrace` stamp: 24 h, far beyond the sweep's
+         * documented 10-minute window (see [agePastSweepGrace]).
+         */
+        const val AGED_MTIME_MILLIS = 24L * 60L * 60L * 1000L
     }
 }

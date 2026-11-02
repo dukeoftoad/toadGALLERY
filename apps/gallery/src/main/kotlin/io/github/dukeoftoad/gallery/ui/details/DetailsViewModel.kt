@@ -8,9 +8,9 @@ import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ToadGalleryApplication
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.MetadataCacheState
-import io.github.dukeoftoad.gallery.data.catalogue.room.MediaCatalogueDatabase
 import io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
 import io.github.dukeoftoad.gallery.data.media.access.ContentResolverMediaAccess
 import io.github.dukeoftoad.gallery.data.media.access.MediaReadHandle
@@ -147,14 +147,16 @@ sealed interface MetadataEditEvent {
 /**
  * State holder for the Phase 4 metadata Details screen (roadmap
  * "Metadata Details view with read"). DI-less by repo convention: the
- * process-wide catalogue and the read boundary are constructed HERE from
- * the [Application], exactly the seams
+ * process-wide catalogue is the SHARED instance the app holds
+ * ([ToadGalleryApplication.mediaCatalogue] --- r19a; this screen used to
+ * build its own database per visit, see [catalogue]), while the read
+ * boundary is constructed HERE from the [Application], exactly the seam
  * [ToadGalleryApplication.startPhase4ScanPipeline] wires for the scan
- * driver --- [RoomMediaCatalogue] over the one Room database,
- * [ContentResolverMediaAccess] behind [MediaReadPermissionGate], and
- * [CatalogueRecordEligibilityGate] as the type-level vault gate. A
- * screen-scoped ViewModel (not shell-scoped) because the details state is
- * per-item transitive UI state, unlike the viewer window hand-off.
+ * driver --- [ContentResolverMediaAccess] behind
+ * [MediaReadPermissionGate], and [CatalogueRecordEligibilityGate] as the
+ * type-level vault gate. A screen-scoped ViewModel (not shell-scoped)
+ * because the details state is per-item transitive UI state, unlike the
+ * viewer window hand-off.
  *
  * Threading: all catalogue reads, byte reads and EXIF parsing run on
  * [Dispatchers] IO/Default --- nothing heavy touches the main thread
@@ -200,9 +202,21 @@ sealed interface MetadataEditEvent {
  */
 class DetailsViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val catalogue = RoomMediaCatalogue(
-        MediaCatalogueDatabase.build(app).catalogueDao(),
-    )
+    /**
+     * The process-wide media catalogue (r19a): the SAME shared instance
+     * ([ToadGalleryApplication.mediaCatalogue]) the scan pipeline, the
+     * Photos timeline and the Map tab talk to, replacing this screen's
+     * former per-visit build. That private database violated the
+     * one-database-per-process invariant the catalogue layer states ---
+     * Room invalidation only reaches observers of the SAME instance, so a
+     * second database over the same file would silently miss every scan
+     * write (and each Details visit leaked one open SQLite connection
+     * until its ViewModel died). Typed as the concrete [RoomMediaCatalogue]
+     * because the keyed [findRecord] lookup (r19a) lives on the concrete
+     * class, exactly like [MapViewModel]'s binding.
+     */
+    private val catalogue: RoomMediaCatalogue =
+        getApplication<ToadGalleryApplication>().mediaCatalogue
 
     private val mediaAccess = ContentResolverMediaAccess(
         resolver = app.contentResolver,
@@ -464,19 +478,23 @@ class DetailsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Finds the live catalogue record for the routed item: the key whose
-     * LAST segment is this MediaStore id (volume-qualified keys end in
-     * `:<id>`; a page-id suffix would not be a plain MediaStore row) AND
-     * whose canonical Uri matches, so two volumes sharing an id never
-     * cross-match. Full-table scan, one call per Details open: the
-     * catalogue is thousands of small rows and the alternative (a
-     * volume-aware route argument) does not exist yet.
+     * Finds the live catalogue record for the routed item: the row(s)
+     * whose canonical Uri equals the route's (one keyed DAO read,
+     * [RoomMediaCatalogue.recordsByCanonicalUri] --- r19a; this used to
+     * materialize the FULL table through `recordsMap()` on every Details
+     * open), narrowed to the one whose key's LAST segment is this
+     * MediaStore id (volume-qualified keys end in `:<id>`; a page-id
+     * suffix would not be a plain MediaStore row) AND whose metadata cache
+     * is not STALE, so two volumes sharing an id never cross-match. The
+     * key itself cannot be rebuilt from the route arguments --- the uri's
+     * volume segment (`external`) is not the key's volume name
+     * (`external_primary` and friends) --- which is why the lookup is
+     * uri-keyed and id-suffix-narrowed rather than a primary-key read.
      */
     private suspend fun findRecord(mediaId: Long, uriString: String): CatalogueRecord? {
         val suffix = ":$mediaId"
-        return catalogue.recordsMap().values.firstOrNull { record ->
+        return catalogue.recordsByCanonicalUri(uriString).firstOrNull { record ->
             record.localMediaKey.endsWith(suffix) &&
-                record.canonicalUri == uriString &&
                 record.metadataCacheState != MetadataCacheState.STALE
         }
     }

@@ -83,6 +83,25 @@ import javax.crypto.spec.GCMParameterSpec
  * builder and the [canPrompt] probe to STRONG, so devices without a
  * Class 3 sensor/enrollment honestly offer PIN-only via
  * [VaultBiometricSupport]'s `Unsupported` state.
+ *
+ * r19a wiring --- the handle-cache invalidation seam: the r19 vault slice
+ * added [AndroidVaultBiometricKeys.invalidateCache] as a documented-but-
+ * UNWIRED hook ("the use-time failure sites live in the prompt wrapper" ---
+ * this file). This slice wires it at exactly those sites, the catch arms
+ * around the cipher-init that USES [AndroidVaultBiometricKeys.key] in
+ * [unlock]: a permanently-invalidated key (enrollment change, the
+ * [Failure.KEY_INVALIDATED] narration the ViewModel turns into the
+ * ADR-0019 PIN fallback) and the residual use-time failures
+ * (`UserNotAuthenticated` and keystore-side hiccups riding the generic
+ * arm). The call order follows the keys' KDoc: narrate first, then drop
+ * the cached handle, so the next operation re-loads it from the keystore
+ * once instead of serving a dead handle for the rest of the process (the
+ * re-load serves the same dead key after an enrollment change --- only
+ * re-enrollment's [AndroidVaultBiometricKeys.freshKey] mints a usable
+ * one, which is the ADR-0019 path). [AndroidVaultKeys]' twin hook stays
+ * unwired here, honestly: the MEDIA key never flows through this wrapper
+ * (its crypto runs inside the vault store), and it carries no auth
+ * binding, so no use-time failure of it can surface in this file.
  */
 object VaultBiometrics {
 
@@ -158,9 +177,24 @@ object VaultBiometrics {
             }
         } catch (e: KeyPermanentlyInvalidatedException) {
             onResult(UnlockResult.Failed(Failure.KEY_INVALIDATED))
+            // r19a: the seam the keys' KDoc documents. Narrate first, then
+            // drop the cached handle (the KDoc-named order) --- the next
+            // operation re-loads it from the keystore once. The re-loaded
+            // key is the same dead one (it still loads; only re-enrollment
+            // mints a usable key), so this is hygiene for the transient
+            // case, and the KEY_INVALIDATED narration above is what drives
+            // the honest ADR-0019 re-enroll fallback.
+            AndroidVaultBiometricKeys.invalidateCache()
             return
         } catch (t: Throwable) {
             onResult(UnlockResult.Failed(Failure.ERROR))
+            // r19a: the generic use-time arm (UserNotAuthenticated and
+            // keystore-side hiccups land here). Dropping the cache is the
+            // documented "one honest way to force the re-load" for a handle
+            // that just failed in use; the worst cost when the failure was
+            // actually the blob's shape (a tampered sealed secret) is one
+            // extra keystore load on the next operation.
+            AndroidVaultBiometricKeys.invalidateCache()
             return
         }
         prompt(

@@ -25,10 +25,21 @@ import kotlin.time.Duration.Companion.milliseconds
  * `Idle` covers BOTH "nothing typed yet" and "short query" --- the screen
  * disambiguates with the live query text (pure gate:
  * [SearchQuery.isSearchable]) so the state machine stays one-dimensional.
+ * `PermissionNeeded` (r19a) is the honest fourth state before any query
+ * runs: revoked media access used to surface as endless generic
+ * "Error + Retry".
  */
 sealed interface SearchUiState {
     /** No results to show: empty field or a query under the minimum length. */
     data object Idle : SearchUiState
+
+    /**
+     * No media read permission (r19a): the pipeline refuses to query until
+     * the screen reports a grant. Rendered with the SAME shared
+     * permission surface (Grant + Settings affordances) the Photos and
+     * Albums tabs use.
+     */
+    data object PermissionNeeded : SearchUiState
 
     /** A query is in flight (post-debounce). */
     data object Searching : SearchUiState
@@ -56,6 +67,18 @@ sealed interface SearchUiState {
  * a query still in flight when a newer (debounced) request lands, so a
  * stale result can never overwrite a newer one.
  *
+ * ## Permission gate (r19a)
+ * The MediaStore query runs ONLY while the screen has reported the media
+ * read permission granted ([onPermissionGranted]/[onPermissionDenied] ---
+ * the same screen-driven decision PhotosViewModel models). Without the
+ * grant the pipeline publishes [SearchUiState.PermissionNeeded] instead of
+ * querying, so revoked access surfaces as the honest grant-me state with
+ * the standard affordances rather than an endless generic
+ * "Error + Retry"; a [SecurityException] mid-query (the grant vanishing
+ * while this tab stayed composed) folds into the same state. Typing while
+ * ungranted is harmless: the field keeps working and the pipeline settles
+ * the moment a grant lands.
+ *
  * ## Gating
  * Every request first consults the pure [SearchQuery.isSearchable] gate:
  * trimmed queries shorter than 2 characters never reach MediaStore ---
@@ -64,7 +87,7 @@ sealed interface SearchUiState {
  * ## Execution
  * [MediaStoreSource.querySearch] runs on Dispatchers.IO inside
  * viewModelScope, the same discipline as PhotosViewModel/TrashViewModel.
- * Any provider failure ( SecurityException, SQLiteException, ...) maps to
+ * Any other provider failure (SQLiteException, ...) maps to
  * [SearchUiState.Error]; [retry] bumps the counter so the combine pipeline
  * re-runs the CURRENT query + filter without the screen having to resend
  * anything.
@@ -102,6 +125,15 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val retries = MutableStateFlow(0)
 
+    /**
+     * The screen-reported media read permission (r19a): written by
+     * [onPermissionGranted]/[onPermissionDenied] and read by the pipeline
+     * gate below. Main-thread-only exactly like the StateFlows above (both
+     * writers and the collector run on the viewModelScope's main
+     * dispatcher), so a plain var is the honest, lock-free shape.
+     */
+    private var permissionGranted = false
+
     init {
         viewModelScope.launch {
             combine(_query, _mediaType, retries) { query, type, _ ->
@@ -109,6 +141,10 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
             }
                 .debounce(DEBOUNCE_MS.milliseconds)
                 .collectLatest { (rawQuery, type) ->
+                    if (!permissionGranted) {
+                        _state.value = SearchUiState.PermissionNeeded
+                        return@collectLatest
+                    }
                     if (!SearchQuery.isSearchable(rawQuery)) {
                         _state.value = SearchUiState.Idle
                         return@collectLatest
@@ -125,6 +161,13 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     } catch (e: CancellationException) {
                         throw e
+                    } catch (_: SecurityException) {
+                        // The grant vanished mid-session (revoked in system
+                        // settings while this tab stayed composed): the
+                        // honest state is the permission state, not a
+                        // generic error the Retry button could not fix.
+                        permissionGranted = false
+                        SearchUiState.PermissionNeeded
                     } catch (_: Exception) {
                         SearchUiState.Error
                     }
@@ -145,6 +188,32 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     /** Re-runs the current query + filter after an [SearchUiState.Error]. */
     fun retry() {
         retries.value += 1
+    }
+
+    /**
+     * The screen reports the media read permission granted (r19a): the
+     * pipeline gate opens and the current query + filter re-run through
+     * the SAME retry bump [retry] uses (the debounced collector re-decides
+     * --- Idle invitation when nothing searchable is typed, the query
+     * otherwise). The early-return keeps tab re-entries cheap: the
+     * launcher returns immediately when access is already granted, so
+     * every re-entry would otherwise re-run the live query for nothing.
+     */
+    fun onPermissionGranted() {
+        if (permissionGranted) return
+        permissionGranted = true
+        retries.value += 1
+    }
+
+    /**
+     * The screen reports the permission denied or revoked later (r19a):
+     * the gate closes and the state flips to the honest grant-me surface,
+     * discarding any shown results (they are unreadable without the grant
+     * anyway).
+     */
+    fun onPermissionDenied() {
+        permissionGranted = false
+        _state.value = SearchUiState.PermissionNeeded
     }
 
     private companion object {

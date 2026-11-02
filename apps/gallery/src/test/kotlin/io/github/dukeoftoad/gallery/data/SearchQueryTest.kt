@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.data
 
+import io.github.dukeoftoad.gallery.data.filters.TimelineFilterMediaStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,6 +17,11 @@ import org.junit.Test
  * lives in `SearchQuery.kt` free of android.* imports --- the Android
  * layer (`MediaStoreSource.querySearch`) hands the built
  * [SearchQuery.Spec] straight to `ContentResolver.query`.
+ *
+ * Since r19 the media-type pins also carry regression cross-checks: the
+ * platform numbers (MEDIA_TYPE_IMAGE = 1, MEDIA_TYPE_AUDIO = 2,
+ * MEDIA_TYPE_VIDEO = 3) are verified against the r17 filter engine's
+ * JVM-pure constants, so the pre-r19 `2 == video` drift cannot come back.
  */
 class SearchQueryTest {
 
@@ -100,9 +106,10 @@ class SearchQueryTest {
 
     @Test
     fun `ALL uses the images-videos IN list`() {
-        // Same MEDIA_TYPE IN (1, 2) semantics as the timeline's unified
-        // Files queries --- keeps downloads/documents out of results.
-        assertEquals("media_type IN (1, 2)", SearchQuery.mediaTypeClause(SearchMediaType.ALL))
+        // Same MEDIA_TYPE IN (1, 3) semantics as the timeline's unified
+        // Files queries --- keeps downloads/documents (and audio) out of
+        // results.
+        assertEquals("media_type IN (1, 3)", SearchQuery.mediaTypeClause(SearchMediaType.ALL))
     }
 
     @Test
@@ -111,8 +118,38 @@ class SearchQueryTest {
     }
 
     @Test
-    fun `VIDEOS selects media_type 2`() {
-        assertEquals("media_type = 2", SearchQuery.mediaTypeClause(SearchMediaType.VIDEOS))
+    fun `VIDEOS selects media_type 3`() {
+        // MEDIA_TYPE_VIDEO = 3 (2 is MEDIA_TYPE_AUDIO); r19 fixed the
+        // pre-existing `= 2`, which selected audio rows and no videos.
+        assertEquals("media_type = 3", SearchQuery.mediaTypeClause(SearchMediaType.VIDEOS))
+    }
+
+    @Test
+    fun `the type numbers match the filter engine's constants`() {
+        // Anti-drift cross-check: the r17 engine (TimelineFilterMediaStore)
+        // holds JVM-pure constants of the same platform values, so if
+        // either side ever changes alone, this pin breaks loudly.
+        assertEquals(
+            "media_type = ${TimelineFilterMediaStore.MEDIA_TYPE_IMAGE}",
+            SearchQuery.mediaTypeClause(SearchMediaType.IMAGES),
+        )
+        assertEquals(
+            "media_type = ${TimelineFilterMediaStore.MEDIA_TYPE_VIDEO}",
+            SearchQuery.mediaTypeClause(SearchMediaType.VIDEOS),
+        )
+    }
+
+    @Test
+    fun `audio's number appears in no media-type clause`() {
+        // Platform constants (MediaStore.Files.FileColumns):
+        // MEDIA_TYPE_IMAGE = 1, MEDIA_TYPE_AUDIO = 2, MEDIA_TYPE_VIDEO = 3.
+        // The pre-r19 literals read IN (1, 2) / `= 2` --- images+AUDIO ---
+        // so audio files leaked into "All" results and the Videos chip
+        // found no actual video. AUDIO's 2 must appear in NEITHER chip's
+        // clause.
+        SearchMediaType.entries.forEach { chip ->
+            assertFalse(SearchQuery.mediaTypeClause(chip).contains("2"))
+        }
     }
 
     // ------------------------------------------------------------------
@@ -151,7 +188,7 @@ class SearchQueryTest {
     fun `build for ALL combines the IN clause with the escaped LIKE`() {
         assertEquals(
             SearchQuery.Spec(
-                selection = "(media_type IN (1, 2)) AND _display_name LIKE ? ESCAPE '\\'",
+                selection = "(media_type IN (1, 3)) AND _display_name LIKE ? ESCAPE '\\'",
                 selectionArgs = listOf("%sunset%"),
                 sortOrder = "date_added DESC, _id DESC LIMIT 1000",
             ),
@@ -175,7 +212,7 @@ class SearchQueryTest {
     fun `build for VIDEOS swaps in the video clause`() {
         assertEquals(
             SearchQuery.Spec(
-                selection = "(media_type = 2) AND _display_name LIKE ? ESCAPE '\\'",
+                selection = "(media_type = 3) AND _display_name LIKE ? ESCAPE '\\'",
                 selectionArgs = listOf("%mpg%"),
                 sortOrder = "date_added DESC, _id DESC LIMIT 1000",
             ),

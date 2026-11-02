@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.database.ContentObserver
+import android.database.sqlite.SQLiteException
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -41,6 +42,15 @@ class MediaStoreSource(private val context: Context) {
      * the user has granted access but has no media, or when the cursor is
      * empty for any reason --- the caller distinguishes "empty library" from
      * "permission denied" via the permission state, not via this result.
+     *
+     * Since r19 the merged snapshot is ordered with
+     * [TimelineSort.NEWEST_FIRST.sortItems] --- the same `date_added` +
+     * `_id` tiebreak discipline [TimelineSort] documents for the windowed
+     * and bucket paths --- instead of a bare date sort. Burst shots share
+     * one `date_added` second, and the old sort left their relative order
+     * to the accidental merge order (stable sort over images-then-videos),
+     * never a pinned sequence; the tiebreak makes the snapshot's order
+     * total, like every other read path.
      */
     fun queryTimeline(): List<MediaItem> {
         val out = ArrayList<MediaItem>(256)
@@ -52,7 +62,11 @@ class MediaStoreSource(private val context: Context) {
             collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
             isVideo = true,
         )
-        return out.sortedByDescending { it.dateAddedSec }
+        return TimelineSort.NEWEST_FIRST.sortItems(
+            out,
+            { it.dateAddedSec },
+            { it.id },
+        )
     }
 
     /**
@@ -176,12 +190,18 @@ class MediaStoreSource(private val context: Context) {
         // staggered grid (issue #34); the duration column (Video collection
         // only) feeds the duration overlay (issue #33).
         //
-        // "width"/"height" are plain MediaStore string columns, available far
-        // below the API 29 `MediaColumns` aliases and honored by both
-        // collections because they share the same underlying files table;
-        // "duration" has been a `Video.VideoColumns` column since API 1. All
-        // reads go through `getColumnIndexOrNull`, so a missing column simply
-        // yields 0 ("unknown") instead of failing.
+        // "duration" has been a `Video.VideoColumns` column since API 1, but
+        // "width"/"height" only became real files-table columns in API 29
+        // (they landed with the scoped-storage `MediaColumns` aliases) --- a
+        // pre-Q provider MAY accept the pair anyway, but one that rejects
+        // unknown columns throws IllegalArgumentException (or
+        // SQLiteException) out of ContentResolver.query, which used to escape
+        // uncaught and crash the timeline on API 26-28. r19's audit retracted
+        // this block's earlier "both collections have always honored the
+        // pair" claim; the guarded query below now retries ONCE with the pair
+        // removed, and the rows then map width=0/height=0 --- the same honest
+        // "unknown" the `getColumnIndexOrNull` 0-fallback yields for any
+        // column a cursor simply lacks.
         //
         // "is_favorite" (issue #66) is only projected where the provider is
         // known to have the column --- Android 10+; earlier providers reject
@@ -208,8 +228,15 @@ class MediaStoreSource(private val context: Context) {
         // `_ID` is required; MIME_TYPE may be null for some HEIC/RAW captures
         // so we fall back to the generic image/video mimetype.
         val fallbackMime = if (isVideo) "video/*" else "image/*"
+        // The guarded query (see the projection note above): byte-identical
+        // to the plain query whenever the provider accepts the projection.
         context.contentResolver
-            .query(collection, projection, selection, selectionArgs, null)
+            .queryGuardingPixelDimensions(
+                collection,
+                projection,
+                selection,
+                selectionArgs,
+            )
             ?.use { cursor ->
                 val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val mimeCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.MIME_TYPE)
@@ -251,6 +278,77 @@ class MediaStoreSource(private val context: Context) {
 
     private fun android.database.Cursor.getColumnIndexOrNull(name: String): Int =
         try { getColumnIndexOrThrow(name) } catch (_: IllegalArgumentException) { -1 }
+
+    /**
+     * [queryCollection]'s ContentResolver.query with the r19 pre-Q
+     * pixel-dimension guard: identical to the plain five-argument query
+     * whenever the provider accepts the projection. If it rejects the
+     * projection's "width"/"height" entries --- the pair only became
+     * files-table columns in API 29 --- with IllegalArgumentException or
+     * SQLiteException, the query is retried ONCE with those entries
+     * removed, after which the row mapping's `getColumnIndexOrNull`
+     * 0-fallback reads width=0/height=0 ("unknown") --- the honest
+     * degradation. Any other failure --- or a retry that still fails ---
+     * propagates untouched, exactly like the ungated call.
+     */
+    private fun ContentResolver.queryGuardingPixelDimensions(
+        collection: Uri,
+        projection: Array<String>,
+        selection: String?,
+        selectionArgs: Array<String>?,
+    ): android.database.Cursor? = runCatching {
+        query(collection, projection, selection, selectionArgs, null)
+    }.getOrElse { error ->
+        if (error !is IllegalArgumentException &&
+            error !is SQLiteException
+        ) throw error
+        query(
+            collection,
+            projection.withoutPixelDimensions(),
+            selection,
+            selectionArgs,
+            null,
+        )
+    }
+
+    /**
+     * [queryTimelineWindow]'s Bundle-args query with the same r19 guard
+     * (the Bundle-argument ContentResolver.query overload the windowed
+     * protocol uses). Belt-and-braces on this leg: the windowed protocol is
+     * API 30+, where the width/height columns are part of the contract, but
+     * the guard keeps both read paths' degradation story identical should a
+     * provider still reject the pair. Same contract as the five-argument
+     * overload: byte-identical on success, one dimension-less retry on a
+     * projection rejection, everything else --- including a still-failing
+     * retry --- propagates untouched.
+     */
+    private fun ContentResolver.queryGuardingPixelDimensions(
+        collection: Uri,
+        projection: Array<String>,
+        queryArgs: Bundle,
+    ): android.database.Cursor? = runCatching {
+        query(collection, projection, queryArgs, null)
+    }.getOrElse { error ->
+        if (error !is IllegalArgumentException &&
+            error !is SQLiteException
+        ) throw error
+        query(
+            collection,
+            projection.withoutPixelDimensions(),
+            queryArgs,
+            null,
+        )
+    }
+
+    /**
+     * This projection minus the "width"/"height" entries --- the retry
+     * shape of the two pixel-dimension guards above.
+     */
+    private fun Array<String>.withoutPixelDimensions(): Array<String> =
+        filterNot { column ->
+            column == MediaStore.Images.ImageColumns.WIDTH ||
+                column == MediaStore.Images.ImageColumns.HEIGHT
+        }.toTypedArray()
 
     // ------------------------------------------------------------------
     // Recycle bin (issue #31): trashed-items query, API 30+ (R).
@@ -442,7 +540,12 @@ class MediaStoreSource(private val context: Context) {
      * the overlay behave identically on both paging paths. Since issue #66
      * the window also projects `is_favorite` (always safe here: the windowed
      * protocol is R+, and the provider column is Q+) so favorited cells can
-     * carry the heart overlay on the paged timeline.
+     * carry the heart overlay on the paged timeline. Since r19 the query
+     * itself carries [queryCollection]'s pixel-dimension guard --- pure
+     * belt-and-braces on this R+ leg (the columns are contract columns from
+     * API 29), kept so both read paths degrade identically if a provider
+     * still rejects the pair: one dimension-less retry, then width=0/
+     * height=0 rows, exactly the 0-fallback shape above.
      *
      * @param offset zero-based window start in the ordered timeline; Paging
      *  keys are always `>= 0` (see [WindowPagingSource]).
@@ -529,8 +632,15 @@ class MediaStoreSource(private val context: Context) {
             )
         }
         val out = ArrayList<MediaItem>(limit.coerceIn(1, 256))
+        // The r19 pixel-dimension guard (see the "Grid-UX metadata" KDoc
+        // section): byte-identical to the plain query on success, one
+        // dimension-less retry if the provider rejects the projection.
         context.contentResolver
-            .query(collection, projection, queryArgs, null)
+            .queryGuardingPixelDimensions(
+                collection,
+                projection,
+                queryArgs,
+            )
             ?.use { cursor ->
                 val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val mimeCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.MIME_TYPE)
@@ -598,10 +708,13 @@ class MediaStoreSource(private val context: Context) {
      * keeps newest-first in v1, per issue #66's scope note).
      *
      * Rows surface as canonical `images/<id>` / `video/<id>` content URIs
-     * with `isFavorite = true`, identical in shape to every other query
-     * path --- ADR-0006 content URIs anchored by `_id`, no filesystem paths.
-     * The heart overlay and the viewer toggle therefore behave the same on
-     * favorites as on the timeline.
+     * with the favorite flag read per row, identical in shape to every
+     * other query path --- ADR-0006 content URIs anchored by `_id`, no
+     * filesystem paths. The flag uses the same conservative `>= 0 &&`
+     * mapping shape as everywhere else (r19 aligned this method's old
+     * optimistic default, which claimed `true` whenever the column was
+     * missing), so the heart overlay and the viewer toggle behave the
+     * same on favorites as on the timeline.
      *
      * ## API gate: empty below Android 10
      * The `is_favorite` provider column is the scoped-storage era; below Q
@@ -616,9 +729,13 @@ class MediaStoreSource(private val context: Context) {
     fun queryFavorites(): List<MediaItem> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptyList()
         val collection = MediaStore.Files.getContentUri("external")
-        // The same projection querySearch maps, plus the flag itself (all
-        // rows here are favorites, but projecting keeps the mapping honest
-        // against providers that filter loosely).
+        // The same projection querySearch maps, plus the flag itself: the
+        // selection promises favorite rows only, but a provider that
+        // filters loosely could return more, so the row mapping below reads
+        // the actual flag --- with the same conservative `>= 0 &&` shape as
+        // every other path (r19: it used to default optimistically to
+        // `true` when the column was missing, unlike the rest of this
+        // file). The honest read, not an assumed `true`.
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.MIME_TYPE,
@@ -666,7 +783,7 @@ class MediaStoreSource(private val context: Context) {
                         width = if (widthCol >= 0) cursor.getInt(widthCol) else 0,
                         height = if (heightCol >= 0) cursor.getInt(heightCol) else 0,
                         durationMs = if (isVideo && durationCol >= 0) cursor.getLong(durationCol) else 0L,
-                        isFavorite = favoriteCol < 0 || cursor.getInt(favoriteCol) == 1,
+                        isFavorite = favoriteCol >= 0 && cursor.getInt(favoriteCol) == 1,
                     )
                 }
             }

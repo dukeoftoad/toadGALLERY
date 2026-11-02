@@ -130,7 +130,18 @@ android {
         // (2026-11-02, after build 23): NO new device builds until
         // Phase 5 completes; this and subsequent rounds ride CI from
         // main only.
-        versionCode = 24
+        // versionCode 25 (r21 round): the Ente engine pin + model-provisioning
+        // core --- the Phase 5 AI engine workstream's first slice: the Ente
+        // Rust ML engine vendored at pinned commit 423b2d80 as the root-level
+        // engine/ workspace (ente-ml + ente-assets + ente-image, cargo-check
+        // gated in CI, AGPL-3.0 recorded in the licensing ledger), and the
+        // Kotlin model-delivery core per ADR-0020 (pinned ModelManifest of
+        // all 11 assets, streaming size+SHA-256 verifier, verify-then-stage-
+        // then-commit provisioner; the HTTP downloader + INTERNET permission
+        // + JNI bridge are r22). Per maintainer directive (2026-11-02, after
+        // build 23): NO new device builds until Phase 5 completes; this and
+        // subsequent rounds ride CI from main only.
+        versionCode = 25
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

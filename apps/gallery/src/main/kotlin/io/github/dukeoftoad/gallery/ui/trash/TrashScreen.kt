@@ -59,6 +59,8 @@ import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaThumb
+import io.github.dukeoftoad.gallery.ui.settings.LayoutStyle
+import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 
 /**
  * The Recycle bin screen (issue #31): trashed images/videos (MediaStore
@@ -72,15 +74,23 @@ import io.github.dukeoftoad.gallery.ui.media.MediaThumb
  * selection --- there is no viewer entry here (trashed rows return to the
  * timeline on restore; keeping this surface lean).
  *
+ * Appearance (r19a): the shell-scoped [settingsViewModel] feeds the
+ * configured column count and the GRID layout's square cells into the
+ * grid --- the SAME wiring PhotosScreen/AlbumDetailScreen use, so every
+ * media grid in the app honors the setting (this screen used to hardcode
+ * `StaggeredGridCells.Fixed(3)`).
+ *
  * Privacy (ADR-0006/ADR-0014): content URIs only, no INTERNET permission.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrashScreen(
     onBack: () -> Unit,
+    settingsViewModel: SettingsViewModel,
     viewModel: TrashViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val appearance by settingsViewModel.appearance.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -196,6 +206,8 @@ fun TrashScreen(
                     TrashContent(
                         items = s.items,
                         totalBytes = s.totalBytes,
+                        columns = appearance.columns,
+                        uniformCells = appearance.layout == LayoutStyle.GRID,
                         selectedKeys = selectedKeys,
                         onToggle = { key ->
                             selectedKeys = if (key in selectedKeys) {
@@ -253,11 +265,18 @@ fun TrashScreen(
  * matching the #30 selection idiom); actions hand the selected items to the
  * ViewModel and the post-consent reload naturally collapses the selection
  * when items leave the trash.
+ *
+ * Since r19a the grid takes its column count and the GRID layout's square
+ * cells from the shell's appearance settings (the same contract
+ * AlbumDetailScreen's grid follows); grouping stays a Photos-timeline
+ * feature --- the bin is a flat list.
  */
 @Composable
 private fun TrashContent(
     items: List<MediaItem>,
     totalBytes: Long,
+    columns: Int,
+    uniformCells: Boolean,
     selectedKeys: Set<String>,
     onToggle: (String) -> Unit,
     onRestore: () -> Unit,
@@ -275,7 +294,7 @@ private fun TrashContent(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         )
         LazyVerticalStaggeredGrid(
-            columns = StaggeredGridCells.Fixed(3),
+            columns = StaggeredGridCells.Fixed(columns),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -290,6 +309,7 @@ private fun TrashContent(
                 TrashCell(
                     item = item,
                     selected = item.uri.toString() in selectedKeys,
+                    forceSquare = uniformCells,
                     onTap = { onToggle(item.uri.toString()) },
                 )
             }
@@ -321,19 +341,21 @@ private fun TrashContent(
 /**
  * One selectable trash cell: [MediaThumb] plus the shared check-badge idiom
  * (same scrim chip as the #30 selection overlay) so trash selection reads
- * exactly like timeline selection.
+ * exactly like timeline selection. [forceSquare] is the appearance
+ * slice's GRID-layout pass-through (r19a), straight into [MediaThumb].
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrashCell(
     item: MediaItem,
     selected: Boolean,
+    forceSquare: Boolean,
     onTap: () -> Unit,
 ) {
     Box(
         modifier = Modifier.combinedClickable(onClick = onTap),
     ) {
-        MediaThumb(item = item)
+        MediaThumb(item = item, forceSquare = forceSquare)
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)

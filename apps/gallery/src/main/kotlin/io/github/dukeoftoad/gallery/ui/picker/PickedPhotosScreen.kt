@@ -18,6 +18,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.MediaGrid
+import io.github.dukeoftoad.gallery.ui.settings.LayoutStyle
+import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 
 /**
  * The picked-photos view (issue #27): the Android 13+ system Photo Picker
@@ -30,6 +32,12 @@ import io.github.dukeoftoad.gallery.ui.media.MediaGrid
  * hoists and shares with the Settings tab, so arriving here right after a
  * pick shows the batch as soon as the mapping coroutine publishes it.
  *
+ * Appearance (r19a): the shell-scoped [settingsViewModel] feeds the
+ * configured column count and the GRID layout's square cells into the
+ * grid --- the SAME wiring PhotosScreen/AlbumDetailScreen use, so every
+ * media grid in the app honors the setting (this grid used to default to
+ * MediaGrid's 3 columns).
+ *
  * Empty set (never picked, or a fresh process --- the v1 set is
  * session-scoped, see the ViewModel KDoc): the frozen [StateScreen] empty
  * state. No permission gate exists here by design --- browsing this
@@ -40,9 +48,11 @@ import io.github.dukeoftoad.gallery.ui.media.MediaGrid
 @Composable
 fun PickedPhotosScreen(
     pickedViewModel: PickedPhotosViewModel,
+    settingsViewModel: SettingsViewModel,
     onBack: () -> Unit,
 ) {
     val items by pickedViewModel.picked.collectAsState()
+    val appearance by settingsViewModel.appearance.collectAsState()
 
     Scaffold(
         topBar = {
@@ -75,6 +85,8 @@ fun PickedPhotosScreen(
             MediaGrid(
                 items = items,
                 modifier = Modifier.padding(innerPadding),
+                columns = appearance.columns,
+                uniformCells = appearance.layout == LayoutStyle.GRID,
             )
         }
     }

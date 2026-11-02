@@ -292,6 +292,29 @@ class RoomMediaCatalogue(
      * .LocationConsentReindexPolicy]).
      */
     suspend fun pendingUngrantedLocations(): Int = dao.ungrantedLocationCount()
+
+    // =====================================================================
+    // --- r19a round: the Details record lookup (canonical-Uri keyed) ------
+    // (additive end-of-class section; nothing above this line changes and
+    // the [MediaCatalogue] interface members are untouched --- like the r16
+    // members above, this exists only on the concrete class, so the Details
+    // ViewModel (which binds `ToadGalleryApplication.mediaCatalogue`, this
+    // exact type) reaches it directly and the frozen interface + in-memory
+    // reference stay stable for the parallel rounds.)
+    // =====================================================================
+
+    /**
+     * The live records whose canonical Uri equals [canonicalUri], via
+     * [CatalogueDao.itemsByCanonicalUri] --- the keyed twin of the
+     * full-table [recordsMap] the Details screen's record lookup used to
+     * run per open. `canonicalUri` is not the primary key, so this returns
+     * the (in practice zero- or one-element) list and leaves the
+     * key-suffix / cache-state narrowing to the caller, which is the only
+     * place that knows the route's MediaStore id --- see the DAO method's
+     * KDoc for the honest-shape rationale.
+     */
+    suspend fun recordsByCanonicalUri(canonicalUri: String): List<CatalogueRecord> =
+        dao.itemsByCanonicalUri(canonicalUri).map { it.toRecord() }
 }
 
 // --- entity <-> record mappers (the ONLY translation point) ---------------

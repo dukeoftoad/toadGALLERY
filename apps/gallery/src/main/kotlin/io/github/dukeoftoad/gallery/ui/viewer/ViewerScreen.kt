@@ -77,6 +77,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.PlaybackException
@@ -123,9 +126,13 @@ import kotlinx.coroutines.launch
  *    [PlayerView] (its own transport controls and gestures --- photo zoom is
  *    deliberately out of scope there), autoplaying with proper audio focus
  *    handling, and built with DECODER FALLBACK enabled (issue #65 --- see
- *    [VideoPage]). A decode/playback failure renders the honest
- *    `viewer_video_error_*` copy plus a Retry button instead of a dead black
- *    page.
+ *    [VideoPage]). Playback is LIFECYCLE- and PAGER-aware (r19a): audio
+ *    pauses when the app is backgrounded (ON_START resumes only a page
+ *    that was actually playing when it stopped) and when the page stops
+ *    being the current page, so a swiped-away neighbor never plays under
+ *    its successor --- see [VideoPage]. A decode/playback failure renders
+ *    the honest `viewer_video_error_*` copy plus a Retry button instead of
+ *    a dead black page.
  *
  * A scrim top bar carries the back action, the position counter
  * (`viewer_counter`) and --- issue #63 --- the operations for the CURRENT
@@ -404,7 +411,20 @@ fun ViewerScreen(
     // documented v1 trade-off in PhotoPage's KDoc. Because swiping is
     // disabled while this is set, the zoomed page is by construction the
     // settled page, so a single flag is enough.
-    var currentPageZoomed by remember { mutableStateOf(false) }
+    //
+    // Keyed to [window] (r19a): a delete swaps the window object and the
+    // `key(window)` below rebuilds the pager around a fresh seed page, and
+    // the old zoomed PhotoPage unwinds through DISPOSAL --- its
+    // leave-resets-zoom [LaunchedEffect] is cancelled, never run --- so an
+    // unkeyed flag would survive the mutation as `true` and leave
+    // `userScrollEnabled` false for the rest of the viewer session (locked
+    // until some later zoom round-trip happened to clear it). Re-seeding
+    // the flag on exactly the mutation the pager re-keys on is the minimal
+    // sound fix, and `false` is the honest seed: the rebuilt pages start at
+    // 1x (their uri-keyed [ZoomableState]s are fresh), and the window is
+    // otherwise frozen, so this key change fires only on the delete path
+    // that needed it.
+    var currentPageZoomed by remember(window) { mutableStateOf(false) }
 
     // A delete replaces the window object; key() gives the pager a fresh
     // state seeded at the window's computed follow-up page (the pager's
@@ -430,7 +450,15 @@ fun ViewerScreen(
             ) { page ->
                 val item = window.items[page]
                 if (item.isVideo) {
-                    VideoPage(item = item)
+                    VideoPage(
+                        item = item,
+                        // The SAME current-page seam PhotoPage receives
+                        // (r19a): a video page pauses its player the
+                        // moment it stops being the settled page, the
+                        // audio-side mirror of PhotoPage's leave-resets-
+                        // zoom. See VideoPage for the semantics.
+                        isCurrentPage = pagerState.currentPage == page,
+                    )
                 } else {
                     PhotoPage(
                         item = item,
@@ -887,13 +915,39 @@ private fun PhotoPage(
  * can make playback undecodable even after a retry, and the viewer must say
  * so instead of showing a frozen black frame.
  *
+ * ## Lifecycle- and pager-aware playback (r19a)
+ * The player used to be created `playWhenReady = true` and touched by
+ * nothing but disposal, so a video kept playing its audio after the app
+ * was backgrounded, and the pager keeping NEAR pages composed meant two
+ * players could sound at once around a swipe. Two seams close that:
+ *
+ *  - **Lifecycle**: a [LifecycleEventObserver] on the [LocalLifecycleOwner]
+ *    pauses on `ON_STOP` and resumes on `ON_START` ONLY when the page was
+ *    actually playing when it stopped --- `playWhenReady` is the intent
+ *    signal, and it reads false for a page the pager seam below (or the
+ *    user) already paused, so a mere foreground round-trip never
+ *    resurrects either. A user-paused video therefore stays paused across
+ *    backgrounding, which is the honest reading of "resume only if it was
+ *    playing".
+ *  - **Pager**: the [isCurrentPage] seam PhotoPage already receives
+ *    (`pagerState.currentPage == page`, threaded by the pager below):
+ *    the moment this page stops being the settled page, its player pauses
+ *    --- the audio-side mirror of PhotoPage's leave-resets-zoom. Without
+ *    it, a page one swipe away (still composed) would keep playing under
+ *    its successor, and a neighbor composed mid-swipe would start under
+ *    the page being left (its initial pause lands in the same composition
+ *    frame, before the first audio render). Returning to a paused page
+ *    keeps it paused: the PlayerView's own play control is the resume,
+ *    exactly the "leaving resets, returning does not restore" half
+ *    PhotoPage implements for zoom.
+ *
  * Zoom/pan are deliberately out of scope on video pages: `PlayerView` owns
  * its gestures, and the photo pipeline ([ZoomableState],
  * [detectPanZoomGestures]) never installs itself here.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun VideoPage(item: MediaItem) {
+private fun VideoPage(item: MediaItem, isCurrentPage: Boolean) {
     val context = LocalContext.current
     var playbackFailed by remember(item.uri) { mutableStateOf(false) }
     val player = remember(item.uri) {
@@ -917,6 +971,38 @@ private fun VideoPage(item: MediaItem) {
     }
     DisposableEffect(item.uri) {
         onDispose { player.release() }
+    }
+
+    // Leaving this page (the pager settled on a neighbor): pause --- the
+    // audio-side mirror of PhotoPage's leave-resets-zoom effect above. See
+    // the KDoc's pager section for why returning does NOT auto-resume.
+    LaunchedEffect(isCurrentPage) {
+        if (!isCurrentPage) {
+            player.pause()
+        }
+    }
+
+    // Lifecycle-aware playback: ON_STOP pauses, ON_START resumes only a
+    // page that was playing when it stopped (see the KDoc's lifecycle
+    // section for why playWhenReady is the intent signal). Keyed on the
+    // lifecycle owner AND the uri: a uri change rebuilds the player above,
+    // and the relaunched effect must observe the NEW instance, never keep
+    // driving the released old one.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, item.uri) {
+        var wasPlayingWhenStopped = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    wasPlayingWhenStopped = player.playWhenReady
+                    player.pause()
+                }
+                Lifecycle.Event.ON_START -> if (wasPlayingWhenStopped) player.play()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     /** Issue #65: re-prepare the same item after a playback failure. */

@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -75,6 +76,18 @@ import io.github.dukeoftoad.gallery.data.displayAspectRatio
  * `ic_video_fallback` poster as the error painter --- the plate + play
  * triangle also doubles as the viewer's playback-error icon.
  *
+ * The non-video branch gets the SAME treatment with a type-neutral glyph
+ * (r19a): a corrupt or undecodable IMAGE used to render a fully blank
+ * cell --- indistinguishable from loading, the honesty gap this closes.
+ * The app's drawable set carries no broken-image glyph (only the
+ * video-specific play-triangle poster), and this slice invents no binary
+ * or vector resources, so the plate is a [ColorPainter] over the theme's
+ * `surfaceVariant` --- a solid tonal placeholder that says "this cell is
+ * dead" without the play triangle lying about the media type. Loading
+ * stays blank (Coil's in-flight look, unchanged), so the three cell
+ * states --- loading, playable-fallback, dead --- read differently at a
+ * glance.
+ *
  * The parallel paging slice (Phase 3) ships its own grid composable over
  * `LazyPagingItems`; it swaps its inline cell for this composable at
  * integration time, so both grids render identical cells.
@@ -105,7 +118,12 @@ fun MediaThumb(item: MediaItem, modifier: Modifier = Modifier, forceSquare: Bool
             error = if (item.isVideo) {
                 painterResource(R.drawable.ic_video_fallback)
             } else {
-                null
+                // r19a: the honest image-cell error plate (see the KDoc's
+                // decode-failure section) --- a neutral tonal fill, NOT the
+                // video poster's play triangle, so the glyph never claims
+                // the wrong media type. ColorPainter resolves the theme
+                // color at composition, so dark/light both plate honestly.
+                ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
             },
         )
         if (item.isVideo && item.durationMs > 0) {

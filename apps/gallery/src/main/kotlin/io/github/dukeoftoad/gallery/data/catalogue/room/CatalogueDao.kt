@@ -356,6 +356,31 @@ interface CatalogueDao {
      */
     @Query("SELECT COUNT(*) FROM catalogue_items WHERE locationSource = 'MEDIA_LOCATION_UNGRANTED'")
     suspend fun ungrantedLocationCount(): Int
+
+    // =====================================================================
+    // --- r19a round: the Details record lookup (canonical-Uri keyed) ------
+    // (additive end-of-interface section; nothing above this line changes.
+    // A sibling branch adds its own end-of-file section --- keep additions
+    // contiguous and clearly fenced.)
+    // =====================================================================
+
+    /**
+     * Every live row whose canonical Uri equals [canonicalUri] --- the
+     * keyed backing of the Details screen's record lookup (r19a), which
+     * used to materialize the FULL table per Details open through
+     * `allItems()` and filter it in Kotlin. The uri is not the primary key
+     * (that is `localMediaKey`), so a LIST is the honest shape: callers
+     * that cannot rebuild the key from their route (the Details route
+     * carries only a MediaStore id + uri, and the uri's volume segment is
+     * not the key's volume name --- `external` vs `external_primary`) still
+     * narrow the handful of rows by key-suffix and cache-state themselves;
+     * in practice a canonical Uri identifies at most one live row, and the
+     * shape keeps that an invariant the CALLER verifies, not one SQLite
+     * silently enforces via LIMIT. Reached through
+     * [RoomMediaCatalogue.recordsByCanonicalUri].
+     */
+    @Query("SELECT * FROM catalogue_items WHERE canonicalUri = :canonicalUri")
+    suspend fun itemsByCanonicalUri(canonicalUri: String): List<CatalogueItemEntity>
 }
 
 /**

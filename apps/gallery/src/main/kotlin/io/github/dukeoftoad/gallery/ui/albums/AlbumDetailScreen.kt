@@ -1,6 +1,7 @@
 package io.github.dukeoftoad.gallery.ui.albums
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,7 @@ import io.github.dukeoftoad.gallery.data.RenameCheck
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
 import io.github.dukeoftoad.gallery.ui.StateScreen
+import io.github.dukeoftoad.gallery.ui.media.ErrorState
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaThumb
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
@@ -90,24 +92,29 @@ import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
  * non-top-level routes): top app bar with the bucket name + back arrow, and
  * a staggered grid (same cell/spacing contract as `ui/media/MediaGrid`)
  * filtered to the bucket's contents. Entered only after the Albums tab
- * loaded with granted access; a mid-session revoke surfaces as an empty
- * grid (defensive query in the ViewModel).
+ * loaded with granted access; a mid-session revoke surfaces as the error
+ * screen with a retry (the ViewModel maps query failures to
+ * `AlbumDetailState.Error`, r19 --- pre-r19 they were masked as an empty
+ * grid).
  *
  * States render through the shared screen-state components (issue #13):
  *  - Loading -> [LoadingState] tagged `album_detail_state_loading`, wrapped in
  *    an inset-padded `Box` so the spinner centers below the top app bar
  *    (same geometry as the pre-#13 inline spinner)
+ *  - Error -> the shared [ErrorState] tagged `album_detail_state_error`
+ *    (r19; the exact tag docs/architecture/screen-states.md §2 reserved for
+ *    this call site): a provider failure --- permission revoked mid-session,
+ *    a provider SQLiteException, a missing column --- renders the honest
+ *    error screen with a retry action that re-queries. Pre-r19 the ViewModel
+ *    defensively masked such failures as an EMPTY bucket --- the honesty gap
+ *    this KDoc used to carry as a documented residual; this and the Albums
+ *    tab's own Error arm are the shared component's first live call sites.
  *  - Ready + empty -> the frozen `StateScreen` empty layout, wrapped in a Box
  *    tagged `album_detail_state_empty` (StateScreen is frozen and carries no
  *    tag parameter; the wrapper supplies the test surface, issue #38.7)
  *  - Ready + items -> the grid, tagged `album_detail_state_grid` (#64, so
  *    the selecting/plain variants share one state surface, like
  *    `photos_state_grid`)
- *
- * No error branch yet: the ViewModel defensively maps query failures to an
- * empty bucket. A later slice should add `AlbumDetailState.Error` and render
- * `ErrorState` with the `album_detail_state_error` tag reserved in
- * docs/architecture/screen-states.md.
  *
  * ## Selection mode + file operations (issue #64)
  * Full parity with the Photos-tab UX (#30), driven by the SAME screen-
@@ -186,6 +193,18 @@ fun AlbumDetailScreen(
     val fileOpsState by fileOpsViewModel.state.collectAsState()
     val selection = fileOpsState as? FileOpsUiState.Selection
     val running = fileOpsState as? FileOpsUiState.Running
+
+    // r19: while a selection is active, system back EXITS the selection
+    // instead of popping the destination --- pre-r19 back navigated away
+    // mid-mode, when the user expectation (and every sibling surface's
+    // behavior) is that back first leaves the mode. During a batch run
+    // `selection` is null (Running replaces Selection in the file-ops state
+    // machine), so back keeps its normal meaning there; `exitSelection`
+    // itself also guards Running (a no-op mid-batch), so the two guards
+    // agree.
+    BackHandler(enabled = selection != null) {
+        fileOpsViewModel.exitSelection()
+    }
 
     // ---- File-ops plumbing (issue #64, same shape as PhotosScreen) ----
     val snackbarHostState = remember { SnackbarHostState() }
@@ -317,6 +336,13 @@ fun AlbumDetailScreen(
                 ) {
                     LoadingState(tag = "album_detail_state_loading")
                 }
+                is AlbumDetailState.Error -> ErrorState(
+                    titleRes = R.string.album_detail_error_title,
+                    bodyRes = R.string.album_detail_error_body,
+                    actionRes = R.string.state_action_retry,
+                    onRetry = viewModel::retry,
+                    tag = "album_detail_state_error",
+                )
                 is AlbumDetailState.Ready -> {
                     if (s.items.isEmpty()) {
                         // StateScreen is frozen without a tag parameter, so the

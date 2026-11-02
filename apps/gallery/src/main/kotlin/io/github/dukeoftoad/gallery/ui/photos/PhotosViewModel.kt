@@ -295,7 +295,7 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
      * Loading is also the pre-first-open value --- the sheet only composes
      * while open, so a stale list never renders.
      */
-    private val _folders = MutableStateFlow(PhotosFoldersState.Loading)
+    private val _folders = MutableStateFlow<PhotosFoldersState>(PhotosFoldersState.Loading)
     val folders: StateFlow<PhotosFoldersState> = _folders.asStateFlow()
 
     /**

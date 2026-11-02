@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.metadata.format
 
+import java.io.IOException
 import java.io.InputStream
 import java.util.Locale
 

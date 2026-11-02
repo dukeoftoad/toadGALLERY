@@ -267,6 +267,15 @@ interface CatalogueDao {
      * window queries above do. Android-adjacent Room glue, untested per
      * ADR-0016 --- the fragment/args contracts are pinned on the JVM in
      * the filter engine's own suite.
+     *
+     * r19: the v5 `bucketId`/`bucketDisplayName` columns extend the
+     * serviceable WHERE dimensions to the folder filter (`bucketId = ?`,
+     * projected by the pure engine like every other dimension and
+     * composed by the JVM-tested `FilteredWindowSql` builder). The
+     * statement above itself is deliberately UNCHANGED: it already accepts
+     * any fragment composed from the engine's fixed clause shapes, so the
+     * folder window needs no second SQL surface --- one composition path,
+     * every dimension.
      */
     @androidx.room.RawQuery
     suspend fun timelineWindowFiltered(

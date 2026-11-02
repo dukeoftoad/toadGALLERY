@@ -193,12 +193,16 @@ class RoomMediaCatalogue(
     // The WHERE fragment + bound args arrive FULLY COMPOSED from the pure,
     // JVM-tested filter engine (io.github.dukeoftoad.gallery.data.filters
     // .TimelineFilterCatalogue) --- fixed clause shapes over existing
-    // columns, no user input, no string interpolation of values. This
-    // method's only jobs are the guards (identical to [timelineWindow]'s:
-    // a negative LIMIT is "unbounded" in SQLite, so invalid arguments must
-    // answer empty in BOTH implementations) and the ONE composition site:
-    // WHERE + the SAME total ORDER BY the fixed window queries use +
-    // LIMIT/OFFSET as bound args, handed to the DAO's @RawQuery window.
+    // columns, no user input, no string interpolation of values. Since the
+    // r19 catalogue v5 the serviceable dimensions include the folder/bucket
+    // filter (`bucketId = ?`, the new v5 column), so the engine's every
+    // dimension is serveable here. This method's only jobs are the guards
+    // (identical to [timelineWindow]'s: a negative LIMIT is "unbounded" in
+    // SQLite, so invalid arguments must answer empty in BOTH
+    // implementations) and the ONE composition site --- extracted into the
+    // pure [FilteredWindowSql] builder below (r19; an audit flagged the
+    // inline composition as the one untested piece of this window), which
+    // hands the DAO's @RawQuery window its statement + bound args.
     // ------------------------------------------------------------------
 
     /**
@@ -212,11 +216,11 @@ class RoomMediaCatalogue(
      * interface: the interface and its in-memory reference implementation
      * are frozen for the parallel r15-r18 rounds; the production shell
      * always binds THIS class (see `ToadGalleryApplication.mediaCatalogue`),
-     * and `PhotosViewModel` reaches the method through that binding. An
-     * active filter the catalogue cannot serve (a bucket --- no column)
-     * must never reach here; the engine's `canServe` gate and the
-     * ViewModel's backend ladder keep such generations on the MediaStore
-     * fallback, which serves every surfaced filter.
+     * and `PhotosViewModel` reaches the method through that binding. Since
+     * the r19 v5 columns the catalogue serves every dimension the engine
+     * can express (the former bucket gap closed), so the engine's
+     * `canServe` gate passes for every filter value and this window is the
+     * catalogue's honest answer for any active generation.
      */
     suspend fun filteredTimelineWindow(
         offset: Int,
@@ -225,27 +229,16 @@ class RoomMediaCatalogue(
         where: io.github.dukeoftoad.gallery.data.filters.TimelineFilterCatalogue.CatalogueFilterWhere,
     ): List<CatalogueRecord> {
         if (offset < 0 || limit <= 0) return emptyList()
-        val directionWord = when (direction) {
-            TimelineDirection.NEWEST_FIRST -> "DESC"
-            TimelineDirection.OLDEST_FIRST -> "ASC"
-        }
-        val whereSql = where.sql?.let { " WHERE $it" } ?: ""
-        val sql =
-            "SELECT * FROM catalogue_items$whereSql " +
-                "ORDER BY COALESCE(resolvedCaptureDateMillis, dateAddedMillis) $directionWord, " +
-                "localMediaKey $directionWord " +
-                "LIMIT ? OFFSET ?"
-        // Built as one explicitly-typed Array<Any?>: a plain
-        // `Array<Any> + Array<Int>` is an overload-resolution ambiguity
-        // (plus(element) vs plus(elements)), and SimpleSQLiteQuery takes
-        // Array<out Any?> anyway.
-        val args: Array<Any?> = buildList {
-            addAll(where.args)
-            add(limit)
-            add(offset)
-        }.toTypedArray()
+        val composed = FilteredWindowSql.compose(where, direction, offset, limit)
         return dao.timelineWindowFiltered(
-            androidx.sqlite.db.SimpleSQLiteQuery(sql, args),
+            androidx.sqlite.db.SimpleSQLiteQuery(
+                composed.sql,
+                // Built as one explicitly-typed Array<Any?>: a plain
+                // `Array<Any> + Array<Int>` is an overload-resolution
+                // ambiguity (plus(element) vs plus(elements)), and
+                // SimpleSQLiteQuery takes Array<out Any?> anyway.
+                composed.bindArgs.toTypedArray(),
+            ),
         ).map { it.toRecord() }
     }
     // =====================================================================
@@ -307,6 +300,14 @@ class RoomMediaCatalogue(
  * Record -> row. [CatalogueRecord.metadataCacheState] is stored as its
  * [Enum.name]; see [CatalogueItemEntity] for why a TypeConverter was not
  * used.
+ *
+ * The location provenance columns are DELIBERATELY not carried: the record
+ * has no location fields (the r16 wipe-and-refill pattern --- the location
+ * index hook re-fills them right after the batch). The r19 folder/bucket
+ * pair is the OPPOSITE case and IS carried verbatim: bucket is ROW-SOURCED
+ * with no hook refill, so nulling it here would lose the folder for good
+ * (see [CatalogueItemEntity]'s r19 KDoc --- this is the wipe-free
+ * carry-through the whole round exists for).
  */
 private fun CatalogueRecord.toEntity(): CatalogueItemEntity =
     CatalogueItemEntity(
@@ -328,6 +329,8 @@ private fun CatalogueRecord.toEntity(): CatalogueItemEntity =
         height = height,
         durationMs = durationMs,
         isFavorite = isFavorite,
+        bucketId = bucketId,
+        bucketDisplayName = bucketDisplayName,
     )
 
 /**
@@ -357,6 +360,8 @@ private fun CatalogueItemEntity.toRecord(): CatalogueRecord =
         height = height,
         durationMs = durationMs,
         isFavorite = isFavorite,
+        bucketId = bucketId,
+        bucketDisplayName = bucketDisplayName,
     )
 
 /** Row -> checkpoint; a straight field copy. */
@@ -366,3 +371,87 @@ private fun ScanCheckpointEntity.toCheckpoint(): ScanCheckpoint =
         generationToken = generationToken,
         scannedAtMillis = scannedAtMillis,
     )
+
+// =====================================================================
+// --- r19 round: the filtered-window SQL builder (pure, JVM-tested) ------
+// (additive end-of-file section. The r17 composition that used to live
+// inline in filteredTimelineWindow --- the one piece of the filtered
+// windows an audit flagged as untestable while the wrapper owned it
+// (ADR-0016: the wrapper itself carries no JVM tests) --- is extracted
+// verbatim into this pure object so its exact statement text and ARG
+// ORDER are pinnable on the plain JVM (`FilteredWindowSqlTest`). No
+// android.* / androidx.* references: the wrapper wraps the result in a
+// SimpleSQLiteQuery at the thin seam.)
+// =====================================================================
+
+/**
+ * The pure composition behind [RoomMediaCatalogue.filteredTimelineWindow]
+ * (r19): the complete statement + bound args for the DAO's @RawQuery
+ * filtered window, assembled from the filter engine's WHERE fragment (see
+ * [io.github.dukeoftoad.gallery.data.filters.TimelineFilterCatalogue]) ---
+ * fixed clause shapes, no user input, no string interpolation of values.
+ *
+ * The composition, each piece load-bearing:
+ * - the SAME total ORDER BY the two fixed window queries use --- effective
+ *   instant (`COALESCE(resolvedCaptureDateMillis, dateAddedMillis)`) with
+ *   the same-direction `localMediaKey` tiebreak --- so a filtered window
+ *   is a plain slice of the very order [RoomMediaCatalogue.timelineWindow]
+ *   serves and pages tile with zero gaps/overlaps (the r13 contract);
+ * - the fragment spliced VERBATIM between FROM and ORDER BY (never into
+ *   the ORDER BY or LIMIT --- a miscomposed splice would reorder, not
+ *   narrow);
+ * - LIMIT/OFFSET as BOUND ARGS with the windowing ints LAST: the
+ *   fragment's `?` placeholders come first in the statement, so its args
+ *   MUST come first in the bind array --- this ordering is the contract
+ *   with [io.github.dukeoftoad.gallery.data.filters.TimelineFilterCatalogue
+ *   .CatalogueFilterWhere] and the piece the JVM suite pins hardest
+ *   (a swapped arg order binds a bucket id as a LIMIT and answers a
+ *   VISIBLE lie).
+ *
+ * The wrapper owns the argument guards (invalid offset/limit answer empty
+ * before this is ever called), so this object is total for the values it
+ * receives; tombstone-awareness needs no clause here because tombstoned
+ * rows are not in `catalogue_items` at all.
+ */
+internal object FilteredWindowSql {
+
+    /** One composed window statement: the SQL text plus its bound args, in order. */
+    data class Composed(
+        val sql: String,
+        val bindArgs: List<Any?>,
+    )
+
+    /**
+     * Composes the filtered window statement for [where] (whose fragment,
+     * if any, narrows the live rows) in [direction]'s spelling of the
+     * timeline's total order, sliced `LIMIT :limit OFFSET :offset`.
+     */
+    fun compose(
+        where: io.github.dukeoftoad.gallery.data.filters.TimelineFilterCatalogue.CatalogueFilterWhere,
+        direction: TimelineDirection,
+        offset: Int,
+        limit: Int,
+    ): Composed {
+        val directionWord = when (direction) {
+            TimelineDirection.NEWEST_FIRST -> "DESC"
+            TimelineDirection.OLDEST_FIRST -> "ASC"
+        }
+        val whereSql = where.sql?.let { " WHERE $it" } ?: ""
+        val sql =
+            "SELECT * FROM catalogue_items$whereSql " +
+                "ORDER BY COALESCE(resolvedCaptureDateMillis, dateAddedMillis) $directionWord, " +
+                "localMediaKey $directionWord " +
+                "LIMIT ? OFFSET ?"
+        // Fragment args first (their placeholders open the statement),
+        // then the two windowing ints in LIMIT/OFFSET order --- one
+        // explicitly-typed list so the wrapper can hand it to
+        // SimpleSQLiteQuery as Array<Any?> without an `Array<Any> +
+        // Array<Int>` overload ambiguity.
+        val bindArgs: List<Any?> = buildList {
+            addAll(where.args)
+            add(limit)
+            add(offset)
+        }
+        return Composed(sql = sql, bindArgs = bindArgs)
+    }
+}

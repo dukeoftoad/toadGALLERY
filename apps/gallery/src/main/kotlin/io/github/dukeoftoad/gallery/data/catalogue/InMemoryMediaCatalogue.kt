@@ -54,10 +54,13 @@ import kotlinx.coroutines.sync.withLock
  * (`resolvedCaptureDateMillis ?: dateAddedMillis`), then `localMediaKey` in
  * the same direction --- and slices `[offset, offset+limit)` out of it.
  * Re-sorting per call is the reference implementation's price for staying
- * dumb and pure; production ordering lives in the DAO's SQL. [changes] is a
- * conflation-friendly [MutableSharedFlow] hook fired after every mutating
- * call that can change the live set or its order (see the interface KDoc
- * for the exact emission table).
+ * dumb and pure; production ordering lives in the DAO's SQL. Since r19 the
+ * folder-filtered twin [folderTimelineWindow] is the reference for the
+ * Room catalogue's `WHERE bucketId = ?` filtered windows (the v5 bucket
+ * columns): same total order, records narrowed to the matching bucket.
+ * [changes] is a conflation-friendly [MutableSharedFlow] hook fired after
+ * every mutating call that can change the live set or its order (see the
+ * interface KDoc for the exact emission table).
  */
 class InMemoryMediaCatalogue : MediaCatalogue {
 
@@ -104,6 +107,25 @@ class InMemoryMediaCatalogue : MediaCatalogue {
      */
     private fun CatalogueRecord.effectiveInstantMillis(): Long =
         resolvedCaptureDateMillis ?: dateAddedMillis
+
+    /**
+     * The timeline's TOTAL ORDER as one comparator (r19: shared by
+     * [timelineWindow] and [folderTimelineWindow] so there is exactly one
+     * in-memory spelling of the effective-instant + key-tiebreak rule the
+     * DAO's fixed window queries and the filtered-window composition both
+     * spell in SQL): effective instant, then `localMediaKey` in the SAME
+     * direction --- the tiebreak that makes windows tile with zero
+     * gaps/overlaps in both directions.
+     */
+    private fun timelineOrder(direction: TimelineDirection): Comparator<CatalogueRecord> =
+        when (direction) {
+            TimelineDirection.NEWEST_FIRST ->
+                compareByDescending<CatalogueRecord> { it.effectiveInstantMillis() }
+                    .thenByDescending { it.localMediaKey }
+            TimelineDirection.OLDEST_FIRST ->
+                compareBy<CatalogueRecord> { it.effectiveInstantMillis() }
+                    .thenBy { it.localMediaKey }
+        }
 
     override suspend fun upsertAll(records: List<CatalogueRecord>) {
         if (records.isEmpty()) return
@@ -176,16 +198,55 @@ class InMemoryMediaCatalogue : MediaCatalogue {
         // empty in both implementations.
         if (offset < 0 || limit <= 0) return emptyList()
         mutex.withLock {
-            val ordered = records.values.sortedWith(
-                when (direction) {
-                    TimelineDirection.NEWEST_FIRST ->
-                        compareByDescending<CatalogueRecord> { it.effectiveInstantMillis() }
-                            .thenByDescending { it.localMediaKey }
-                    TimelineDirection.OLDEST_FIRST ->
-                        compareBy<CatalogueRecord> { it.effectiveInstantMillis() }
-                            .thenBy { it.localMediaKey }
-                },
-            )
+            val ordered = records.values.sortedWith(timelineOrder(direction))
+            if (offset >= ordered.size) return emptyList()
+            val end = minOf(offset + limit, ordered.size)
+            return ordered.subList(offset, end)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // r19 round: the FOLDER-FILTERED window --- the folder-filter
+    // reference the Room catalogue's `WHERE bucketId = ?` windows
+    // (composed by the pure FilteredWindowSql builder + the filter
+    // engine's projection) must match. Deliberately a concrete member,
+    // NOT on the [MediaCatalogue] interface: the interface stays the
+    // frozen r13 surface, exactly like the Room side's filtered windows
+    // live on the concrete class (the r17 decision).
+    // ------------------------------------------------------------------
+
+    /**
+     * Window `[offset, offset+limit)` of LIVE records whose
+     * [CatalogueRecord.bucketId] equals [bucketId], in the SAME total
+     * order [timelineWindow] serves --- the in-memory reference for the
+     * folder-filtered catalogue windows the r19 v5 columns unlock
+     * (`WHERE bucketId = ?` spliced into the timeline's ORDER BY).
+     *
+     * Matching semantics, mirroring the SQL exactly:
+     * - `=` never matches NULL: records with a `null` bucketId (the
+     *   honest "not resolvable on this API path" --- the pre-Q defensive
+     *   reduced-projection walk, a provider that dropped the column) are
+     *   EXCLUDED from every folder window, never bucket 0.
+     * - Tombstoned keys are excluded by construction (not in the live
+     *   map).
+     * - The same effective-instant + localMediaKey tiebreak, so windows
+     *   tile inside a folder exactly like the unfiltered timeline.
+     *
+     * Argument discipline identical to [timelineWindow]: a negative
+     * [offset] or non-positive [limit] reads empty; an offset at/after the
+     * folder's end reads empty.
+     */
+    suspend fun folderTimelineWindow(
+        offset: Int,
+        limit: Int,
+        direction: TimelineDirection,
+        bucketId: Long,
+    ): List<CatalogueRecord> {
+        if (offset < 0 || limit <= 0) return emptyList()
+        mutex.withLock {
+            val ordered = records.values
+                .filter { it.bucketId == bucketId }
+                .sortedWith(timelineOrder(direction))
             if (offset >= ordered.size) return emptyList()
             val end = minOf(offset + limit, ordered.size)
             return ordered.subList(offset, end)

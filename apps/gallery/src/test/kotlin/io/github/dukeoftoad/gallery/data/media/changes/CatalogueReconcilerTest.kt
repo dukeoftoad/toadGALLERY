@@ -36,6 +36,8 @@ class CatalogueReconcilerTest {
         height: Int = 0,
         durationMs: Long = 0L,
         isFavorite: Boolean = false,
+        bucketId: Long? = null,
+        bucketDisplayName: String? = null,
     ): MediaScanRow =
         MediaScanRow(
             localMediaKey = key,
@@ -50,6 +52,8 @@ class CatalogueReconcilerTest {
             height = height,
             durationMs = durationMs,
             isFavorite = isFavorite,
+            bucketId = bucketId,
+            bucketDisplayName = bucketDisplayName,
         )
 
     private fun recordOf(
@@ -68,6 +72,8 @@ class CatalogueReconcilerTest {
         height: Int = 0,
         durationMs: Long = 0L,
         isFavorite: Boolean = false,
+        bucketId: Long? = null,
+        bucketDisplayName: String? = null,
     ): CatalogueRecord =
         CatalogueRecord(
             localMediaKey = key,
@@ -85,6 +91,8 @@ class CatalogueReconcilerTest {
             height = height,
             durationMs = durationMs,
             isFavorite = isFavorite,
+            bucketId = bucketId,
+            bucketDisplayName = bucketDisplayName,
         )
 
     // --- added ---------------------------------------------------------------
@@ -273,6 +281,28 @@ class CatalogueReconcilerTest {
                     durationMs = 0L,
                     isFavorite = false,
                 ),
+            ),
+        )
+        assertEquals(0, result.changed.size)
+        assertEquals(1, result.unchangedCount)
+        assertTrue(result.added.isEmpty())
+        assertTrue(result.removedKeys.isEmpty())
+    }
+
+    @Test
+    fun `folder bucket drift alone is unchanged (no embedding recompute)`() {
+        // R19 REGRESSION GUARD: the bucket pair rides every scan row but is
+        // NON-REVISION --- a folder-only move (bucket changed, bytes not)
+        // must not re-index. It refreshes with the row's next
+        // revision-visible change (a real MediaStore move rewrites
+        // date_modified, which IS a revision change); if this test fails,
+        // a folder move now costs an embedding recompute.
+        val result = CatalogueReconciler.reconcile(
+            scanRows = listOf(
+                row(bucketId = 222L, bucketDisplayName = "Screenshots"),
+            ),
+            catalogueRecords = mapOf(
+                "external_primary:1" to recordOf(bucketId = 111L, bucketDisplayName = "Camera"),
             ),
         )
         assertEquals(0, result.changed.size)

@@ -18,6 +18,10 @@
 //!   [`nativeStoreFaceCount`] / [`nativeStoreCluster`] /
 //!   [`nativeStoreClose`] (r23) — the app-private face-index store over
 //!   the vendored `ente-photos-ml` persistence + clustering stack.
+//! * [`nativeStoreIndexedFaceFileIds`] / [`nativeStoreDeleteFacesForFiles`]
+//!   (r24) — the store maintenance pair the background queue drives:
+//!   which files carry current-version face rows, and the per-file
+//!   invalidation delete.
 //! * [`nativeRelease`] — tear the engine (and the store) down.
 //!
 //! Contract notes (see also `README.md`):
@@ -45,8 +49,8 @@ use std::{
 
 use jni::{
     JNIEnv,
-    objects::{JByteArray, JClass, JFloatArray, JString},
-    sys::{self, jboolean, jdouble, jfloatArray, jlong, jstring},
+    objects::{JByteArray, JClass, JFloatArray, JLongArray, JString},
+    sys::{self, jboolean, jdouble, jfloatArray, jlong, jlongArray, jstring},
 };
 
 mod engine;
@@ -401,6 +405,72 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
             .new_string(&json)
             .map_err(|error| format!("allocate cluster summary string: {error}"))?;
         Ok(java_string.into_raw())
+    })
+}
+
+/// `MlEngineJni.nativeStoreIndexedFaceFileIds(): LongArray` (r24).
+///
+/// The file IDs that currently carry face rows at the vendored pin's
+/// `FACE_ML_VERSION`, via upstream's own `MlDb::face_indexed_file_ids`
+/// read (the map's ml_version half is dropped on the wire). An empty
+/// array means no indexed files. Throws
+/// `java.lang.IllegalStateException` when the store is not open.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreIndexedFaceFileIds<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jlongArray {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let file_ids = store::indexed_face_file_ids()?;
+        let array = env
+            .new_long_array(file_ids.len() as i32)
+            .map_err(|error| format!("allocate indexed-file-id array: {error}"))?;
+        if !file_ids.is_empty() {
+            env.set_long_array_region(&array, 0, &file_ids)
+                .map_err(|error| format!("fill indexed-file-id array: {error}"))?;
+        }
+        Ok(array.into_raw() as jlongArray)
+    })
+}
+
+/// `MlEngineJni.nativeStoreDeleteFacesForFiles(fileIds: LongArray):
+/// Boolean` (r24).
+///
+/// Deletes every face row for `fileIds` through the vendored upstream
+/// delete path (`MlDb::delete_face_index_for_files`, chunked +
+/// transactional; an empty array is upstream's own no-op). This is the
+/// per-file invalidation primitive behind revision-driven re-indexing and
+/// orphan cleanup. Returns true on success; failure throws
+/// `java.lang.IllegalStateException`.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreDeleteFacesForFiles<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    file_ids: JLongArray<'local>,
+) -> jboolean {
+    call_or_throw(&mut env, sys::JNI_FALSE, |env| {
+        let length =
+            env.get_array_length(&file_ids)
+                .map_err(|error| format!("read fileIds argument: {error}"))? as usize;
+        let mut values = vec![0_i64; length];
+        if length > 0 {
+            env.get_long_array_region(&file_ids, 0, &mut values)
+                .map_err(|error| format!("read fileIds argument: {error}"))?;
+        }
+        store::delete_faces_for_files(&values)?;
+        Ok(sys::JNI_TRUE)
     })
 }
 

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Phase 3: media access for the Photos timeline (issue #25).
          API 33+ uses the granular READ_MEDIA_* permissions; pre-33 falls back
@@ -36,6 +37,39 @@
          coordinates never leave the device and no network surface exists
          to carry them (ADR-0014). -->
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+
+    <!-- r24 (WorkManager, Workstream 5): the background face-index queue
+         uses androidx.work for scheduling + process-death persistence. That
+         library's own manifest injects four permissions into the MERGED
+         manifest; two of them are declined here with tools:node=remove and
+         two are accepted (documented in docs/phase-2/privacy-gate.md, r24
+         note):
+         * DECLINED ACCESS_NETWORK_STATE — the queue NEVER uses
+           network-constrained work, so the connectivity observer is dead
+           weight; stripping it keeps the app's network-capability surface
+           at exactly the ADR-0020 model-fetch INTERNET grant.
+         * DECLINED FOREGROUND_SERVICE — r24 runs plain background
+           workers only (no setForeground, no expedited); a future
+           user-visible indexing notification round adds this back
+           deliberately, with its own ADR note.
+         * ACCEPTED WAKE_LOCK (merged from the library) — WorkManager's
+           execution-guarantee plumbing for the queue's workers.
+         * ACCEPTED RECEIVE_BOOT_COMPLETED (merged from the library) —
+           rescheduling persisted work after a reboot, which extends the
+           queue's resume contract; neither accepted permission is a
+           network permission, so the ADR-0014 gate is unaffected.
+         The entries below are MERGER REMOVAL MARKERS, not grants: they
+         push permissions OUT of the merged manifest. The source manifest's
+         own permission set stays the pinned five asserted by
+         PrivacyPolicyTest (which filters these removal markers out of the
+         declared-set pin and asserts the removal set exactly, in its own
+         dedicated r24 test). -->
+    <uses-permission
+        android:name="android.permission.ACCESS_NETWORK_STATE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:node="remove" />
 
     <!-- Phase 3 grid UX (issue #33): the Application registers Coil's
          VideoFrameDecoder for video thumbnails; see ToadGalleryApplication. -->

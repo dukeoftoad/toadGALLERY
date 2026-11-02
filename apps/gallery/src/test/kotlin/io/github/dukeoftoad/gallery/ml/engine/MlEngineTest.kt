@@ -51,6 +51,13 @@ class MlEngineTest {
         var lastPutEmbedding: FloatArray? = null
         var lastClusterThreshold: Double? = null
 
+        // ---- r24 ----
+        var storeIndexedFileIdsResult: LongArray = LongArray(0)
+        var storeDeleteResult: Boolean = true
+        var storeIndexedCalls = 0
+        var storeDeleteCalls = 0
+        var lastDeleteArg: LongArray? = null
+
         override fun nativeInit(modelsDir: String): Boolean {
             initCalls++
             lastInitArg = modelsDir
@@ -102,6 +109,17 @@ class MlEngineTest {
         override fun nativeStoreClose(): Boolean {
             storeCloseCalls++
             return storeCloseResult
+        }
+
+        override fun nativeStoreIndexedFaceFileIds(): LongArray {
+            storeIndexedCalls++
+            return storeIndexedFileIdsResult
+        }
+
+        override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean {
+            storeDeleteCalls++
+            lastDeleteArg = fileIds
+            return storeDeleteResult
         }
     }
 
@@ -206,6 +224,8 @@ class MlEngineTest {
             override fun nativeStoreFaceCount() = 0L
             override fun nativeStoreCluster(distanceThreshold: Double) = "{}"
             override fun nativeStoreClose() = true
+            override fun nativeStoreIndexedFaceFileIds(): LongArray = LongArray(0)
+            override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean = true
         }
         val engine = MlEngine(bridge)
         engine.initialize("/data/models")
@@ -319,6 +339,8 @@ class MlEngineTest {
             { engine.putFace(7L, FloatArray(MlEngine.FACE_EMBEDDING_DIM)) },
             { engine.faceCount() },
             { engine.clusterFaces(0.24) },
+            { engine.indexedFaceFileIds() },
+            { engine.deleteFacesForFiles(longArrayOf(7L)) },
         )
         for (reject in rejects) {
             try {
@@ -428,6 +450,59 @@ class MlEngineTest {
     }
 
     @Test
+    fun `indexedFaceFileIds maps the native long array through the open-store gate`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: the state-machine rejection, no native call.
+        try {
+            engine.indexedFaceFileIds()
+            fail("indexedFaceFileIds before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeIndexedCalls)
+
+        // Open store: the bridge's long array verbatim, as a List.
+        engine.openFaceIndex("/data/face-index")
+        bridge.storeIndexedFileIdsResult = longArrayOf(4L, 8L, 15L)
+        assertEquals(listOf(4L, 8L, 15L), engine.indexedFaceFileIds())
+        assertEquals(1, bridge.storeIndexedCalls)
+
+        // Empty is honest empty (nothing indexed at the current version):
+        bridge.storeIndexedFileIdsResult = LongArray(0)
+        assertEquals(emptyList<Long>(), engine.indexedFaceFileIds())
+    }
+
+    @Test
+    fun `deleteFacesForFiles passes the file ids through and returns the native result`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: rejected before any native call.
+        try {
+            engine.deleteFacesForFiles(longArrayOf(1L, 2L))
+            fail("deleteFacesForFiles before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeDeleteCalls)
+
+        // Open store: ids passed verbatim, native result mapped, and the
+        // empty array (upstream's own no-op) goes through unchanged.
+        engine.openFaceIndex("/data/face-index")
+        assertTrue(engine.deleteFacesForFiles(longArrayOf(1L, 2L)))
+        assertTrue(bridge.lastDeleteArg!!.contentEquals(longArrayOf(1L, 2L)))
+        assertTrue(engine.deleteFacesForFiles(LongArray(0)))
+        assertTrue(bridge.lastDeleteArg!!.isEmpty())
+        assertEquals(2, bridge.storeDeleteCalls)
+
+        // The native failure shape maps through (false without throwing):
+        bridge.storeDeleteResult = false
+        assertFalse(engine.deleteFacesForFiles(longArrayOf(9L)))
+    }
+
+    @Test
     fun `a library-less build rejects every r23 operation explicitly`() {
         val bridge = FakeBridge().apply { available = false }
         val engine = MlEngine(bridge)
@@ -437,6 +512,8 @@ class MlEngineTest {
             { engine.openFaceIndex("/data/face-index") },
             { engine.faceCount() },
             { engine.clusterFaces(0.24) },
+            { engine.indexedFaceFileIds() },
+            { engine.deleteFacesForFiles(longArrayOf(1L)) },
         )
         for (reject in rejects) {
             try {

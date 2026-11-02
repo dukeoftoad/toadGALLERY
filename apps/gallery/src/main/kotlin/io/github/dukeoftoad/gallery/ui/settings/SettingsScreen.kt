@@ -29,6 +29,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,6 +55,12 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
+import io.github.dukeoftoad.gallery.ml.index.FaceIndexWorkState
+import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_CLUSTERS
+import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_FACES
+import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_INDEXED
+import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_SKIPPED_UP_TO_DATE
+import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_TOTAL_FACES
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.trash.TrashUiState
 import io.github.dukeoftoad.gallery.ui.trash.TrashViewModel
@@ -689,87 +696,131 @@ fun SettingsScreen(
             null -> Unit
         }
 
-        // ---- Face indexing + clustering (r23 dogfood) ----
-        // The r23 slice of the same section: on-device face embeddings +
-        // a persistent app-private index + the vendored upstream
-        // clustering, over the 12 most recent on-device JPEGs. Same
-        // single-flight gating as the r22 actions (`aiState.busy`); live
-        // per-photo progress while the run walks the photos.
+        // ---- Background face indexing (r24 dogfood) ----
+        // The r24 slice replaces the r23 12-photo manual run with the
+        // WorkManager-backed queue: revision-aware planning, bounded
+        // batches, retry/resume across process death, live progress from
+        // the queue state, and the threshold tuning control the r23
+        // round flagged for this round. Reset cancels + erases the whole
+        // app-private face-index directory (ML store AND queue state).
         Text(
-            text = stringResource(R.string.settings_ai_index_body),
+            text = stringResource(R.string.settings_ai_queue_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+        val queueState by aiViewModel.queueState.collectAsState()
+        val queueThreshold by aiViewModel.threshold.collectAsState()
+        Text(
+            text = stringResource(
+                R.string.settings_ai_queue_threshold,
+                String.format(java.util.Locale.ROOT, "%.2f", queueThreshold),
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .testTag("settings_ai_queue_threshold"),
+        )
+        Slider(
+            value = queueThreshold.toFloat(),
+            onValueChange = { aiViewModel.setThreshold(it.toDouble()) },
+            valueRange = AI_THRESHOLD_MIN.toFloat()..AI_THRESHOLD_MAX.toFloat(),
+            steps = AI_THRESHOLD_STEPS,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .testTag("settings_ai_queue_threshold_slider"),
+        )
         Button(
-            onClick = aiViewModel::runIndexCluster,
-            enabled = !aiState.busy,
+            onClick = aiViewModel::startBackgroundIndex,
+            enabled = aiState.engineLibraryPresent,
             modifier = Modifier
                 .padding(top = 8.dp)
                 .testTag("settings_ai_index_run"),
         ) {
-            Text(stringResource(R.string.settings_ai_index_run))
+            Text(stringResource(R.string.settings_ai_queue_start))
+        }
+        when (queueState) {
+            is FaceIndexWorkState.Enqueued, is FaceIndexWorkState.Running -> Button(
+                onClick = aiViewModel::cancelBackgroundIndex,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .testTag("settings_ai_queue_cancel"),
+            ) {
+                Text(stringResource(R.string.settings_ai_queue_cancel))
+            }
+            else -> Unit
         }
         Button(
-            onClick = aiViewModel::deleteFaceIndex,
+            onClick = aiViewModel::resetFaceIndex,
             enabled = !aiState.busy,
             modifier = Modifier
                 .padding(top = 8.dp)
                 .testTag("settings_ai_index_delete"),
         ) {
-            Text(stringResource(R.string.settings_ai_index_delete))
+            Text(stringResource(R.string.settings_ai_queue_reset))
         }
-        aiState.indexProgress?.let { progress ->
-            Text(
+        when (val queue = queueState) {
+            is FaceIndexWorkState.Running -> Text(
                 text = stringResource(
-                    R.string.settings_ai_index_progress,
-                    progress.photosProcessed,
-                    progress.totalPhotos,
-                    progress.facesIndexed,
+                    R.string.settings_ai_queue_progress,
+                    queue.processedThisRun,
+                    queue.batchSize,
+                    queue.queueDepth,
+                    queue.facesWrittenThisRun,
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
             )
-        }
-        when (val result = aiState.indexResult) {
-            AiDogfoodState.IndexResult.LibraryMissing -> Text(
-                text = stringResource(R.string.settings_ai_index_library_missing),
+            is FaceIndexWorkState.Enqueued -> Text(
+                text = stringResource(R.string.settings_ai_queue_enqueued),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            AiDogfoodState.IndexResult.NoJpegFound -> Text(
-                text = stringResource(R.string.settings_ai_index_no_jpeg),
+            is FaceIndexWorkState.Succeeded -> {
+                val clusters = queue.output.getInt(KEY_OUT_CLUSTERS, -1)
+                Text(
+                    // Two honest terminal shapes: the draining run that
+                    // clustered (clusters >= 0) and the no-op drain that
+                    // did not (empty plan --- no wasted recluster pass).
+                    text = if (clusters >= 0) {
+                        stringResource(
+                            R.string.settings_ai_queue_done,
+                            queue.output.getInt(KEY_OUT_INDEXED, 0),
+                            queue.output.getInt(KEY_OUT_FACES, 0),
+                            queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
+                            clusters,
+                            queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                        )
+                    } else {
+                        stringResource(
+                            R.string.settings_ai_queue_done_no_cluster,
+                            queue.output.getInt(KEY_OUT_INDEXED, 0),
+                            queue.output.getInt(KEY_OUT_FACES, 0),
+                            queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
+                            queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                        )
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+            is FaceIndexWorkState.Failed -> Text(
+                text = stringResource(R.string.settings_ai_queue_failed, queue.message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            is AiDogfoodState.IndexResult.Ok -> Text(
-                text = stringResource(
-                    R.string.settings_ai_index_done,
-                    result.photos,
-                    result.faces,
-                    result.clusters,
-                    result.elapsedMs,
-                ),
+            FaceIndexWorkState.Cancelled -> Text(
+                text = stringResource(R.string.settings_ai_queue_cancelled),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            AiDogfoodState.IndexResult.Deleted -> Text(
-                text = stringResource(R.string.settings_ai_index_deleted),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is AiDogfoodState.IndexResult.Failed -> Text(
-                text = stringResource(R.string.settings_ai_index_failed, result.message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            null -> Unit
+            FaceIndexWorkState.Idle -> Unit
         }
 
         // ---- About (appearance slice) ----
@@ -908,6 +959,12 @@ private fun LayoutPreview(uniform: Boolean) {
  * Same 24dp viewport and stroke weight as `Icons.Filled.Add`, so the
  * minus/plus pair renders as one family.
  */
+// The r24 threshold slider's tuning window (mirrors AiEngineViewModel's
+// MIN/MAX constants; the ViewModel clamps writes into the same range).
+private const val AI_THRESHOLD_MIN = 0.10
+private const val AI_THRESHOLD_MAX = 0.40
+private const val AI_THRESHOLD_STEPS = 29
+
 private val RemoveIcon: ImageVector = ImageVector.Builder(
     name = "Remove",
     defaultWidth = 24.dp,

@@ -46,6 +46,7 @@ copyleft licenses other than GPL/AGPL are generally not). This report screens fo
 | Dependency | License | GPL-3.0 compatible | Notes |
 |---|---|---|---|
 | androidx (Room, media3/ExoPlayer, Lifecycle, ConstraintLayout, SwipeRefresh, DocumentFile, Print) | Apache-2.0 | Yes | clean |
+| androidx.work 2.10.1 (r24) | Apache-2.0 | Yes | the background face-index queue's scheduling + process-death persistence (Phase 5 Workstream 5); pure on-device library, no network code — its manifest's WAKE_LOCK + RECEIVE_BOOT_COMPLETED injections are documented in `docs/phase-2/privacy-gate.md` (r24 note) and its ACCESS_NETWORK_STATE + FOREGROUND_SERVICE injections are stripped via merger removal markers |
 | Glide (+avif-integration, KSP compiler 5.0.7) | BSD-style / Apache-2.0 dual headers | Yes | verify per-artifact POM at lock time |
 | Picasso 2.71828 | Apache-2.0 | Yes | consider dropping (dup of Glide role) |
 | subsampling-scale-image-view (Fossify fork) | Apache-2.0 (upstream davemorrissey) | Yes | fork provenance recorded |

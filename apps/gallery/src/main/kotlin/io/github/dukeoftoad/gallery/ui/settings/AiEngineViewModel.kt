@@ -1,6 +1,7 @@
 package io.github.dukeoftoad.gallery.ui.settings
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
 import android.provider.OpenableColumns
@@ -11,16 +12,20 @@ import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
-import io.github.dukeoftoad.gallery.ml.index.IndexCoordinator
-import io.github.dukeoftoad.gallery.ml.index.MlEngineIndexEngine
+import io.github.dukeoftoad.gallery.ml.index.FaceIndexScheduler
+import io.github.dukeoftoad.gallery.ml.index.FaceIndexWorkState
+import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 
 /**
  * The r22 AI-engine dogfood section's state (see [AiEngineViewModel]).
@@ -43,10 +48,6 @@ data class AiDogfoodState(
     val note: Note? = null,
     /** The last self-test outcome, or null. */
     val selfTest: SelfTestResult? = null,
-    /** Live r23 index-run progress, or null between runs. */
-    val indexProgress: IndexCoordinator.IndexProgress? = null,
-    /** The last r23 index+cluster outcome (or reset), or null. */
-    val indexResult: IndexResult? = null,
 ) {
 
     /** One FACE asset's presence row. */
@@ -78,33 +79,6 @@ data class AiDogfoodState(
         /** Init or inference failed; [message] is the engine's own text. */
         data class Failed(val message: String) : SelfTestResult
     }
-
-    /**
-     * The r23 index+cluster outcome (mirrors [SelfTestResult]'s honest
-     * failure shapes; the OK case is the "N photos · M faces · K
-     * clusters" summary).
-     */
-    sealed interface IndexResult {
-        /** No `libtoad_ml_jni.so` in this build --- the honest answer. */
-        object LibraryMissing : IndexResult
-
-        /** Library present but no indexable JPEG exists on the device. */
-        object NoJpegFound : IndexResult
-
-        /** The run completed: photos fed, faces written, clusters found. */
-        data class Ok(
-            val photos: Int,
-            val faces: Int,
-            val clusters: Int,
-            val elapsedMs: Long,
-        ) : IndexResult
-
-        /** The face-index database was deleted/reset. */
-        object Deleted : IndexResult
-
-        /** The run failed; [message] is the engine's own text. */
-        data class Failed(val message: String) : IndexResult
-    }
 }
 
 /**
@@ -131,15 +105,21 @@ data class AiDogfoodState(
  *    [MlEngine], timed with the monotonic clock, session released after
  *    (the next self-test re-initializes --- the contract's re-init
  *    guarantee, dogfooded);
- *  - [runIndexCluster] (r23): up to the 12 most recent on-device JPEGs,
- *    read through the same content-resolver path as the self-test, fed to
- *    the [IndexCoordinator] (detect embeddings → putFace per face →
- *    cluster at the vendored upstream 0.24 threshold) over the SAME
- *    [MlEngine] instance, with live per-photo progress; the face-index
- *    store lives at `filesDir/face-index/ml-index.sqlite` (app-private;
- *    no new permissions, no network) and is closed after every run;
- *  - [deleteFaceIndex] (r23): closes the store and deletes the whole
- *    `face-index` directory (the reset mirror of [deleteFaceModels]).
+ *  - [startBackgroundIndex] (r24): hands the whole library to the
+ *    WorkManager-backed background queue ([FaceIndexScheduler] ->
+ *    `FaceIndexWorker`): revision-aware planning + bounded batches +
+ *    retry/resume across process death, live progress collected from the
+ *    queue state ([queueState]) --- the r23 12-photo dogfood slice this
+ *    card replaces (the r22 model buttons and self-test above are
+ *    untouched);
+ *  - [cancelBackgroundIndex] (r24): cancels the chain;
+ *  - [resetFaceIndex] (r24): cancels, closes the store and deletes the
+ *    whole `face-index` directory --- ML store AND queue bookkeeping
+ *    together, so neither can outlive the other (the reset mirror of
+ *    [deleteFaceModels]);
+ *  - [setThreshold] (r24): the clustering distance threshold the queue
+ *    clusters at (upstream's recommended 0.24 by default, tuned through
+ *    the card's slider, persisted in the `toad_settings` preferences).
  */
 class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -215,30 +195,75 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** The r23 index+cluster run over the 12 most recent on-device JPEGs. */
-    fun runIndexCluster() {
+    // ---- r24: the background queue state + the clustering threshold ----
+
+    /**
+     * The background queue's live state, collected from WorkManager for
+     * as long as this ViewModel lives (WhileSubscribed: the collection
+     * follows the card's visibility, not the process).
+     */
+    val queueState: StateFlow<FaceIndexWorkState> =
+        FaceIndexScheduler.observe(getApplication())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), FaceIndexWorkState.Idle)
+
+    /**
+     * The clustering distance threshold the queue runs at: upstream's
+     * recommended 0.24 by default, persisted in the `toad_settings`
+     * preferences (`face_cluster_threshold`) so the tuned value survives
+     * process death with the queue itself.
+     */
+    private val _threshold = MutableStateFlow(readThreshold())
+    val threshold: StateFlow<Double> = _threshold.asStateFlow()
+
+    /** Starts the background queue at the current [threshold] (r24). */
+    fun startBackgroundIndex() {
+        FaceIndexScheduler.enqueue(getApplication(), threshold.value)
+    }
+
+    /** Cancels the background queue chain (r24). */
+    fun cancelBackgroundIndex() {
+        FaceIndexScheduler.cancel(getApplication())
+    }
+
+    /**
+     * Persists [value] as the queue's clustering threshold (clamped to the
+     * card's tuning window) and feeds it to the NEXT run --- a running
+     * chain keeps the threshold it was enqueued with.
+     */
+    fun setThreshold(value: Double) {
+        val clamped = clampThreshold(value)
+        prefs().edit().putString(KEY_THRESHOLD, String.format(Locale.ROOT, "%.2f", clamped)).apply()
+        _threshold.value = clamped
+    }
+
+    /**
+     * The r24 reset: cancel the chain, close any open store THIS process
+     * holds, then delete the whole `face-index` directory --- the ML
+     * store's SQLite file AND the queue's `index-state.json` go together,
+     * so the queue's bookkeeping can never describe rows that no longer
+     * exist.
+     */
+    fun resetFaceIndex() {
         if (_state.value.busy) return
         _state.value = _state.value.copy(busy = true)
         viewModelScope.launch {
             _state.value = withContext(Dispatchers.IO) {
-                val result = runIndexClusterBlocking()
-                snapshot().copy(indexResult = result, indexProgress = null)
+                FaceIndexScheduler.cancel(getApplication())
+                engine.closeFaceIndex()
+                faceIndexDir().deleteRecursively()
+                snapshot().copy(note = null)
             }
         }
     }
 
-    /** Closes the face-index store and deletes its database (r23 reset). */
-    fun deleteFaceIndex() {
-        if (_state.value.busy) return
-        _state.value = _state.value.copy(busy = true)
-        viewModelScope.launch {
-            _state.value = withContext(Dispatchers.IO) {
-                engine.closeFaceIndex()
-                faceIndexDir().deleteRecursively()
-                snapshot().copy(indexResult = AiDogfoodState.IndexResult.Deleted)
-            }
-        }
-    }
+    private fun prefs() = getApplication<Application>().getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+
+    /** The persisted threshold, forgiving-parse to the upstream default. */
+    private fun readThreshold(): Double =
+        clampThreshold(prefs().getString(KEY_THRESHOLD, null)?.toDoubleOrNull())
+
+    private fun clampThreshold(raw: Double?): Double =
+        (raw ?: DEFAULT_THRESHOLD).coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
 
     /**
      * The self-test body, already on a worker thread. Fails honestly at
@@ -279,56 +304,9 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 
-    /**
-     * The r23 index run body, already on a worker thread. Same honest
-     * gates as the self-test (no library, no JPEG), then the
-     * coordinator's pipeline with live progress pushed into the state.
-     * The store is opened per run and closed in `finally` --- every run
-     * starts from a known store state, and [deleteFaceIndex] (or an
-     * engine release) can never race an open handle.
-     */
-    private suspend fun runIndexClusterBlocking(): AiDogfoodState.IndexResult {
-        if (!engine.available) return AiDogfoodState.IndexResult.LibraryMissing
-        val jpegs = source.queryTimeline()
-            .filter { !it.isVideo && it.mimeType.equals("image/jpeg", ignoreCase = true) }
-            .take(INDEX_PHOTO_LIMIT)
-        val photos = jpegs.mapNotNull { item ->
-            resolver.openInputStream(item.uri)?.use { stream -> stream.readBytes() }
-                ?.let { bytes -> item.id to bytes }
-        }
-        if (photos.isEmpty()) return AiDogfoodState.IndexResult.NoJpegFound
-        return try {
-            if (!engine.openFaceIndex(faceIndexDir().absolutePath)) {
-                return AiDogfoodState.IndexResult.Failed("face index store did not open")
-            }
-            val coordinator = IndexCoordinator(MlEngineIndexEngine(engine))
-            val startedAt = SystemClock.elapsedRealtime()
-            val summary = coordinator.indexAndCluster(photos) { progress ->
-                _state.value = _state.value.copy(indexProgress = progress, busy = true)
-            }
-            val elapsedMs = SystemClock.elapsedRealtime() - startedAt
-            AiDogfoodState.IndexResult.Ok(
-                photos = summary.photosProcessed,
-                faces = summary.facesIndexed,
-                clusters = summary.clusterSummary.clusters,
-                elapsedMs = elapsedMs,
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // The facade's failure shapes (IllegalStateException for state
-            // machine/engine faults, IllegalArgumentException for a wrong
-            // embedding dimension); the engine's own message is the honest
-            // diagnostic, not a paraphrase.
-            AiDogfoodState.IndexResult.Failed(e.message ?: e.javaClass.simpleName)
-        } finally {
-            engine.closeFaceIndex()
-        }
-    }
-
     /** The app-private face-index directory (`ml-index.sqlite` inside). */
     private fun faceIndexDir(): File =
-        File(getApplication<ToadGalleryApplication>().filesDir, "face-index")
+        File(getApplication<ToadGalleryApplication>().filesDir, FACE_INDEX_DIR_NAME)
 
     /** Presence truth from the provisioner's own derivation (disk-backed). */
     private fun snapshot(): AiDogfoodState {
@@ -343,7 +321,20 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
-        /** The r23 dogfood caps one run at the 12 most recent JPEGs. */
-        const val INDEX_PHOTO_LIMIT = 12
+        /** The SettingsViewModel house preferences file (`toad_settings`). */
+        const val PREFS_FILE = "toad_settings"
+
+        /** The threshold's preferences key (r24). */
+        const val KEY_THRESHOLD = "face_cluster_threshold"
+
+        /** Upstream's recommended clustering distance (the untuned default). */
+        const val DEFAULT_THRESHOLD = 0.24
+
+        /** The card's tuning window around the upstream recommendation. */
+        const val MIN_THRESHOLD = 0.10
+        const val MAX_THRESHOLD = 0.40
+
+        /** [queueState]'s WhileSubscribed stop timeout (house milliseconds). */
+        const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }

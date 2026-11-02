@@ -11,18 +11,20 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import io.github.dukeoftoad.gallery.ml.engine.HttpModelDownloader
+import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.net.InetSocketAddress
-import java.net.Socket
-import java.net.SocketException
+import java.io.IOException
 
 /**
  * Instrumented privacy suite (issue #20, Phase 2 exit criteria; extended for
- * Phase 3 media access in issue #25).
+ * Phase 3 media access in issue #25; extended for the r22 ADR-0020
+ * model-delivery round).
  *
  * RUN MODE (ADR-0016, 2026-10-30): this suite is a MANUAL RELEASE GATE ---
  * run it on a physical device before every tagged release:
@@ -30,20 +32,52 @@ import java.net.SocketException
  * CI no longer runs emulator jobs (no KVM on hosted runners made the CI
  * emulator slow and probabilistically red before any test executed).
  *
- * Proves the offline-by-construction guarantee at runtime, on a real Android
- * system image (physical device; previously CI emulator, API 34):
+ * r22 POSTURE CHANGE (ADR-0020, on record): the app now HOLDS the INTERNET
+ * permission for exactly one purpose --- fetching the pinned model assets
+ * from the single allowlisted host `models.ente.com` (MODEL_HOST). The
+ * pre-r22 OS-level guarantee ("the app cannot open any socket") is
+ * deliberately superseded for that grant; what the suites prove instead is
+ * the r22 boundary:
  *
- *  1. `internetPermission_isNotGrantedAtRuntime` --- the app uid holds no
- *     INTERNET permission. Without it the OS itself refuses every socket the
- *     app could open: no code path, dependency, or future AI feature can phone
- *     home. This is strictly stronger than any proxy-based egress sniffing.
- *  2. `socketEgress_isBlockedByOs` --- actively tries to open a TCP connection
- *     to a public resolver (raw IP, no DNS dependency) and asserts the OS
- *     blocks it. If any future change silently grants network access, this
- *     test turns red.
+ *  1. `internetPermission_isGrantedForTheAdr0020ModelFetch` --- the grant
+ *     landed (a missing INTERNET would break every model fetch); the
+ *     permission-set pin and the allowlist protocol live in the JVM suite.
+ *  2. `nonAllowlistedModelTargets_areRejectedWithoutConnection` --- the
+ *     downloader's structural guard refuses crafted traversal /
+ *     absolute-URL / query / fragment targets BEFORE any connection can
+ *     exist; the refusal is the guard's own message, not a network error.
+ *     This replaces the pre-r22 `socketEgress_isBlockedByOs` probe (the
+ *     OS no longer blocks sockets --- that was the point of the grant) and
+ *     implements ADR-0020 §6's "no connection outside the allowlisted
+ *     host" assertion at the only place it is now enforceable: the URL
+ *     construction the app actually performs.
  *  3. `coreFlows_coldLaunchAndTabWalk_noCrash` --- walks the core shell flows
- *     (cold launch, all four tabs) so the guarantee is exercised against real
+ *     (cold launch, all four tabs) so the posture is exercised against real
  *     app startup, not a permission check in isolation.
+ *
+ * ## r22 DEVICE CHECKLIST (the maintainer's dogfood run; the Settings
+ * "AI engine (r22 dogfood)" section exists exactly for this)
+ *
+ *  1. Build WITH the engine property so `libtoad_ml_jni.so` is packaged;
+ *     install on a device with a few JPEGs (some with people).
+ *  2. Settings → AI engine section: the library line must read "present";
+ *     with a clean install the FACE state reads "not downloaded" and both
+ *     asset rows (yolov5s_face…, mobilefacenet…) read "missing".
+ *  3. "Download face models (~36 MiB)": expect the asset rows to flip to
+ *     "installed" one after the other (live per-asset updates), the state
+ *     line to reach "Face models: ready", and the note "Face models
+ *     installed and verified." A second tap performs NO new fetch
+ *     (idempotence; watch the host's access log if in doubt).
+ *  4. "Run engine self-test": expect "<jpeg name>: N faces in X ms —
+ *     engine OK"; any N (including 0 on a face-free photo) is a pass ---
+ *     the assertion is that one real JPEG went through the JNI engine.
+ *  5. "Delete face models": rows flip back to "missing", the state line to
+ *     "not downloaded", and `filesDir/models` holds no *.onnx files.
+ *  6. Re-download and re-run the self-test (provisioning + re-provision
+ *     after invalidation).
+ *  7. Plain (non-engine) build as a control: the library line reads "not
+ *     in this build (build with the engine flag)" and the self-test
+ *     reports exactly that --- never a crash, never a fake result.
  *
  * Scope note: "open a photo" joins the walk later in Phase 3 (issue #25 follow-
  * up); the emulator image has no media, so the granted-path Photos state is the
@@ -70,8 +104,9 @@ class PrivacyEgressTest {
     /**
      * Phase 3 (issue #25): pre-grant the media permission set so the cold-launch
      * tab-walk sees the granted path (empty timeline on a media-less emulator)
-     * instead of the permission rationale. The OS-level INTERNET refusal is
-     * independent of this rule and stays asserted by tests 1 and 2.
+     * instead of the permission rationale. INTERNET is a normal permission ---
+     * granted at install, no runtime dialog --- so it needs no rule here and is
+     * asserted directly below.
      */
     @get:Rule
     val grantMediaPermission: GrantPermissionRule = GrantPermissionRule.grant(
@@ -85,38 +120,69 @@ class PrivacyEgressTest {
         }.toTypedArray()
     )
 
+    /**
+     * r22 (ADR-0020 §1): the app HOLDS INTERNET --- the model-fetch grant.
+     * This is the deliberate, on-record supersession of the pre-r22
+     * assertion (`PERMISSION_DENIED`): a missing grant would now break the
+     * ADR-0020 delivery path, so the suite pins the grant's PRESENCE. The
+     * boundary that keeps the grant honest is not the OS (it no longer is)
+     * but the single-host allowlist + URL guard, pinned by the JVM
+     * `PrivacyPolicyTest` and by the rejection test below.
+     */
     @Test
-    fun internetPermission_isNotGrantedAtRuntime() {
+    fun internetPermission_isGrantedForTheAdr0020ModelFetch() {
         val granted = targetContext.packageManager.checkPermission(
             Manifest.permission.INTERNET,
             targetContext.packageName,
         )
         assertEquals(
-            "Core toadGALLERY must never hold INTERNET; without it the OS blocks all " +
-                "egress (docs/phase-2/privacy-gate.md, issue #20).",
-            PackageManager.PERMISSION_DENIED,
+            "The r22 ADR-0020 model-fetch grant must be present: the app declares INTERNET " +
+                "solely to download the pinned model assets from the allowlisted host " +
+                "(docs/integration-decisions.md, ADR-0020 §1; see PrivacyPolicyTest for the " +
+                "permission-set pin and the allowlist protocol).",
+            PackageManager.PERMISSION_GRANTED,
             granted,
         )
     }
 
+    /**
+     * r22 (ADR-0020 §6): no connection outside the allowlisted host. The
+     * enforcement point is the downloader's structural guard: every fetch
+     * URL is built as `https://models.ente.com/<guard-validated name>`, so
+     * a crafted target is refused BEFORE any socket can exist. Each case
+     * below uses the REAL production downloader (argument-less
+     * construction, exactly like `ToadGalleryApplication` wires it) and
+     * asserts the refusal is the GUARD's own message --- not a DNS,
+     * connect or HTTP failure, which would mean a connection was
+     * attempted. This replaces the pre-r22 raw-socket probe: the OS no
+     * longer blocks sockets (that was the point of the grant), and the
+     * app-side allowlist is the boundary that remains.
+     */
     @Test
-    fun socketEgress_isBlockedByOs() {
-        val socket = Socket()
-        try {
-            // Raw IP literal (no DNS lookup), public resolver port. If the app held
-            // INTERNET this would connect or time out; without INTERNET the OS must
-            // refuse the socket outright.
-            socket.connect(InetSocketAddress("1.1.1.1", 53), 3_000)
-            fail(
-                "Network egress was NOT blocked: connected to 1.1.1.1:53 without " +
-                    "INTERNET permission --- the offline guarantee is broken."
-            )
-        } catch (expected: SecurityException) {
-            // Documented Android refusal path for missing INTERNET permission.
-        } catch (expected: SocketException) {
-            // Kernel-level EACCES variant of the same block.
-        } finally {
-            runCatching { socket.close() }
+    fun nonAllowlistedModelTargets_areRejectedWithoutConnection() {
+        val downloader = HttpModelDownloader()
+        val hostile = mapOf(
+            "https://evil.example.com/a.onnx" to "absolute-URL injection",
+            "http://evil.example.com/a.onnx" to "cleartext absolute-URL injection",
+            "//evil.example.com/a.onnx" to "protocol-relative injection",
+            "../../other-app/files/x.onnx" to "parent traversal",
+            "a\\b.onnx" to "backslash traversal",
+            "a.onnx?host=evil.example.com" to "query smuggling",
+            "a.onnx#evil.example.com" to "fragment smuggling",
+        )
+        hostile.forEach { (fileName, why) ->
+            try {
+                downloader.open(
+                    ModelManifest.Model(fileName, ModelManifest.Capability.FACE, 1L, "0".repeat(64)),
+                )
+                fail("The production downloader accepted a $why target: \"$fileName\"")
+            } catch (expected: IOException) {
+                assertTrue(
+                    "The refusal must be the structural guard (pre-connection), not a network " +
+                        "error --- got: \"${expected.message}\"",
+                    expected.message!!.contains("refusing unsafe model file name"),
+                )
+            }
         }
     }
 
@@ -178,4 +244,3 @@ class PrivacyEgressTest {
         }
     }
 }
-

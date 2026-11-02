@@ -16,7 +16,7 @@
     <string name="state_settings_empty_title">Settings</string>
     <string name="state_settings_empty_body">Appearance, privacy and storage preferences land as the product grows.</string>
     <string name="state_permission_title">Access needed</string>
-    <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — the app has no network access at all.</string>
+    <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — nothing you store is ever sent anywhere.</string>
     <string name="state_action_grant">Grant access</string>
     <!-- Photos refresh-error state + retry action (Paging 3 load-state layering, issue #28) -->
     <string name="state_photos_error_title">Couldn\'t load your library</string>
@@ -217,9 +217,9 @@
     <!-- Vault section, issue #32 -->
     <!-- Hidden vault (ADR-0017): media sealed in an app-private store under an
          AndroidKeyStore key, listed only after a PIN unlock, auto-locked when
-         the app goes to the background. Everything is on-device only; the app
-         holds no INTERNET permission, so no vault byte can ever leave the
-         device. -->
+         the app goes to the background. Everything is on-device only; the
+         app's only network use since r22 is the verified AI-model download
+         (ADR-0020), which never carries vault bytes or any media. -->
     <string name="settings_vault_title">Hidden vault</string>
     <string name="settings_vault_pre_q_body">Available on Android 10 and above.</string>
     <string name="vault_settings_not_configured">Set up a PIN to start hiding media here.</string>
@@ -351,7 +351,7 @@
     <string name="about_version_line">%1$s (build %2$d)</string>
     <string name="about_device_line">%1$s · Android %2$d</string>
     <string name="about_privacy_title">Privacy</string>
-    <string name="about_privacy_body">toadGALLERY is offline by design: it holds no Internet permission, needs no account, and keeps every photo and video — vault contents included — on this device.</string>
+    <string name="about_privacy_body">toadGALLERY is offline by design: it needs no account and keeps every photo and video — vault contents included — on this device. Its only network use is downloading optional AI model files, verified before install; nothing you store is ever sent anywhere.</string>
     <string name="about_credits_title">Credits</string>
     <string name="about_credits_body">Inspired by Aves (metadata reference) and Ente (planned on-device AI). Built with Jetpack Compose, Coil and Media3.</string>
     <string name="about_view_source">View source on GitHub</string>

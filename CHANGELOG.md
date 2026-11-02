@@ -4,11 +4,48 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 25; per maintainer
+## [0.4.1-alpha] — unreleased on main (versionCode 26; per maintainer
   directive no new device builds until Phase 5 completes)
 
 ### Added
 
+- **The pinned-host HTTP model downloader** (r22 round; ADR-0020's r21-named
+  first r22 slice, `docs/phase-5/ente-pin.md`):
+  `ml/engine/HttpModelDownloader.kt` — plain `HttpURLConnection`, ZERO new
+  dependencies — fetches the pinned model assets from the single allowlisted
+  host `models.ente.com`, verified against the live host before the pin (all
+  five core assets answer HTTP 200 directly, no redirects, exact pinned
+  content-lengths). Fetch URLs are built from parts over a structurally
+  guarded file name (path traversal / absolute-URL / query / fragment
+  injection is rejected before any socket can exist), redirects fail closed,
+  and a `Content-Length` that disagrees with the pin aborts before the first
+  byte. The app's first network permission lands with it: the manifest
+  declares INTERNET exactly once for this grant (ADR-0020 amends ADR-0014
+  for model fetches only), bounded by the merged-manifest gate + allowlist
+  protocol, the extended `PrivacyPolicyTest` (permission-set pin,
+  host-literal source scan, URL surface for all eleven entries, injection
+  matrix) and the instrumented `PrivacyEgressTest` device checks (INTERNET
+  granted; non-allowlisted targets refused without a connection).
+- **The Android engine bridge + its build plumbing** (r22 round; the second
+  r21-named slice): the net-new Rust crate `engine/crates/toad-ml-jni`
+  (cdylib `libtoad_ml_jni.so`, a four-function JNI surface — session
+  init/info/face-detect-over-JPEG-bytes/release — behind the Kotlin
+  `MlEngine`/`MlEngineJni` facade, where a missing library is a graceful
+  `LibraryMissing` state, never a crash) links the vendored AGPL engine for
+  Android. `engine/scripts/build-android.sh` builds it with cargo-ndk
+  (arm64-v8a; `--all` adds x86_64) together with ONNX Runtime's official
+  `libonnxruntime.so` (the 1.31.0 Android AAR from Maven Central,
+  sha256-pinned in the script — the exact version the ort-sys rc.15 api-31
+  bindings expect; load-dynamic makes the runtime library a fetched supply,
+  never a cargo artifact), staging both into a build-dir jniLibs
+  folder that Gradle packages ONLY under `-PwithEngine` (`buildRustEngine`
+  task + jniLibs srcDir; without the property the build is byte-for-byte the
+  r21 one). CI gains the `engine-android` job — Android ABI build +
+  engine-enabled assembleDebug, verifying both native libraries actually
+  land in the APK — and the Settings "AI engine (r22 dogfood)" section drives
+  the whole path on a device: download the FACE assets with live per-asset
+  presence updates, delete, and a one-JPEG face-detection self-test
+  (byte-level download progress deliberately deferred).
 - **The Ente ML engine, vendored at a pinned commit** (r21 round; the Phase 5
   AI engine workstream's first slice, `docs/phase-5/ente-pin.md`): the new
   root-level `engine/` Rust workspace carries `crates/ente-ml` (YOLO face

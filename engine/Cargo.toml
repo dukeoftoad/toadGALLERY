@@ -10,6 +10,7 @@ members = [
     "crates/ente-assets",
     "crates/ente-image",
     "crates/ente-ml",
+    "crates/toad-ml-jni",
 ]
 
 [workspace.package]
@@ -25,6 +26,7 @@ fast_image_resize = { version = "6.1.0", features = ["image"] }
 flate2 = "1.1.10"
 futures-util = "0.3.32"
 image = "0.25.10"
+jni = "0.21.1"
 log = "0.4.34"
 moxcms = "0.9.1"
 ort = { version = "=2.0.0-rc.15", default-features = false }

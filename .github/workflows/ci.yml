@@ -5,6 +5,9 @@ name: CI
 # No Flutter (ADR-0008). A green CI check is required to merge any PR.
 # Since r21 the workflow also gates the vendored Ente ML engine (engine/)
 # with cargo check + fmt + clippy (ADR-0020 context; see engine/NOTICE.md).
+# Since r22 the engine-android job additionally builds the engine for the
+# Android ABI (cargo-ndk) and assembles an engine-enabled APK (-PwithEngine;
+# zero-release directive: that job uploads nothing).
 
 on:
   push:
@@ -46,8 +49,9 @@ jobs:
       # mirrors UPSTREAM's own gate (workspace lints on lib/bins, no
       # --all-targets: the vendored tests are byte-identical upstream code and
       # must not be re-linted under stricter flags than Ente itself uses). The
-      # Android ABI build via cargo-ndk lands with the r22 JNI bridge spike;
-      # ORT native resolution happens at real build/link time, not check time.
+      # Android ABI build via cargo-ndk is the engine-android job below
+      # (landed r22); ORT native resolution happens at real build/link time,
+      # not check time.
       - name: cargo check
         working-directory: engine
         run: cargo check --workspace --all-targets
@@ -144,3 +148,115 @@ jobs:
           path: apps/gallery/build/reports/tests/
           if-no-files-found: warn
           retention-days: 14
+
+  engine-android:
+    name: Vendored engine (Android ABI + engine-enabled assemble)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust (stable, minimal)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      # Same cache shape as the engine job (registry + git + engine/target)
+      # under a distinct key prefix: the Android build fills in
+      # engine/target/<android-triple>/ beside the host artifacts, and the
+      # two jobs run in parallel on the same push.
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: cargo-android-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: cargo-android-${{ runner.os }}-
+
+      # Cache the cargo-ndk BINARY alone so `cargo install` is skipped
+      # entirely on hit (the command -v guard below makes the install a
+      # no-op, so no ~/.cargo/.crates* metadata needs caching).
+      - name: Cache cargo-ndk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-ndk
+          key: cargo-ndk-${{ runner.os }}-3.5.4
+
+      - name: Install cargo-ndk (pinned)
+        run: command -v cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --version 3.5.4 --locked
+
+      # GH ubuntu runners ship preinstalled NDKs under $ANDROID_HOME/ndk/;
+      # pick the newest and export it. (engine/scripts/build-android.sh would
+      # discover it itself; resolving here documents the choice in the log.
+      # If the image ever drops NDKs, the script's sdkmanager fallback
+      # installs the pinned one instead --- java is set up below.)
+      - name: Resolve the preinstalled Android NDK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          NDK_HOME="$(ls -d "$SDK_ROOT"/ndk/* 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$NDK_HOME" ]; then
+            echo "No preinstalled NDK under $SDK_ROOT/ndk --- the build script's sdkmanager fallback will install one."
+          else
+            echo "Using preinstalled NDK: $NDK_HOME"
+            echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # GH ubuntu runners ship a preinstalled Android SDK at $ANDROID_HOME
+      # (cmdline-tools included) but do not always put sdkmanager on PATH, and
+      # android-actions/setup-android@v3 is broken on current images (it runs the
+      # legacy `sdkmanager tools` package, which no longer exists). Resolve the
+      # binary directly and install only what the project pins.
+      - name: Install Android SDK packages (platform 36, build-tools 36)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SDK_MGR="$(command -v sdkmanager)"
+          else
+            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
+          fi
+          echo "Using sdkmanager: $SDK_MGR"
+          yes | "$SDK_MGR" --licenses > /dev/null || true
+          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
+          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # -PwithEngine registers the buildRustEngine Exec task; its preBuild
+      # dependency runs engine/scripts/build-android.sh (idempotent):
+      # cargo-ndk builds libtoad_ml_jni.so + libonnxruntime.so (the vendored
+      # ente-ml uses ort load-dynamic + copy-dylibs) for arm64-v8a into
+      # apps/gallery/build/rust-jniLibs/, which the jniLibs srcDir packages.
+      # Lint and unit tests stay in the build job (property-less, unchanged).
+      - name: Engine-enabled debug assemble (arm64-v8a)
+        run: ./gradlew :apps:gallery:assembleDebug -PwithEngine --no-daemon --stacktrace
+
+      # Gate, not an upload: the engine-enabled APK must actually carry BOTH
+      # native libraries (a silently broken jniLibs wiring would otherwise
+      # pass the assemble step).
+      - name: Verify the native libraries are packaged
+        run: |
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          echo "APK: $APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"

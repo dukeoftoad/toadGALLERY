@@ -188,7 +188,26 @@ android {
         // (face-derived data never leaves the device). Per maintainer
         // directive: NO new device builds until Phase 5 completes; this
         // and subsequent rounds ride CI from main only.
-        versionCode = 28
+        // versionCode 29 (r25 round): the People UI round (Workstream 6)
+        // --- the r23/r24 face index gains its product surface: the
+        // toad-ml-jni store extended from twelve to sixteen externals with
+        // the People read/management paths (nativeStoreFaceClusters off
+        // the LIVE face_clusters table + per-cluster cover file,
+        // nativeStoreClusterFileIds, nativeStoreMergeFaceClusters over
+        // upstream's force_update_cluster_ids, and
+        // nativeStoreRemoveFacesFromCluster over upstream's
+        // remove_face_id_to_cluster_id --- zero new SQL authored), the
+        // Kotlin ml/people domain (PeopleEngineSeam + the atomic
+        // people-state.json names/hidden bookkeeping in the face-index
+        // directory, the pure six-state PeopleContentPolicy, the
+        // repository + the MlEngine adapter), and the Compose surfaces
+        // (PeopleScreen grid, PersonDetailScreen with rename / merge /
+        // remove-from-person / hide, the Albums-tab People section, the
+        // Settings peopleAlbumEnabled consent row --- ADR-0010 opt-in,
+        // OFF by default; face-derived data never leaves the device).
+        // Per maintainer directive: NO new device builds until Phase 5
+        // completes; this and subsequent rounds ride CI from main only.
+        versionCode = 29
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

@@ -6,12 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -28,6 +30,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -51,11 +54,13 @@ import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.filters.DerivedCollections
 import io.github.dukeoftoad.gallery.data.filters.PhotosFilterHandoff
+import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.ErrorState
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
 import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
+import io.github.dukeoftoad.gallery.ui.people.PersonCard
 import io.github.dukeoftoad.gallery.ui.photos.collectionLabelRes
 import kotlinx.coroutines.launch
 
@@ -104,13 +109,26 @@ import kotlinx.coroutines.launch
  * snackbar ("...open the Photos tab to view"); the Photos screen consumes
  * the request on its next entry. The favorites card is Q+ only, matching
  * the favorites pseudo-album's own tiering.
+ *
+ * Since r25 (Workstream 6) a "People" section ([PeopleSection]) sits
+ * ABOVE the Collections section as the grid's first full-span item: the
+ * same pure [io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy]
+ * state the People screen renders, as ONE honest card per non-Ready arm
+ * (consent off / engine missing in this build / not indexed yet / all
+ * hidden / read error with retry) or a horizontal `LazyRow` of the shared
+ * [PersonCard]s plus a "See all" action into the `people` sub-screen.
+ * Consent is re-read on every tab re-entry (`AlbumsViewModel.refreshPeople`),
+ * so the Settings toggle lands here on the next visit.
  */
 @Composable
 fun AlbumsScreen(
     onOpenAlbum: (bucketId: Long) -> Unit,
+    onOpenPeople: () -> Unit,
+    onOpenPerson: (clusterId: String) -> Unit,
     viewModel: AlbumsViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val peopleState by viewModel.people.collectAsState()
 
     val requester = rememberMediaPermissionRequester(
         onResult = { granted ->
@@ -143,6 +161,9 @@ fun AlbumsScreen(
 
     LaunchedEffect(Unit) {
         requester.launch()
+        // r25: the People section re-reads consent + clusters on every tab
+        // (re-)entry --- the toggle in Settings lands here on the next visit.
+        viewModel.refreshPeople()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -174,8 +195,12 @@ fun AlbumsScreen(
                 } else {
                     AlbumGrid(
                         albums = s.albums,
+                        peopleState = peopleState,
                         onOpenAlbum = onOpenAlbum,
                         onOpenCollection = onOpenCollection,
+                        onOpenPeople = onOpenPeople,
+                        onOpenPerson = onOpenPerson,
+                        onRetryPeople = viewModel::refreshPeople,
                     )
                 }
             }
@@ -192,8 +217,12 @@ fun AlbumsScreen(
 @Composable
 private fun AlbumGrid(
     albums: List<Album>,
+    peopleState: PeopleContentState,
     onOpenAlbum: (bucketId: Long) -> Unit,
     onOpenCollection: (DerivedCollections.DerivedCollection) -> Unit,
+    onOpenPeople: () -> Unit,
+    onOpenPerson: (clusterId: String) -> Unit,
+    onRetryPeople: () -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -202,9 +231,20 @@ private fun AlbumGrid(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // The Collections section (r17) spans the grid's full width as its
-        // first item, so it scrolls with the albums (one scroll surface)
-        // and needs no extra layout scaffolding.
+        // The People section (r25) spans the grid's full width as its FIRST
+        // item, above the Collections section and the albums: the people
+        // row scrolls with everything else (one scroll surface).
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            PeopleSection(
+                state = peopleState,
+                onOpenPeople = onOpenPeople,
+                onOpenPerson = onOpenPerson,
+                onRetryPeople = onRetryPeople,
+            )
+        }
+        // The Collections section (r17) spans the grid's full width, so it
+        // scrolls with the albums (one scroll surface) and needs no extra
+        // layout scaffolding.
         item(span = { GridItemSpan(maxLineSpan) }) {
             CollectionsSection(onOpenCollection = onOpenCollection)
         }
@@ -222,6 +262,128 @@ private fun AlbumGrid(
                     album = album,
                     onClick = { onOpenAlbum(album.bucketId) },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The People section (r25, Workstream 6): ONE honest row above the
+ * Collections section, decided by the SAME pure
+ * [io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy] output
+ * the People screen renders:
+ *  - Loading -> nothing at all (the albums grid is the content; a
+ *    transient sub-second section flash would be noise, not honesty);
+ *  - ConsentOff / EngineMissing / NotIndexed / Ready-with-everyone-hidden
+ *    -> one honest card saying exactly why there is no row of people;
+ *  - Error -> the honest card with a retry action
+ *    ([AlbumsViewModel.refreshPeople]);
+ *  - Ready -> the header + a horizontal `LazyRow` of the SHARED
+ *    [PersonCard]s (identical chrome to the People screen) plus a
+ *    "See all" action into the `people` sub-screen; a card tap opens
+ *    that person's detail (the album cards' pattern).
+ */
+@Composable
+private fun PeopleSection(
+    state: PeopleContentState,
+    onOpenPeople: () -> Unit,
+    onOpenPerson: (clusterId: String) -> Unit,
+    onRetryPeople: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when (state) {
+            PeopleContentState.Loading -> Unit
+            PeopleContentState.ConsentOff -> PeopleInfoCard(
+                text = stringResource(R.string.albums_people_consent_off),
+            )
+            PeopleContentState.EngineMissing -> PeopleInfoCard(
+                text = stringResource(R.string.albums_people_engine_missing),
+            )
+            PeopleContentState.NotIndexed -> PeopleInfoCard(
+                text = stringResource(R.string.albums_people_not_indexed),
+            )
+            is PeopleContentState.Error -> PeopleInfoCard(
+                text = stringResource(R.string.albums_people_error),
+                actionLabel = stringResource(R.string.state_action_retry),
+                onAction = onRetryPeople,
+            )
+            is PeopleContentState.Ready -> {
+                if (state.visible.isEmpty()) {
+                    PeopleInfoCard(
+                        text = stringResource(R.string.albums_people_all_hidden),
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.albums_people_header),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = onOpenPeople,
+                            modifier = Modifier.testTag("albums_people_see_all"),
+                        ) {
+                            Text(stringResource(R.string.albums_people_see_all))
+                        }
+                    }
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .testTag("albums_people_row"),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Count-based items: the file already imports the GRID
+                        // items extension for the album cards below, and the
+                        // LazyList list-overload shares its name (the same
+                        // trick the Collections row above uses).
+                        items(state.visible.size) { index ->
+                            val person = state.visible[index]
+                            PersonCard(
+                                person = person,
+                                onClick = { onOpenPerson(person.clusterId) },
+                                modifier = Modifier.width(104.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One honest People-section card (r25): the tonal rounded card the
+ * [CollectionCard] idiom uses, carrying ONE line of truth about why
+ * there is no row of people (plus an optional action).
+ */
+@Composable
+private fun PeopleInfoCard(
+    text: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Surface(
+        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (actionLabel != null) {
+                TextButton(onClick = { onAction?.invoke() }) {
+                    Text(actionLabel)
+                }
             }
         }
     }

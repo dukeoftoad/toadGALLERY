@@ -58,6 +58,21 @@ class MlEngineTest {
         var storeDeleteCalls = 0
         var lastDeleteArg: LongArray? = null
 
+        // ---- r25 ----
+        var storeFaceClustersResult: String = "[]"
+        var storeClusterFileIdsResult: LongArray = LongArray(0)
+        var storeMergeResult: Boolean = true
+        var storeRemoveFacesResult: Boolean = true
+        var storeFaceClustersCalls = 0
+        var storeClusterFileIdsCalls = 0
+        var storeMergeCalls = 0
+        var storeRemoveFacesCalls = 0
+        var lastClusterFileIdsArg: String? = null
+        var lastMergeSource: String? = null
+        var lastMergeTarget: String? = null
+        var lastRemoveClusterId: String? = null
+        var lastRemoveFileIds: LongArray? = null
+
         override fun nativeInit(modelsDir: String): Boolean {
             initCalls++
             lastInitArg = modelsDir
@@ -120,6 +135,31 @@ class MlEngineTest {
             storeDeleteCalls++
             lastDeleteArg = fileIds
             return storeDeleteResult
+        }
+
+        override fun nativeStoreFaceClusters(): String {
+            storeFaceClustersCalls++
+            return storeFaceClustersResult
+        }
+
+        override fun nativeStoreClusterFileIds(clusterId: String): LongArray {
+            storeClusterFileIdsCalls++
+            lastClusterFileIdsArg = clusterId
+            return storeClusterFileIdsResult
+        }
+
+        override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean {
+            storeMergeCalls++
+            lastMergeSource = sourceClusterId
+            lastMergeTarget = targetClusterId
+            return storeMergeResult
+        }
+
+        override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean {
+            storeRemoveFacesCalls++
+            lastRemoveClusterId = clusterId
+            lastRemoveFileIds = fileIds
+            return storeRemoveFacesResult
         }
     }
 
@@ -226,6 +266,14 @@ class MlEngineTest {
             override fun nativeStoreClose() = true
             override fun nativeStoreIndexedFaceFileIds(): LongArray = LongArray(0)
             override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean = true
+            override fun nativeStoreFaceClusters(): String =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClusterFileIds(clusterId: String): LongArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
         }
         val engine = MlEngine(bridge)
         engine.initialize("/data/models")
@@ -528,5 +576,259 @@ class MlEngineTest {
         assertEquals(0, bridge.storeFaceCountCalls)
         assertEquals(0, bridge.storeClusterCalls)
         assertFalse("nothing was open, so nothing was closed", engine.closeFaceIndex())
+    }
+
+    // ---- r25: the People read/management paths ----
+
+    @Test
+    fun `faceClusters parses the live cluster JSON including null covers`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        bridge.storeFaceClustersResult =
+            "[{\"cluster_id\":\"cluster_a\",\"count\":12,\"cover_file_id\":4813}," +
+                "{\"cluster_id\":\"cluster_b\",\"count\":3,\"cover_file_id\":null}]"
+        val clusters = engine.faceClusters()
+
+        // Content equality + the engine's ordering preserved verbatim:
+        assertEquals(
+            listOf(
+                MlEngine.FaceCluster("cluster_a", 12, 4813L),
+                MlEngine.FaceCluster("cluster_b", 3, null),
+            ),
+            clusters,
+        )
+        assertEquals(1, bridge.storeFaceClustersCalls)
+
+        // The empty array is the honest "no clusters yet":
+        bridge.storeFaceClustersResult = "[]"
+        assertEquals(emptyList<MlEngine.FaceCluster>(), engine.faceClusters())
+    }
+
+    @Test
+    fun `malformed face clusters JSON fails as IllegalStateException`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        for (bad in listOf(
+            "not json at all",
+            "{\"faces\":1}", // an object, not the array envelope
+            "[{\"cluster_id\":\"cluster_a\"}]", // missing count/cover fields
+            "[{\"cluster_id\":\"cluster_a\",\"count\":1}]", // missing cover field
+            "[{\"cluster_id\":\"cluster_a\",\"count\":-1,\"cover_file_id\":null}]", // negative count
+            "[{\"cluster_id\":7,\"count\":1,\"cover_file_id\":null}]", // wrong type: numeric id
+            "[{\"cluster_id\":\"cluster_a\",\"count\":{},\"cover_file_id\":null}]", // wrong type: object count
+        )) {
+            bridge.storeFaceClustersResult = bad
+            try {
+                engine.faceClusters()
+                fail("malformed face clusters JSON must fail: $bad")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message!!.contains("malformed face clusters"))
+            }
+        }
+    }
+
+    @Test
+    fun `faceClusters before openFaceIndex throws without a native call`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        try {
+            engine.faceClusters()
+            fail("faceClusters before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals("the state machine rejects before the bridge", 0, bridge.storeFaceClustersCalls)
+    }
+
+    @Test
+    fun `clusterFileIds passes the id through and maps the long array`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: the state-machine rejection, no native call.
+        try {
+            engine.clusterFileIds("cluster_a")
+            fail("clusterFileIds before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeClusterFileIdsCalls)
+
+        // Open store: the bridge's long array verbatim, as a List.
+        engine.openFaceIndex("/data/face-index")
+        bridge.storeClusterFileIdsResult = longArrayOf(4L, 8L, 15L)
+        assertEquals(listOf(4L, 8L, 15L), engine.clusterFileIds("cluster_a"))
+        assertEquals("cluster_a", bridge.lastClusterFileIdsArg)
+
+        // Empty is honest empty (no files in the cluster / unknown id):
+        bridge.storeClusterFileIdsResult = LongArray(0)
+        assertEquals(emptyList<Long>(), engine.clusterFileIds("cluster_a"))
+        assertEquals(2, bridge.storeClusterFileIdsCalls)
+    }
+
+    @Test
+    fun `mergeFaceClusters rejects a self-merge before any native call`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        try {
+            engine.mergeFaceClusters("cluster_same", "cluster_same")
+            fail("a self-merge must be rejected facade-side")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("must differ"))
+            assertTrue(expected.message!!.contains("cluster_same"))
+        }
+        assertEquals("the guard fires before the native call", 0, bridge.storeMergeCalls)
+
+        // Distinct ids delegate with the arguments verbatim:
+        bridge.storeMergeResult = true
+        assertTrue(engine.mergeFaceClusters("cluster_a", "cluster_b"))
+        assertEquals("cluster_a", bridge.lastMergeSource)
+        assertEquals("cluster_b", bridge.lastMergeTarget)
+        assertEquals(1, bridge.storeMergeCalls)
+
+        // The native result maps through (false without throwing):
+        bridge.storeMergeResult = false
+        assertFalse(engine.mergeFaceClusters("cluster_a", "cluster_b"))
+    }
+
+    @Test
+    fun `mergeFaceClusters follows the store state machine`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: the state-machine rejection fires before the
+        // argument guard AND before any native call (the putFace order):
+        try {
+            engine.mergeFaceClusters("cluster_a", "cluster_b")
+            fail("mergeFaceClusters before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        try {
+            engine.mergeFaceClusters("cluster_same", "cluster_same")
+            fail("the closed-store rejection still dominates a bad argument")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeMergeCalls)
+    }
+
+    @Test
+    fun `removeFacesFromCluster passes arguments through and maps the result`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: rejected before any native call.
+        try {
+            engine.removeFacesFromCluster("cluster_a", longArrayOf(7L))
+            fail("removeFacesFromCluster before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeRemoveFacesCalls)
+
+        // Open store: arguments verbatim, native result mapped.
+        engine.openFaceIndex("/data/face-index")
+        bridge.storeRemoveFacesResult = true
+        assertTrue(engine.removeFacesFromCluster("cluster_a", longArrayOf(7L, 8L)))
+        assertEquals("cluster_a", bridge.lastRemoveClusterId)
+        assertTrue(bridge.lastRemoveFileIds!!.contentEquals(longArrayOf(7L, 8L)))
+
+        // The empty selection (the no-op) goes through unchanged:
+        assertTrue(engine.removeFacesFromCluster("cluster_a", LongArray(0)))
+        assertTrue(bridge.lastRemoveFileIds!!.isEmpty())
+        assertEquals(2, bridge.storeRemoveFacesCalls)
+
+        // The native failure shape maps through (false without throwing):
+        bridge.storeRemoveFacesResult = false
+        assertFalse(engine.removeFacesFromCluster("cluster_a", longArrayOf(9L)))
+    }
+
+    @Test
+    fun `release closes the face index for the r25 operations too`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+        assertTrue(engine.release())
+
+        try {
+            engine.faceClusters()
+            fail("engine release must close the face-index store for r25 reads too")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        try {
+            engine.mergeFaceClusters("cluster_a", "cluster_b")
+            fail("engine release must close the face-index store for r25 writes too")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeFaceClustersCalls)
+        assertEquals(0, bridge.storeMergeCalls)
+    }
+
+    @Test
+    fun `a library-less build rejects every r25 operation explicitly`() {
+        val bridge = FakeBridge().apply { available = false }
+        val engine = MlEngine(bridge)
+
+        val rejects = listOf<() -> Any?>(
+            { engine.faceClusters() },
+            { engine.clusterFileIds("cluster_a") },
+            { engine.mergeFaceClusters("cluster_a", "cluster_b") },
+            { engine.removeFacesFromCluster("cluster_a", longArrayOf(1L)) },
+        )
+        for (reject in rejects) {
+            try {
+                reject()
+                fail("an r25 op on a library-less build must fail explicitly, not UnsatisfiedLinkError")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message!!.contains("not in this build"))
+            }
+        }
+        assertEquals("no native call may happen without a library", 0, bridge.storeFaceClustersCalls)
+        assertEquals(0, bridge.storeClusterFileIdsCalls)
+        assertEquals(0, bridge.storeMergeCalls)
+        assertEquals(0, bridge.storeRemoveFacesCalls)
+    }
+
+    @Test
+    fun `a native r25 failure surfaces unchanged with its message`() {
+        val bridge = object : MlEngine.Bridge {
+            override val available = true
+            override fun nativeInit(modelsDir: String) = true
+            override fun nativeEngineInfo(): String? = null
+            override fun nativeDetectFacesJpeg(jpegBytes: ByteArray): FloatArray = FloatArray(0)
+            override fun nativeRelease() = true
+            override fun nativeDetectFaceEmbeddingsJpeg(jpegBytes: ByteArray): FloatArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreOpen(dir: String) = true
+            override fun nativeStorePutFace(fileId: Long, embedding: FloatArray) = 1L
+            override fun nativeStoreFaceCount() = 0L
+            override fun nativeStoreCluster(distanceThreshold: Double) = "{}"
+            override fun nativeStoreClose() = true
+            override fun nativeStoreIndexedFaceFileIds(): LongArray = LongArray(0)
+            override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean = true
+            override fun nativeStoreFaceClusters(): String =
+                throw IllegalStateException("store read failed")
+            override fun nativeStoreClusterFileIds(clusterId: String): LongArray = LongArray(0)
+            override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean = true
+            override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean = true
+        }
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+        try {
+            engine.faceClusters()
+            fail("the native failure must surface")
+        } catch (expected: IllegalStateException) {
+            assertEquals("store read failed", expected.message)
+        }
     }
 }

@@ -135,18 +135,25 @@
   * [x] Add `androidx.work:work-runtime-ktx` 2.10.1 (Apache-2.0, license-screened) + `FaceIndexWorker` (CoroutineWorker, unique-name chain with self-re-enqueue, retry/backoff ≤ 3, honest failure shapes) + `FaceIndexScheduler` (`getWorkInfosForUniqueWorkFlow` observation).
   * [x] Trim WorkManager's merged-manifest injections via two `tools:node="remove"` markers (`ACCESS_NETWORK_STATE`, `FOREGROUND_SERVICE` declined; `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED` accepted + documented) with the privacy suite pinning both directions; exclude the `face-index` directory from cloud backup and device transfer.
   * [x] Replace the Settings r23 card with the r24 queue card: start / cancel / reset, live per-batch progress, terminal outcome lines, and the clustering-threshold tuning control (0.10–0.40, upstream 0.24 default, persisted).
-  * [x] Author `docs/phase-5/background-queue.md` + the privacy-gate r24 note + the dependency-license row; `versionCode 28`, no device build per the Phase-5-completion directive.
+  * [x] Author `docs/phase-5/background-queue.md` + the privacy-gate r24 note + the dependency-license row; `versionCode 28`, no device build per the Phase-5-completion directive. Squash-merged as **PR #97** (`d610123`).
+* [x] **Round `r25` (Build 29) — The People UI Round (Workstream 6)**:
+  * [x] Extend `toad-ml-jni` from 12 to 16 JNI functions: `nativeStoreFaceClusters` (live `face_clusters` table + per-cluster cover file id), `nativeStoreClusterFileIds`, `nativeStoreMergeFaceClusters` (upstream `force_update_cluster_ids`; self-merge rejected as `IllegalArgumentException` on both sides of the bridge) and `nativeStoreRemoveFacesFromCluster` (the split primitive, upstream `remove_face_id_to_cluster_id`) — zero new SQL authored; 20 JNI-crate Rust tests (8 new).
+  * [x] Build the Kotlin `ml/people` domain: `PeopleEngineSeam` (+ availability), the atomic `people-state.json` names/hidden store in the face-index directory (corrupt-recovers, prunes stale ids), the pure six-state `PeopleContentPolicy`, the no-cache `PeopleRepository`, `PeopleEngineAdapter` and the chunked 999-limit `PeopleMediaQuery`; 927 JVM tests total (+42).
+  * [x] Build the Compose surfaces: `PeopleScreen` grid, `PersonDetailScreen` (rename / merge-with / remove-from-person / hide, viewer hand-offs the Album-detail way), the Albums-tab People section with honest off/engine-missing/not-indexed cards, and the Settings `peopleAlbumEnabled` consent row (ADR-0010 opt-in, OFF by default).
+  * [x] Author `docs/phase-5/people-ui.md` + the `PrivacyPolicyTest` non-host-literal addition (`people-state.json`); `versionCode 29`, no device build per the Phase-5-completion directive.
 
-## 3. Remaining / Queued Tasks & Next Steps (Post-`r23`)
+## 3. Remaining / Queued Tasks & Next Steps (Post-`r25`)
 
-### Immediate Device Validation & Phase 5 AI Workstreams (`r25`–`r29`)
-* [ ] **On-Device Dogfood Validation (engine APK at build 28; build 27 APK already delivered as `toadGALLERY-0.4.2-alpha-r23-engine-debug.apk`)**:
+### Immediate Device Validation & Phase 5 AI Workstreams (`r26`–`r29`)
+* [ ] **On-Device Dogfood Validation (engine APK at build 29; build 27 APK already delivered as `toadGALLERY-0.4.2-alpha-r23-engine-debug.apk`)**:
   * [ ] Install an engine-enabled build on the Xiaomi test device (`2201116PI`, Android 36).
   * [ ] Open `Settings → AI engine (r22 dogfood)` and download the FACE model pack (~36 MiB from `models.ente.com`).
   * [ ] Open `Settings → Start background index (r24 dogfood)`, let the queue drain the library, verify live progress + the drain outcome line, exercise Cancel (resume) and Reset, and evaluate the clustering threshold through the r24 tuning control on a real library.
+  * [ ] Dogfood the r25 People surfaces on-device: enable `Settings → People albums`, browse the People grid + person details, rename/merge/remove-from-person/hide, and verify the honest off/engine-missing/not-indexed states.
   * [ ] Run pending device validation checklist sections (`docs/phase-3/device-validation-checklist.md` §§13–18, including Room v4→v6 over-install migrations and pre-Q fallback check).
-* [ ] **People UI & Cluster Management (Workstream 6 / `r25`+)**:
-  * [ ] People auto-albums grid, person cluster detail screen, cluster naming/labeling, merge/split/ignore clusters, photo exclusion, and opt-in consent gate (disabled by default per ADR-0010).
+* [ ] **People UI Follow-ups (deferred from r25, documented in `docs/phase-5/people-ui.md`)**:
+  * [ ] Edit-preserving reclustering (cluster-id remapping overlay so names/hidden/merges survive the queue's recluster passes).
+  * [ ] Unhide UI for hidden persons (r25 way back is the r24 Reset face index).
 * [ ] **Magic Search / Things (Workstream 7)**:
   * [ ] Wire MobileCLIP image embedding indexing (`mobileclip_s2_image_opset18_opt.onnx`), BPE tokenizer (`bpe_simple_vocab_16e6.txt.gz`), and text encoder (`mobileclip_s2_text_opset18_opt.onnx`) over `ente-vecdb` for offline semantic search in the Search tab.
 * [ ] **MI-Style Organisational UX (Roadmap Phase 5 / Reconciled Phase 6)**:

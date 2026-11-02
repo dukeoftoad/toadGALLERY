@@ -296,7 +296,11 @@ class PrivacyPolicyTest {
         // install.properties: the provisioner's receipt file name.
         // index-state.json: the r24 queue's state-file name (the atomic
         // bookkeeping file inside the app-private face-index directory).
-        val nonHostLiterals = setOf("install.properties", "index-state.json")
+        // people-state.json: the r25 People state file (Workstream 6 ---
+        // the names/hidden bookkeeping in the SAME app-private directory,
+        // `FaceIndexStateFile`'s discipline; the deliberate documented-set
+        // addition this test prescribes for a new dotted NON-host literal).
+        val nonHostLiterals = setOf("install.properties", "index-state.json", "people-state.json")
         val found = mlDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .flatMap { file -> hostLike.findAll(file.readText()).map { m -> m.value.removeSurrounding("\"") } }

@@ -42,6 +42,8 @@ import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
 import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
 import io.github.dukeoftoad.gallery.ui.details.DetailsScreen
 import io.github.dukeoftoad.gallery.ui.map.MapScreen
+import io.github.dukeoftoad.gallery.ui.people.PeopleScreen
+import io.github.dukeoftoad.gallery.ui.people.PersonDetailScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
@@ -80,6 +82,25 @@ object Destinations {
 
     /** Route pattern for the album detail sub-screen (issue #29). */
     const val ALBUM_DETAIL = "album/{bucketId}"
+
+    /**
+     * The People browse sub-screen (r25 round, Workstream 6): the live
+     * face clusters over the `peopleAlbumEnabled` consent (ADR-0010).
+     * Not top-level on purpose (sub-page UX like album detail; the
+     * bottom bar hides): reached from the Albums tab's People section
+     * via its "See all" action.
+     */
+    const val PEOPLE = "people"
+
+    /**
+     * Route pattern for the Person detail sub-screen (r25, Workstream 6):
+     * one face cluster's photos + the rename/merge/hide/remove actions.
+     * The cluster id is a STRING nav argument (the engine's own row
+     * identity), percent-encoded by [personDetail] exactly like the
+     * Details route encodes its Uri --- an id containing route-reserved
+     * characters must never splinter the pattern.
+     */
+    const val PERSON_DETAIL = "person/{clusterId}"
 
     /**
      * Sub-screen for the system-Photo-Picker selection (issue #27). Not
@@ -134,6 +155,10 @@ object Destinations {
     const val DETAILS = "details/{mediaId}?uri={uri}"
 
     fun albumDetail(bucketId: Long): String = "album/$bucketId"
+
+    /** Builds the Person detail route for [clusterId], encoding the id. */
+    fun personDetail(clusterId: String): String =
+        "person/${Uri.encode(clusterId)}"
 
     /** Builds the details route for [mediaId], encoding the [uri] argument. */
     fun details(mediaId: Long, uri: Uri): String =
@@ -256,10 +281,17 @@ fun ToadGalleryApp() {
                 }
                 composable(Destinations.ALBUMS) {
                     // Phase 3 (issue #29): real folder grid replaces the placeholder.
+                    // r25: the shell hands the People section's two navigations
+                    // down --- "See all" opens the People sub-screen, a person
+                    // card opens that person's detail (the album cards' pattern).
                     AlbumsScreen(
                         onOpenAlbum = { bucketId ->
                             navController.navigate(Destinations.albumDetail(bucketId))
-                        }
+                        },
+                        onOpenPeople = { navController.navigate(Destinations.PEOPLE) },
+                        onOpenPerson = { clusterId ->
+                            navController.navigate(Destinations.personDetail(clusterId))
+                        },
                     )
                 }
                 composable(
@@ -273,6 +305,45 @@ fun ToadGalleryApp() {
                             onBack = { navController.popBackStack() },
                             onOpenViewer = openViewer,
                             settingsViewModel = settingsViewModel,
+                        )
+                    }
+                }
+                composable(Destinations.PEOPLE) {
+                    // r25 (Workstream 6): the People browse sub-screen over the
+                    // live face clusters. The consent-off state's "Open Settings"
+                    // action routes to the Settings tab with the same
+                    // single-top-level-stack discipline a bottom-bar tap uses
+                    // (the Map tab's consent copy wired it first).
+                    PeopleScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenPerson = { clusterId ->
+                            navController.navigate(Destinations.personDetail(clusterId))
+                        },
+                        onOpenSettings = {
+                            navController.navigate(Destinations.SETTINGS) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
+                }
+                composable(
+                    route = Destinations.PERSON_DETAIL,
+                    arguments = listOf(navArgument("clusterId") { type = NavType.StringType }),
+                ) { backStackEntry ->
+                    // r25 (Workstream 6): one cluster's photos + management ops.
+                    // The ViewModel is screen-scoped (per-cluster state, the
+                    // AlbumDetailScreen factory pattern); photo taps open the
+                    // SAME shell-scoped viewer hand-off the grid screens use.
+                    val clusterId = backStackEntry.arguments?.getString("clusterId")
+                    if (!clusterId.isNullOrEmpty()) {
+                        PersonDetailScreen(
+                            clusterId = clusterId,
+                            onBack = { navController.popBackStack() },
+                            onOpenViewer = openViewer,
                         )
                     }
                 }

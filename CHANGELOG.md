@@ -4,10 +4,45 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.2-alpha] — unreleased on main (versionCode 28; per maintainer
+## [0.4.2-alpha] — unreleased on main (versionCode 29; per maintainer
   directive no new device builds until Phase 5 completes)
 
 ### Added
+
+- **The People auto-album** (r25 round; Workstream 6 of the Phase 5 plan,
+  `docs/phase-5/people-ui.md`): the r23/r24 face index gains its product
+  surface — an opt-in (ADR-0010, **off by default**) People grid. The
+  JNI store extends from twelve to sixteen externals, all riding the
+  same open-store state machine and all upstream queries verbatim (zero
+  new SQL authored): `nativeStoreFaceClusters` (the live cluster list
+  off the LIVE `face_clusters` table — deliberately not upstream's
+  `cluster_summary` cache, so manual edits reflect immediately — with
+  per-cluster cover file ids from the top-scored face),
+  `nativeStoreClusterFileIds`, `nativeStoreMergeFaceClusters` (upstream
+  `force_update_cluster_ids`; `source == target` rejected as
+  `IllegalArgumentException` on BOTH sides of the bridge) and
+  `nativeStoreRemoveFacesFromCluster` (the split primitive, over
+  upstream `remove_face_id_to_cluster_id`). Kotlin side, the new
+  `ml/people` domain: `PeopleEngineSeam` (the four operations +
+  availability; fakes in tests, `PeopleEngineAdapter` in production),
+  `PeopleStateStore` (names + hidden in one atomic
+  `people-state.json` inside the backup-excluded face-index directory;
+  corrupt-recovers to empty; prunes stale cluster ids on load), the pure
+  six-state `PeopleContentPolicy` (Error dominates; consent before
+  capability; EngineMissing is the build-shape fact; all-hidden is
+  `Ready(empty)`, distinct from `NotIndexed`), `PeopleRepository`
+  (no-cache live-table reads) and `PeopleMediaQuery` (chunked 999-limit
+  `IN` MediaStore selection, newest-first). The Compose surfaces:
+  `PeopleScreen` (circular cover cards, name or "Unnamed", honest
+  state copy), `PersonDetailScreen` (the person's photo grid with
+  multi-select Remove-from-person, Rename, Merge-with and Hide actions;
+  taps hand off to the existing viewer the Album-detail way), the
+  Albums-tab People section (honest cards when off / engine-missing /
+  not-indexed; the person row + "See all" when ready) and the Settings
+  `peopleAlbumEnabled` consent row (default FALSE). Honest limitation,
+  pinned by a Rust test and the facade KDoc: manual cluster edits
+  persist only until the queue's next recluster pass recomputes
+  assignments. Rust suite 20 tests (8 new); JVM suite 927 tests (+42).
 
 - **The background face-index queue** (r24 round; Workstream 5 of the
   Phase 5 plan, `docs/phase-5/background-queue.md`): the r23 12-photo

@@ -7,7 +7,10 @@ name: CI
 # with cargo check + fmt + clippy (ADR-0020 context; see engine/NOTICE.md).
 # Since r22 the engine-android job additionally builds the engine for the
 # Android ABI (cargo-ndk) and assembles an engine-enabled APK (-PwithEngine;
-# zero-release directive: that job uploads nothing).
+# zero-release directive: that job uploads nothing). Since r23 the engine job
+# also runs the vendored photos-side crates' test suites explicitly (the
+# workspace check/clippy gates cover them automatically --- no crate lists
+# anywhere --- but no workspace test step existed before).
 
 on:
   push:
@@ -63,6 +66,16 @@ jobs:
       - name: cargo clippy
         working-directory: engine
         run: cargo clippy --workspace
+
+      # r23 added the photos-side crates (ente-vecdb + ente-photos-ml). The
+      # check/clippy/fmt gates above cover them automatically (workspace
+      # selectors, no crate lists) but no step ran the vendored tests; this
+      # runs the two new crates' suites only (the older ente crates' tests
+      # would pull heavy ML inference --- the profile.dev opt-level=3 note in
+      # engine/Cargo.toml --- for little gate value).
+      - name: cargo test (r23 photos-side crates)
+        working-directory: engine
+        run: cargo test -p ente-vecdb -p ente-photos-ml
 
   build:
     name: Build + lint + test

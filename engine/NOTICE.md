@@ -56,9 +56,71 @@ manifest (the Kotlin `ModelManifest` must always match the pinned
 4. Everything else — including the git-pinned `heic-decoder` dependency
    (`ente/heic-decoder@2a20a208`) — is byte-identical to upstream at the pin.
 
-Deferred to a later round (tracked in `docs/phase-5/ente-pin.md`): extraction
-of `rust/crates/photos` `ml_db` / `ml_store` / `face_clustering` modules and
-`ente-vecdb` into a fourth vendored crate.
+Deferred to r23 and delivered below: extraction of `rust/crates/photos`
+`ml_db` / `ml_store` / `face_clustering` modules and `ente-vecdb` into the
+fourth and fifth vendored crates.
+
+## r23 additions (the indexing round: persistence + clustering)
+
+The r23 delivery round vendored the photos-side ML persistence + clustering
+stack, at the same pin (`423b2d80d9ec89d45f5680cb1e1d777bac225f41`):
+
+| Upstream source | Vendored location | Role |
+| --- | --- | --- |
+| `rust/crates/vecdb` (whole crate) | `engine/crates/ente-vecdb` | Append-only vector store (HNSW graph, snapshots, CRC-guarded log) used by the ML store |
+| `rust/crates/photos` `src/db.rs` | `engine/crates/ente-photos-ml/src/db.rs` | Connection-pool wrapper over rusqlite (WAL writer + read-only readers, busy timeout) |
+| `rust/crates/photos` `src/ml_db/**` | `engine/crates/ente-photos-ml/src/ml_db/` | SQLite schema, migrations and queries for the ML index (files, faces, clusters, persons, CLIP, caches) |
+| `rust/crates/photos` `src/ml_store/**` | `engine/crates/ente-photos-ml/src/ml_store/` | On-device vector store orchestration: fill from `ml_db`, face-distance index, cluster averages, clustering driver |
+| `rust/crates/photos` `src/face_clustering/**` | `engine/crates/ente-photos-ml/src/face_clustering/` | Pure-math face clustering (complete + incremental linear algorithms, cluster-id generation) |
+
+`ente-photos-ml` is a NEW wrapper crate around those four module trees; its
+`lib.rs` and `crypto.rs` are net-new toadGALLERY code (clearly headered in
+file, like toad-ml-jni's). Byte-identity method: every vendored file diffed
+against a `git archive FETCH_HEAD` extraction of the pin (see the audit note
+below); upstream's own `#[cfg(test)]` tests are vendored unchanged and run
+under `cargo test`.
+
+Adaptations from upstream (complete list for r23):
+
+1. The four photos modules' only external references outside their subtree
+   are `crate::db::{...}` (internal to the new crate), `ente_vecdb`
+   (workspace ref), and `ente_core::crypto::random_bytes` at exactly two
+   call sites (`face_clustering/mod.rs:8`, `ml_store/face_distances.rs:5`).
+   Instead of vendoring all of `ente-core` for one function, the two imports
+   are rewritten to `use crate::crypto::random_bytes;` and a net-new
+   `src/crypto.rs` seam reproduces `random_bytes` with byte-for-byte
+   upstream semantics (`getrandom::fill` + `expect`, carrying upstream's own
+   `#[expect(clippy::expect_used, reason = ...)]` attribute, which silences
+   the workspace's `expect_used` deny lint). This 2-line import rewrite is
+   the ONLY diff to the vendored module files.
+2. `ente-vecdb`'s `Cargo.toml` gains `license.workspace = true` (AGPL-3.0
+   declaration, same as the r21 crates); everything else in it is
+   byte-identical to upstream (upstream already names the package
+   `ente-vecdb` and uses `[lints] workspace = true`).
+3. `engine/Cargo.toml`: `crates/ente-photos-ml` and `crates/ente-vecdb`
+   added to members; `workspace.dependencies` gained `ente-photos-ml` /
+   `ente-vecdb` path entries, `rusqlite = { version = "0.40.2",
+   default-features = false, features = ["bundled"] }` (verbatim upstream),
+   and `getrandom = "0.4.0"` — upstream's entry is `getrandom = { version =
+   "0.4.0", features = ["wasm_js"] }`; the wasm_js feature is dropped
+   because the engine workspace is native-only (the seam never compiles for
+   wasm). `[profile.dev.package.ente-vecdb] opt-level = 3` added (verbatim
+   upstream; keeps the vector-store tests fast).
+4. Upstream gates `db`/`ml_db`/`ml_store` behind
+   `#[cfg(not(target_arch = "wasm32"))]` in the photos `lib.rs`; the engine
+   is native-only, so `ente-photos-ml/src/lib.rs` declares all four modules
+   unconditionally (no vendored module file contains those cfgs).
+5. `ente-photos-ml` declares exactly the dependencies the four modules use:
+   `rusqlite` (upstream's effective resolution: default features on top of
+   the workspace's bundled pin), `ente-vecdb`, `getrandom`, `log`,
+   `thiserror`, plus `tempfile` as a dev-dependency for the vendored inline
+   tests. No serde/serde_json/futures are needed (the modules use none).
+
+Byte-identity audit method for r23 (re-runnable): extract the pin with
+`git archive 423b2d80d9ec89d45f5680cb1e1d777bac225f41 -- rust/crates/vecdb
+rust/crates/photos/src/{db.rs,ml_db,ml_store,face_clustering}` and diff each
+vendored file against it; every file must be byte-identical except the two
+recorded `random_bytes` import lines.
 
 ## r22 additions (not from upstream)
 

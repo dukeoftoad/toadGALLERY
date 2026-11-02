@@ -154,8 +154,23 @@ android {
         // directive (2026-11-02, after build 23): NO new device builds until
         // Phase 5 completes; this and subsequent rounds ride CI from main
         // only.
-        versionCode = 26
-        versionName = "0.4.1-alpha"
+        // versionCode 27 (r23 round): the indexing round --- the photos-side
+        // persistence stack vendored into the engine workspace (ente-vecdb,
+        // the whole upstream rust/crates/vecdb byte-identical, and
+        // ente-photos-ml, the upstream photos crate's db/ml_db/ml_store/
+        // face_clustering modules byte-identical except the recorded crypto
+        // seam), the toad-ml-jni surface extended with the face-embedding
+        // + face-index store externals (nativeDetectFaceEmbeddingsJpeg;
+        // nativeStoreOpen/PutFace/FaceCount/Cluster/Close over the vendored
+        // MlStore), the Kotlin ml/index/IndexCoordinator, and the Settings
+        // "index + cluster (r23 dogfood)" slice. No packaging change:
+        // -PwithEngine gating is exactly the r22 one (the new crates ride
+        // the same cargo-ndk build of toad-ml-jni as workspace
+        // dependencies). Per maintainer directive (2026-11-02,
+        // after build 23): NO new device builds until Phase 5 completes;
+        // this and subsequent rounds ride CI from main only.
+        versionCode = 27
+        versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 
@@ -417,6 +432,10 @@ dependencies {
     // --- Privacy test suite (issue #20) ---
     // JVM policy tests (manifest + allowlist invariants); run in testDebugUnitTest.
     testImplementation(libs.junit)
+    // The real org.json parser for JVM unit tests (r23 cluster-summary JSON
+    // shape tests); android.jar's stub throws "not mocked". Test classpath
+    // only --- zero new runtime surface (see the catalog note).
+    testImplementation(libs.org.json)
     // Instrumented egress suite: runtime permission assert + socket-egress probe +
     // cold-launch/tab-walk; run in connectedDebugAndroidTest on the CI emulator.
     androidTestImplementation(libs.androidx.test.runner)

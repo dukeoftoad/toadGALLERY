@@ -11,6 +11,8 @@ import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
+import io.github.dukeoftoad.gallery.ml.index.IndexCoordinator
+import io.github.dukeoftoad.gallery.ml.index.MlEngineIndexEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * The r22 AI-engine dogfood section's state (see [AiEngineViewModel]).
@@ -40,6 +43,10 @@ data class AiDogfoodState(
     val note: Note? = null,
     /** The last self-test outcome, or null. */
     val selfTest: SelfTestResult? = null,
+    /** Live r23 index-run progress, or null between runs. */
+    val indexProgress: IndexCoordinator.IndexProgress? = null,
+    /** The last r23 index+cluster outcome (or reset), or null. */
+    val indexResult: IndexResult? = null,
 ) {
 
     /** One FACE asset's presence row. */
@@ -71,6 +78,33 @@ data class AiDogfoodState(
         /** Init or inference failed; [message] is the engine's own text. */
         data class Failed(val message: String) : SelfTestResult
     }
+
+    /**
+     * The r23 index+cluster outcome (mirrors [SelfTestResult]'s honest
+     * failure shapes; the OK case is the "N photos · M faces · K
+     * clusters" summary).
+     */
+    sealed interface IndexResult {
+        /** No `libtoad_ml_jni.so` in this build --- the honest answer. */
+        object LibraryMissing : IndexResult
+
+        /** Library present but no indexable JPEG exists on the device. */
+        object NoJpegFound : IndexResult
+
+        /** The run completed: photos fed, faces written, clusters found. */
+        data class Ok(
+            val photos: Int,
+            val faces: Int,
+            val clusters: Int,
+            val elapsedMs: Long,
+        ) : IndexResult
+
+        /** The face-index database was deleted/reset. */
+        object Deleted : IndexResult
+
+        /** The run failed; [message] is the engine's own text. */
+        data class Failed(val message: String) : IndexResult
+    }
 }
 
 /**
@@ -96,7 +130,16 @@ data class AiDogfoodState(
  *    `nativeInit(modelsDir)` + `nativeDetectFacesJpeg` round-trip through
  *    [MlEngine], timed with the monotonic clock, session released after
  *    (the next self-test re-initializes --- the contract's re-init
- *    guarantee, dogfooded).
+ *    guarantee, dogfooded);
+ *  - [runIndexCluster] (r23): up to the 12 most recent on-device JPEGs,
+ *    read through the same content-resolver path as the self-test, fed to
+ *    the [IndexCoordinator] (detect embeddings → putFace per face →
+ *    cluster at the vendored upstream 0.24 threshold) over the SAME
+ *    [MlEngine] instance, with live per-photo progress; the face-index
+ *    store lives at `filesDir/face-index/ml-index.sqlite` (app-private;
+ *    no new permissions, no network) and is closed after every run;
+ *  - [deleteFaceIndex] (r23): closes the store and deletes the whole
+ *    `face-index` directory (the reset mirror of [deleteFaceModels]).
  */
 class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -104,7 +147,6 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
     private val engine = MlEngine()
     private val source = MediaStoreSource(app)
     private val resolver = app.contentResolver
-
     // Construction only reads the in-memory library flag; the disk-derived
     // rows arrive with the first refresh() (the section's LaunchedEffect)
     // a frame later --- no IO on the main thread at ViewModel creation.
@@ -173,6 +215,31 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The r23 index+cluster run over the 12 most recent on-device JPEGs. */
+    fun runIndexCluster() {
+        if (_state.value.busy) return
+        _state.value = _state.value.copy(busy = true)
+        viewModelScope.launch {
+            _state.value = withContext(Dispatchers.IO) {
+                val result = runIndexClusterBlocking()
+                snapshot().copy(indexResult = result, indexProgress = null)
+            }
+        }
+    }
+
+    /** Closes the face-index store and deletes its database (r23 reset). */
+    fun deleteFaceIndex() {
+        if (_state.value.busy) return
+        _state.value = _state.value.copy(busy = true)
+        viewModelScope.launch {
+            _state.value = withContext(Dispatchers.IO) {
+                engine.closeFaceIndex()
+                faceIndexDir().deleteRecursively()
+                snapshot().copy(indexResult = AiDogfoodState.IndexResult.Deleted)
+            }
+        }
+    }
+
     /**
      * The self-test body, already on a worker thread. Fails honestly at
      * every gate (no library, no JPEG, init failure, engine exception)
@@ -212,6 +279,57 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 
+    /**
+     * The r23 index run body, already on a worker thread. Same honest
+     * gates as the self-test (no library, no JPEG), then the
+     * coordinator's pipeline with live progress pushed into the state.
+     * The store is opened per run and closed in `finally` --- every run
+     * starts from a known store state, and [deleteFaceIndex] (or an
+     * engine release) can never race an open handle.
+     */
+    private suspend fun runIndexClusterBlocking(): AiDogfoodState.IndexResult {
+        if (!engine.available) return AiDogfoodState.IndexResult.LibraryMissing
+        val jpegs = source.queryTimeline()
+            .filter { !it.isVideo && it.mimeType.equals("image/jpeg", ignoreCase = true) }
+            .take(INDEX_PHOTO_LIMIT)
+        val photos = jpegs.mapNotNull { item ->
+            resolver.openInputStream(item.uri)?.use { stream -> stream.readBytes() }
+                ?.let { bytes -> item.id to bytes }
+        }
+        if (photos.isEmpty()) return AiDogfoodState.IndexResult.NoJpegFound
+        return try {
+            if (!engine.openFaceIndex(faceIndexDir().absolutePath)) {
+                return AiDogfoodState.IndexResult.Failed("face index store did not open")
+            }
+            val coordinator = IndexCoordinator(MlEngineIndexEngine(engine))
+            val startedAt = SystemClock.elapsedRealtime()
+            val summary = coordinator.indexAndCluster(photos) { progress ->
+                _state.value = _state.value.copy(indexProgress = progress, busy = true)
+            }
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+            AiDogfoodState.IndexResult.Ok(
+                photos = summary.photosProcessed,
+                faces = summary.facesIndexed,
+                clusters = summary.clusterSummary.clusters,
+                elapsedMs = elapsedMs,
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The facade's failure shapes (IllegalStateException for state
+            // machine/engine faults, IllegalArgumentException for a wrong
+            // embedding dimension); the engine's own message is the honest
+            // diagnostic, not a paraphrase.
+            AiDogfoodState.IndexResult.Failed(e.message ?: e.javaClass.simpleName)
+        } finally {
+            engine.closeFaceIndex()
+        }
+    }
+
+    /** The app-private face-index directory (`ml-index.sqlite` inside). */
+    private fun faceIndexDir(): File =
+        File(getApplication<ToadGalleryApplication>().filesDir, "face-index")
+
     /** Presence truth from the provisioner's own derivation (disk-backed). */
     private fun snapshot(): AiDogfoodState {
         val faceAssets = ModelManifest.forCapability(ModelManifest.Capability.FACE)
@@ -222,5 +340,10 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
             },
             engineLibraryPresent = engine.available,
         )
+    }
+
+    private companion object {
+        /** The r23 dogfood caps one run at the 12 most recent JPEGs. */
+        const val INDEX_PHOTO_LIMIT = 12
     }
 }

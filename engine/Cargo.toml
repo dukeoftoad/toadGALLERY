@@ -10,6 +10,8 @@ members = [
     "crates/ente-assets",
     "crates/ente-image",
     "crates/ente-ml",
+    "crates/ente-photos-ml",
+    "crates/ente-vecdb",
     "crates/toad-ml-jni",
 ]
 
@@ -21,10 +23,13 @@ license = "AGPL-3.0"
 ente-assets = { path = "crates/ente-assets" }
 ente-image = { path = "crates/ente-image" }
 ente-ml = { path = "crates/ente-ml" }
+ente-photos-ml = { path = "crates/ente-photos-ml" }
+ente-vecdb = { path = "crates/ente-vecdb" }
 anyhow = "1.0.104"
 fast_image_resize = { version = "6.1.0", features = ["image"] }
 flate2 = "1.1.10"
 futures-util = "0.3.32"
+getrandom = "0.4.0"
 image = "0.25.10"
 jni = "0.21.1"
 log = "0.4.34"
@@ -32,6 +37,7 @@ moxcms = "0.9.1"
 ort = { version = "=2.0.0-rc.15", default-features = false }
 regex = "1.13.1"
 reqwest = { version = "0.12.28", default-features = false }
+rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
@@ -76,4 +82,9 @@ unwrap_used = "deny"
 
 # Upstream: unoptimized ML inference dominates test runtime.
 [profile.dev.package.ente-ml]
+opt-level = 3
+
+# Upstream: same rationale for the vector store (used heavily by the
+# ente-photos-ml tests).
+[profile.dev.package.ente-vecdb]
 opt-level = 3

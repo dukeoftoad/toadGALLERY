@@ -4,8 +4,63 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 26; per maintainer
+## [0.4.2-alpha] — unreleased on main (versionCode 27; per maintainer
   directive no new device builds until Phase 5 completes)
+
+### Added
+
+- **The photos-side persistence stack, vendored** (r23 round; the Phase 5 AI
+  engine workstream's third slice, `docs/phase-5/ente-pin.md`): the engine
+  workspace gains two crates extracted from `ente/ente` at the SAME pin as
+  r21 (`423b2d80d9ec89d45f5680cb1e1d777bac225f41`). `engine/crates/
+  ente-vecdb` is the whole upstream `rust/crates/vecdb` vendored
+  byte-identical (the vector store the face index searches over);
+  `engine/crates/ente-photos-ml` is a partial-crate extraction of the
+  upstream `photos` crate's `db`, `ml_db`, `ml_store` and `face_clustering`
+  modules, byte-identical except a two-line `use` rewrite: the modules'
+  `ente_core::crypto::random_bytes` imports (exactly two call sites) are
+  routed onto an engine-owned seam (net-new `src/crypto.rs`) instead of
+  vendoring all of `ente-core` for one function — the seam recorded in
+  `engine/NOTICE.md`. The r21 self-containment finding is resolved the way
+  that round's deferral predicted: the trio's `crate::db::…` imports are
+  satisfied by vendoring the host `db` module alongside them rather than by
+  re-porting the trio onto a new DB seam. Provenance rows added to the
+  licensing ledger §5 (both AGPL-3.0 at the pin).
+- **The face-index JNI surface + coordinator** (r23 round):
+  `engine/crates/toad-ml-jni` extends its r22 four-function ABI with five
+  externals: `nativeDetectFaceEmbeddingsJpeg` (runs detection + embedding
+  over one JPEG and returns `N × (5 + 192)` flat row-major floats — per
+  face `[x1, y1, x2, y2, score, e0..e191]`, the stride-197 layout, 192-d
+  MobileFaceNet embeddings over the r22 detection path) and a face-index
+  store surface over the vendored `MlStore` — `nativeStoreOpen` /
+  `nativeStorePutFace` / `nativeStoreFaceCount` / `nativeStoreCluster` /
+  `nativeStoreClose` — with the store's sqlite backed by bundled rusqlite
+  (`<dir>/ml-index.sqlite`, its own migrations), so embeddings persist
+  across engine sessions and clustering runs natively; clustering returns
+  a compact JSON summary (`faces`/`clusters`/descending `sizes`). Kotlin
+  side, `ml/engine/MlEngine.kt` maps the stride-197 flat floats to
+  `FaceEmbedding` rows behind the existing facade, and
+  `ml/index/IndexCoordinator.kt` orchestrates the round trip
+  (detect → embed → putFace → cluster over upstream's
+  `RECOMMENDED_DISTANCE_THRESHOLD`, 0.24, quoted from the vendored
+  `face_clustering`) as pure JVM-testable logic over an injectable
+  `FaceIndexEngine` seam — the Settings "index + cluster (r23 dogfood)"
+  slice drives it end-to-end on a device the same way the r22 slice drove
+  detection.
+
+### Changed
+
+- **CI**: the `engine` job's check/fmt/clippy gates already cover the new
+  crates automatically (workspace selectors, no crate lists), but no step
+  ran the vendored tests — it now runs `cargo test -p ente-vecdb -p
+  ente-photos-ml` explicitly. `engine/scripts/build-android.sh` needs NO
+  change: its `cargo ndk … build -p toad-ml-jni` pulls the new crates as
+  workspace dependencies of the bridge, so the `engine-android` job and the
+  `-PwithEngine` packaging are exactly the r22 ones (versionCode 27; no
+  new device builds per the standing maintainer directive).
+
+## [0.4.1-alpha] — 2026-11-02 (versionCode 26; per maintainer directive no
+  new device builds until Phase 5 completes)
 
 ### Added
 

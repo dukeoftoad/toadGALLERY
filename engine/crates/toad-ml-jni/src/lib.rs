@@ -1,16 +1,24 @@
-//! toadGALLERY face-detection JNI bridge (r22 spike).
+//! toadGALLERY face-detection + face-index JNI bridge (r22 spike, r23
+//! indexing round).
 //!
-//! Provenance: net-new toadGALLERY code, r22 — this crate is *our* adapter,
-//! not vendored from upstream. It links the AGPL-3.0 vendored Ente engine
-//! (`ente-ml`, `ente-image`) and exposes a deliberately narrow JNI surface for
-//! Kotlin's `io.github.dukeoftoad.gallery.ml.engine.MlEngineJni`:
+//! Provenance: net-new toadGALLERY code, r22/r23 — this crate is *our*
+//! adapter, not vendored from upstream. It links the AGPL-3.0 vendored
+//! Ente engine (`ente-ml`, `ente-image`) and the vendored persistence
+//! stack (`ente-photos-ml`), exposing a deliberately narrow JNI surface
+//! for Kotlin's `io.github.dukeoftoad.gallery.ml.engine.MlEngineJni`:
 //!
 //! * [`nativeInit`] — validate and register the pinned face models in a
 //!   models directory, then warm up ONNX Runtime.
 //! * [`nativeEngineInfo`] — one-line human-readable engine description.
-//! * [`nativeDetectFacesJpeg`] — face boxes + scores for a JPEG byte payload,
-//!   mapped to source-image pixel coordinates.
-//! * [`nativeRelease`] — tear the engine down.
+//! * [`nativeDetectFacesJpeg`] — face boxes + scores for a JPEG byte
+//!   payload, mapped to source-image pixel coordinates.
+//! * [`nativeDetectFaceEmbeddingsJpeg`] (r23) — the same detection plus
+//!   the 192-float MobileFaceNet embedding per face (flat stride 197).
+//! * [`nativeStoreOpen`] / [`nativeStorePutFace`] /
+//!   [`nativeStoreFaceCount`] / [`nativeStoreCluster`] /
+//!   [`nativeStoreClose`] (r23) — the app-private face-index store over
+//!   the vendored `ente-photos-ml` persistence + clustering stack.
+//! * [`nativeRelease`] — tear the engine (and the store) down.
 //!
 //! Contract notes (see also `README.md`):
 //!
@@ -18,11 +26,14 @@
 //!   never unwinds across the JNI boundary and is reported to Kotlin as
 //!   `java.lang.IllegalStateException("panic: …")`.
 //! * Engine failures are surfaced as `java.lang.IllegalStateException` whose
-//!   message is the Rust error's `Display` string.
+//!   message is the Rust error's `Display` string; the one caller-input
+//!   failure (a wrong embedding dimension on `nativeStorePutFace`) is
+//!   surfaced as `java.lang.IllegalArgumentException`.
 //! * The engine state lives in a process-global `OnceLock<Mutex<…>>` that is
-//!   held for the whole of `nativeInit`, `nativeDetectFacesJpeg` and
-//!   `nativeRelease`; inference is therefore serialized across calling
-//!   threads.
+//!   held for the whole of `nativeInit`, the detection/embedding calls and
+//!   `nativeRelease`; the face-index store has its own process-global mutex
+//!   held across every store operation. Inference and store access are
+//!   therefore serialized across calling threads.
 //! * All Java object access goes through the `jni` crate's safe wrappers; no
 //!   raw JNI pointers are handled outside them.
 
@@ -34,14 +45,19 @@ use std::{
 
 use jni::{
     JNIEnv,
-    objects::{JByteArray, JClass, JString},
-    sys::{self, jboolean, jfloatArray, jstring},
+    objects::{JByteArray, JClass, JFloatArray, JString},
+    sys::{self, jboolean, jdouble, jfloatArray, jlong, jstring},
 };
 
 mod engine;
+mod store;
 
 /// The bridge's single Java exception type; matches the Kotlin-side contract.
 const ILLEGAL_STATE_EXCEPTION: &str = "java/lang/IllegalStateException";
+
+/// The one caller-input Java exception type (wrong embedding dimension on
+/// `nativeStorePutFace`); matches the Kotlin-side contract.
+const ILLEGAL_ARGUMENT_EXCEPTION: &str = "java/lang/IllegalArgumentException";
 
 /// Bridges a fallible engine call into the JNI contract.
 ///
@@ -181,9 +197,11 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
 
 /// `MlEngineJni.nativeRelease(): Boolean`.
 ///
-/// Frees the engine. Returns `true` if an engine existed and was released,
-/// `false` if none did; either way the engine ends up uninitialized. Calling
-/// `nativeInit` again afterwards starts from a clean state.
+/// Frees the engine (and closes the r23 face-index store, if one is
+/// open). Returns `true` if an engine existed and was released, `false`
+/// if none did; either way the engine ends up uninitialized and the
+/// store closed. Calling `nativeInit` again afterwards starts from a
+/// clean state (and a later `nativeStoreOpen` reopens the store).
 #[expect(
     unsafe_code,
     reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
@@ -194,7 +212,215 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
     _class: JClass<'local>,
 ) -> jboolean {
     call_or_throw(&mut env, sys::JNI_FALSE, |_| {
-        Ok(if engine::release() {
+        let freed = engine::release();
+        // The r23 contract: engine release closes the store too. The
+        // store's own close result never masks the engine result.
+        store::close();
+        Ok(if freed { sys::JNI_TRUE } else { sys::JNI_FALSE })
+    })
+}
+
+/// `MlEngineJni.nativeDetectFaceEmbeddingsJpeg(jpegBytes: ByteArray):
+/// FloatArray`.
+///
+/// Decodes the JPEG bytes with `ente-image` and runs the ente-ml face
+/// pipeline (the same `analyze_image` flow as
+/// `nativeDetectFacesJpeg`), returning `N * (5 + 192)` flat row-major
+/// floats: per face `[x1, y1, x2, y2, score, e0..e191]` in source-image
+/// pixel coordinates with the 192-dimensional MobileFaceNet embedding
+/// appended. An empty array means "no faces". A runtime embedding
+/// dimension other than 192 is validated at the Rust boundary and throws
+/// `java.lang.IllegalStateException` (as does an uninitialized engine or
+/// any pipeline failure).
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeDetectFaceEmbeddingsJpeg<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    jpeg_bytes: JByteArray<'local>,
+) -> jfloatArray {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let jpeg_bytes = env
+            .convert_byte_array(&jpeg_bytes)
+            .map_err(|error| format!("read jpegBytes argument: {error}"))?;
+        let buffer = engine::detect_face_embeddings_jpeg(jpeg_bytes)?;
+        let array = env
+            .new_float_array(buffer.len() as i32)
+            .map_err(|error| format!("allocate embedding result array: {error}"))?;
+        if !buffer.is_empty() {
+            env.set_float_array_region(&array, 0, &buffer)
+                .map_err(|error| format!("fill embedding result array: {error}"))?;
+        }
+        Ok(array.into_raw() as jfloatArray)
+    })
+}
+
+/// `MlEngineJni.nativeStoreOpen(dir: String): Boolean`.
+///
+/// Opens the vendored `ente_photos_ml::ml_store::MlStore` at
+/// `<dir>/ml-index.sqlite` (creating the database through its own
+/// migrations). Idempotent: an already-open store returns true without
+/// reopening. Returns true on success; failure throws
+/// `java.lang.IllegalStateException`.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreOpen<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    dir: JString<'local>,
+) -> jboolean {
+    call_or_throw(&mut env, sys::JNI_FALSE, |env| {
+        let dir: String = env
+            .get_string(&dir)
+            .map_err(|error| format!("read dir argument: {error}"))?
+            .into();
+        store::open(&dir)?;
+        Ok(sys::JNI_TRUE)
+    })
+}
+
+/// `MlEngineJni.nativeStorePutFace(fileId: Long, embedding: FloatArray):
+/// Long`.
+///
+/// Inserts one face row through the vendored upstream insert path
+/// (`MlDb::bulk_insert_faces`, single-row form) and returns the face's
+/// per-file ordinal (> 0; the upstream schema keys faces by the
+/// `(file_id, face_id)` pair, so there is no rowid to return). A
+/// wrong-dimension embedding throws
+/// `java.lang.IllegalArgumentException`; a closed store or DB failure
+/// throws `java.lang.IllegalStateException`.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStorePutFace<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    file_id: jlong,
+    embedding: JFloatArray<'local>,
+) -> jlong {
+    let fail = |env: &mut JNIEnv<'local>, exception: &str, message: String| -> jlong {
+        let _ = env.throw_new(exception, &message);
+        0
+    };
+    // The caller-input failure is the IllegalArgumentException leg of the
+    // contract; everything below stays IllegalStateException. The array is
+    // read through the safe region-copy JNI helpers (no raw element
+    // pointers), sized from the array's own length.
+    let length = match env.get_array_length(&embedding) {
+        Ok(length) => length as usize,
+        Err(error) => {
+            return fail(
+                &mut env,
+                ILLEGAL_ARGUMENT_EXCEPTION,
+                format!("read embedding argument: {error}"),
+            );
+        }
+    };
+    let mut values = vec![0.0_f32; length];
+    if let Err(error) = env.get_float_array_region(&embedding, 0, &mut values) {
+        return fail(
+            &mut env,
+            ILLEGAL_ARGUMENT_EXCEPTION,
+            format!("read embedding argument: {error}"),
+        );
+    }
+    if values.len() != store::FACE_EMBEDDING_DIM {
+        return fail(
+            &mut env,
+            ILLEGAL_ARGUMENT_EXCEPTION,
+            format!(
+                "embedding must be {} floats; got {}",
+                store::FACE_EMBEDDING_DIM,
+                values.len()
+            ),
+        );
+    }
+    match store::put_face(file_id, &values) {
+        Ok(ordinal) => ordinal,
+        Err(message) => fail(&mut env, ILLEGAL_STATE_EXCEPTION, message),
+    }
+}
+
+/// `MlEngineJni.nativeStoreFaceCount(): Long`.
+///
+/// Total face rows in the store, via the vendored upstream count query
+/// (`MlDb::get_total_face_count`). Throws
+/// `java.lang.IllegalStateException` when the store is not open.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreFaceCount<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jlong {
+    call_or_throw(&mut env, 0, |_| store::face_count())
+}
+
+/// `MlEngineJni.nativeStoreCluster(distanceThreshold: Double): String`.
+///
+/// Runs the vendored upstream clustering over the faces in the store at
+/// `distanceThreshold` — `MlDb::get_faces_for_clustering()` →
+/// `MlStore::recluster_faces(...)` (upstream's own full-recluster flow:
+/// `face_clustering::recluster` + the upstream assignment/summary/centroid
+/// write paths) — and returns the compact summary JSON
+/// `{"faces":N,"clusters":M,"sizes":[s1,s2,...]}` with sizes descending.
+/// Throws `java.lang.IllegalStateException` on failure or a closed store.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreCluster<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    distance_threshold: jdouble,
+) -> jstring {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let json = store::cluster(distance_threshold)?;
+        let java_string = env
+            .new_string(&json)
+            .map_err(|error| format!("allocate cluster summary string: {error}"))?;
+        Ok(java_string.into_raw())
+    })
+}
+
+/// `MlEngineJni.nativeStoreClose(): Boolean`.
+///
+/// Closes the face-index store (flushing the ente-vecdb index handles).
+/// Idempotent; returns true.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreClose<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jboolean {
+    call_or_throw(&mut env, sys::JNI_FALSE, |_| {
+        Ok(if store::close() {
             sys::JNI_TRUE
         } else {
             sys::JNI_FALSE

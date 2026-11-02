@@ -62,6 +62,13 @@ const FILE_ID: i64 = 0;
 /// Message used when detection or release runs before a successful init.
 const NOT_INITIALIZED: &str = "engine is not initialized; call nativeInit(modelsDir) first";
 
+/// The face-embedding dimension on the r23 wire: upstream MobileFaceNet
+/// output (the vendored clustering's `CLUSTER_CENTROID_DIMENSIONS`).
+pub(crate) const FACE_EMBEDDING_DIM: usize = 192;
+
+/// The r23 embeddings wire stride: 5 box floats + [`FACE_EMBEDDING_DIM`].
+pub(crate) const EMBEDDING_STRIDE: usize = 5 + FACE_EMBEDDING_DIM;
+
 /// Warm-up image geometry: a tiny featureless gray image is enough to force
 /// the full decode → YOLO preprocessing → detector inference path.
 const WARMUP_WIDTH: u32 = 8;
@@ -207,6 +214,63 @@ pub(crate) fn detections_to_source_pixel_buffer(result: &AnalyzeImageResult) -> 
     buffer
 }
 
+/// Runs face detection + embedding over JPEG bytes. Returns the flat
+/// `[x1, y1, x2, y2, score, e0..e191, …]` buffer produced by
+/// [`embeddings_to_source_pixel_buffer`].
+pub(crate) fn detect_face_embeddings_jpeg(jpeg_bytes: Vec<u8>) -> Result<Vec<f32>, String> {
+    let engine = lock();
+    let state = engine.as_ref().ok_or_else(|| NOT_INITIALIZED.to_string())?;
+    let result = analyze_image(AnalyzeImageRequest {
+        file_id: FILE_ID,
+        source: ImageSource::Bytes(jpeg_bytes),
+        run_faces: true,
+        run_clip: false,
+        run_pets: false,
+        generate_face_crops: false,
+        model_paths: state.model_paths.clone(),
+    })
+    .map_err(|error| format!("face embedding failed: {error}"))?;
+    embeddings_to_source_pixel_buffer(&result)
+}
+
+/// Flattens the ente-ml face results into the r23 JNI wire format
+/// `[x1, y1, x2, y2, score, e0..e191, …]` (row-major, stride
+/// [`EMBEDDING_STRIDE`]), same box/score mapping as
+/// [`detections_to_source_pixel_buffer`].
+///
+/// The embedding dimension is validated HERE, at the Rust boundary: a
+/// runtime model whose output dim differs from [`FACE_EMBEDDING_DIM`] is a
+/// broken engine contract and surfaces as an error (Kotlin throws
+/// `IllegalStateException`), never as silently corrupt stride math.
+pub(crate) fn embeddings_to_source_pixel_buffer(
+    result: &AnalyzeImageResult,
+) -> Result<Vec<f32>, String> {
+    let Some(faces) = result.faces.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let width = result.decoded_image_size.width as f32;
+    let height = result.decoded_image_size.height as f32;
+    let mut buffer = Vec::with_capacity(faces.len() * EMBEDDING_STRIDE);
+    for face in faces {
+        if face.embedding.len() != FACE_EMBEDDING_DIM {
+            return Err(format!(
+                "face embedding has unexpected dimension: expected {FACE_EMBEDDING_DIM}, found {}",
+                face.embedding.len()
+            ));
+        }
+        let [x_min, y_min, x_max, y_max] = face.detection.box_xyxy;
+        buffer.extend_from_slice(&[
+            x_min * width,
+            y_min * height,
+            x_max * width,
+            y_max * height,
+            face.detection.score,
+        ]);
+        buffer.extend_from_slice(&face.embedding);
+    }
+    Ok(buffer)
+}
+
 fn format_engine_info() -> String {
     format!("ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={FACE_MODELS_LABEL}")
 }
@@ -326,9 +390,47 @@ mod tests {
     }
 
     #[test]
+    fn embeddings_map_to_the_stride_197_wire_format() {
+        let mut with_embedding = face_result(0.75, [0.1, 0.2, 0.3, 0.4]);
+        with_embedding.embedding = vec![0.5; FACE_EMBEDDING_DIM];
+        let result = analysis(Some(vec![with_embedding]), 1000, 500);
+
+        let buffer = embeddings_to_source_pixel_buffer(&result).expect("a 192-dim embedding maps");
+        assert_eq!(buffer.len(), EMBEDDING_STRIDE);
+        assert_eq!(&buffer[..5], &[100.0, 100.0, 300.0, 200.0, 0.75]);
+        assert!(buffer[5..].iter().all(|&value| value == 0.5));
+    }
+
+    #[test]
+    fn a_wrong_runtime_embedding_dimension_is_an_error_not_bad_stride_math() {
+        let mut short = face_result(0.9, [0.0, 0.0, 1.0, 1.0]);
+        short.embedding = vec![0.5; FACE_EMBEDDING_DIM - 1];
+        let result = analysis(Some(vec![short]), 64, 64);
+
+        let error = embeddings_to_source_pixel_buffer(&result)
+            .expect_err("a non-192 embedding is a broken engine contract");
+        assert!(error.contains("192"));
+
+        let mut over = face_result(0.9, [0.0, 0.0, 1.0, 1.0]);
+        over.embedding = vec![0.5; FACE_EMBEDDING_DIM + 1];
+        let result = analysis(Some(vec![over]), 64, 64);
+        assert!(embeddings_to_source_pixel_buffer(&result).is_err());
+    }
+
+    #[test]
     fn absent_or_empty_face_lists_map_to_an_empty_buffer() {
         assert!(detections_to_source_pixel_buffer(&analysis(Some(Vec::new()), 64, 64)).is_empty());
         assert!(detections_to_source_pixel_buffer(&analysis(None, 64, 64)).is_empty());
+        assert!(
+            embeddings_to_source_pixel_buffer(&analysis(Some(Vec::new()), 64, 64))
+                .expect("no faces")
+                .is_empty()
+        );
+        assert!(
+            embeddings_to_source_pixel_buffer(&analysis(None, 64, 64))
+                .expect("no faces")
+                .is_empty()
+        );
     }
 
     #[test]

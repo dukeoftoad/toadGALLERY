@@ -17,9 +17,9 @@ import org.junit.rules.TemporaryFolder
  * Contract tests for the pinned model catalog + provisioning core (r21, audit
  * workstream 3). These run hermetically: the transport is faked and the
  * provisioner gets a tiny synthetic catalog, so no test hashes megabytes and
- * no test needs the INTERNET permission --- mirroring the fact that the
- * production HTTP downloader does not exist yet (ADR-0020 egress rules land
- * next round).
+ * no test needs the INTERNET permission --- the r22 production HTTP
+ * downloader has its own hermetic loopback suite (`HttpModelDownloaderTest`)
+ * and the privacy suites pin its egress surface.
  */
 class ModelProvisionerTest {
 

@@ -27,12 +27,12 @@ import java.util.concurrent.CancellationException
  * - no bytes are ever read into memory whole: verification streams
  *   ([ModelVerifier]).
  *
- * The transport is injected ([ModelDownloader]): this round pins the catalog
- * and the verify/install mechanics; the HTTP implementation lands with the
- * ADR-0020 egress rules in the next round, so nothing here needs the INTERNET
- * permission and unit tests run hermetically against fakes. All work is
- * blocking IO; the Phase 5 index coordinator wraps calls in its own bounded
- * dispatcher.
+ * The transport is injected ([ModelDownloader]): the production transport
+ * is r22's [HttpModelDownloader] --- the ADR-0020 single-host allowlist ---
+ * while unit tests run hermetically against fakes. All work is blocking
+ * IO; callers run it off the main thread (the r22 Settings dogfood section
+ * uses Dispatchers.IO; the Phase 5 index coordinator will own its own
+ * bounded dispatcher).
  *
  * [catalog] defaults to [ModelManifest.all]; tests inject tiny synthetic
  * specs so no test ever hashes megabytes.
@@ -72,6 +72,13 @@ class ModelProvisioner(
 
     private val dir: File = storeDir
     private val receiptFile: File = File(storeDir, RECEIPT_NAME)
+
+    /**
+     * The app-private install root (r22): the directory an engine session
+     * is opened over --- [MlEngine.initialize] passes it to
+     * `nativeInit`. May not exist until the first [provision] creates it.
+     */
+    val modelsDir: File get() = dir
 
     private fun tempFile(spec: ModelManifest.Model) = File(dir, spec.fileName + PART_SUFFIX)
     private fun finalFile(spec: ModelManifest.Model) = File(dir, spec.fileName)

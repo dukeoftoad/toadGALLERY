@@ -3,14 +3,26 @@
 
     <!-- Phase 3: media access for the Photos timeline (issue #25).
          API 33+ uses the granular READ_MEDIA_* permissions; pre-33 falls back
-         to READ_EXTERNAL_STORAGE capped at maxSdkVersion=32.
-         No INTERNET (ADR-0014 Layer 1; ADR-0020's model-download-only grant
-         arrives with the r22 downloader, not before). -->
+         to READ_EXTERNAL_STORAGE capped at maxSdkVersion=32. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <!-- r22 (ADR-0020 §1): the model-fetch-only INTERNET grant, landed with
+         the r22 downloader (HttpModelDownloader). The app may open network
+         connections for exactly ONE purpose: downloading the pinned AI model
+         assets (ModelManifest) from the single allowlisted host pinned in
+         ml/engine/HttpModelDownloader.kt (MODEL_HOST), every byte verified
+         (size + SHA-256) before install. This amends ADR-0014's
+         offline-by-construction for model fetches ONLY: no account, no
+         telemetry, no crash reporting, no tile/vector/config fetches of any
+         other kind; media, embeddings and indexes never cross the network.
+         The build-time merged-manifest gate (InternetPermissionGateTask)
+         enforces the allowlist-file protocol; the JVM/instrumented privacy
+         suites pin the host and the URL surface. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Phase 4: EXIF location consent (audit decision #1; see the
          data/media/location package and ExifReader's KDoc). A runtime

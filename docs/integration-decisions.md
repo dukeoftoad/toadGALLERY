@@ -4,9 +4,18 @@
 choice. Decisions are never edited in place after acceptance — a superseding ADR is added.
 Statuses: `PROPOSED` (awaiting phase evidence) → `ACCEPTED` (evidence supports it) → `SUPERSEDED`.
 
-**Latest revision:** 2026-11-02 — ADR-0020 introduced (on-device AI model delivery:
+**Latest revision:** 2026-11-02 (r22) — ADR-0020 revised by its delivery round
+(see the revision note on the ADR): the model-fetch INTERNET permission is now
+present in the manifest, the downloader host is pinned to `models.ente.com`
+(verified against the live host: 200-direct, no redirects, exact pinned
+content-lengths) over plain `HttpURLConnection` with zero new dependencies, and
+the egress boundary is enforced by the extended JVM + instrumented privacy
+suites. The vendored engine's Android ABI build lands in the same round
+(cargo-ndk via `engine/scripts/build-android.sh`, packaged only under Gradle
+`-PwithEngine`; gated by the new `engine-android` CI job).
+Previously (2026-11-02, r21): ADR-0020 introduced (on-device AI model delivery:
 pinned runtime download, offline-verified — the Phase 5 Ente engine workstream's
-delivery policy; the app holds no INTERNET permission until r22).
+delivery policy; the app held no INTERNET permission before r22).
 Previously (2026-10-31): ADR-0015 amended by the issue #38 review follow-ups: MediaStore
 change notifications now drive a debounced `pagingSource.invalidate()` (a re-anchored generational
 refresh) instead of drifting appends, and the slice's Coil-packaging claim was corrected — Coil 2.x
@@ -1080,6 +1089,47 @@ Ente-derived AI engine workstream inside Phase 5; resolves the audit's
 "Runtime model-download policy conflict" and refines ADR-0010's model-asset
 wording for that engine; amends ADR-0014 for model fetches only — the
 INTERNET permission itself lands in r22).
+
+**Revision (2026-11-02, r22 — the delivery round).** The r21-deferred pieces
+of this ADR landed; each item below records what actually shipped:
+
+- **§1 (model-only INTERNET grant): in force.** The source manifest declares
+  `android.permission.INTERNET` exactly once, justified in the manifest
+  comment and bounded by the merged-manifest privacy gate's allowlist
+  protocol --- the single ADR-0020 entry is the only one `PrivacyPolicyTest`
+  ever permits in the allowlist file (entry added per the protocol's three
+  conditions: this ADR, tracking issue #94, and the r22 PR description).
+- **§4 (strict host allowlist): the pin is `models.ente.com`** --- the
+  documented fallback, i.e. the only host the vendored upstream catalog itself
+  references --- chosen after verification against the live host: all five
+  core assets answer HTTP 200 directly, no redirects, and exact pinned
+  content-lengths. The transport is plain `HttpURLConnection` behind the r21
+  `ModelDownloader` seam: ZERO new dependencies (no OkHttp/Retrofit enters the
+  tree for one pinned GET surface --- the earlier `OkHttpModelDownloader`
+  sketch in `docs/phase-5/ente-pin.md` is corrected by the r22 delivery).
+  Redirects fail closed (3xx can only be a mis-aimed or tampered endpoint) and
+  a `Content-Length` that disagrees with the pin aborts before the first
+  byte; fetch URLs are built from parts over a structurally guarded file
+  name, so path traversal / absolute-URL / query / fragment injection is
+  rejected before any socket can exist. A project-controlled model-mirror
+  repository remains a documented future option, not shipped.
+- **§6 (egress gate extension): shipped as the extended privacy suites.**
+  JVM side, binding in CI (`testDebugUnitTest`): the permission-set pin (the
+  manifest's five permissions and no second network permission), the
+  allowlist protocol, the URL surface for every one of the eleven manifest
+  entries (exactly `https://models.ente.com/<fileName>` --- no port, no
+  query, no fragment), the host-literal source scan of the `ml/` package,
+  and the file-name guard's injection matrix. Instrumented side
+  (`PrivacyEgressTest`, the manual physical-device release gate): the
+  INTERNET grant is asserted present, and non-allowlisted targets are
+  refused by the URL guard before any connection can exist (the pre-r22
+  raw-socket probe is honestly retired --- the OS no longer blocks sockets,
+  which was the point of the grant).
+- **Progress reporting:** the delivery path surfaces live per-asset presence
+  updates (the r21 provisioner's per-asset callback, re-deriving installed/
+  missing after each verified install); byte-level download progress is
+  deliberately not added in r22, keeping the r21 provisioner contract and
+  its tests untouched.
 
 **Context.** The Phase 4 compatibility audit flagged a hard conflict: ADR-0010
 says AI models ship inside the APK, while the Ente engine we are porting

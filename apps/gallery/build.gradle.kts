@@ -6,6 +6,7 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android)
@@ -141,7 +142,19 @@ android {
         // + JNI bridge are r22). Per maintainer directive (2026-11-02, after
         // build 23): NO new device builds until Phase 5 completes; this and
         // subsequent rounds ride CI from main only.
-        versionCode = 25
+        // versionCode 26 (r22 round): the Android engine bridge --- the two
+        // r21-named r22 deliverables of ADR-0020: the HTTP model downloader
+        // behind the r21 `ModelDownloader` seam, pinned to models.ente.com
+        // (the app's first and only network permission, gated by the egress
+        // suites), and the Rust JNI bridge crate engine/crates/toad-ml-jni
+        // (net-new ours, AGPL-3.0 via the engine workspace), built for
+        // Android ABIs by engine/scripts/build-android.sh and packaged ONLY
+        // when Gradle runs with -PwithEngine (the withEngine block below) ---
+        // the default build stays byte-for-byte the r21 one. Per maintainer
+        // directive (2026-11-02, after build 23): NO new device builds until
+        // Phase 5 completes; this and subsequent rounds ride CI from main
+        // only.
+        versionCode = 26
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
@@ -213,6 +226,57 @@ android {
     dependenciesInfo {
         includeInApk = false
     }
+}
+
+// --- Optional Rust engine packaging (r22, ADR-0020) ---
+// The engine's Android native libraries --- the JNI bridge libtoad_ml_jni.so
+// plus the ONNX Runtime libonnxruntime.so it dynamically loads --- are
+// packaged ONLY when Gradle is invoked with -PwithEngine. Without the
+// property NOTHING here exists: no task, no extra jniLibs source dir, and
+// the build is byte-for-byte the pre-r22 one (no Rust toolchain needed; the
+// Kotlin engine facade treats a missing native library as an unavailable
+// engine). With it, `buildRustEngine` runs engine/scripts/build-android.sh
+// (cargo-ndk release build for arm64-v8a; run the script with --all to also
+// stage x86_64), which stages BOTH libraries into the build-dir folder
+// rust-jniLibs/ --- never src/main, so the source tree stays clean --- and
+// that folder is added below as a jniLibs srcDir. The script needs bash
+// (POSIX shell / WSL).
+val withEngine = providers.gradleProperty("withEngine").isPresent
+if (withEngine) {
+    val buildRustEngine = tasks.register<Exec>("buildRustEngine") {
+        group = "build"
+        description =
+            "Builds the vendored Rust engine for Android (cargo-ndk) and stages " +
+                "libtoad_ml_jni.so + libonnxruntime.so into the build-dir jniLibs " +
+                "folder (r22, ADR-0020)."
+        workingDir = rootProject.projectDir
+        commandLine("bash", rootProject.file("engine/scripts/build-android.sh").absolutePath)
+        // ANDROID_HOME for the script's NDK discovery: the ambient env first
+        // (CI runners export it), else local.properties sdk.dir --- the same
+        // place AGP itself resolves the SDK from. With neither, the script's
+        // own discovery (ANDROID_NDK_HOME, common SDK roots) applies.
+        val androidHome = providers.environmentVariable("ANDROID_HOME").orNull
+            ?: Properties().apply {
+                rootProject.file("local.properties").takeIf { it.isFile }
+                    ?.inputStream()?.use { load(it) }
+            }.getProperty("sdk.dir")
+        if (androidHome != null) {
+            environment("ANDROID_HOME", androidHome)
+        }
+    }
+    android {
+        sourceSets {
+            // AGP 9 forbids Provider instances on the sourceSet API; resolve
+            // to a plain File at configuration time (the directory is created
+            // by buildRustEngine before this srcDir is ever read).
+            getByName("main").jniLibs.srcDir(
+                layout.buildDirectory.dir("rust-jniLibs").get().asFile
+            )
+        }
+    }
+    // preBuild is registered by AGP after this script evaluates, so anchor
+    // the dependency the same way the privacy gate anchors on assemble.
+    tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(buildRustEngine) }
 }
 
 /**

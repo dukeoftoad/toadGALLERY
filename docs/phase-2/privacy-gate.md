@@ -82,9 +82,13 @@ It still proves, on a real system image:
 ## Allowlist protocol
 
 The allowlist is
-[`apps/gallery/internet-permission-allowlist.txt`](../../apps/gallery/internet-permission-allowlist.txt)
-and it **ships empty**. An entry (`android.permission.INTERNET`) may only be
-added when all of the following hold:
+[`apps/gallery/internet-permission-allowlist.txt`](../../apps/gallery/internet-permission-allowlist.txt).
+It shipped **empty** through Phase 4; since r22 it carries exactly one
+entry (issue #94): the first-party INTERNET declaration behind ADR-0020's
+model downloads (pinned host `models.ente.com` — the ADR's revision note
+records the egress gates that scope it). An entry
+(`android.permission.INTERNET`) may only be added when all of the
+following hold:
 
 1. A superseding or new ADR in
    [`docs/integration-decisions.md`](../integration-decisions.md) authorizes

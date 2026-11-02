@@ -1,9 +1,11 @@
 # Licensing and Attribution
 
-**Status:** Living document (updated every phase) · **Last revised:** 2026-11-02 (v2.3 —
-Ente ML engine vendored under ADR-0020 with the AGPL-3.0 one-way-compatibility
-consequence; still features-only per ADR-0008 otherwise; Aves `exifinterface` fork port
-cancelled; `org.fossify:commons` slated for removal per compose-migration).
+**Status:** Living document (updated every phase) · **Last revised:** 2026-11-02 (v2.4 —
+r22 records the net-new `engine/crates/toad-ml-jni` JNI bridge crate, AGPL-3.0 via the
+engine workspace; v2.3 — Ente ML engine vendored under ADR-0020 with the AGPL-3.0
+one-way-compatibility consequence; still features-only per ADR-0008 otherwise; Aves
+`exifinterface` fork port cancelled; `org.fossify:commons` slated for removal per
+compose-migration).
 This is engineering compliance tracking, not legal advice.
 
 ## 1. Governing decision
@@ -95,6 +97,7 @@ rationale changes.
 | `engine/crates/ente-ml/**` | `ente/ente` `rust/crates/ml` @ `423b2d80` | `423b2d80d9ec89d45f5680cb1e1d777bac225f41` | AGPL-3.0 | Workspace-root recreation (dependency subset), `license.workspace = true` added; otherwise byte-identical; `engine/NOTICE.md` is the authoritative adaptation list |
 | `engine/crates/ente-assets/**` | `ente/ente` `rust/crates/assets` @ `423b2d80` | (same pin) | AGPL-3.0 | Directory rename only + `license.workspace = true` |
 | `engine/crates/ente-image/**` | `ente/ente` `rust/crates/image` @ `423b2d80` | (same pin) | AGPL-3.0 | Directory rename only + `license.workspace = true`; keeps upstream's git-pinned `heic-decoder` dep |
+| `engine/crates/toad-ml-jni/**` | net-new Rust (r22, the JNI bridge over `ente-ml`/`ente-image`) | --- | AGPL-3.0 | Not vendored --- net-new toadGALLERY code (the Kotlin-facing cdylib); `license.workspace = true` places it in the AGPL-3.0 engine workspace because it compiles against the AGPL vendored crates; the §2 distributed-binary consequence is unchanged |
 | `apps/gallery/src/main/kotlin/io/github/dukeoftoad/gallery/ml/engine/*` | net-new Kotlin | --- | GPL-3.0 (project) | Model manifest (all 11 assets match the pinned Rust catalog name+size+digest, test-pinned), verifier, provisioner --- Ente-inspired reimplementations, not ports |
 
 > The only upstream-derived artifact under ADR-0008 proper is the root `LICENSE` --- the

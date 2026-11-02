@@ -8,6 +8,7 @@ import coil.decode.VideoFrameDecoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.io.File
 import io.github.dukeoftoad.gallery.data.catalogue.room.MediaCatalogueDatabase
 import io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
 import io.github.dukeoftoad.gallery.data.diag.DiagLog
@@ -25,6 +26,8 @@ import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityG
 import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
 import io.github.dukeoftoad.gallery.data.media.location.ItemLocationWriter
 import io.github.dukeoftoad.gallery.data.media.location.LocationReadGate
+import io.github.dukeoftoad.gallery.ml.engine.HttpModelDownloader
+import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 
 /**
  * toadGALLERY's [Application]; exists to wire Coil's video frame decoder into
@@ -86,13 +89,15 @@ import io.github.dukeoftoad.gallery.data.media.location.LocationReadGate
  * failed" report carried no such line). Nothing else changes here: the
  * line is pure [DiagLog] bookkeeping with no secrets (ADR-0014).
  *
- * Privacy (ADR-0006 / ADR-0014): [VideoFrameDecoder] decodes frames purely
- * on-device through `MediaMetadataRetriever`; `coil-video` is a decoder
- * artifact, not a network component, and this builder adds no network code.
- * The offline guarantee rests on the app never holding the INTERNET
- * permission --- enforced at build time by the merged-manifest privacy gate
- * and proven at runtime by `PrivacyEgressTest` --- which a locally built
- * `ImageLoader` cannot weaken.
+ * Privacy (ADR-0006 / ADR-0014, amended by ADR-0020): [VideoFrameDecoder]
+ * decodes frames purely on-device through `MediaMetadataRetriever`;
+ * `coil-video` is a decoder artifact, not a network component, and this
+ * builder adds no network code. Since r22 the app holds the INTERNET
+ * permission for exactly the ADR-0020 model fetch (the [modelProvisioner]
+ * above; pinned single host, verified bytes) --- enforced at build time by
+ * the merged-manifest privacy gate + allowlist protocol and at runtime by
+ * the privacy suites; media, embeddings and indexes never cross the
+ * network.
  */
 class ToadGalleryApplication : Application(), ImageLoaderFactory {
 
@@ -123,6 +128,24 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
      */
     val mediaCatalogue: RoomMediaCatalogue by lazy {
         RoomMediaCatalogue(MediaCatalogueDatabase.build(this).catalogueDao())
+    }
+
+    /**
+     * The process-wide model provisioner (r22, ADR-0020):
+     * verify-then-stage-then-commit delivery of the pinned FACE/SEMANTIC
+     * assets into `filesDir/models`, over the REAL HTTP transport
+     * ([HttpModelDownloader] --- the single allowlisted host; the INTERNET
+     * permission exists for exactly this fetch, see the manifest). Lazy
+     * like [mediaCatalogue]: constructing it allocates nothing, opens no
+     * files and touches no network --- the first reader is the Settings
+     * dogfood section's download/self-test action. One instance per
+     * process so the receipt file is never concurrently rewritten.
+     */
+    val modelProvisioner: ModelProvisioner by lazy {
+        ModelProvisioner(
+            storeDir = File(filesDir, "models"),
+            downloader = HttpModelDownloader(),
+        )
     }
 
     /**

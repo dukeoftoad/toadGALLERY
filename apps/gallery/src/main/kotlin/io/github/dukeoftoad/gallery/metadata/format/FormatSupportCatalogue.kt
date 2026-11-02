@@ -440,7 +440,7 @@ object FormatSupportCatalogue {
         ),
         FormatSupport(
             format = SniffedFormat.MP4_VIDEO,
-            signature = "ftyp video brands: isom, iso2, mp41, mp42, avc1, dash, mp4*",
+            signature = "ftyp major brand: isom, iso2, mp41, mp42, avc1, dash, mp4*",
             stillDecode = StillDecodeSupport.NOT_A_STILL_IMAGE_FORMAT,
             animated = AnimatedSupport.NOT_AN_IMAGE_FORMAT,
             exifRead = ExifReadSupport.NO_STANDARD_EXIF_CARRIER,
@@ -472,7 +472,7 @@ object FormatSupportCatalogue {
         ),
         FormatSupport(
             format = SniffedFormat.THREEGP,
-            signature = "ftyp brands: 3gp*, 3g2*",
+            signature = "ftyp major brand: 3gp*, 3g2*",
             stillDecode = StillDecodeSupport.NOT_A_STILL_IMAGE_FORMAT,
             animated = AnimatedSupport.NOT_AN_IMAGE_FORMAT,
             exifRead = ExifReadSupport.NO_STANDARD_EXIF_CARRIER,

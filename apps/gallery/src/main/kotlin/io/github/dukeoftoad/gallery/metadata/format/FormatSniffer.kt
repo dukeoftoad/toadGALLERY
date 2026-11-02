@@ -37,12 +37,19 @@ enum class SniffedFormat {
      * HEIF/HEIC still-image family: an `ftyp` box carrying one of the
      * ISO/IEC 23008-12 image brands (heic, heix, heim, heis, hevc, hevx,
      * mif1, msf1). `hevc`/`hevx` are the spec's image-SEQUENCE brands and
-     * are deliberately classified as HEIF (the image reading); some HEVC
-     * camcorder files also carry them, which the audit doc flags.
+     * are deliberately classified as HEIF (the image reading) --- when no
+     * VIDEO major brand declared the file first: some HEVC camcorder
+     * files carry `hevc` as a COMPATIBLE brand behind a `qt  `/`isom`
+     * major, and those classify by their major brand (the exact case the
+     * audit doc flags; see [FormatSniffer]).
      */
     HEIF,
 
-    /** AVIF: an `ftyp` box carrying the `avif` or `avis` brand (still checked first, mirroring androidx's own sniff order). */
+    /**
+     * AVIF: an `ftyp` box carrying the `avif` or `avis` brand (checked
+     * before the HEIF set within the image scan, mirroring androidx's own
+     * sniff order).
+     */
     AVIF,
 
     /** Generic TIFF (`II*`/`MM*` magic) with no recognized RAW structure. PEF/SRW/NRW RAWs honestly land here too. */
@@ -65,13 +72,16 @@ enum class SniffedFormat {
     /** Sony ARW candidate: TIFF magic plus a Make tag starting "SONY" (same honesty rule as [TIFF_RAW_NIKON]). */
     TIFF_RAW_SONY,
 
-    /** MP4-family video: an `ftyp` box with ISO-BMFF video brands (isom, iso2, mp41, mp42, avc1, dash, ...). */
+    /**
+     * MP4-family video: an `ftyp` box whose MAJOR brand is an ISO-BMFF
+     * video brand (isom, iso2, mp41, mp42, avc1, dash, ...).
+     */
     MP4_VIDEO,
 
     /** QuickTime movie: an `ftyp` box whose major brand is `qt  `. */
     QUICKTIME_MOV,
 
-    /** 3GPP/3GPP2 video: an `ftyp` box with a `3gp*` or `3g2*` brand. */
+    /** 3GPP/3GPP2 video: an `ftyp` box whose MAJOR brand is a `3gp*`/`3g2*` brand. */
     THREEGP,
 
     /**
@@ -181,12 +191,33 @@ object FormatSniffer {
      * then sniffs the collected prefix. Does NOT close [stream] ---
      * ownership stays with the caller (the MediaReadHandle boundary owns
      * stream lifetimes).
+     *
+     * NEVER THROWS, exactly like the byte overload --- the deliberate
+     * choice, weighed against documenting a divergence instead: a read
+     * that fails partway (`IOException`) is treated as an ABNORMAL END
+     * of the stream, the loop stops, and the verdict comes from the
+     * bytes already collected --- which is precisely how the byte
+     * overload treats a truncated prefix (a fully-present signature
+     * still proves its family; nothing collected proves nothing).
+     * Swallowing the exception hides no real error in practice: the
+     * stream's owner (the read boundary) still surfaces provider
+     * failures on its own reads, while this overload is a
+     * classification call, not an error-reporting channel --- and a
+     * throw would be the one code path out of an otherwise
+     * never-throws object.
      */
     fun sniff(stream: InputStream): SniffedFormat {
         val prefix = ByteArray(MAX_SNIFF_BYTES)
         var total = 0
         while (total < prefix.size) {
-            val read = stream.read(prefix, total, prefix.size - total)
+            val read = try {
+                stream.read(prefix, total, prefix.size - total)
+            } catch (e: IOException) {
+                // Abnormal end of stream: the collected prefix is all
+                // the proof there is (see the KDoc for why this is the
+                // byte overload's contract, not a swallowed error).
+                break
+            }
             if (read <= 0) break
             total += read
         }
@@ -228,17 +259,44 @@ object FormatSniffer {
     // ---- ISO-BMFF (ftyp brands) ----------------------------------------
 
     /**
-     * Scans the `ftyp` box's major plus compatible brands and classifies
-     * by the first matching family, in priority order: AVIF (so an AVIF
-     * also listing `mif1` is AVIF, mirroring androidx's own sniff), HEIF
-     * image brands, QuickTime, 3GPP, then the MP4 family. A brand list
-     * truncated mid-box simply stops adding brands --- available bytes
-     * only, nothing fabricated; an unrecognized brand set is UNKNOWN.
+     * Classifies the `ftyp` box in two deliberate halves:
+     *
+     *  - the MAJOR brand decides the VIDEO families (QuickTime, the MP4
+     *    set, 3GPP/3GPP2) before anything is scanned. A compatible-brand
+     *    list is a compatibility DECLARATION, not a primary family
+     *    claim: a QuickTime/MP4 HEVC camcorder file can carry the
+     *    image-sequence brand `hevc` in its list, and classifying on the
+     *    mixed list handed back the still-image verdict (playback =
+     *    NOT_A_VIDEO_CONTAINER) for a playable video --- the exact file
+     *    the audit doc flags. Video families are therefore declared by
+     *    the major brand ONLY; an exotic major with video brands in its
+     *    compatible list stays UNKNOWN rather than guessing a family.
+     *  - image classification falls back to scanning the major PLUS
+     *    compatible brands, AVIF first (so an AVIF also listing
+     *    mif1/heic is AVIF, mirroring androidx's own sniff order), then
+     *    the HEIF image set --- a generic container (mif1) carries its
+     *    real image brand in the compatible list, which is why the
+     *    image half needs the scan the video half does not.
+     *
+     * A brand list truncated mid-box simply stops adding brands ---
+     * available bytes only, nothing fabricated; an unrecognized brand
+     * set is UNKNOWN.
      */
     private fun isoBmffVariant(bytes: ByteArray): SniffedFormat {
-        val brands = ArrayList<String>(8)
         val majorBrand = fourccAt(bytes, FTYP_MAJOR_BRAND_OFFSET)
             ?: return SniffedFormat.UNKNOWN
+        // Video families, from the major brand alone (see the KDoc for
+        // why the compatible list must not be consulted here).
+        if (majorBrand == QUICKTIME_BRAND) return SniffedFormat.QUICKTIME_MOV
+        if (majorBrand in MP4_BRANDS || majorBrand.startsWith(MP4_PREFIX)) {
+            return SniffedFormat.MP4_VIDEO
+        }
+        if (majorBrand.startsWith(THREEGP_PREFIX) || majorBrand.startsWith(THREEG2_PREFIX)) {
+            return SniffedFormat.THREEGP
+        }
+        // Image classification: the full brand scan (major plus
+        // compatible brands).
+        val brands = ArrayList<String>(8)
         brands.add(majorBrand)
         val declaredBoxSize = u32At(bytes, FTYP_BOX_SIZE_OFFSET, littleEndian = false)
         val declaredEnd =
@@ -257,13 +315,6 @@ object FormatSniffer {
             return SniffedFormat.AVIF
         }
         if (brands.any { it in HEIF_IMAGE_BRANDS }) return SniffedFormat.HEIF
-        if (brands.any { it == QUICKTIME_BRAND }) return SniffedFormat.QUICKTIME_MOV
-        if (brands.any { it.startsWith(THREEGP_PREFIX) || it.startsWith(THREEG2_PREFIX) }) {
-            return SniffedFormat.THREEGP
-        }
-        if (brands.any { it in MP4_BRANDS || it.startsWith(MP4_PREFIX) }) {
-            return SniffedFormat.MP4_VIDEO
-        }
         return SniffedFormat.UNKNOWN
     }
 

@@ -1,6 +1,8 @@
 package io.github.dukeoftoad.gallery.metadata.format
 
 import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -189,6 +191,31 @@ class FormatSnifferTest {
         val box = hex(0x00, 0x00, 0x00, 0x14) + ascii("ftyp") + ascii("qt  ") +
             hex(0x00, 0x02, 0x00, 0x00) + ascii("qt  ")
         assertEquals(SniffedFormat.QUICKTIME_MOV, FormatSniffer.sniff(box))
+    }
+
+    @Test
+    fun `a quicktime camcorder file with an hevc compatible brand is a mov not a heif`() {
+        // THE audit doc's flagged case: a QuickTime/MP4 HEVC camcorder
+        // file can carry the image-sequence brand `hevc` in its
+        // COMPATIBLE list. The MAJOR brand declares the family (qt ->
+        // QUICKTIME_MOV) and the compatible-brand scan classifies
+        // images only --- classifying on the mixed list used to hand
+        // back the still-image verdict (playback = NOT_A_VIDEO_CONTAINER)
+        // for a playable video.
+        val box = hex(0x00, 0x00, 0x00, 0x18) + ascii("ftyp") + ascii("qt  ") +
+            hex(0x00, 0x02, 0x00, 0x00) + ascii("qt  ") + ascii("hevc")
+        assertEquals(SniffedFormat.QUICKTIME_MOV, FormatSniffer.sniff(box))
+    }
+
+    @Test
+    fun `an mp4 with a 3gp compatible brand stays the mp4 verdict`() {
+        // Same rule, the MP4 side: the major brand (isom) declares the
+        // video family, and a `3gp*` COMPATIBLE brand --- a
+        // compatibility declaration, not a primary family claim --- must
+        // not override it (the pre-fix scan order answered THREEGP here).
+        val box = hex(0x00, 0x00, 0x00, 0x18) + ascii("ftyp") + ascii("isom") +
+            hex(0x00, 0x00, 0x02, 0x00) + ascii("isom") + ascii("3gp5")
+        assertEquals(SniffedFormat.MP4_VIDEO, FormatSniffer.sniff(box))
     }
 
     @Test
@@ -386,6 +413,39 @@ class FormatSnifferTest {
         assertEquals(SniffedFormat.JPEG, FormatSniffer.sniff(ByteArrayInputStream(jpeg)))
         // An empty stream proves nothing, same as an empty array.
         assertEquals(SniffedFormat.UNKNOWN, FormatSniffer.sniff(ByteArrayInputStream(ByteArray(0))))
+    }
+
+    @Test
+    fun `a stream failing mid-read never throws - the collected prefix is the whole proof`() {
+        // The byte overload's never-throws doctrine extends to the stream
+        // overload: an IOException mid-read ends the read early ---
+        // exactly like EOF --- and the verdict comes from the bytes
+        // collected before the failure (a fully-present signature still
+        // proves its family; nothing collected still proves nothing).
+        // The stream's owner surfaces provider failures on its own reads;
+        // this overload is a classification call, not an error channel.
+        val jpegThenFailure = object : InputStream() {
+            private var served = false
+
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (!served) {
+                    served = true
+                    hex(0xFF, 0xD8, 0xFF).copyInto(b, off)
+                    return 3
+                }
+                throw IOException("provider stream died")
+            }
+
+            override fun read(): Int = throw IOException("provider stream died")
+        }
+        assertEquals(SniffedFormat.JPEG, FormatSniffer.sniff(jpegThenFailure))
+        val alwaysFailing = object : InputStream() {
+            override fun read(b: ByteArray, off: Int, len: Int): Int =
+                throw IOException("provider stream died")
+
+            override fun read(): Int = throw IOException("provider stream died")
+        }
+        assertEquals(SniffedFormat.UNKNOWN, FormatSniffer.sniff(alwaysFailing))
     }
 
     // ---- Fixture helpers ------------------------------------------------------

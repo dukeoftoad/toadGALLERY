@@ -17,9 +17,13 @@ import org.junit.Test
  *   per-volume scan checkpoint never enters per-item comparison, so
  *   changing one item must not invalidate unrelated items on the same
  *   volume (audit finding C), and
- * - a metadataWriteRevision-only delta must be UNCHANGED (an in-app EXIF
- *   write is not an external edit; re-indexing on it would burn the
- *   battery and the embedding store for bytes that never moved).
+ * - a generation-token that merely APPEARS or DISAPPEARS, or a
+ *   metadataWriteRevision-only delta, must be UNCHANGED (new
+ *   observability of the same bytes is not a content change, and an
+ *   in-app EXIF write is not an external edit; re-indexing on either
+ *   would burn the battery and the embedding store for bytes that
+ *   never moved --- the contract MediaRevisionTest pins, now shared
+ *   through MediaRevision.diff instead of duplicated inline).
  */
 class CatalogueReconcilerTest {
 
@@ -180,16 +184,37 @@ class CatalogueReconcilerTest {
     }
 
     @Test
-    fun `generation token appearing where the record had none is changed`() {
+    fun `generation token appearing where the record had none is unchanged`() {
         // API-30 upgrade path: pre-30 records carry null tokens; the first
-        // post-30 scan sees a real token. That is a platform-visibility
-        // change, but treating it as unchanged would freeze the null
-        // forever --- report it so the record adopts the token.
+        // post-30 scan sees a real token. That is a change in
+        // OBSERVABILITY, not in content --- the SAME rule MediaRevision's
+        // diff pins (`a per-row generation-modified value appearing
+        // after an os upgrade is not a content change`), which the
+        // reconciler now delegates to instead of reimplementing it
+        // inline with a plain `!=` (two suites used to pin opposite
+        // contracts for this input). The stored null stays until the
+        // row's next content change adopts the fresh row --- stable
+        // across scans, never a re-index storm on OS upgrade day.
         val result = CatalogueReconciler.reconcile(
             scanRows = listOf(row(generationToken = "5")),
             catalogueRecords = mapOf("external_primary:1" to recordOf(generationToken = null)),
         )
-        assertEquals(1, result.changed.size)
+        assertEquals(0, result.changed.size)
+        assertEquals(1, result.unchangedCount)
+    }
+
+    @Test
+    fun `generation token disappearing where the record had one is unchanged`() {
+        // The symmetric half of the same rule (tokenless platform after a
+        // token-observing one, or a provider that stops exposing the
+        // column): disappearance is lost observability of the same bytes,
+        // not a content change.
+        val result = CatalogueReconciler.reconcile(
+            scanRows = listOf(row(generationToken = null)),
+            catalogueRecords = mapOf("external_primary:1" to recordOf(generationToken = "5")),
+        )
+        assertEquals(0, result.changed.size)
+        assertEquals(1, result.unchangedCount)
     }
 
     // --- unchanged -------------------------------------------------------------

@@ -454,6 +454,123 @@ class VaultStore(
     fun entries(): List<VaultIndexEntry> = readIndex()
 
     /**
+     * One item of a [storeBatch] request: everything [store] takes per
+     * item, unchanged (the batch is the same seal cycle, repeated).
+     */
+    data class BatchItem(
+        val displayName: String,
+        val mimeType: String,
+        val isVideo: Boolean,
+        val addedAtMillis: Long,
+        val bytes: InputStream,
+        /** The caller's declared size; the entry records the actual count streamed. */
+        val length: Long,
+    )
+
+    /**
+     * One item's batch outcome: the sealed [entry], or the [failure] that
+     * cost this item alone (never the batch --- see [storeBatch]).
+     */
+    sealed interface BatchOutcome {
+        data class Sealed(val entry: VaultIndexEntry) : BatchOutcome
+        data class Failed(val failure: Exception) : BatchOutcome
+    }
+
+    /**
+     * The batch seal cycle (r20 round; the r19-named "vault batch store"
+     * follow-up, closed): seals EVERY item of a multi-item move in ONE
+     * index read + N blob writes + ONE index rewrite, all under the same
+     * [storeLock] monitor --- where N separate [store] calls paid the full
+     * read-copy-rewrite cycle (and a full index re-encryption) per item.
+     * Returns the outcomes POSITIONALLY, one per input item in order.
+     *
+     * ## Failure semantics (the store's, restated per batch)
+     *
+     * - A PER-ITEM seal failure (unreadable source stream, cipher error)
+     *   deletes that item's half-written blob and records
+     *   [BatchOutcome.Failed]; the batch CONTINUES --- one bad item must
+     *   never cost its siblings their seal, the same one-row isolation
+     *   discipline every batch in this app keeps.
+     * - The single index rewrite failing (disk full, I/O error) deletes
+     *   every blob THIS call staged and rethrows, exactly like [store]:
+     *   the pre-existing index file is untouched (the rewrite is atomic),
+     *   so the vault keeps its prior state and every staged blob is
+     *   reclaimed as a plain orphan rather than lingering as if indexed.
+     * - Cancellation is NOT checked inside the lock (neither is [store]'s):
+     *   the seal cycle is blocking I/O that must not be abandoned
+     *   half-done. Callers check cancellation BETWEEN batches/phases (the
+     *   repository's move flow documents its own contract).
+     *
+     * ## Crash order, per batch
+     *
+     * All blobs first, the index second --- the same orphan-safety as
+     * [store], scaled up: a crash before the rewrite leaves N sweepable
+     * orphans and an honest pre-batch index; nothing index-visible ever
+     * half-exists, for any batch size.
+     *
+     * Serialized behind [storeLock] with every other mutation: a
+     * concurrent [sweepOrphans], [store] or unlock cannot observe the
+     * half-done batch (the r19 unlock-vs-move window stays closed for the
+     * batch shape too --- the sweep's grace window additionally covers the
+     * now-longer interval a big batch holds the lock for).
+     */
+    fun storeBatch(items: List<BatchItem>): List<BatchOutcome> = synchronized(storeLock) {
+        check(isConfigured()) { "vault is not configured; run setup() first" }
+        if (items.isEmpty()) return emptyList()
+        val entries = readIndex().toMutableList()
+        val outcomes = mutableListOf<BatchOutcome>()
+        val staged = mutableListOf<Pair<File, VaultIndexEntry>>()
+        try {
+            for (item in items) {
+                require(item.length >= 0) { "length must not be negative" }
+                val id = VaultIndex.nextId(entries)
+                val blob = blobFile(id)
+                val counting = CountingInputStream(item.bytes)
+                try {
+                    if (!blobsDir().isDirectory) {
+                        throw VaultStoreException("vault blobs directory is missing")
+                    }
+                    FileOutputStream(blob).use { output ->
+                        VaultCrypto.encryptTo(counting, output, keys.key())
+                    }
+                } catch (e: Exception) {
+                    // This item alone failed: no index entry, no lingering
+                    // blob, the batch continues.
+                    blob.delete()
+                    outcomes += BatchOutcome.Failed(e)
+                    continue
+                }
+                // The entry's size is only truthful once the stream is fully
+                // consumed --- construct it AFTER the seal so the counted
+                // byte total rides in (the store() single-item doctrine:
+                // the entry records the ACTUAL plaintext count, not the
+                // caller's declared length).
+                val entry = VaultIndexEntry(
+                    id = id,
+                    displayName = item.displayName,
+                    mimeType = item.mimeType,
+                    sizeBytes = counting.count,
+                    addedAtMillis = item.addedAtMillis,
+                    isVideo = item.isVideo,
+                )
+                entries += entry
+                staged += blob to entry
+                outcomes += BatchOutcome.Sealed(entry)
+            }
+            if (staged.isNotEmpty()) {
+                atomicWrite(indexFile(), VaultCrypto.encrypt(VaultIndex.serialize(entries), keys.key()))
+            }
+        } catch (e: Exception) {
+            // The single index rewrite failed: nothing this call staged may
+            // linger as if indexed (the store() doctrine, scaled to the
+            // batch). The pre-existing index file is untouched.
+            staged.forEach { (blob, _) -> blob.delete() }
+            throw e
+        }
+        outcomes
+    }
+
+    /**
      * Opens [entry]'s plaintext stream. The caller owns and MUST close it,
      * and must treat any read failure as "blob rejected" (the GCM tag
      * authenticates the whole stream; a truncated or tampered blob fails on

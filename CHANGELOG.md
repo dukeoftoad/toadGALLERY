@@ -4,10 +4,60 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.1-alpha] — unreleased on main (versionCode 23)
+## [0.4.1-alpha] — unreleased on main (versionCode 24; per maintainer
+  directive no new device builds until Phase 5 completes)
 
 ### Added
 
+- **The combined single-read EXIF index pass** (r20 round; the
+  r19-named follow-up, closed): one `MediaReadHandle` open + one
+  byte read + one EXIF parse per row now serves BOTH provenance
+  dimensions — the capture date (through the r12 resolver path,
+  unchanged) and the GPS coordinates (through the r16 snapshot
+  path, unchanged) — where the r12/r16 pair of standalone indexers
+  each opened and streamed the same bytes. The two standalone
+  indexers are removed with it (no dead code); the evidence types,
+  the pure write mappings, the eligibility gate and the consent
+  gate survive untouched, and the per-dimension availability
+  contracts ride on through the combined pass's JVM suite. The
+  capability check now runs BEFORE the bytes are read (the r16
+  order note): a PNG/GIF/video row costs no read at all, where
+  the r12 source paid a wasted full-read to learn the same
+  nothing.
+- **The NULL-provenance healing pass** (r20 round; the r19-named
+  follow-up, closed): Room v5 → v6 adds a `provenanceIndexedAtMillis`
+  stamp, written as the LAST of the pass's three targeted writes
+  (date, location, stamp) — a row that fails anywhere stays
+  unstamped, and a bounded healing pass (100-row batches, at most
+  1000 rows per app start, newest-seen-first) re-offers exactly
+  those rows to the same pass until they succeed. One transient
+  error during a scan can no longer strand a row's date/location
+  forever; pre-r20 rows heal once and are never re-selected unless
+  a real change resets them. Non-destructive `ADD COLUMN`
+  migration; the v6 identityHash re-derived with the documented
+  Room 2.8.5 method (v1–v5 reproduced byte-for-byte as control)
+  and verified against KSP's own regenerated snapshot.
+- **Volume hot-plug for the scan pipeline** (r20 round; the
+  r19-named follow-up, closed): an `ACTION_MEDIA_MOUNTED` shell
+  (registered with `RECEIVER_NOT_EXPORTED` on T+) hands the
+  signal to the driver's new `onVolumesChanged()` — observer
+  registration is now idempotent against a tracked volume set,
+  so a card inserted after process start gets its observer and a
+  coalesced scan pass without waiting for the next app restart.
+  Unmounted volumes need no signal (the walk only covers reported
+  volumes; their rows keep their live records until the volume
+  returns).
+- **The vault batch store** (r20 round; the r19-named follow-up,
+  closed): a multi-item move-to-vault now seals the whole
+  selection under ONE index read + N blob writes + ONE index
+  rewrite inside the store lock, where each item used to pay the
+  full read-copy-rewrite cycle. Per-item seal failures delete
+  that item's blob and report FAILED alone (siblings continue);
+  a whole-batch index-rewrite failure deletes every staged blob
+  and rethrows, exactly like the single-item `store`. The move
+  flow's two phases (seal batch, then per-item consent-checked
+  deletes) are documented on the repository method, positional
+  outcome pairing unchanged.
 - **Folder filter + catalogue bucket dimension** (r19 round; the
   r17-named follow-up, closed):
   - The catalogue persists the folder dimension as row-sourced

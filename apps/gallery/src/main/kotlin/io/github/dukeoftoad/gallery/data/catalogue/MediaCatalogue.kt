@@ -59,8 +59,9 @@ interface MediaCatalogue {
     /**
      * The targeted capture-date write (r12 round): persists the capture
      * date resolved by the scan's index pass
-     * ([CaptureDateIndexer][io.github.dukeoftoad.gallery.data.media.dates
-     * .CaptureDateIndexer]) onto the live row for [localMediaKey] ---
+     * ([CombinedExifIndexer][io.github.dukeoftoad.gallery.data.media.changes
+     * .CombinedExifIndexer] since r20; the r12/r16 standalone indexers it
+     * absorbed) onto the live row for [localMediaKey] ---
      * ONLY the three provenance fields
      * ([CatalogueRecord.resolvedCaptureDateMillis],
      * [CatalogueRecord.resolvedCaptureDateZoneOffsetMinutes],

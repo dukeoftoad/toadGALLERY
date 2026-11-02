@@ -319,15 +319,38 @@ class VaultRepository(context: Context) {
     // ------------------------------------------------------------------
 
     /**
-     * Moves [items] into the vault, strictly one at a time (issue #32):
-     * seal the bytes, then delete the MediaStore row. [onResult] receives
-     * the stable item index (callers pair outcomes with items positionally,
-     * even on cancellation --- only a prefix arrives then), [onProgress]
-     * fires `(0, total)` before the first item and `(completed, total)`
-     * after each. Cancellation is checked between items; per-item failures
-     * never abort the batch. W1: the completed batch logs one INFO line of
-     * outcome counts (a cancelled batch narrates its prefix in the UI
-     * instead; the counts here describe only completed batches).
+     * Moves [items] into the vault as ONE seal batch + a per-item delete
+     * round (issue #32; the r20 batch-store rework). [onResult] receives
+     * the stable item index (callers pair outcomes with items
+     * positionally; only a prefix arrives on cancellation), [onProgress]
+     * fires with the count of items that have reached a FINAL state.
+     *
+     * ## The two phases and their failure semantics
+     *
+     * Phase A (seal) runs the whole selection through
+     * [VaultStore.storeBatch] --- ONE index read + N blob writes + ONE
+     * index rewrite under the store lock, where the pre-r20 flow paid the
+     * full read-copy-rewrite cycle per item. Items that fail BEFORE or
+     * DURING the seal (details unresolvable, source stream unopenable,
+     * cipher error) report [VaultMoveOutcome.FAILED] immediately and never
+     * cost their siblings the seal (the store's per-item batch isolation).
+     *
+     * Phase B (delete) walks the sealed items in order, removing each
+     * original through the existing consent machinery
+     * (RecoverableSecurityException -> NEEDS_CONSENT, the retry path
+     * [deleteOriginals] already serves). Cancellation is checked between
+     * phase B items and before phase A: a cancelled run leaves the
+     * already-sealed items safely in the vault with their originals
+     * untouched --- the same half-moved shape the consent-blocked outcome
+     * produces, and exactly what the retry path exists for.
+     *
+     * Callback ORDER therefore differs from the pre-r20 interleave: all
+     * seal-phase FAILED results arrive before any delete-phase result
+     * (each phase ascending by index). Positional pairing is unaffected.
+     *
+     * W1: the completed batch logs one INFO line of outcome counts (a
+     * cancelled batch narrates its prefix in the UI instead; the counts
+     * here describe only completed batches).
      */
     @RequiresApi(Build.VERSION_CODES.Q)
     suspend fun moveToVault(
@@ -345,18 +368,71 @@ class VaultRepository(context: Context) {
         var needsConsent = 0
         var notRemoved = 0
         var failed = 0
+        var settled = 0
         onProgress(0, items.size)
-        for ((index, item) in items.withIndex()) {
+
+        // --- Phase A: seal the whole selection in one batch ----------------
+        // Cancellation checkpoint BEFORE the store lock: the seal cycle is
+        // blocking I/O under the monitor and must not be abandoned
+        // half-done (the store's own contract); this is the one place a
+        // cancel can cleanly stop the move before anything is sealed.
+        coroutineContext.ensureActive()
+
+        val sealedCandidates = mutableListOf<SealedCandidate>()
+        val seal = sealBatch(items)
+
+        // Skipped items (unresolvable details / unopenable stream) report
+        // FAILED immediately, ascending by index.
+        for (index in seal.skippedIndexes) {
+            failed++
+            settled++
+            onResult(index, VaultMoveOutcome.FAILED)
+            onProgress(settled, items.size)
+        }
+        if (seal.storeOutcomes == null) {
+            // Whole-batch store failure (the single index rewrite): nothing
+            // this call staged is in the vault --- every opened item
+            // honestly failed.
+            for (candidate in seal.candidates) {
+                failed++
+                settled++
+                onResult(candidate.index, VaultMoveOutcome.FAILED)
+                onProgress(settled, items.size)
+            }
+        } else {
+            val byPosition = seal.storeOutcomes.iterator()
+            for (candidate in seal.candidates) {
+                when (byPosition.next()) {
+                    is VaultStore.BatchOutcome.Sealed -> sealedCandidates += candidate
+                    is VaultStore.BatchOutcome.Failed -> {
+                        failed++
+                        settled++
+                        onResult(candidate.index, VaultMoveOutcome.FAILED)
+                        onProgress(settled, items.size)
+                    }
+                }
+            }
+        }
+
+        // --- Phase B: remove the originals, one consent-checked delete ----
+        for (sealed in sealedCandidates) {
             coroutineContext.ensureActive()
-            val outcome = moveOne(item)
+            val outcome = withContext(Dispatchers.IO) {
+                when (localOps.delete(sealed.item.uri).outcome) {
+                    FileOpOutcome.Success -> VaultMoveOutcome.MOVED
+                    FileOpOutcome.NeedsConsent -> VaultMoveOutcome.NEEDS_CONSENT
+                    else -> VaultMoveOutcome.NOT_REMOVED
+                }
+            }
             when (outcome) {
                 VaultMoveOutcome.MOVED -> moved++
                 VaultMoveOutcome.NEEDS_CONSENT -> needsConsent++
                 VaultMoveOutcome.NOT_REMOVED -> notRemoved++
                 VaultMoveOutcome.FAILED -> failed++
             }
-            onResult(index, outcome)
-            onProgress(index + 1, items.size)
+            settled++
+            onResult(sealed.index, outcome)
+            onProgress(settled, items.size)
         }
         DiagLog.i(
             TAG,
@@ -364,37 +440,103 @@ class VaultRepository(context: Context) {
         )
     }
 
+    /**
+     * One item that made it INTO the seal batch (r20): its position in the
+     * caller's selection plus the item itself. The stream is already
+     * consumed and closed by the time this value exists.
+     */
+    private data class SealedCandidate(val index: Int, val item: MediaItem)
+
+    /**
+     * [sealBatch]'s outcome: the items that never reached the store
+     * ([skippedIndexes], ascending), the items that did ([candidates], in
+     * seal order = ascending index), and the store's positional outcomes
+     * for exactly those candidates --- or `null` when the whole batch
+     * failed at the single index rewrite (nothing staged is in the vault).
+     */
+    private class SealBatchOutcome(
+        val skippedIndexes: List<Int>,
+        val candidates: List<SealedCandidate>,
+        val storeOutcomes: List<VaultStore.BatchOutcome>?,
+    )
+
+    /**
+     * Phase A of the move flow (r20): opens every item's source stream and
+     * hands the whole set to [VaultStore.storeBatch] --- ONE index read + N
+     * blob writes + ONE index rewrite under the store lock, where the
+     * pre-r20 flow paid the full read-copy-rewrite cycle per item.
+     *
+     * Stream discipline: every stream this method opens is closed in its
+     * `finally` --- the store reads successful items' streams to
+     * exhaustion, and a skipped/failed item's stream must not leak. A
+     * details/stream failure for ONE item costs that item alone (it lands
+     * in [SealBatchOutcome.skippedIndexes]); a store-batch failure (the
+     * index rewrite) reports `null` outcomes for the whole opened set,
+     * because the store guarantees nothing it staged survived.
+     */
     @RequiresApi(Build.VERSION_CODES.Q)
-    private suspend fun moveOne(item: MediaItem): VaultMoveOutcome =
+    private suspend fun sealBatch(items: List<MediaItem>): SealBatchOutcome =
         withContext(Dispatchers.IO) {
-            val details = querySourceDetails(item.uri)
-                ?: return@withContext VaultMoveOutcome.FAILED
+            class Opened(
+                val index: Int,
+                val item: MediaItem,
+                val displayName: String,
+                val sizeBytes: Long,
+                val stream: java.io.InputStream,
+            )
+
+            val opened = mutableListOf<Opened>()
+            val skipped = sortedSetOf<Int>()
             try {
-                resolver.openInputStream(item.uri)?.use { input ->
-                    store.store(
-                        displayName = details.displayName,
-                        mimeType = item.mimeType,
-                        isVideo = item.isVideo,
-                        addedAtMillis = System.currentTimeMillis(),
-                        bytes = input,
-                        length = details.sizeBytes,
-                    )
-                } ?: return@withContext VaultMoveOutcome.FAILED
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // openInputStream or the seal failed: nothing index-visible
-                // happened; any half blob is a sweepable orphan (reclaimed
-                // once aged past the sweep's grace window --- see
-                // [VaultStore.sweepOrphans]).
-                return@withContext VaultMoveOutcome.FAILED
-            }
-            // Sealed. Now remove the original through the existing consent
-            // machinery (RecoverableSecurityException -> NeedsConsent).
-            when (ops?.delete(item.uri)?.outcome) {
-                FileOpOutcome.Success -> VaultMoveOutcome.MOVED
-                FileOpOutcome.NeedsConsent -> VaultMoveOutcome.NEEDS_CONSENT
-                else -> VaultMoveOutcome.NOT_REMOVED
+                for ((index, item) in items.withIndex()) {
+                    try {
+                        val details = querySourceDetails(item.uri)
+                            ?: error("source details unresolvable")
+                        val stream = resolver.openInputStream(item.uri)
+                            ?: error("source stream unopenable")
+                        opened += Opened(
+                            index = index,
+                            item = item,
+                            displayName = details.displayName,
+                            sizeBytes = details.sizeBytes,
+                            stream = stream,
+                        )
+                    } catch (e: Exception) {
+                        // This item alone never reaches the seal.
+                        skipped += index
+                    }
+                }
+                val candidates = opened.map { SealedCandidate(it.index, it.item) }
+                val outcomes: List<VaultStore.BatchOutcome>? =
+                    if (opened.isEmpty()) {
+                        emptyList()
+                    } else {
+                        try {
+                            store.storeBatch(
+                                opened.map { o ->
+                                    VaultStore.BatchItem(
+                                        displayName = o.displayName,
+                                        mimeType = o.item.mimeType,
+                                        isVideo = o.item.isVideo,
+                                        addedAtMillis = System.currentTimeMillis(),
+                                        bytes = o.stream,
+                                        length = o.sizeBytes,
+                                    )
+                                },
+                            )
+                        } catch (ce: CancellationException) {
+                            throw ce
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                SealBatchOutcome(
+                    skippedIndexes = skipped.toList(),
+                    candidates = candidates,
+                    storeOutcomes = outcomes,
+                )
+            } finally {
+                opened.forEach { runCatching { it.stream.close() } }
             }
         }
 

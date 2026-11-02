@@ -86,7 +86,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CatalogueTombstoneEntity::class,
         ScanCheckpointEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class MediaCatalogueDatabase : RoomDatabase() {
@@ -244,12 +244,39 @@ abstract class MediaCatalogueDatabase : RoomDatabase() {
         }
 
         /**
+         * v5 -> v6 (r20 round): adds the NULL-provenance healing marker to
+         * `catalogue_items` --- one nullable INTEGER column recording when
+         * the combined EXIF index pass last completed ALL of a row's
+         * provenance writes. `ADD COLUMN` only, no table rebuild, no
+         * index, no data loss; existing rows read `NULL`, which is the
+         * honest "never fully indexed" and exactly the set the healing
+         * pass exists to re-offer (rows whose per-row indexing failed
+         * before this round had no marker at all and would otherwise
+         * never be retried --- the r19-named follow-up this closes).
+         *
+         * `DEFAULT NULL` for the same reason as [MIGRATION_1_2]: it makes
+         * the migrated schema identical to the CREATE TABLE Room generates
+         * for the v6 entity (a nullable column with no declared default),
+         * so open-time schema validation passes without `@ColumnInfo
+         * (defaultValue = ...)` annotations. INTEGER affinity matches the
+         * Kotlin `Long?` property.
+         */
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE catalogue_items " +
+                        "ADD COLUMN provenanceIndexedAtMillis INTEGER DEFAULT NULL",
+                )
+            }
+        }
+
+        /**
          * Builds the singleton-scope database for the app. Callers own the
          * instance lifetime (one per process, via whatever dependency
          * holder the app settles on); [context.applicationContext] is used
          * so no Activity can leak through the builder. Explicit
          * migrations only ([MIGRATION_1_2], [MIGRATION_2_3],
-         * [MIGRATION_3_4], [MIGRATION_4_5]) --- NO
+         * [MIGRATION_3_4], [MIGRATION_4_5], [MIGRATION_5_6]) --- NO
          * `fallbackToDestructiveMigration`, ever; see the class KDoc.
          */
         fun build(context: Context): MediaCatalogueDatabase =
@@ -261,7 +288,10 @@ abstract class MediaCatalogueDatabase : RoomDatabase() {
                 // class KDoc. An incompatible future schema must fail loud
                 // (IllegalStateException on open), not wipe silently.
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
+                    MIGRATION_4_5, MIGRATION_5_6,
+                )
                 .build()
     }
 }

@@ -542,6 +542,7 @@
 | **#95** | `r22` (Phase 5) | `HttpModelDownloader` (`models.ente.com` allowlist, `#94`) + `toad-ml-jni` + ORT 1.31.0 AAR + dogfood UI | `c1a5cb9` | Squash-merged; 855 JVM tests + `engine-android` CI job; `versionCode 26` |
 | **#96** | `r23` (Phase 5) | Vendor `ente-vecdb` + `ente-photos-ml` + 10-fn JNI face index/clustering + `IndexCoordinator` + 71 MB debug APK | `7293610` | Squash-merged; 526 Rust + 11 JNI + JVM tests; `versionCode 27` |
 | **#97** | `r24` (Phase 5) | `tg-r24-background-queue`: WorkManager face-index queue (Workstream 5) + store maintenance JNI pair + pure planner/processor/state core + r24 Settings card | `d610123` | Squash-merged; 885 JVM tests; `versionCode 28`; CI 3/3 green |
+| **#98** | `r25` (Phase 5) | `tg-r25-people-ui`: the People UI round (Workstream 6) — 16-external JNI store, `ml/people` domain + `people-state.json`, `PeopleScreen`/`PersonDetailScreen`, ADR-0010 consent row | pending | 927 JVM tests (+42) + 20 JNI-crate Rust tests (8 new); `versionCode 29` |
 
 ## Architecture Decision Records (ADR) Registry
 

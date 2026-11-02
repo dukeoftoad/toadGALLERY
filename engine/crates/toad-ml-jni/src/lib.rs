@@ -22,6 +22,12 @@
 //!   (r24) — the store maintenance pair the background queue drives:
 //!   which files carry current-version face rows, and the per-file
 //!   invalidation delete.
+//! * [`nativeStoreFaceClusters`] / [`nativeStoreClusterFileIds`] /
+//!   [`nativeStoreMergeFaceClusters`] /
+//!   [`nativeStoreRemoveFacesFromCluster`] (r25) — the People UI read +
+//!   manual cluster-management paths over the same open-store state
+//!   machine: the live cluster list (JSON), a cluster's file ids, the
+//!   merge-two-people upsert and the remove-photo-from-person delete.
 //! * [`nativeRelease`] — tear the engine (and the store) down.
 //!
 //! Contract notes (see also `README.md`):
@@ -30,9 +36,10 @@
 //!   never unwinds across the JNI boundary and is reported to Kotlin as
 //!   `java.lang.IllegalStateException("panic: …")`.
 //! * Engine failures are surfaced as `java.lang.IllegalStateException` whose
-//!   message is the Rust error's `Display` string; the one caller-input
-//!   failure (a wrong embedding dimension on `nativeStorePutFace`) is
-//!   surfaced as `java.lang.IllegalArgumentException`.
+//!   message is the Rust error's `Display` string; the two caller-input
+//!   failures (a wrong embedding dimension on `nativeStorePutFace`, a
+//!   source==target merge on `nativeStoreMergeFaceClusters`) are surfaced
+//!   as `java.lang.IllegalArgumentException`.
 //! * The engine state lives in a process-global `OnceLock<Mutex<…>>` that is
 //!   held for the whole of `nativeInit`, the detection/embedding calls and
 //!   `nativeRelease`; the face-index store has its own process-global mutex
@@ -470,6 +477,185 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
                 .map_err(|error| format!("read fileIds argument: {error}"))?;
         }
         store::delete_faces_for_files(&values)?;
+        Ok(sys::JNI_TRUE)
+    })
+}
+
+/// `MlEngineJni.nativeStoreFaceClusters(): String` (r25).
+///
+/// The live cluster list for the People UI, as the JSON array
+/// `[{"cluster_id":"…","count":12,"cover_file_id":4813},…]`
+/// (a JSON `null` cover when the cluster's top face id has no parsable
+/// leading file-id segment), sorted by count DESC then cluster_id ASC.
+/// Counts come from the vendored upstream `MlDb::cluster_id_to_face_count`
+/// — the LIVE `face_clusters` assignments table, deliberately NOT the
+/// `cluster_summary` table the clustering pass refreshes, so manual
+/// merges/exclusions reflect immediately; covers from
+/// `MlDb::get_face_ids_for_cluster_ordered_by_score` (limit 1). Throws
+/// `java.lang.IllegalStateException` when the store is not open or a read
+/// fails.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreFaceClusters<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jstring {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let json = store::face_clusters()?;
+        let java_string = env
+            .new_string(&json)
+            .map_err(|error| format!("allocate face clusters string: {error}"))?;
+        Ok(java_string.into_raw())
+    })
+}
+
+/// `MlEngineJni.nativeStoreClusterFileIds(clusterId: String): LongArray`
+/// (r25).
+///
+/// The file IDs whose faces currently sit in `clusterId`, via the
+/// vendored upstream `MlDb::get_file_ids_of_cluster_id` verbatim (the
+/// DISTINCT file-id read over the live `face_clusters` table; the
+/// ordering is upstream's own). An empty array means no files —
+/// including an unknown cluster id. Throws
+/// `java.lang.IllegalStateException` when the store is not open or the
+/// read fails.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreClusterFileIds<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    cluster_id: JString<'local>,
+) -> jlongArray {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let cluster_id: String = env
+            .get_string(&cluster_id)
+            .map_err(|error| format!("read clusterId argument: {error}"))?
+            .into();
+        let file_ids = store::cluster_file_ids(&cluster_id)?;
+        let array = env
+            .new_long_array(file_ids.len() as i32)
+            .map_err(|error| format!("allocate cluster file-id array: {error}"))?;
+        if !file_ids.is_empty() {
+            env.set_long_array_region(&array, 0, &file_ids)
+                .map_err(|error| format!("fill cluster file-id array: {error}"))?;
+        }
+        Ok(array.into_raw() as jlongArray)
+    })
+}
+
+/// `MlEngineJni.nativeStoreMergeFaceClusters(sourceClusterId: String,
+/// targetClusterId: String): Boolean` (r25).
+///
+/// Moves every face of `sourceClusterId` into `targetClusterId` — the
+/// People UI's "merge these two people" — through the vendored upstream
+/// read (`MlDb::get_face_ids_for_cluster`) and atomic batch upsert
+/// (`MlDb::force_update_cluster_ids`); an empty source is a no-op
+/// returning true. `cluster_summary` rows are deliberately untouched:
+/// the People read counts the live assignments table, and the next
+/// clustering pass recomputes summaries (and, honestly, ALL assignments
+/// from the embeddings) anyway.
+///
+/// A `sourceClusterId` equal to `targetClusterId` is the one caller-input
+/// failure of this entry point and throws
+/// `java.lang.IllegalArgumentException` BEFORE any store mutation — the
+/// exact mechanism `nativeStorePutFace` uses for its embedding-dimension
+/// guard (argument reads on this leg surface as `IllegalArgumentException`
+/// too). Everything else stays `java.lang.IllegalStateException`.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreMergeFaceClusters<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    source_cluster_id: JString<'local>,
+    target_cluster_id: JString<'local>,
+) -> jboolean {
+    // The caller-input leg mirrors nativeStorePutFace's embedding guard:
+    // validate the input at the JNI boundary, throw
+    // IllegalArgumentException, return the failure sentinel — all before
+    // any store access or mutation.
+    let fail_argument = |env: &mut JNIEnv<'local>, message: String| -> jboolean {
+        let _ = env.throw_new(ILLEGAL_ARGUMENT_EXCEPTION, &message);
+        sys::JNI_FALSE
+    };
+    let source_cluster_id: String = match env.get_string(&source_cluster_id) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            return fail_argument(&mut env, format!("read sourceClusterId argument: {error}"));
+        }
+    };
+    let target_cluster_id: String = match env.get_string(&target_cluster_id) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            return fail_argument(&mut env, format!("read targetClusterId argument: {error}"));
+        }
+    };
+    if source_cluster_id == target_cluster_id {
+        return fail_argument(
+            &mut env,
+            format!("source and target cluster ids must differ; both are \"{source_cluster_id}\""),
+        );
+    }
+    call_or_throw(&mut env, sys::JNI_FALSE, |_| {
+        store::merge_face_clusters(&source_cluster_id, &target_cluster_id)?;
+        Ok(sys::JNI_TRUE)
+    })
+}
+
+/// `MlEngineJni.nativeStoreRemoveFacesFromCluster(clusterId: String,
+/// fileIds: LongArray): Boolean` (r25).
+///
+/// Removes `fileIds`' faces from `clusterId` — the People UI's "remove
+/// this photo from this person" / split primitive. Per file, the vendored
+/// upstream `MlDb::get_faces_for_given_file_id` reads the face rows and
+/// `MlDb::get_cluster_id_for_face_id` the CURRENT assignment; only faces
+/// actually sitting in `clusterId` are dropped, through one atomic
+/// `MlDb::remove_face_id_to_cluster_id` batch (a file whose other faces
+/// live in other clusters keeps those; the face rows themselves stay for
+/// the next clustering pass). An empty array is a no-op returning true.
+/// Throws `java.lang.IllegalStateException` when the store is not open or
+/// any read/write fails.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreRemoveFacesFromCluster<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    cluster_id: JString<'local>,
+    file_ids: JLongArray<'local>,
+) -> jboolean {
+    call_or_throw(&mut env, sys::JNI_FALSE, |env| {
+        let cluster_id: String = env
+            .get_string(&cluster_id)
+            .map_err(|error| format!("read clusterId argument: {error}"))?
+            .into();
+        let length =
+            env.get_array_length(&file_ids)
+                .map_err(|error| format!("read fileIds argument: {error}"))? as usize;
+        let mut values = vec![0_i64; length];
+        if length > 0 {
+            env.get_long_array_region(&file_ids, 0, &mut values)
+                .map_err(|error| format!("read fileIds argument: {error}"))?;
+        }
+        store::remove_faces_from_cluster(&cluster_id, &values)?;
         Ok(sys::JNI_TRUE)
     })
 }

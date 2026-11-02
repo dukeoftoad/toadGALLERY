@@ -1,6 +1,7 @@
 package io.github.dukeoftoad.gallery.ui.albums
 
 import android.app.Application
+import android.content.Context
 import android.database.ContentObserver
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
@@ -9,6 +10,14 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
+import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy
+import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
+import io.github.dukeoftoad.gallery.ml.people.PeopleEngineAdapter
+import io.github.dukeoftoad.gallery.ml.people.PeopleRepository
+import io.github.dukeoftoad.gallery.ml.people.PeopleStateFile
+import io.github.dukeoftoad.gallery.ml.people.PEOPLE_STATE_FILE_NAME
+import io.github.dukeoftoad.gallery.ui.settings.KEY_PEOPLE_ALBUM_ENABLED
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -18,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -42,6 +52,17 @@ import kotlin.time.Duration.Companion.milliseconds
  * `PhotosViewModel`/`AlbumDetailViewModel` --- no observer exists and the
  * list reflects the last query; favorites toggles are Q+ writes, and their
  * staleness on Q is the documented residual of that tier.
+ *
+ * ## People section (r25, Workstream 6)
+ * [people] carries the SAME pure [PeopleContentPolicy] state the People
+ * screen renders, refreshed by [refreshPeople] (init + every screen
+ * re-entry, so a consent toggle in Settings lands on the next visit).
+ * The section is read-only here --- names/merges/hides live on the Person
+ * detail screen --- and the engine session only ever opens when consent
+ * is ON and the engine is present (the consent-off and build-shape arms
+ * are decided from the preference and the availability flag alone),
+ * which keeps the common path session-free. A provider/engine failure
+ * maps to the policy's honest Error state, never a fake empty row.
  */
 class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -65,6 +86,29 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     /** Registered in `init` (API 30+ only); unregistered in [onCleared]. */
     private var albumsObserver: ContentObserver? = null
 
+    // ---- r25 (Workstream 6): the People section's state ----
+
+    private val engineAdapter = PeopleEngineAdapter.fromApplication(app)
+
+    /**
+     * The People read path (read-only here; no photo query is needed for
+     * the section, so the repository's default empty binding suffices).
+     */
+    private val peopleRepository = PeopleRepository(
+        engine = engineAdapter,
+        stateStore = PeopleStateFile(
+            File(File(app.filesDir, FACE_INDEX_DIR_NAME), PEOPLE_STATE_FILE_NAME),
+        ),
+    )
+
+    /** The consent source, read fresh on every [refreshPeople]. */
+    private val prefs = app.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+
+    private val _people = MutableStateFlow<PeopleContentState>(PeopleContentState.Loading)
+
+    /** The People section's content state (the pure policy's output, r25). */
+    val people: StateFlow<PeopleContentState> = _people.asStateFlow()
+
     init {
         // API 30+ only, mirroring PhotosViewModel's gating and rationale:
         // the observer watches the unified Files collection (an R-gated
@@ -78,6 +122,44 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
                 albumsChanges
                     .debounce(RELOAD_DEBOUNCE_MS.milliseconds)
                     .collect { reload() }
+            }
+        }
+        refreshPeople()
+    }
+
+    /**
+     * One People read (r25): consent + availability + one repository
+     * snapshot, mapped through the SAME pure policy the People screen
+     * uses. Called from `init` and on every screen re-entry (the screen's
+     * entry `LaunchedEffect`), which is what carries a Settings consent
+     * toggle over without a shared ViewModel scope. Engine/store failures
+     * map to the policy's honest Error state with the failure's own
+     * message (the `reload` guard's contract).
+     */
+    fun refreshPeople() {
+        viewModelScope.launch {
+            _people.value = withContext(Dispatchers.IO) {
+                runCatching {
+                    val consent = prefs.getBoolean(KEY_PEOPLE_ALBUM_ENABLED, false)
+                    // Consent-off and build-shape-missing are decided WITHOUT
+                    // touching the engine (no session opens on the common path).
+                    if (!consent) {
+                        PeopleContentState.ConsentOff
+                    } else if (!peopleRepository.engineAvailable) {
+                        PeopleContentState.EngineMissing
+                    } else {
+                        val snapshot = peopleRepository.snapshot()
+                        PeopleContentPolicy.decide(
+                            consentEnabled = true,
+                            engineAvailable = true,
+                            clusters = snapshot.clusters,
+                            hiddenIds = snapshot.hidden,
+                            names = snapshot.names,
+                        )
+                    }
+                }.getOrElse { e ->
+                    PeopleContentState.Error(e.message ?: e.javaClass.simpleName)
+                }
             }
         }
     }
@@ -111,6 +193,8 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         albumsObserver?.let { source.unregisterTimelineObserver(it) }
         albumsObserver = null
+        // r25: release the People section's engine session with the screen.
+        engineAdapter.close()
         super.onCleared()
     }
 
@@ -179,6 +263,9 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
          * change at once.
          */
         private const val RELOAD_DEBOUNCE_MS = 500L
+
+        /** The Settings house preferences file (issue #27; see SettingsViewModel). */
+        private const val PREFS_FILE = "toad_settings"
     }
 }
 

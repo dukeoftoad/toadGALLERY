@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ml.engine
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -32,6 +33,18 @@ import org.json.JSONObject
  * carry current-model-version face rows --- the resumability read) and
  * [deleteFacesForFiles] (the per-file invalidation delete behind
  * revision-driven re-indexing and orphan cleanup).
+ *
+ * r25 adds the People read/management paths over the SAME open-store
+ * state machine: [faceClusters] (the live cluster list --- counts are
+ * read from the live assignments table, NOT the clustering pass's
+ * summaries, so manual edits reflect immediately), [clusterFileIds] (a
+ * person's current file ids), [mergeFaceClusters] (merge two people;
+ * source==target is an IllegalArgumentException BEFORE any native call,
+ * mirrored by a Rust-side guard as defense in depth) and
+ * [removeFacesFromCluster] (remove a photo from a person --- the split
+ * primitive). Honest caveat, not an overpromise: manual edits persist
+ * only until the next [clusterFaces] pass recomputes assignments from
+ * the embeddings --- they are not sticky.
  */
 class MlEngine(private val bridge: Bridge = JniBridge) {
 
@@ -76,6 +89,15 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      */
     data class ClusterSummary(val faces: Int, val clusters: Int, val sizes: List<Int>)
 
+    /**
+     * One row of the People UI's cluster list (r25): the cluster id, its
+     * LIVE face count (manual merges/exclusions reflect immediately),
+     * and the cover file id --- the file of the cluster's highest-scored
+     * face, or null when the cluster has no parsable cover. Plain
+     * content equality.
+     */
+    data class FaceCluster(val clusterId: String, val faceCount: Int, val coverFileId: Long?)
+
     /** The coarse session state every UI surfaces. */
     sealed class State {
         /**
@@ -119,6 +141,12 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         // ---- r24 ----
         fun nativeStoreIndexedFaceFileIds(): LongArray
         fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean
+
+        // ---- r25 ----
+        fun nativeStoreFaceClusters(): String
+        fun nativeStoreClusterFileIds(clusterId: String): LongArray
+        fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean
+        fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean
     }
 
     private object JniBridge : Bridge {
@@ -150,6 +178,18 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
 
         override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean =
             MlEngineJni.nativeStoreDeleteFacesForFiles(fileIds)
+
+        // ---- r25 ----
+        override fun nativeStoreFaceClusters(): String = MlEngineJni.nativeStoreFaceClusters()
+
+        override fun nativeStoreClusterFileIds(clusterId: String): LongArray =
+            MlEngineJni.nativeStoreClusterFileIds(clusterId)
+
+        override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean =
+            MlEngineJni.nativeStoreMergeFaceClusters(sourceClusterId, targetClusterId)
+
+        override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean =
+            MlEngineJni.nativeStoreRemoveFacesFromCluster(clusterId, fileIds)
     }
 
     private var sessionOpen = false
@@ -359,6 +399,74 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         return bridge.nativeStoreDeleteFacesForFiles(fileIds)
     }
 
+    /**
+     * The live cluster list for the People UI (r25), in the Rust side's
+     * order (face count descending, ties by cluster id ascending;
+     * preserved verbatim --- the parse never re-sorts). Counts come from
+     * the LIVE assignments table, so manual [mergeFaceClusters] /
+     * [removeFacesFromCluster] edits are reflected immediately; the
+     * cover is the cluster's highest-scored face's file (null when the
+     * cluster has no parsable cover). Throws IllegalStateException when
+     * the store is not open (or the build is library-less), the native
+     * call fails, or the JSON shape is not the pinned
+     * `[{"cluster_id":…,"count":…,"cover_file_id":…}]` array.
+     */
+    @Synchronized
+    fun faceClusters(): List<FaceCluster> {
+        requireFaceIndexOpen()
+        return parseFaceClusters(bridge.nativeStoreFaceClusters())
+    }
+
+    /**
+     * The file IDs whose faces currently sit in [clusterId] (r25), via
+     * upstream's own distinct-file read over the live assignments. An
+     * empty list means no files --- including an unknown cluster id; the
+     * ordering is upstream's own. Throws IllegalStateException when the
+     * store is not open (or the build is library-less) or the native
+     * call fails.
+     */
+    @Synchronized
+    fun clusterFileIds(clusterId: String): List<Long> {
+        requireFaceIndexOpen()
+        return bridge.nativeStoreClusterFileIds(clusterId).toList()
+    }
+
+    /**
+     * Moves every face of [sourceClusterId] into [targetClusterId] (r25)
+     * --- "merge these two people". An empty source is a no-op returning
+     * true. [sourceClusterId] equal to [targetClusterId] throws
+     * IllegalArgumentException BEFORE any native call (mirroring the
+     * putFace embedding-dimension guard); the Rust side guards again as
+     * defense in depth. Honest caveat: a manual merge persists only
+     * until the next [clusterFaces] pass recomputes assignments from the
+     * embeddings. Throws IllegalStateException when the store is not
+     * open (or the build is library-less) or the native call fails.
+     */
+    @Synchronized
+    fun mergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean {
+        requireFaceIndexOpen()
+        require(sourceClusterId != targetClusterId) {
+            "source and target cluster ids must differ; both are \"$sourceClusterId\""
+        }
+        return bridge.nativeStoreMergeFaceClusters(sourceClusterId, targetClusterId)
+    }
+
+    /**
+     * Removes [fileIds]' faces from [clusterId] (r25) --- "remove this
+     * photo from this person" / the split primitive. Only faces
+     * currently assigned to [clusterId] are dropped (a file whose other
+     * faces live in other clusters keeps those); the face rows
+     * themselves stay, so the next [clusterFaces] pass re-derives
+     * assignments from the embeddings. An empty array is a no-op
+     * returning true. Throws IllegalStateException when the store is
+     * not open (or the build is library-less) or the native call fails.
+     */
+    @Synchronized
+    fun removeFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean {
+        requireFaceIndexOpen()
+        return bridge.nativeStoreRemoveFacesFromCluster(clusterId, fileIds)
+    }
+
     internal companion object {
         /**
          * The r23 face-embedding dimension (upstream MobileFaceNet output;
@@ -418,6 +526,46 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
                 ClusterSummary(obj.getInt("faces"), obj.getInt("clusters"), sizes)
             } catch (e: Exception) {
                 throw IllegalStateException("malformed cluster summary JSON: ${e.message}")
+            }
+        }
+
+        /**
+         * Parses the r25 `nativeStoreFaceClusters` JSON array into
+         * [FaceCluster] rows. Shapes other than the pinned
+         * `[{"cluster_id":"…","count":N,"cover_file_id":…|null}]` --- a
+         * non-array envelope, a missing field, a wrong field type, a
+         * negative face count --- fail as IllegalStateException (the
+         * facade's own failure shape), exactly like [parseClusterSummary].
+         */
+        internal fun parseFaceClusters(json: String): List<FaceCluster> {
+            return try {
+                val array = JSONArray(json)
+                val clusters = ArrayList<FaceCluster>(array.length())
+                for (i in 0 until array.length()) {
+                    val entry = array.getJSONObject(i)
+                    val faceCount = entry.getInt("count")
+                    check(faceCount >= 0) {
+                        "cluster \"${entry.optString("cluster_id")}\" has a negative face count: $faceCount"
+                    }
+                    // The pinned shape ALWAYS carries the cover key ---
+                    // JSON null when the cluster has no parsable cover. A
+                    // missing key is a broken engine contract and fails
+                    // like any other malformed shape (a bare isNull would
+                    // silently treat it as null).
+                    check(entry.has("cover_file_id")) {
+                        "cluster \"${entry.optString("cluster_id")}\" is missing cover_file_id"
+                    }
+                    clusters.add(
+                        FaceCluster(
+                            clusterId = entry.getString("cluster_id"),
+                            faceCount = faceCount,
+                            coverFileId = if (entry.isNull("cover_file_id")) null else entry.getLong("cover_file_id"),
+                        )
+                    )
+                }
+                clusters
+            } catch (e: Exception) {
+                throw IllegalStateException("malformed face clusters JSON: ${e.message}")
             }
         }
     }

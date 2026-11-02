@@ -142,8 +142,12 @@ import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
  * from the process-wide provisioner (ToadGalleryApplication), the real
  * allowlisted-host download, deletion, and one JNI inference self-test
  * over the first JPEG on the device. A developer section, honestly
- * labeled: no user-facing feature consumes the engine yet (the Phase 5
- * People/Magic-Search wiring lands later). See `AiEngineViewModel`.
+ * labeled. Since r25 (Workstream 6) the section also carries the
+ * USER-facing "People albums" consent row --- the ADR-0010 opt-in gate
+ * (default off) for the People UI that consumes the engine's clusters:
+ * one Switch + on-device-processing copy, persisted by the shell-scoped
+ * [SettingsViewModel] under the `peopleAlbumEnabled` key. See
+ * `AiEngineViewModel` for the dogfood rows.
  */
 @Composable
 fun SettingsScreen(
@@ -573,6 +577,42 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
+
+        // ---- People albums consent (r25, Workstream 6; ADR-0010) ----
+        // The opt-in gate for the People UI: default OFF, one Switch, copy
+        // that states the on-device posture. The row rides the SHELL-scoped
+        // settingsViewModel (write-through persistence under the
+        // `peopleAlbumEnabled` key); the People/Albums surfaces read the
+        // preference at their own entry refresh, so a toggle here lands
+        // there on the next visit.
+        val peopleAlbumsEnabled by settingsViewModel.peopleAlbumsEnabled.collectAsState()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_people_albums),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = peopleAlbumsEnabled,
+                onCheckedChange = { settingsViewModel.setPeopleAlbumsEnabled(it) },
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .testTag("settings_toggle_people_albums"),
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_people_albums_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+
         val aiViewModel: AiEngineViewModel = viewModel()
         val aiState by aiViewModel.state.collectAsState()
         LaunchedEffect(Unit) { aiViewModel.refresh() }

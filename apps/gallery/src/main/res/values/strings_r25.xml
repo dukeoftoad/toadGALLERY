@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r25 slice: the People UI + cluster management (Workstream 6 of the
+     Phase 5 plan) — the People browse screen, the Person detail screen
+     with rename/merge/hide/remove, the Albums tab's People section, and
+     the "People albums" consent row in the Settings AI section. Same
+     copy rules as every round file: honest plain language, escaped
+     apostrophes, and the privacy posture spelled out — the ADR-0010
+     opt-in rule (off by default) and ADR-0020's on-device model
+     delivery mean face clustering and people data never leave the
+     device. -->
+<resources>
+
+    <!-- The Settings AI-section consent row (ADR-0010: opt-in, off by default). -->
+    <string name="settings_people_albums">People albums</string>
+    <string name="settings_people_albums_body">Group photos by the faces found by the background index. Clustering runs entirely on this device — people data never leaves your phone. Off by default.</string>
+
+    <!-- The Albums tab's People section. -->
+    <string name="albums_people_header">People</string>
+    <string name="albums_people_consent_off">People albums are off — enable them in Settings.</string>
+    <string name="albums_people_engine_missing">People albums need the AI engine, which is not part of this build.</string>
+    <string name="albums_people_not_indexed">No people yet — they appear after the background face index runs (Settings → AI engine).</string>
+    <string name="albums_people_all_hidden">Every detected person is hidden. Reset the face index in Settings to start over.</string>
+    <string name="albums_people_error">People could not be read.</string>
+    <string name="albums_people_see_all">See all</string>
+
+    <!-- The People screen's honest states. -->
+    <string name="people_title">People</string>
+    <string name="people_unnamed">Unnamed</string>
+    <string name="people_state_consent_title">People albums are off</string>
+    <string name="people_state_consent_body">Enable People albums in Settings to group your photos by face. Clustering runs entirely on this device — nothing is uploaded.</string>
+    <string name="people_state_consent_action">Open Settings</string>
+    <string name="people_state_engine_title">AI engine not in this build</string>
+    <string name="people_state_engine_body">This build was compiled without the face engine, so people albums cannot run here.</string>
+    <string name="people_state_not_indexed_title">No people yet</string>
+    <string name="people_state_not_indexed_body">People appear here after the background face index runs. Start it from Settings → AI engine → Start background index.</string>
+    <string name="people_state_empty_title">Everyone is hidden</string>
+    <string name="people_state_empty_body">Every detected person is currently hidden. Reset the face index in Settings to start over.</string>
+    <string name="people_state_error_title">Couldn\'t load people</string>
+    <string name="people_corrupt_note">Saved people names could not be read — they were reset.</string>
+
+    <!-- Cluster-management actions + dialogs (Person detail). -->
+    <string name="person_detail_fallback_title">Person</string>
+    <string name="person_detail_error_title">Couldn\'t load this person</string>
+    <string name="person_detail_empty_title">No photos</string>
+    <string name="person_detail_empty_body">This person\'s photos are no longer in your library.</string>
+    <string name="person_detail_menu_rename">Rename</string>
+    <string name="person_detail_menu_merge">Merge with…</string>
+    <string name="person_detail_menu_hide">Hide this person</string>
+    <string name="person_action_remove">Remove from person</string>
+    <string name="cd_person_overflow">More actions</string>
+
+    <!-- The rename dialog (blank input removes the name — a real action). -->
+    <string name="person_rename_title">Rename person</string>
+    <string name="person_rename_label">Name</string>
+    <string name="person_rename_blank_hint">Leave empty to remove the name</string>
+    <string name="person_rename_save">Save</string>
+
+    <!-- The merge dialog. -->
+    <string name="person_merge_title">Merge with…</string>
+    <string name="person_merge_body">Every face of this person moves into the one you pick. This cannot be undone.</string>
+
+    <!-- The hide confirmation. -->
+    <string name="person_hide_title">Hide this person?</string>
+    <string name="person_hide_body">They won\'t appear in People anymore. Reset the face index in Settings to start over — that erases the whole index, names included.</string>
+    <string name="person_hide_confirm">Hide</string>
+
+    <!-- Operation outcomes. -->
+    <plurals name="people_face_count">
+        <item quantity="one">%1$d face</item>
+        <item quantity="other">%1$d faces</item>
+    </plurals>
+    <plurals name="person_removed_faces">
+        <item quantity="one">Removed %1$d face from this person</item>
+        <item quantity="other">Removed %1$d faces from this person</item>
+    </plurals>
+    <string name="people_action_failed">Couldn\'t save the change: %1$s</string>
+    <string name="people_action_failed_generic">Couldn\'t save the change — try again.</string>
+</resources>

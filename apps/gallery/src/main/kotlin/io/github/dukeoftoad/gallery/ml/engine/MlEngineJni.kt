@@ -19,6 +19,16 @@ package io.github.dukeoftoad.gallery.ml.engine
  * rows) and `nativeStoreDeleteFacesForFiles` (the per-file invalidation
  * delete behind revision-driven re-indexing and orphan cleanup).
  *
+ * r25 adds the People read/management paths over the same store:
+ * `nativeStoreFaceClusters` (the live cluster list as JSON),
+ * `nativeStoreClusterFileIds` (a cluster's current file ids),
+ * `nativeStoreMergeFaceClusters` (merge two people; a source equal to
+ * its target throws IllegalArgumentException before any store mutation)
+ * and `nativeStoreRemoveFacesFromCluster` (remove a photo from a
+ * person). Manual edits persist only until the next clustering pass
+ * recomputes assignments --- the r25 contract carries that caveat
+ * honestly.
+ *
  * Library packaging: the `.so` is built ONLY with the engine property and
  * is ABSENT from plain CI/dev builds. A missing library is a graceful
  * state, never a crash: the try-load in the `init` block catches
@@ -150,6 +160,56 @@ object MlEngineJni {
      */
     @JvmStatic
     external fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean
+
+    // ---- r25: the People read/management paths ----
+
+    /**
+     * The live cluster list for the People UI (r25), as the JSON array
+     * `[{"cluster_id":"…","count":12,"cover_file_id":4813},…]`
+     * (`cover_file_id` is JSON null when the cluster's top face id has no
+     * parsable leading file-id segment), sorted by count descending then
+     * cluster id ascending. Counts come from the LIVE assignments table
+     * --- NOT the clustering pass's summaries --- so manual merges and
+     * removals reflect immediately. Throws IllegalStateException when
+     * the store is not open or the read fails.
+     */
+    @JvmStatic
+    external fun nativeStoreFaceClusters(): String
+
+    /**
+     * The file IDs whose faces currently sit in [clusterId] (r25), via
+     * upstream's own distinct-file read over the live assignments. An
+     * empty array means no files --- including an unknown cluster id.
+     * Throws IllegalStateException when the store is not open or the
+     * read fails.
+     */
+    @JvmStatic
+    external fun nativeStoreClusterFileIds(clusterId: String): LongArray
+
+    /**
+     * Moves every face of [sourceClusterId] into [targetClusterId] (r25)
+     * --- "merge these two people" --- via upstream's own atomic batch
+     * upsert. An empty source is a no-op returning true. Throws
+     * IllegalArgumentException when source and target are equal (before
+     * any store mutation) and IllegalStateException on a closed store or
+     * DB failure. Manual merges persist only until the next clustering
+     * pass recomputes assignments.
+     */
+    @JvmStatic
+    external fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean
+
+    /**
+     * Removes [fileIds]' faces from [clusterId] (r25) --- "remove this
+     * photo from this person" / the split primitive --- via upstream's
+     * own atomic batch delete. Only faces currently assigned to
+     * [clusterId] are dropped (a file with faces in other clusters keeps
+     * those); the face rows themselves stay for the next clustering pass.
+     * An empty array is a no-op returning true. Throws
+     * IllegalStateException when the store is not open or any
+     * read/write fails.
+     */
+    @JvmStatic
+    external fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean
 
     /**
      * Closes the face-index store. Idempotent; returns true.

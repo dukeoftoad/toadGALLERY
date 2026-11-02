@@ -9,6 +9,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
+ * The r25 People-albums consent key (Workstream 6): persisted in the
+ * house `toad_settings` preferences, default FALSE --- ADR-0010's
+ * opt-in rule (AI features are off until the user turns them on).
+ * Lives at FILE scope (not in the private companion) because the
+ * People/Albums ViewModels read the same key at refresh time; a single
+ * public definition keeps it from drifting between readers.
+ */
+const val KEY_PEOPLE_ALBUM_ENABLED = "peopleAlbumEnabled"
+
+/**
  * State holder for the Settings tab (issue #27; appearance preferences since
  * the roadmap Phase 3 appearance slice).
  *
@@ -23,7 +33,14 @@ import kotlinx.coroutines.flow.asStateFlow
  *    `"photos_layout"` / `"photos_columns"` (Int) / `"photos_group_by"`,
  *    (de)serialized with the pure helpers in `Appearance.kt` --- unknown
  *    stored values degrade to the COLLAGE/3/NONE defaults, so the pre-slice
- *    render survives any corrupt or future-format file.
+ *    render survives any corrupt or future-format file;
+ *  - the "People albums" consent (r25, Workstream 6) under
+ *    [KEY_PEOPLE_ALBUM_ENABLED], default FALSE --- ADR-0010's opt-in rule
+ *    for AI features. The People/Albums surfaces read the preference
+ *    directly at refresh time (they are separate ViewModels without a
+ *    shared scope), so this flow's write-through matters for the Settings
+ *    row's own render; cross-screen propagation rides each surface's
+ *    entry refresh.
  *
  * Plain prefs remain the right-sized store: a handful of scalars, read
  * synchronously once at ViewModel creation (tiny file, no first-frame
@@ -42,6 +59,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _usePhotoPicker = MutableStateFlow(prefs.getBoolean(KEY_USE_PHOTO_PICKER, false))
     val usePhotoPicker: StateFlow<Boolean> = _usePhotoPicker.asStateFlow()
+
+    // r25 (Workstream 6): the People-albums consent, default FALSE per
+    // ADR-0010 --- the same write-through shape as the picker toggle.
+    private val _peopleAlbumsEnabled =
+        MutableStateFlow(prefs.getBoolean(KEY_PEOPLE_ALBUM_ENABLED, false))
+
+    /** Whether the People feature is consented on (r25; default false). */
+    val peopleAlbumsEnabled: StateFlow<Boolean> = _peopleAlbumsEnabled.asStateFlow()
 
     private val _appearance = MutableStateFlow(
         Appearance(
@@ -64,6 +89,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setUsePhotoPicker(enabled: Boolean) {
         _usePhotoPicker.value = enabled
         prefs.edit().putBoolean(KEY_USE_PHOTO_PICKER, enabled).apply()
+    }
+
+    /** Sets the People-albums consent (r25) and persists it write-through. */
+    fun setPeopleAlbumsEnabled(enabled: Boolean) {
+        if (enabled == _peopleAlbumsEnabled.value) return
+        _peopleAlbumsEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_PEOPLE_ALBUM_ENABLED, enabled).apply()
     }
 
     fun setLayout(layout: LayoutStyle) {

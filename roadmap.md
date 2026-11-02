@@ -679,6 +679,37 @@ and device transfer (face-derived data never leaves the device). 885 JVM
 tests + 526 vendored Rust tests + 12 JNI tests; versionCode 28, no
 device build per the Phase-5-completion directive.
 
+#### Status — r25 round (versionCode 29): the People UI round
+
+Workstream 6 of the Phase 5 plan
+(`docs/phase-5/people-ui.md`): the r23/r24 face index gains its product
+surface — the **People auto-album**, opt-in per ADR-0010 and **off by
+default**. The JNI store extends from twelve to sixteen externals
+(`nativeStoreFaceClusters` off the LIVE `face_clusters` table — not the
+stale `cluster_summary` cache, so manual edits reflect immediately —
+with per-cluster cover file ids; `nativeStoreClusterFileIds`;
+`nativeStoreMergeFaceClusters` over upstream `force_update_cluster_ids`
+with the self-merge `IllegalArgumentException` checked on both sides of
+the bridge; `nativeStoreRemoveFacesFromCluster`, the split primitive,
+over upstream `remove_face_id_to_cluster_id`; zero new SQL authored).
+The new `ml/people` domain carries the `PeopleEngineSeam` (fakes in
+tests, `PeopleEngineAdapter` in production), the atomic
+`people-state.json` names/hidden store inside the backup-excluded
+face-index directory (corrupt-recovers to empty, prunes stale cluster
+ids), the pure six-state `PeopleContentPolicy` (Error dominates;
+consent before capability; all-hidden is Ready(empty), distinct from
+NotIndexed), the no-cache `PeopleRepository` and the chunked
+999-limit `PeopleMediaQuery`. The Compose surfaces: the `PeopleScreen`
+grid, `PersonDetailScreen` (rename / merge-with / remove-from-person /
+hide over a multi-select photo grid, viewer hand-offs the Album-detail
+way), the Albums-tab People section (honest off / engine-missing /
+not-indexed cards; the person row + See all when ready) and the Settings
+`peopleAlbumEnabled` consent row. Honest limitation, pinned by a Rust
+test: manual cluster edits persist only until the queue's next
+recluster pass (an edit-preserving overlay is future work). 927 JVM
+tests (+42) + 526 vendored Rust tests + 20 JNI tests (8 new);
+versionCode 29, no device build per the Phase-5-completion directive.
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

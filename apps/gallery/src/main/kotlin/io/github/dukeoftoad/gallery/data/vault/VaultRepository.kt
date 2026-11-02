@@ -242,6 +242,23 @@ class VaultRepository(context: Context) {
      * crash-orphaned blobs), then returns the index. W1: the swept count
      * and the entry count are INFO-logged --- the unlock leg of the device
      * story.
+     *
+     * Why no repository-level mutex (the unlock-vs-move race round): the
+     * unlock path (`moveToVault` -> [VaultStore.store]) and this sweep are
+     * deliberately allowed to overlap --- moves run while the vault is
+     * Locked (the gate is [isConfigured], not the session) --- and the
+     * data-loss window between them is closed INSIDE the store:
+     * [VaultStore.store], [VaultStore.delete] and [VaultStore.sweepOrphans]
+     * serialize on one store-level monitor, so the sweep can only run
+     * fully BEFORE a store's blob write (nothing fresh to reclaim) or
+     * fully AFTER its index commit (the entry is known); the pre-fix
+     * interleave --- the sweep deleting a blob whose index write was
+     * still in flight, right before the move deleted the original
+     * MediaStore row --- is unreachable. A store that lands between this
+     * sweep and the [store.entries] read is fully committed and therefore
+     * VISIBLE in the listing (never lost, never half-state), which is the
+     * benign freshness consequence of not holding a repo mutex across the
+     * two calls. See [VaultStore]'s KDoc for the full interleave list.
      */
     suspend fun loadEntriesAfterSweep(): List<VaultIndexEntry> = withContext(Dispatchers.IO) {
         val swept = store.sweepOrphans()
@@ -367,7 +384,9 @@ class VaultRepository(context: Context) {
                 throw e
             } catch (e: Exception) {
                 // openInputStream or the seal failed: nothing index-visible
-                // happened; any half blob is a sweepable orphan.
+                // happened; any half blob is a sweepable orphan (reclaimed
+                // once aged past the sweep's grace window --- see
+                // [VaultStore.sweepOrphans]).
                 return@withContext VaultMoveOutcome.FAILED
             }
             // Sealed. Now remove the original through the existing consent

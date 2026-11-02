@@ -33,6 +33,16 @@ import javax.crypto.SecretKey
  *    binding file, so discarding the old key is free and self-heals the
  *    invalidated-key state without a separate migration path.
  *
+ * Handle caching (the binder-IPC round): [key] used to run a full
+ * AndroidKeyStore load+getEntry on every call; the handle is now cached
+ * after the first successful load (an AndroidKeyStore `SecretKey` handle
+ * stays valid for the process lifetime). [freshKey] refreshes the cache
+ * with the key it mints; [invalidateCache] is the use-time-failure hook.
+ * Honest limits, stated up front: a key invalidated by a biometric
+ * enrollment change still LOADS (see [key]'s KDoc), so a re-load serves
+ * the same dead handle --- the hook covers transient handle staleness,
+ * while enrollment changes keep needing [freshKey]'s re-mint.
+ *
  * StrongBox is attempted on API 28+ with fallback to the regular TEE-backed
  * Keystore exactly like [AndroidVaultKeys] (`setIsStrongBoxBacked(true)` →
  * [StrongBoxUnavailableException] → TEE); both spellings satisfy ADR-0017/0019.
@@ -58,27 +68,59 @@ object AndroidVaultBiometricKeys {
     private val lock = Any()
 
     /**
+     * The cached handle (guarded by [lock]): served for the process
+     * lifetime after the first successful load --- re-fetching it instead
+     * costs a full keystore load+getEntry (2-3 binder IPCs) per
+     * prompt-bound operation. [freshKey] replaces it; [invalidateCache]
+     * clears it.
+     */
+    private var cachedKey: SecretKey? = null
+
+    /**
      * Gets-or-generates the auth-bound key. A key invalidated by a biometric
      * enrollment change is still RETURNED here (it loads fine; it only fails
-     * when used) --- callers catch the use-time failure and narrate the
-     * ADR-0019 fallback. Enrollment paths use [freshKey] instead.
+     * when used) --- callers catch the use-time failure, narrate the
+     * ADR-0019 fallback, and call [invalidateCache] to drop the cached
+     * handle (the re-load serves the same dead key; only re-enrollment via
+     * [freshKey] mints a usable one). Enrollment paths use [freshKey]
+     * instead.
      */
     fun key(): SecretKey = synchronized(lock) {
-        loadExistingKey()?.let { return it }
-        generate()
+        cachedKey?.let { return it }
+        loadExistingKey()?.let { existing ->
+            cachedKey = existing
+            return existing
+        }
+        generate().also { cachedKey = it }
     }
 
     /**
      * Deletes any existing key under the alias and generates a fresh one ---
      * the enrollment path: each enrollment seals a NEW session secret and
      * replaces the binding file, so the old key (possibly invalidated by a
-     * biometric enrollment change) is simply discarded.
+     * biometric enrollment change) is simply discarded. The cache follows
+     * the mint: a later [key] must never serve the deleted old handle.
      */
     fun freshKey(): SecretKey = synchronized(lock) {
         runCatching {
             KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.deleteEntry(ALIAS)
         }
-        generate()
+        generate().also { cachedKey = it }
+    }
+
+    /**
+     * The use-time-failure hook: clears [cachedKey] so the next [key]
+     * re-loads the handle from the keystore ONCE. See the class KDoc's
+     * caching note for the honest limit: an enrollment-invalidated key
+     * still loads, so the re-load helps only transient handle staleness
+     * (keystore-side hiccups) --- the ADR-0019 invalidation path is
+     * [freshKey], which callers reach through re-enrollment. No caller in
+     * this round invokes it: the use-time failure sites live in the
+     * prompt wrapper (`ui/vault/VaultBiometrics`), outside this data-layer
+     * scope; the hook is the documented seam for that wiring.
+     */
+    fun invalidateCache() {
+        synchronized(lock) { cachedKey = null }
     }
 
     /** TEE-backed generation with a StrongBox attempt on P+ (the lint-visible guard). */

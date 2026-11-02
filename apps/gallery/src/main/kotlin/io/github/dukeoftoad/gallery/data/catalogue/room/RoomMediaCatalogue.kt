@@ -57,7 +57,8 @@ import kotlinx.coroutines.flow.map
  */
 class RoomMediaCatalogue(
     private val dao: CatalogueDao,
-) : MediaCatalogue {
+) : MediaCatalogue,
+    io.github.dukeoftoad.gallery.data.media.changes.ProvenanceHealingStore {
 
     /**
      * The atomic upsert/restore transition: the whole batch lands (rows
@@ -315,6 +316,33 @@ class RoomMediaCatalogue(
      */
     suspend fun recordsByCanonicalUri(canonicalUri: String): List<CatalogueRecord> =
         dao.itemsByCanonicalUri(canonicalUri).map { it.toRecord() }
+
+    // =====================================================================
+    // --- r20 round: the NULL-provenance healing store ---------------------
+    // (additive end-of-class section, the r16/r19a fencing discipline. The
+    // class now implements the healing seam from the scan-pipeline package;
+    // the [MediaCatalogue] interface stays untouched, per the r16 decision
+    // that widening it is the Phase 5 Places contract to settle.)
+    // =====================================================================
+
+    /**
+     * The Room side of
+     * [ProvenanceHealingStore][io.github.dukeoftoad.gallery.data.media
+     * .changes.ProvenanceHealingStore] --- a straight delegation to the
+     * two r20 DAO statements; every decision above the SQL lives in the
+     * seam's KDoc and its JVM tests.
+     */
+    override suspend fun rowsNeedingIndexHealing(limit: Int): List<CatalogueRecord> =
+        dao.rowsNeedingProvenanceHealing(limit).map { it.toRecord() }
+
+    /**
+     * The healing marker's targeted write: see the seam's KDoc for the
+     * write-ordering contract (this is the LAST write of a fully indexed
+     * row).
+     */
+    override suspend fun markProvenanceIndexed(localMediaKey: String, atMillis: Long) {
+        dao.updateProvenanceIndexedAt(localMediaKey, atMillis)
+    }
 }
 
 // --- entity <-> record mappers (the ONLY translation point) ---------------

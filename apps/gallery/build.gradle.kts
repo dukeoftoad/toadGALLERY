@@ -116,7 +116,21 @@ android {
         // lifecycle-aware video pause, and every grid honoring the
         // columns setting. Per maintainer directive (2026-11-02)
         // releases resume: build 23 ships r13-r19.
-        versionCode = 23
+        // versionCode 24 (r20 round): the scan-debt round --- the four
+        // r19-named data-layer follow-ups closed: the combined
+        // single-read EXIF pass (one open + one parse per row serving
+        // BOTH the capture-date and location dimensions; the r12/r16
+        // standalone indexers removed), the NULL-provenance healing
+        // pass (Room v5 -> v6 provenanceIndexedAtMillis stamp; failed
+        // rows re-offered bounded-per-start until they succeed), volume
+        // hot-plug (ACTION_MEDIA_MOUNTED shell -> idempotent observer
+        // registration + a coalesced scan for the new volume), and the
+        // vault batch store (one index rewrite per move batch with
+        // per-item failure isolation). Per maintainer directive
+        // (2026-11-02, after build 23): NO new device builds until
+        // Phase 5 completes; this and subsequent rounds ride CI from
+        // main only.
+        versionCode = 24
         versionName = "0.4.1-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

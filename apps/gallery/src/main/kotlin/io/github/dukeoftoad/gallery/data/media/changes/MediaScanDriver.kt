@@ -210,6 +210,7 @@ class MediaScanDriver(
     private val changeFeed: MediaChangeFeed,
     private val scanIndexHook: ScanIndexHook?,
     private val scanScope: CoroutineScope,
+    private val healingPass: ProvenanceHealingPass? = null,
     private val diag: DiagLog = DiagLog,
 ) {
 
@@ -226,31 +227,97 @@ class MediaScanDriver(
     private val unregisterFns = mutableListOf<() -> Unit>()
 
     /**
+     * The volumes this driver has already registered an observer for
+     * (r20 volume hot-plug): registration is IDEMPOTENT against this set,
+     * so a volume that appears after process start (SD card inserted,
+     * USB OTG) gets its observer exactly once no matter how many mount
+     * broadcasts arrive, and [unregisterObservers] resets the set along
+     * with the registrations.
+     */
+    private val registeredVolumes = mutableSetOf<String>()
+
+    /**
      * One-shot app-start entry: registers the change-feed observers (off
      * the main thread --- registration is binder work, and onCreate must
-     * stay cheap) and launches the first [ScanTrigger.APP_START] pass into
-     * [appScope]. The APP_START pass is what reconciles everything that
-     * happened while the process was dead; observer signals cover only the
-     * live process from here on.
+     * stay cheap), launches the first [ScanTrigger.APP_START] pass into
+     * [appScope], and --- when a [healingPass] is wired --- runs one
+     * bounded NULL-provenance healing pass right after the scan in the
+     * SAME coroutine (see [ProvenanceHealingPass]): the healing pass then
+     * observes exactly the catalogue the first scan just reconciled, with
+     * no lock of its own to take (its writes are targeted partial updates
+     * against a transaction-per-call catalogue, and its rows are selected
+     * by the stamp, so a racing observer scan costs at worst a redundant
+     * re-index of a row that legitimately re-indexed anyway).
+     *
+     * The APP_START pass is what reconciles everything that happened
+     * while the process was dead; observer signals cover only the live
+     * process from here on.
      */
     fun start(appScope: CoroutineScope) {
         appScope.launch {
             registerObservers()
             runScan(ScanTrigger.APP_START)
+            if (healingPass != null) {
+                try {
+                    healingPass.heal()
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (t: Throwable) {
+                    // The healing pass is best-effort housekeeping: a
+                    // failure costs the stranded rows their retry THIS
+                    // start, never the process (they stay selectable and
+                    // the next start re-offers them).
+                    diag.e(TAG, "provenance healing pass failed", t)
+                }
+            }
         }
     }
 
     /**
-     * Registers a change-feed observer per reported volume. The callbacks
-     * carry no payload and no debounce (the feed's contract) --- coalescing
-     * is THIS class's job, see [onMediaChanged]. Registrations are
-     * resources: [unregisterObservers] releases them deterministically.
+     * Registers a change-feed observer for every reported volume not
+     * already observed ([registeredVolumes]; r20 made this idempotent so
+     * the hot-plug callback below can call it freely). The callbacks carry
+     * no payload and no debounce (the feed's contract) --- coalescing is
+     * THIS class's job, see [onMediaChanged]. Registrations are resources:
+     * [unregisterObservers] releases them deterministically.
      */
     fun registerObservers() {
         for (volume in rowSource.volumes()) {
+            val isNew = synchronized(registeredVolumes) {
+                if (volume in registeredVolumes) {
+                    false
+                } else {
+                    registeredVolumes += volume
+                    true
+                }
+            }
+            if (!isNew) continue
             val unregister = changeFeed.registerObserver(volume) { onMediaChanged() }
             synchronized(unregisterFns) { unregisterFns += unregister }
         }
+    }
+
+    /**
+     * The volume hot-plug entry (r20, the r19-named follow-up): a storage
+     * volume appeared after process start (SD card inserted, USB OTG
+     * mounted). The pre-r20 driver observed only the volumes that existed
+     * when it registered at app start, so a hot-plugged volume's changes
+     * never reached the pipeline until the next process restart.
+     *
+     * This method (called by the platform mount broadcast shell, see
+     * `AndroidVolumeMonitor`) does the two things the restart used to be
+     * needed for: it registers observers for the NEW volumes only
+     * (idempotent via [registeredVolumes]) and fires [onMediaChanged] ---
+     * the coalesced scan valve --- so the fresh volume gets a pass over
+     * the same serialized path every other scan takes. A volume that
+     * merely DISAPPEARED needs no call: [scanAllVolumes] walks only the
+     * volumes the row source reports, so an unmounted volume's rows keep
+     * their live records until it returns (and its observer firing on
+     * unmount is just another coalesced no-change pass).
+     */
+    fun onVolumesChanged() {
+        registerObservers()
+        onMediaChanged()
     }
 
     /** Releases every observer registration [registerObservers] made. */
@@ -259,6 +326,7 @@ class MediaScanDriver(
             unregisterFns.forEach { it() }
             unregisterFns.clear()
         }
+        synchronized(registeredVolumes) { registeredVolumes.clear() }
     }
 
     /**

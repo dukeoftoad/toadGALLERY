@@ -430,3 +430,39 @@ user-visible outcomes on the reference device.
 **Sign-off:** record results per section; any fail gets a logcat snippet
 and a new issue filed against milestone **Phase 3** (#4) — that milestone
 stays open until this checklist passes on the reference device.
+
+## 18. r20 pass — the scan-debt round (versionCode 24; NO device build —
+       per maintainer directive, no builds until Phase 5 completes)
+
+This round ships as CI APK artifacts from main only (see the roadmap's
+r20 status note). The items below are the device checks for whenever
+the next installable build happens (the Phase 5 completion build);
+they are written now so the round's behavior changes carry their
+verification plan with them.
+
+- [ ] **Room v6 upgrade (the healing stamp)**: install the next build
+      over a build-23 install → the app opens normally (no
+      identity-hash crash; the migration is one ADD COLUMN), and the
+      first launch's diagnostics show a `provenance healing pass
+      offered N rows` line while pre-r20 rows converge (a library
+      scanned entirely before r20 offers up to 1000 rows per start
+      until drained).
+- [ ] **Healing convergence**: force-stop mid-heal (or let one happen)
+      → the next start continues from where it stopped; a row whose
+      indexing repeatedly fails is re-offered every start (bounded),
+      never crashes the pass, and never blocks the scan.
+- [ ] **Combined pass on-device**: an EXIF-carrying JPEG gains BOTH
+      its timeline date and its map dot from one launch (the map
+      after the ACCESS_MEDIA_LOCATION grant heals ungranted rows via
+      the stamp reset on their next change); a PNG/video item costs
+      no EXIF read at all (capability-first).
+- [ ] **Volume hot-plug**: with the app running, insert an SD card
+      with media → the new volume's items appear without an app
+      restart (the mount broadcast registers the observer + fires a
+      coalesced scan); ejecting the card leaves its items intact in
+      the catalogue until it returns (no mass tombstone).
+- [ ] **Vault batch move**: select 10+ items → move to vault → the
+      whole batch seals in one pass (one index rewrite; materially
+      faster than the per-item cycle on large batches), per-item
+      failures narrate alone, and a consent-blocked delete still
+      offers the existing retry path for exactly the blocked items.

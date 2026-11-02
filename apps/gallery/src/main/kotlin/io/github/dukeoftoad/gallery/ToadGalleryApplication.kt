@@ -16,15 +16,14 @@ import io.github.dukeoftoad.gallery.data.media.access.MediaAccess
 import io.github.dukeoftoad.gallery.data.media.access.MediaReadPermissionGate
 import io.github.dukeoftoad.gallery.data.media.changes.AndroidMediaScanRowSource
 import io.github.dukeoftoad.gallery.data.media.changes.AndroidMediaStoreChangeFeed
+import io.github.dukeoftoad.gallery.data.media.changes.AndroidVolumeMonitor
+import io.github.dukeoftoad.gallery.data.media.changes.AndroidCombinedExifSource
+import io.github.dukeoftoad.gallery.data.media.changes.CombinedExifIndexer
 import io.github.dukeoftoad.gallery.data.media.changes.MediaScanDriver
-import io.github.dukeoftoad.gallery.data.media.dates.AndroidCaptureDateCandidateSource
-import io.github.dukeoftoad.gallery.data.media.dates.CaptureDateIndexer
+import io.github.dukeoftoad.gallery.data.media.changes.ProvenanceHealingPass
 import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityGate
-import io.github.dukeoftoad.gallery.data.media.location.AndroidGpsCandidateSource
 import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
-import io.github.dukeoftoad.gallery.data.media.location.CompositeScanIndexHook
 import io.github.dukeoftoad.gallery.data.media.location.ItemLocationWriter
-import io.github.dukeoftoad.gallery.data.media.location.LocationIndexer
 import io.github.dukeoftoad.gallery.data.media.location.LocationReadGate
 
 /**
@@ -166,53 +165,60 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
         // the map's `changes()` collections see every write the pipeline
         // commits.
         val catalogue = mediaCatalogue
-        // ONE read boundary shared by both indexers (r16): the capture-date
-        // and location passes each read the same rows' bytes; a single
-        // [MediaAccess] instance keeps the read-time permission re-check
-        // and handle minting in one place.
+        // ONE read boundary for the index pass (r20): the combined EXIF
+        // indexer reads each row's bytes ONCE and extracts BOTH provenance
+        // dimensions from the single read, where the r12/r16 pair of
+        // standalone indexers each opened and streamed the same bytes.
         val mediaAccess: MediaAccess = ContentResolverMediaAccess(
             resolver = contentResolver,
             permissionGate = MediaReadPermissionGate(this),
         )
-        // The eligibility gate is date-agnostic by construction ("may this
-        // process read this record's bytes"), so the location indexer
-        // reuses the same production gate as the capture-date pass.
+        // The eligibility gate is dimension-agnostic by construction ("may
+        // this process read this record's bytes"), so the combined pass
+        // reuses the same production gate both standalone indexers used.
         val eligibilityGate = CatalogueRecordEligibilityGate()
-        val captureDateHook = CaptureDateIndexer(
-            catalogue = catalogue,
-            mediaAccess = mediaAccess,
-            candidateSource = AndroidCaptureDateCandidateSource(),
-            eligibilityGate = eligibilityGate,
-        )
-        // The r16 location pass: EXIF GPS through the same read boundary,
-        // persisted via the catalogue's targeted location write (Room v4).
-        // The read gate consults the SAME r14 consent machinery
-        // ([AndroidMediaLocationAccess]) the Settings row and the Details
-        // display gate use --- on API 29+ an ungranted ACCESS_MEDIA_LOCATION
-        // means the platform redacts EXIF location, so the indexer skips
-        // the bytes and persists the honest withheld provenance instead.
+        // The r14 consent machinery decides whether the GPS HALF of the
+        // combined evidence may be consulted ([AndroidMediaLocationAccess]
+        // --- on API 29+ an ungranted ACCESS_MEDIA_LOCATION means the
+        // platform redacts EXIF location, so the pass persists the honest
+        // withheld provenance instead of reading redacted bytes).
         val locationAccess = AndroidMediaLocationAccess(this)
-        val locationHook = LocationIndexer(
+        val combinedIndexer = CombinedExifIndexer(
+            catalogue = catalogue,
             locationWriter = ItemLocationWriter { key, latitude, longitude, sourceName ->
                 catalogue.updateItemLocation(key, latitude, longitude, sourceName)
             },
+            healingStore = catalogue,
             mediaAccess = mediaAccess,
-            candidateSource = AndroidGpsCandidateSource(),
+            combinedSource = AndroidCombinedExifSource(),
             eligibilityGate = eligibilityGate,
             locationReadGate = LocationReadGate { locationAccess.isGranted() },
+        )
+        // The NULL-provenance healing pass (r20): re-offers rows whose
+        // indexing never completed --- selected by the v6 stamp column ---
+        // bounded per app start (see [ProvenanceHealingPass]).
+        val healingPass = ProvenanceHealingPass(
+            healingStore = catalogue,
+            indexHook = combinedIndexer,
         )
         val scanDriver = MediaScanDriver(
             rowSource = AndroidMediaScanRowSource(this),
             catalogue = catalogue,
             changeFeed = AndroidMediaStoreChangeFeed(this),
-            scanIndexHook = CompositeScanIndexHook(listOf(captureDateHook, locationHook)),
+            scanIndexHook = combinedIndexer,
             scanScope = appScope,
+            healingPass = healingPass,
         )
         scanDriver.start(appScope)
+        // Volume hot-plug (r20): a storage volume mounted after process
+        // start registers its observers and gets a coalesced scan pass.
+        // Held for the process lifetime (the receiver is process state,
+        // like the driver itself).
+        AndroidVolumeMonitor(this) { scanDriver.onVolumesChanged() }.register()
         DiagLog.i(
             TAG,
             "phase 4 scan driver started " +
-                "(catalogue + change feed + capture-date and location indexers wired)",
+                "(catalogue + change feed + combined EXIF indexer + healing pass + volume hot-plug wired)",
         )
     }
 

@@ -35,7 +35,8 @@ layout, so a future internal swap stays call-site compatible.
 ## 2. Tag scheme (issue #38.7)
 
 - Pattern: `<screen>_state_<state>` — e.g. `albums_state_loading`,
-  `album_detail_state_empty`, `album_detail_state_error` (reserved).
+  `album_detail_state_empty`, `album_detail_state_error` (live since the
+  r19 round).
 - Component-owned intrinsic defaults apply only where mandated: the denial
   state always carries `state_permission_denied` (shared by Photos + Albums so
   one tag finds any denial; the `tag` param exists for per-screen overrides
@@ -91,13 +92,23 @@ exactly this, so the user is never left wondering why a button "does nothing".
   `ErrorState` / tagged wrappers later. Its error copy
   (`state_photos_error_*` + `state_action_retry`) becomes the canonical
   `ErrorState` argument set.
-- **AlbumDetail error (gap):** the ViewModel defensively maps query failures
-  to an empty bucket, so no error state renders today. A later slice should
-  add `AlbumDetailState.Error` and render `ErrorState(tag =
-  "album_detail_state_error")`.
+- **AlbumDetail error (gap CLOSED by r19):** `AlbumDetailState.Error` now
+  renders `ErrorState(tag = "album_detail_state_error")` — a failed query
+  is an error, never a disguised "folder is empty".
+- **r19 live call sites of the shared `ErrorState` (the component's first):**
+  Albums (`albums_state_error`, with retry re-entering Loading) and
+  AlbumDetail (`album_detail_state_error`, retry separate from refresh so
+  observer-driven refreshes never flash a spinner over a working grid).
+  Search gained the Photos permission pattern (`PermissionNeeded` under the
+  still-usable field, `state_permission_denied` via the shared
+  `MediaPermissionState`); a mid-query `SecurityException` folds into the
+  same state. The move picker's album query failure renders its honest
+  empty state + the `file_ops_albums_failed` snackbar instead of crashing.
 - **Unsupported (no call sites yet):** defined now so the viewer (Phase 3)
   and the editor round trip receiving `ERROR_UNSUPPORTED` (Phase 6,
   `editor-contract.md`) adopt it instead of reinventing per-screen variants.
-- **Search/Settings placeholders:** stay on raw `StateScreen` until those
-  features exist.
+- **Search/Settings placeholders:** Search adopted the shared permission
+  machinery in r19 (see above); its loading/error/empty states stay inline
+  until a later slice migrates them onto `LoadingState`/`ErrorState`.
+  Settings remains on its own layout (no grid states to share).
 - `docs/architecture/README.md` index entry: next docs-touching slice.

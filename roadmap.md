@@ -520,6 +520,32 @@ CI-validated, merged in sequence #86–#89) land the rest of Phase 4:
   `docs/phase-4/format-support-audit.md` — the cited format matrix
   (every platform claim carries a repo cite or an official-docs URL).
 
+#### Status — r20 round (versionCode 24): the scan-debt round
+
+The maintainer directive after build 23 (2026-11-02): **no new
+device builds until Phase 5 completes** — rounds land on main and
+ride CI artifacts only. r20 closes four of the six r19-named
+follow-ups, the data-layer debt the Phase 5 index coordinator
+builds on: the **combined single-read EXIF pass** (one open + one
+parse per row serving both the capture-date and GPS dimensions;
+the r12/r16 standalone indexers removed, their evidence types,
+pure write mappings, eligibility gate and consent gate absorbed
+unchanged), the **NULL-provenance healing pass** (Room v5 → v6
+`provenanceIndexedAtMillis` stamp — the LAST of the pass's three
+writes; a bounded per-start pass re-offers unstamped rows until
+they succeed, so one transient error can no longer strand a row's
+provenance forever), **volume hot-plug** (an
+`ACTION_MEDIA_MOUNTED` shell drives idempotent observer
+registration + a coalesced scan for volumes mounted after process
+start), and the **vault batch store** (one index rewrite per move
+batch with per-item failure isolation, two-phase move flow with
+positional outcome pairing). The fifth follow-up — the
+`screen-states.md` flips for the r19 error/permission call sites —
+is done in the same round. The sixth (device verification of the
+pre-Q reduced-projection fallback on an API 26–28 device) stays
+open, now folded into the eventual Phase 5 completion build's
+checklist.
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

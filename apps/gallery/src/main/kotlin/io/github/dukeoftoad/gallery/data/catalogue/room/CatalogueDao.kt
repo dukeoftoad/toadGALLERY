@@ -297,9 +297,11 @@ interface CatalogueDao {
      * an unknown/tombstoned key can never resurrect a row).
      *
      * Consumers reach this through
-     * [RoomMediaCatalogue.updateItemLocation], which the r16
-     * [io.github.dukeoftoad.gallery.data.media.location.LocationIndexer]
-     * consumes through its narrow
+     * [RoomMediaCatalogue.updateItemLocation], which the combined EXIF
+     * index pass (r20;
+     * [io.github.dukeoftoad.gallery.data.media.changes
+     * .CombinedExifIndexer], absorbing the r16 location indexer) consumes
+     * through its narrow
      * [io.github.dukeoftoad.gallery.data.media.location.ItemLocationWriter]
      * seam.
      */
@@ -381,6 +383,52 @@ interface CatalogueDao {
      */
     @Query("SELECT * FROM catalogue_items WHERE canonicalUri = :canonicalUri")
     suspend fun itemsByCanonicalUri(canonicalUri: String): List<CatalogueItemEntity>
+
+    // =====================================================================
+    // --- r20 round: the NULL-provenance healing pass's two writes --------
+    // (additive end-of-interface section, the r16/r19a fencing discipline.
+    // Both queries are the Room side of
+    // io.github.dukeoftoad.gallery.data.media.changes
+    // .ProvenanceHealingStore; every decision above the SQL lives in that
+    // seam's JVM tests.)
+    // =====================================================================
+
+    /**
+     * Up to [limit] live rows the combined index pass has never fully
+     * indexed (`provenanceIndexedAtMillis IS NULL`), most recently seen
+     * first --- the healing pass re-offers exactly these (see
+     * [CatalogueItemEntity.provenanceIndexedAtMillis] for why an upsert
+     * legitimately re-nulls the marker and the index pass re-stamps it).
+     *
+     * NEWEST-FIRST bounds the pass's usefulness on a cold first run (every
+     * legacy row is NULL): the rows the user is most likely to look at
+     * heal first, and the remainder converges over subsequent app starts
+     * (each pass is capped, so a 50k-item first-library never stalls
+     * app start --- the roadmap's "no full-library re-parse at launch").
+     *
+     * Pre-r20 rows read NULL by the migration's nature and heal ONCE;
+     * after that they carry the stamp and are never re-selected unless a
+     * real add/change resets it (which means they legitimately re-index).
+     */
+    @Query(
+        "SELECT * FROM catalogue_items " +
+            "WHERE provenanceIndexedAtMillis IS NULL " +
+            "ORDER BY lastSeenAtMillis DESC, localMediaKey DESC " +
+            "LIMIT :limit",
+    )
+    suspend fun rowsNeedingProvenanceHealing(limit: Int): List<CatalogueItemEntity>
+
+    /**
+     * The healing marker's targeted write: stamps [atMillis] onto the live
+     * row for [localMediaKey]. The UPDATE matches zero rows for an unknown
+     * or tombstoned key --- a no-op, never a resurrection (the same
+     * discipline as [updateCaptureDateColumns] and [updateLocationColumns]).
+     */
+    @Query(
+        "UPDATE catalogue_items SET provenanceIndexedAtMillis = :atMillis " +
+            "WHERE localMediaKey = :localMediaKey",
+    )
+    suspend fun updateProvenanceIndexedAt(localMediaKey: String, atMillis: Long)
 }
 
 /**

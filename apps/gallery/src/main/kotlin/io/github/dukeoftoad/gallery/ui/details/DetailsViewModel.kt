@@ -389,8 +389,8 @@ class DetailsViewModel(app: Application) : AndroidViewModel(app) {
             // "block cannot be opened"; the byte read succeeded, so the
             // honest renderable state here is ABSENT (no block found).
             // The UNREADABLE state stays reserved for the failed byte
-            // read --- the same split AndroidCaptureDateCandidateSource
-            // makes (open-fail -> UNREADABLE, parsed-empty -> ABSENT).
+            // read --- the same split the combined EXIF extraction makes
+            // (open-fail -> UNREADABLE, parsed-empty -> ABSENT).
             exifBlockAvailability =
                 if (bytes == null) MetadataAvailability.UNREADABLE else MetadataAvailability.ABSENT
         }

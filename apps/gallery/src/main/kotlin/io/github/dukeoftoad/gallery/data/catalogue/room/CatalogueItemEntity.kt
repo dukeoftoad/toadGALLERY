@@ -188,4 +188,39 @@ data class CatalogueItemEntity(
      * [bucketId]'s KDoc gives.
      */
     val bucketDisplayName: String? = null,
+
+    // --- indexer healing marker (r20 round) --------------------------------
+
+    /**
+     * Epoch millis of the moment the combined EXIF index pass last
+     * completed ALL of a row's provenance writes (capture date + location
+     * + this stamp), or `null` when the row was never fully indexed ---
+     * the marker the NULL-provenance healing pass selects on (see
+     * `CatalogueDao`'s r20 section and [RoomMediaCatalogue]'s
+     * [ProvenanceHealingStore][io.github.dukeoftoad.gallery.data.media
+     * .changes.ProvenanceHealingStore] implementation).
+     *
+     * WIPE-AND-REFILL, exactly like the capture-date/location provenance
+     * columns: the record->row mapper constructs the entity WITHOUT this
+     * field (the record does not carry it), so every scan upsert resets it
+     * to `null` and the index pass re-stamps the row right after the
+     * batch. That reset is CORRECT, not loss: an upserted row is by
+     * definition ADDED or CHANGED, i.e. exactly the set the index pass
+     * must re-run for anyway; the stamp's only job is to distinguish
+     * "indexed" from "never successfully indexed" for rows the scan did
+     * NOT touch this pass --- the per-row-failure remainder the healing
+     * pass exists to re-offer. A row whose indexing fails keeps `null`
+     * (the stamp write is the LAST of the pass's writes) and is selected
+     * again by the next healing pass, idempotently, until it succeeds.
+     *
+     * NO counterpart on
+     * [CatalogueRecord][io.github.dukeoftoad.gallery.data.catalogue
+     * .CatalogueRecord] (the r16 location-column discipline): the marker
+     * is pipeline-internal state; no reader outside the healing pass has
+     * a use for it, so widening the record would be speculative surface.
+     * Nullable `ADD COLUMN` only, in
+     * [MediaCatalogueDatabase.MIGRATION_5_6]; Kotlin default invisible
+     * to Room (no schema default), the latitude/bucket pattern.
+     */
+    val provenanceIndexedAtMillis: Long? = null,
 )

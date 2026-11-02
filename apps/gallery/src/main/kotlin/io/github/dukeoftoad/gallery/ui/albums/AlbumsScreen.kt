@@ -52,6 +52,7 @@ import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.filters.DerivedCollections
 import io.github.dukeoftoad.gallery.data.filters.PhotosFilterHandoff
 import io.github.dukeoftoad.gallery.ui.StateScreen
+import io.github.dukeoftoad.gallery.ui.media.ErrorState
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
 import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
@@ -61,11 +62,19 @@ import kotlinx.coroutines.launch
 /**
  * Albums tab (Phase 3, issue #29).
  *
- * Same three-state model as Photos (Loading / PermissionNeeded / Ready),
- * rendered through the shared screen-state components (issue #13):
+ * Same state model as Photos (Loading / PermissionNeeded / Ready), plus
+ * since r19 the honest Error arm, rendered through the shared screen-state
+ * components (issue #13):
  *  - Loading -> [LoadingState] tagged `albums_state_loading`
  *  - PermissionNeeded -> [MediaPermissionState] (shared denial tag
  *    `state_permission_denied`, Settings deep-link built in)
+ *  - Error -> the shared [ErrorState] tagged `albums_state_error` (r19):
+ *    a provider failure --- permission revoked mid-session, a provider
+ *    SQLiteException, a missing column --- renders the honest error screen
+ *    with a retry action that re-queries. These are the shared component's
+ *    FIRST live call sites: issue #13 defined it with none, and the UI
+ *    audit tracked it as dead code (the Photos tab migrates later per
+ *    docs/architecture/screen-states.md §5).
  *  - Ready + empty -> the frozen `StateScreen` empty layout, wrapped in a Box
  *    tagged `albums_state_empty` (StateScreen itself is frozen and carries no
  *    tag parameter; the wrapper supplies the test surface, issue #38.7)
@@ -140,6 +149,13 @@ fun AlbumsScreen(
         when (val s = state) {
             is AlbumsState.Loading -> LoadingState(tag = "albums_state_loading")
             is AlbumsState.PermissionNeeded -> MediaPermissionState(onGrant = requester::launch)
+            is AlbumsState.Error -> ErrorState(
+                titleRes = R.string.state_albums_error_title,
+                bodyRes = R.string.state_albums_error_body,
+                actionRes = R.string.state_action_retry,
+                onRetry = viewModel::retry,
+                tag = "albums_state_error",
+            )
             is AlbumsState.Ready -> {
                 if (s.albums.isEmpty()) {
                     // StateScreen is frozen without a tag parameter, so the stable

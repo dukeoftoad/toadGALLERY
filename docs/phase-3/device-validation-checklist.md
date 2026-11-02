@@ -372,6 +372,59 @@ verify:
 - [ ] No new `AndroidRuntime` FATAL lines attributable to build 22
       (stale-buffer `r8-map-id` guidance as section 13).
 
+## 17. r19 pass — the code-improvement round (build 23, the release resumption)
+
+Build 23 releases the r13–r19 backlog per the maintainer directive of
+2026-11-02 (releases resume). The r19 code-improvement round was
+driven by a full three-part static audit; this pass exercises its
+user-visible outcomes on the reference device.
+
+- [ ] **Favorites shows videos** (the `media_type` fix): favorite one
+      VIDEO and one photo, then open Albums → Favorites — both appear;
+      no audio rows leak in (the old selection treated 2 = AUDIO as
+      VIDEO and dropped every favorited video).
+- [ ] **Search type chips**: the Videos chip returns only videos; All
+      returns images+videos and never audio.
+- [ ] **Folder chip + picker (the r19 feature)**: cold start (MediaStore
+      path) — the leading Folder chip opens the picker sheet with
+      folder names + counts; picking a folder narrows the timeline;
+      "All folders" clears it. Repeat once warm (catalogue path) — the
+      same filter must serve from the catalogue (Room v5 bucket
+      columns). The selection survives a sort change and a
+      backend flip.
+- [ ] **Folder sheet honesty**: revoke media permission while on
+      another tab, then open the folder sheet → honest error + retry
+      (never a silent empty list, never a crash).
+- [ ] **Albums error state**: with permission revoked, visit the
+      Albums tab → Error + retry renders (no crash, no eternal
+      spinner); re-grant → retry reloads. Album detail under the same
+      conditions shows Error (not "folder is empty").
+- [ ] **Viewer zoom-lock fix**: zoom a photo, delete it from the top
+      bar → the rebuilt pager swipes immediately (previously the swipe
+      stayed locked until an accidental gesture).
+- [ ] **Video lifecycle**: play a video, background the app → audio
+      stops; return → playback resumes (only if it was playing);
+      swipe to the next page mid-play → the previous page's audio
+      stops.
+- [ ] **Columns everywhere**: change Settings → Appearance → "Photos
+      per row" → the Trash, Search and move-picker grids honor it
+      (previously hardcoded 3).
+- [ ] **Vault move-vs-unlock (the P0 race)**: start a move-to-vault of
+      a large video, then unlock the vault while the move runs → no
+      data loss, no dangling index entry, no orphan deletion of the
+      in-flight blob (the store-level mutex + sweep grace). Verify the
+      moved item still opens and the original is gone only after the
+      move completes.
+- [ ] **Details view on an old item**: open Details for an item scanned
+      pre-r19 → renders normally (the shared catalogue instance + the
+      keyed `canonicalUri` lookup replaced the per-visit DB + full
+      table scan).
+- [ ] **GPS editor honesty** (r15 follow-up): enter `NaN` or `0x1p3` in
+      the GPS editor → refused (previously it wrote GPS 0,0 into the
+      file).
+- [ ] No new `AndroidRuntime` FATAL lines attributable to build 23
+      (stale-buffer `r8-map-id` guidance as section 13).
+
 ---
 
 **Sign-off:** record results per section; any fail gets a logcat snippet

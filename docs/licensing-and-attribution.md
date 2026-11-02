@@ -1,6 +1,8 @@
 # Licensing and Attribution
 
-**Status:** Living document (updated every phase) · **Last revised:** 2026-11-02 (v2.4 —
+**Status:** Living document (updated every phase) · **Last revised:** 2026-11-02 (v2.5 —
+r23 records the photos-side vendored crates `ente-vecdb` (whole upstream `vecdb`) and
+`ente-photos-ml` (partial `photos` extraction with one crypto seam) in §2/§5; v2.4 —
 r22 records the net-new `engine/crates/toad-ml-jni` JNI bridge crate, AGPL-3.0 via the
 engine workspace; v2.3 — Ente ML engine vendored under ADR-0020 with the AGPL-3.0
 one-way-compatibility consequence; still features-only per ADR-0008 otherwise; Aves
@@ -26,7 +28,7 @@ rationale changes.
 | Mi Gallery | (Xiaomi, proprietary) | Proprietary | n/a | **UX/feature reference only.** No code, no assets, no trademark. |
 | Jetpack Compose + Material 3 | `androidx.compose` | **Apache-2.0** | AndroidX metadata | Canonical UI toolkit (ADR-0009). |
 | `androidx.exifinterface` | `androidx.exifinterface` | **Apache-2.0** | AndroidX metadata | Replaces the planned Aves `exifinterface` fork port (ADR-0008). |
-| Ente ML engine (Rust) | `ente/ente` `rust/crates/{ml,assets,image}` @ `423b2d80d9ec89d45f5680cb1e1d777bac225f41` | **AGPL-3.0** (c) Ente Services Pvt. Ltd. and contributors | 2026-11-02, repo LICENSE + crate tree | **Vendored + adapted** under ADR-0020 / maintainer direction (2026-11-02): `engine/` workspace, see `engine/NOTICE.md` |
+| Ente ML engine (Rust) | `ente/ente` `rust/crates/{ml,assets,image}` + (r23) `rust/crates/vecdb` and the `photos` crate's `db`/`ml_db`/`ml_store`/`face_clustering` modules @ `423b2d80d9ec89d45f5680cb1e1d777bac225f41` | **AGPL-3.0** (c) Ente Services Pvt. Ltd. and contributors | 2026-11-02, repo LICENSE + crate tree | **Vendored + adapted** under ADR-0020 / maintainer direction (2026-11-02): `engine/` workspace, see `engine/NOTICE.md` |
 
 ### Attribution chain
 
@@ -48,7 +50,9 @@ rationale changes.
   + license text required for the dependency.
 - BSD-3-Clause (Aves) → GPL-compatible; *not* ported under ADR-0008, so no notice text
   required for Aves code in the tree (none is in the tree).
-- **AGPL-3.0 (Ente ML engine, vendored under ADR-0020)** → AGPL-3.0 is GPL-3.0-compatible
+- **AGPL-3.0 (Ente ML engine, vendored under ADR-0020; r23 extends the vendored
+  set with the photos-side persistence stack — `vecdb` whole and the `photos`
+  crate's db/ml_db/ml_store/face_clustering modules)** → AGPL-3.0 is GPL-3.0-compatible
   one-way (AGPL code may enter a GPL-3.0 work only by re-licensing the combined derivative
   under AGPL-3.0). Consequence accepted by the maintainer (2026-11-02): distributed builds
   containing `engine/` are effectively offered under **AGPL-3.0**. The vendored crate tree
@@ -97,8 +101,10 @@ rationale changes.
 | `engine/crates/ente-ml/**` | `ente/ente` `rust/crates/ml` @ `423b2d80` | `423b2d80d9ec89d45f5680cb1e1d777bac225f41` | AGPL-3.0 | Workspace-root recreation (dependency subset), `license.workspace = true` added; otherwise byte-identical; `engine/NOTICE.md` is the authoritative adaptation list |
 | `engine/crates/ente-assets/**` | `ente/ente` `rust/crates/assets` @ `423b2d80` | (same pin) | AGPL-3.0 | Directory rename only + `license.workspace = true` |
 | `engine/crates/ente-image/**` | `ente/ente` `rust/crates/image` @ `423b2d80` | (same pin) | AGPL-3.0 | Directory rename only + `license.workspace = true`; keeps upstream's git-pinned `heic-decoder` dep |
-| `engine/crates/toad-ml-jni/**` | net-new Rust (r22, the JNI bridge over `ente-ml`/`ente-image`) | --- | AGPL-3.0 | Not vendored --- net-new toadGALLERY code (the Kotlin-facing cdylib); `license.workspace = true` places it in the AGPL-3.0 engine workspace because it compiles against the AGPL vendored crates; the §2 distributed-binary consequence is unchanged |
-| `apps/gallery/src/main/kotlin/io/github/dukeoftoad/gallery/ml/engine/*` | net-new Kotlin | --- | GPL-3.0 (project) | Model manifest (all 11 assets match the pinned Rust catalog name+size+digest, test-pinned), verifier, provisioner --- Ente-inspired reimplementations, not ports |
+| `engine/crates/toad-ml-jni/**` | net-new Rust (r22, the JNI bridge over `ente-ml`/`ente-image`; r23 extends the surface with `nativeDetectFaceEmbeddingsJpeg` + the face-index store over the vendored `MlStore`) | --- | AGPL-3.0 | Not vendored --- net-new toadGALLERY code (the Kotlin-facing cdylib); `license.workspace = true` places it in the AGPL-3.0 engine workspace because it compiles against the AGPL vendored crates; the §2 distributed-binary consequence is unchanged |
+| `engine/crates/ente-vecdb/**` | `ente/ente` `rust/crates/vecdb` @ `423b2d80` (r23, vendored whole) | (same pin) | AGPL-3.0 | Vendored byte-identical; `license.workspace = true` + directory rename only; `engine/NOTICE.md` is the authoritative adaptation list |
+| `engine/crates/ente-photos-ml/**` | `ente/ente` `rust/crates/photos` (partial: `db`, `ml_db`, `ml_store`, `face_clustering` modules) @ `423b2d80` (r23) | (same pin) | AGPL-3.0 | Partial-crate extraction; the four modules are byte-identical except the two `use` import lines for `ente_core::crypto::random_bytes`, rewritten onto an engine-owned crypto seam (net-new `src/crypto.rs` + wrapper `lib.rs`, recorded in `engine/NOTICE.md`); the modules' `crate::db::…` imports are satisfied by vendoring the host `db` module in the same crate |
+| `apps/gallery/src/main/kotlin/io/github/dukeoftoad/gallery/ml/engine/*`, `.../ml/index/*` | net-new Kotlin | --- | GPL-3.0 (project) | Model manifest (all 11 assets match the pinned Rust catalog name+size+digest, test-pinned), verifier, provisioner; r23 adds `ml/index/IndexCoordinator.kt` (detect → embed → put → cluster over the JNI surface) --- Ente-inspired reimplementations, not ports |
 
 > The only upstream-derived artifact under ADR-0008 proper is the root `LICENSE` --- the
 > canonical GNU GPL v3 text, the project's own voluntary license choice (ADR-0004

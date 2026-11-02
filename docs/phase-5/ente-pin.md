@@ -8,13 +8,15 @@ The pin is authoritative for EVERYTHING derived from upstream: the vendored
 the ML-DB/vector-store extraction and any behavioral thresholds quoted from
 Ente source. Never mix code or values from a different commit into this pin.
 
-## What this round vendored (workstream 2, first slice)
+## What the pin vendored (workstream 2)
 
 | Upstream | Vendored location | State |
 | --- | --- | --- |
 | `rust/crates/ml` | `engine/crates/ente-ml` | compiles (`cargo check --workspace` green, host target) |
 | `rust/crates/assets` | `engine/crates/ente-assets` | compiles |
 | `rust/crates/image` | `engine/crates/ente-image` | compiles (keeps upstream's git-pinned heic-decoder dep) |
+| `rust/crates/vecdb` | `engine/crates/ente-vecdb` | vendored whole, byte-identical (added r23) |
+| `rust/crates/photos` (partial: `db`, `ml_db`, `ml_store`, `face_clustering`) | `engine/crates/ente-photos-ml` | byte-identical except the crypto seam (added r23; see the r23 delivery section) |
 
 Adaptation record: `engine/NOTICE.md` (authoritative, diffable against the
 pin). Compliance record: `docs/licensing-and-attribution.md` §2/§5.
@@ -24,7 +26,9 @@ r22 added a fourth crate to the same workspace — `engine/crates/toad-ml-jni` �
 which is **net-new toadGALLERY code** (the JNI bridge over `ente-ml`), NOT
 part of the pin and not vendored from upstream; its provenance is stated in
 the crate's own header. This document's byte-identity claims cover only the
-three vendored crates above.
+vendored crates in the table above (r23 added `ente-vecdb` and
+`ente-photos-ml` to it; the r23 JNI extensions and Kotlin index coordinator
+are net-new toadGALLERY code, not part of the pin).
 
 ## What this round pinned in Kotlin
 
@@ -73,19 +77,51 @@ Both halves of the r21 deferral landed in the r22 round:
   per-asset presence updates, delete, and a one-JPEG face-detection
   self-test (byte-level download progress deliberately deferred).
 
+## r23 delivery (the photos-side extraction, deferred item 1 closed)
+
+The r21 deferral landed in the r23 round as two further crates in the same
+workspace, both extracted from the SAME pin:
+
+- **`engine/crates/ente-vecdb`** — the whole upstream `rust/crates/vecdb`
+  vendored byte-identical (no partial extraction needed: the crate is
+  self-contained at the pin).
+- **`engine/crates/ente-photos-ml`** — a partial-crate extraction of the
+  upstream `photos` crate: the `db`, `ml_db`, `ml_store` and
+  `face_clustering` modules, byte-identical except a two-line `use`
+  rewrite — the modules' `ente_core::crypto::random_bytes` imports
+  (exactly two call sites: `face_clustering/mod.rs`,
+  `ml_store/face_distances.rs`) are routed onto an engine-owned crypto
+  seam (net-new `src/crypto.rs`, byte-for-byte upstream semantics) instead
+  of vendoring all of `ente-core` for one function (adaptation recorded in
+  `engine/NOTICE.md`, provenance in the licensing ledger §5).
+
+The r21 self-containment finding (deferred item 1 below as it then read,
+now closed and removed from the list) was resolved exactly as its first
+option described: the trio's
+`crate::db::{Connection, Database, OpenOptions, …}` imports (production
+code in `ml_db/mod.rs`, `ml_db/migrations.rs` and the `ml_db/queries/*`,
+plus more inside `#[cfg(test)]` blocks) are satisfied by vendoring the host
+`db` module alongside the trio — no DB seam was invented. No new ADR: the
+only net-new surface is the crypto seam, recorded in `engine/NOTICE.md` and
+this file rather than a decision record.
+
+On top of the vendored crates, the net-new `toad-ml-jni` bridge extended
+its r22 surface with `nativeDetectFaceEmbeddingsJpeg` (`N × (5 + 192)`
+flat floats per JPEG — boxes + 192-d MobileFaceNet embeddings, stride 197)
+and a face-index store over the vendored `MlStore` (`nativeStoreOpen` /
+`nativeStorePutFace` / `nativeStoreFaceCount` / `nativeStoreCluster` /
+`nativeStoreClose`; sqlite via bundled rusqlite at `<dir>/ml-index.sqlite`),
+with `ml/engine/MlEngine.kt` mapping the flat floats to `FaceEmbedding`
+rows, `ml/index/IndexCoordinator.kt` orchestrating detect → putFace →
+cluster (at upstream's `RECOMMENDED_DISTANCE_THRESHOLD`, 0.24, quoted from
+the vendored source), and the Settings "index + cluster (r23 dogfood)"
+slice driving the path on-device. Those pieces are net-new toadGALLERY
+code (not part of the pin) and their byte-identity claims are covered by
+the vendored-crate rows above only.
+
 ## Deferred (named, ordered)
 
-1. **r22+ — photos-side extraction.** `rust/crates/photos` `ml_db`,
-   `ml_store`, `face_clustering` + `rust/crates/vecdb` vendored as a
-   further engine crate. Self-containment check at the pin, corrected by
-   re-grep: NOT fully self-contained — the trio's production code imports
-   the host crate's `db` module (`crate::db::{Connection, Database,
-   OpenOptions, …}` in `ml_db/mod.rs`, `ml_db/migrations.rs` and the
-   `ml_db/queries/*`), with more of the same inside `#[cfg(test)]` blocks
-   — so the extraction must vendor `db` (or the needed subset) alongside
-   the trio, or port the trio onto an engine-owned DB seam.
-   `rust/crates/vecdb` exists at the pin.
-2. Later — model pack CI target for the offline release channel
+1. Later — model pack CI target for the offline release channel
    (ADR-0020 §7).
 
 ## Regeneration procedure (moving the pin)

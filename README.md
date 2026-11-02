@@ -103,7 +103,7 @@ Testing pre-releases are produced by the dedicated `Release` workflow
 ([`.github/workflows/release.yml`](.github/workflows/release.yml), ADR-0018,
 issue #59), separate from CI: push a `v*` tag, or dispatch the workflow by
 hand (its `tag_name` input defaults to a `versionName`-derived
-`v0.4.1-alpha-r<run_number>`, so testing releases can be cut ad hoc). The
+`v0.4.2-alpha-r<run_number>`, so testing releases can be cut ad hoc). The
 signed APK is published as a GitHub **pre-release** --- never marked latest
 while pre-1.0 --- together with a `.sha256` checksum and the R8
 `mapping.txt` for de-obfuscating crash traces. A hard `apksigner verify`

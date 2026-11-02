@@ -612,6 +612,40 @@ section dogfoods the whole path on a device: download the FACE assets
 deferred), delete, and a one-JPEG face-detection self-test. No device
 build, per the Phase-5-completion directive.
 
+#### Status — r23 round (versionCode 27): the indexing round
+
+The Phase 5 AI engine workstream's third slice: the photos-side
+persistence + clustering stack is **vendored at the same pin** as r21
+(`docs/phase-5/ente-pin.md`) — `engine/crates/ente-vecdb` (the whole
+upstream `rust/crates/vecdb`, byte-identical: the append-only HNSW vector
+store) and `engine/crates/ente-photos-ml` (the upstream `photos` crate's
+`db`, `ml_db`, `ml_store`, `face_clustering` modules, byte-identical
+except a two-line `use` rewrite routing `ente_core::crypto::random_bytes`
+onto an engine-owned seam instead of vendoring all of `ente-core` for one
+function) — closing the r21 deferral exactly as its first option
+described (`db` vendored alongside the trio, no DB seam invented; both
+adaptations recorded in `engine/NOTICE.md`, provenance in the licensing
+ledger §5, AGPL-3.0 at the pin). On top of the vendored crates the JNI
+bridge extends its r22 surface with `nativeDetectFaceEmbeddingsJpeg`
+(`N × (5 + 192)` flat floats per JPEG — boxes + 192-d MobileFaceNet
+embeddings, stride 197) and a face-index store over the vendored
+`MlStore` (`nativeStoreOpen`/`nativeStorePutFace`/`nativeStoreFaceCount`/
+`nativeStoreCluster`/`nativeStoreClose`; sqlite via bundled rusqlite at
+`<dir>/ml-index.sqlite`, so embeddings persist across engine sessions),
+Kotlin `ml/engine/MlEngine.kt` maps the flat floats to `FaceEmbedding`
+rows and `ml/index/IndexCoordinator.kt` orchestrates the round trip
+(detect → putFace → cluster at upstream's `RECOMMENDED_DISTANCE_THRESHOLD`,
+0.24) over an injectable `FaceIndexEngine` seam, and the Settings
+"index + cluster (r23 dogfood)" slice drives it end-to-end. CI's engine
+job runs the two new crates' test suites explicitly (`cargo test -p
+ente-vecdb -p ente-photos-ml`; the check/fmt/clippy workspace gates cover
+them automatically); `engine/scripts/build-android.sh` needs no change —
+its `cargo ndk -p toad-ml-jni` build pulls the new crates as workspace
+dependencies, so `-PwithEngine` packaging is exactly the r22 one. No new
+ADR: the crypto seam is recorded in `engine/NOTICE.md` and the pin doc,
+not duplicated into a decision record. No device build, per the
+Phase-5-completion directive.
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

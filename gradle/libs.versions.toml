@@ -13,6 +13,15 @@ androidx-lifecycle = "2.8.7"
 # ADR-0019): declares USE_BIOMETRIC but NOT INTERNET, so the ADR-0014
 # offline gate is unaffected
 androidx-biometric = "1.1.0"
+# WorkManager for the r24 background face-index queue (Workstream 5 of
+# docs/phase-4/phase-4-contract-audit-and-ente-ai-plan.md): persistence of
+# the queue across process death, retry/backoff and progress plumbing for
+# the Settings dogfood card. Pure on-device scheduling --- no network code;
+# its manifest injects WAKE_LOCK + RECEIVE_BOOT_COMPLETED into the MERGED
+# manifest (documented in docs/phase-2/privacy-gate.md, r24 note; the
+# source manifest's pinned permission set is unchanged and still guarded
+# by the PrivacyPolicyTest pin).
+androidx-work = "2.10.1"
 # Material (Theme.Material3.DayNight.NoActionBar manifest theme)
 material = "1.13.0"
 # Jetpack Compose (ADR-0009) --- BOM-pinned
@@ -67,6 +76,9 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 # ADR-0019): pure on-device auth library, no network code --- it declares
 # USE_BIOMETRIC but NOT INTERNET, so the ADR-0014 merged-manifest gate holds
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
+# WorkManager (r24): the background face-index queue's scheduling +
+# process-death persistence (Workstream 5)
+androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
 # Paging 3 (issue #28): windowed MediaStore loads + LazyPagingItems grid
 androidx-paging-runtime = { module = "androidx.paging:paging-runtime", version.ref = "androidx-paging" }
 androidx-paging-compose = { module = "androidx.paging:paging-compose", version.ref = "androidx-paging" }

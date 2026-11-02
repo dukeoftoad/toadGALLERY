@@ -4,10 +4,75 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.2-alpha] — unreleased on main (versionCode 27; per maintainer
+## [0.4.2-alpha] — unreleased on main (versionCode 28; per maintainer
   directive no new device builds until Phase 5 completes)
 
 ### Added
+
+- **The background face-index queue** (r24 round; Workstream 5 of the
+  Phase 5 plan, `docs/phase-5/background-queue.md`): the r23 12-photo
+  dogfood slice is expanded into the full-library, WorkManager-backed
+  indexing queue. The JNI bridge's store surface gains the maintenance
+  pair the queue drives — `nativeStoreIndexedFaceFileIds` (which files
+  currently carry face rows, via upstream's own
+  `MlDb::face_indexed_file_ids` filtered to the vendored pin's
+  `FACE_ML_VERSION`) and `nativeStoreDeleteFacesForFiles` (the per-file
+  invalidation delete, upstream's own chunked + transactional
+  `MlDb::delete_face_index_for_files`; no new SQL authored) — taking the
+  ABI from ten to twelve externals. Kotlin side, the pure queue core:
+  `FaceIndexQueuePlanner` derives each run's plan from three truths (the
+  catalogue's eligible JPEG candidates with their `MediaRevision`, the
+  queue's own recorded states, the store's indexed-file set) using the
+  Phase 4 `RevisionDelta` invalidation contract verbatim — UNCHANGED and
+  METADATA_CHANGED photos skip (a metadata write never burns model
+  inference), CONTENT_CHANGED photos re-index DELETE-FIRST (the r23
+  `putFace` ordinals append, so stale rows must go before fresh ones),
+  files that left the listing are orphan-deleted, and state records
+  without photos are dropped; `FaceIndexQueueProcessor` executes one
+  bounded batch per run over the same `FaceIndexEngine` seam (orphan
+  deletes first, then at most 50 photos — bytes read one photo at a
+  time, never the library — with whole-photo cancellation, state
+  persisted under `NonCancellable` on every exit path, and the
+  clustering pass exactly once at queue drain, never mid-queue);
+  `FaceIndexStateFile` persists the queue's bookkeeping as one
+  versioned, atomically-moved JSON file INSIDE the app-private
+  face-index directory (reset erases store + bookkeeping together;
+  a corrupt file degrades to "nothing processed" — the delete-first
+  re-index keeps that correct, just slower). `FaceIndexWorker`
+  (CoroutineWorker) binds the real seams — candidates from the Phase 4
+  Room catalogue (external-primary volume only, the documented
+  multi-volume boundary), bytes through the content resolver, the
+  `MlEngine` facade over the JNI store — reports live progress via
+  `setProgress`, re-enqueues itself under one unique WorkManager name
+  while the plan outlives its batch (process-death resumability through
+  WorkManager's own persistence), retries mid-run engine faults with
+  backoff (bounded), and fails honestly with the engine's own message
+  for permanent shapes (missing library, unprovisioned models). The
+  Settings card is replaced in kind: the r23 manual "index + cluster"
+  button becomes the r24 queue card — start / cancel / reset, live
+  per-batch progress, terminal outcome lines, and the clustering
+  distance-threshold tuning control the r23 round flagged for this
+  round (0.10–0.40 window, upstream's 0.24 default, persisted in the
+  `toad_settings` preferences).
+- **WorkManager (androidx.work 2.10.1, Apache-2.0)** — the queue's
+  scheduling + process-death persistence layer, the round's one new
+  dependency (license-screened in the Phase 1 compatibility doc). Its
+  manifest injects four permissions into the MERGED manifest; two are
+  accepted (WAKE_LOCK, RECEIVE_BOOT_COMPLETED — neither is a network
+  permission; documented in `docs/phase-2/privacy-gate.md`'s r24 note)
+  and two are DECLINED via `tools:node="remove"` merger markers in the
+  source manifest (ACCESS_NETWORK_STATE — the queue never uses
+  network-constrained work, so the connectivity observer is dead
+  weight; FOREGROUND_SERVICE — plain background workers only). The
+  JVM privacy suite pins both directions: the declared-set test filters
+  removal markers out of the pinned-five grant set, and a new dedicated
+  test pins the removal set EXACTLY. The face-index directory
+  (`filesDir/face-index` — embeddings, cluster assignments, queue
+  bookkeeping) is now excluded from cloud backup AND device transfer
+  (`backup_rules.xml` / `data_extraction_rules.xml`): the ADR-0020
+  manifest note's "embeddings and indexes never cross the network"
+  extended to backup/transfer — face-derived data does not leave the
+  device.
 
 - **The photos-side persistence stack, vendored** (r23 round; the Phase 5 AI
   engine workstream's third slice, `docs/phase-5/ente-pin.md`): the engine
@@ -50,7 +115,17 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Changed
 
-- **CI**: the `engine` job's check/fmt/clippy gates already cover the new
+- **CI**: the `engine` job's check/fmt/clippy gates cover the JNI
+  changes automatically (workspace selectors); `cargo test -p
+  toad-ml-jni` (12 tests, store-side only — no model files needed) ran
+  locally this round and is a natural future CI addition once the
+  engine job grows a dedicated step for it. The Kotlin suite grows from
+  855 to 885 JVM tests (the planner's invalidation mapping, the
+  processor's batch/cancellation/resume contract, the state file's
+  round-trip/atomicity/corruption posture, the facade's two new store
+  functions, and the two new privacy pins). `versionCode` 27 → 28; no
+  packaging change (`-PwithEngine` is exactly the r22/r23 one).
+- **CI (r23)**: the `engine` job's check/fmt/clippy gates already cover the new
   crates automatically (workspace selectors, no crate lists), but no step
   ran the vendored tests — it now runs `cargo test -p ente-vecdb -p
   ente-photos-ml` explicitly. `engine/scripts/build-android.sh` needs NO

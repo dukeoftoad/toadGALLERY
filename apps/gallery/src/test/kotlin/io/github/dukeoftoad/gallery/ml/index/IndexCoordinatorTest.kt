@@ -36,6 +36,18 @@ class IndexCoordinatorTest {
         var faceCountResult = 3L
         var detectFail: RuntimeException? = null
 
+        // ---- r24 maintenance surface (unused by indexAndCluster; the
+        // queue processor's tests script these) ----
+        var indexedFileIdsResult: List<Long> = emptyList()
+        val deleteCalls = mutableListOf<LongArray>()
+
+        override fun indexedFaceFileIds(): List<Long> = indexedFileIdsResult
+
+        override fun deleteFacesForFiles(fileIds: LongArray): Boolean {
+            deleteCalls.add(fileIds)
+            return true
+        }
+
         private fun embedding(seed: Float) = FloatArray(192) { it.toFloat() + seed }
 
         private fun face(seed: Float) = MlEngine.FaceEmbedding(

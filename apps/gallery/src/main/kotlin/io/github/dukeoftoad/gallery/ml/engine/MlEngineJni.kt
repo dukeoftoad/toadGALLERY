@@ -14,6 +14,11 @@ package io.github.dukeoftoad.gallery.ml.engine
  * `nativeStoreCluster` / `nativeStoreClose`) over the vendored
  * `ente-photos-ml` persistence + clustering stack.
  *
+ * r24 adds the store maintenance pair the background queue drives:
+ * `nativeStoreIndexedFaceFileIds` (which files carry current-version face
+ * rows) and `nativeStoreDeleteFacesForFiles` (the per-file invalidation
+ * delete behind revision-driven re-indexing and orphan cleanup).
+ *
  * Library packaging: the `.so` is built ONLY with the engine property and
  * is ABSENT from plain CI/dev builds. A missing library is a graceful
  * state, never a crash: the try-load in the `init` block catches
@@ -127,6 +132,24 @@ object MlEngineJni {
      */
     @JvmStatic
     external fun nativeStoreCluster(distanceThreshold: Double): String
+
+    /**
+     * The file IDs that currently carry face rows at the vendored pin's
+     * model version (r24), via upstream's own indexed-files read. An
+     * empty array means no indexed files. Throws IllegalStateException
+     * when the store is not open.
+     */
+    @JvmStatic
+    external fun nativeStoreIndexedFaceFileIds(): LongArray
+
+    /**
+     * Deletes every face row for [fileIds] (r24), via upstream's own
+     * chunked, transactional per-file delete. An empty array is a no-op.
+     * Returns true on success; throws IllegalStateException on a closed
+     * store or DB failure.
+     */
+    @JvmStatic
+    external fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean
 
     /**
      * Closes the face-index store. Idempotent; returns true.

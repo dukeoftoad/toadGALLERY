@@ -100,6 +100,41 @@ following hold:
 Reviewers should treat any diff that adds an active allowlist line as
 requiring the same scrutiny as an ADR change.
 
+## r24 note — non-INTERNET merged-manifest permissions (WorkManager)
+
+The INTERNET gate above governs the only permission class that can open a
+network surface. This file also records, on the same
+nothing-rides-in-silently principle, the one dependency whose manifest
+contributes NON-network permissions to the merged manifest:
+**androidx.work 2.10.1** (r24, the background face-index queue's
+scheduling layer). Its own manifest injects four permissions; the split:
+
+- **Declined via `tools:node="remove"` markers in the source manifest**
+  (verified against the published AAR's manifest, r24):
+  - `ACCESS_NETWORK_STATE` — WorkManager's connectivity observer for
+    network-constrained work. The queue never uses network constraints,
+    so this is dead weight; stripping it keeps the app's
+    network-capability surface at exactly the ADR-0020 model-fetch
+    INTERNET grant.
+  - `FOREGROUND_SERVICE` — only needed for `setForeground`/expedited
+    workers. r24 runs plain background workers; a future
+    user-visible-indexing-notification round adds it back deliberately
+    with its own decision record.
+- **Accepted (merged from the library, not declared by us):**
+  - `WAKE_LOCK` — WorkManager's execution-guarantee plumbing.
+  - `RECEIVE_BOOT_COMPLETED` — rescheduling persisted work after a
+    reboot; this extends the queue's resume contract, and neither
+    permission can open a socket.
+
+Both directions are pinned in the JVM suite (`PrivacyPolicyTest`): the
+declared-set test filters removal markers out of the pinned-five grant
+set, and a dedicated r24 test pins the removal set EXACTLY — shrinking
+it widens the network-capability surface, growing it breaks the queue's
+guarantees, and either is an ADR-level decision. The same round excludes
+the app-private `face-index` directory (embeddings, cluster assignments,
+queue bookkeeping) from cloud backup AND device transfer: face-derived
+data does not leave the device.
+
 ## Verification evidence
 
 * CI `build` job (assemble + lint + unit tests):

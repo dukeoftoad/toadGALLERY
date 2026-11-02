@@ -12,7 +12,7 @@
 | **Phase 2** | Product shell, visual foundation, privacy hardening, Compose toolchain, and CI | **Closed / Exited** (Turn 9/10, PRs #15, #16, #23, #46, #47) |
 | **Phase 3 (M4)** | Core media access, browsing, file ops, recycle bin, hidden vault (16/16 issues closed) | **Code-complete / 16 of 16 issues closed** (Reopened in Turn 21 for device validation; all 16 issues closed by PR #70) |
 | **Phase 4** | Aves-grade metadata layer & AI media-contract foundation (`r10`–`r20`) | **Complete** (Turn 35 PR #90 + Turn 38 PR #92) |
-| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **In Progress** (`r21`, `r22`, `r23` merged on `main`; `r24`–`r29` queued) |
+| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **In Progress** (`r21`–`r24` merged on `main`; `r25`–`r29` queued) |
 | **Phase 6** | toadGALLERY Edit v1: core adjustments + non-destructive pipeline (gated by `#14`) | **Planned** (Issue `#14` open) |
 | **Phase 7** | toadGALLERY Edit v2: LUT filters, text, stickers, drawing, mosaic, frames | **Planned** |
 | **Phase 8** | toadGALLERY Edit v3: on-device AI editing (magic erase, sky replacement, bokeh, opt-in face retouch) | **Planned** |
@@ -129,17 +129,23 @@
   * [x] Extend `toad-ml-jni` to 10 JNI functions (`nativeDetectFaceEmbeddingsJpeg` + 5 face-index SQLite/clustering functions).
   * [x] Build `IndexCoordinator.kt` + Settings `"Index + cluster (r23 dogfood)"` card (indexes 12 recent JPEGs, runs face detection + embedding + clustering at threshold `0.24`).
   * [x] Build and deliver `download/toadGALLERY-0.4.2-alpha-r23-engine-debug.apk` (71 MB, `versionCode 27`, `arm64-v8a` with `libtoad_ml_jni.so` + `libonnxruntime.so`).
+* [x] **Round `r24` (Build 28) — The Background Queue Round (Workstream 5)**:
+  * [x] Extend `toad-ml-jni` from 10 to 12 JNI functions: `nativeStoreIndexedFaceFileIds` (upstream `MlDb::face_indexed_file_ids` at the pin's `FACE_ML_VERSION`) + `nativeStoreDeleteFacesForFiles` (upstream's chunked, transactional `delete_face_index_for_files`) — zero new SQL authored; 12 JNI store tests.
+  * [x] Build the pure queue core: `FaceIndexQueuePlanner` (`MediaRevision.diff` → skip / re-index-delete-first / orphan-cleanup mapping), `FaceIndexQueueProcessor` (bounded 50-photo batches, whole-photo cancellation, `NonCancellable` state persistence, once-per-drain clustering) and the atomic `FaceIndexStateFile` inside the face-index directory; 885 JVM tests total (+30).
+  * [x] Add `androidx.work:work-runtime-ktx` 2.10.1 (Apache-2.0, license-screened) + `FaceIndexWorker` (CoroutineWorker, unique-name chain with self-re-enqueue, retry/backoff ≤ 3, honest failure shapes) + `FaceIndexScheduler` (`getWorkInfosForUniqueWorkFlow` observation).
+  * [x] Trim WorkManager's merged-manifest injections via two `tools:node="remove"` markers (`ACCESS_NETWORK_STATE`, `FOREGROUND_SERVICE` declined; `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED` accepted + documented) with the privacy suite pinning both directions; exclude the `face-index` directory from cloud backup and device transfer.
+  * [x] Replace the Settings r23 card with the r24 queue card: start / cancel / reset, live per-batch progress, terminal outcome lines, and the clustering-threshold tuning control (0.10–0.40, upstream 0.24 default, persisted).
+  * [x] Author `docs/phase-5/background-queue.md` + the privacy-gate r24 note + the dependency-license row; `versionCode 28`, no device build per the Phase-5-completion directive.
 
 ## 3. Remaining / Queued Tasks & Next Steps (Post-`r23`)
 
-### Immediate Device Validation & Phase 5 AI Workstreams (`r24`–`r29`)
-* [ ] **On-Device Dogfood Validation of `r23` APK (`toadGALLERY-0.4.2-alpha-r23-engine-debug.apk`)**:
-  * [ ] Install build 27 APK on the Xiaomi test device (`2201116PI`, Android 36).
+### Immediate Device Validation & Phase 5 AI Workstreams (`r25`–`r29`)
+* [ ] **On-Device Dogfood Validation (engine APK at build 28; build 27 APK already delivered as `toadGALLERY-0.4.2-alpha-r23-engine-debug.apk`)**:
+  * [ ] Install an engine-enabled build on the Xiaomi test device (`2201116PI`, Android 36).
   * [ ] Open `Settings → AI engine (r22 dogfood)` and download the FACE model pack (~36 MiB from `models.ente.com`).
-  * [ ] Open `Settings → Index + cluster (r23 dogfood)`, run indexing over the 12 most recent JPEGs, verify `"N photos · M faces · K clusters"` output, and evaluate whether clustering threshold `0.24` needs a UI tuning control in `r24`.
+  * [ ] Open `Settings → Start background index (r24 dogfood)`, let the queue drain the library, verify live progress + the drain outcome line, exercise Cancel (resume) and Reset, and evaluate the clustering threshold through the r24 tuning control on a real library.
   * [ ] Run pending device validation checklist sections (`docs/phase-3/device-validation-checklist.md` §§13–18, including Room v4→v6 over-install migrations and pre-Q fallback check).
-* [ ] **Workstream 5 Complete / Background Queue**: Expand `IndexCoordinator` from the 12-photo dogfood slice into full `WorkManager`-backed background indexing with bounded concurrency, retry/resume across process death, and `MediaRevision.diff()` invalidation wiring.
-* [ ] **People UI & Cluster Management (Workstream 6 / `r24`+)**:
+* [ ] **People UI & Cluster Management (Workstream 6 / `r25`+)**:
   * [ ] People auto-albums grid, person cluster detail screen, cluster naming/labeling, merge/split/ignore clusters, photo exclusion, and opt-in consent gate (disabled by default per ADR-0010).
 * [ ] **Magic Search / Things (Workstream 7)**:
   * [ ] Wire MobileCLIP image embedding indexing (`mobileclip_s2_image_opset18_opt.onnx`), BPE tokenizer (`bpe_simple_vocab_16e6.txt.gz`), and text encoder (`mobileclip_s2_text_opset18_opt.onnx`) over `ente-vecdb` for offline semantic search in the Search tab.

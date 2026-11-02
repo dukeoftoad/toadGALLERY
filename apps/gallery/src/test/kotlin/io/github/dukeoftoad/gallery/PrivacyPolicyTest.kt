@@ -79,13 +79,24 @@ class PrivacyPolicyTest {
                 "model-fetch-only and the citation is the audit trail for why the permission exists.",
             manifest.contains("ADR-0020"),
         )
-        val declared = Regex("""android:name\s*=\s*"(android\.permission\.[A-Z_]+)"""")
+        // r24: tools:node="remove" markers are merger REMOVAL directives,
+        // not grants --- they push permissions OUT of the merged manifest.
+        // The declared-set pin below asserts GRANTS only; the removal set
+        // is pinned exactly by its own dedicated r24 test below.
+        val declared = Regex("""<(uses-permission|uses-permission-sdk-\d+)[^>]*>""")
             .findAll(manifest)
-            .map { it.groupValues[1] }
+            .map { it.value }
+            .filterNot { it.contains("tools:node=\"remove\"") }
+            .flatMap { element ->
+                Regex("""android:name\s*=\s*"(android\.permission\.[A-Z_]+)"""")
+                    .findAll(element)
+                    .map { it.groupValues[1] }
+            }
             .toSet()
         assertEquals(
             "The source manifest's permission set is pinned: media read (Phase 3), location consent " +
-                "(Phase 4) and the ADR-0020 model-fetch INTERNET --- nothing else, ever.",
+                "(Phase 4) and the ADR-0020 model-fetch INTERNET --- nothing else, ever (r24 merger " +
+                "removal markers are filtered out above and pinned by their own dedicated test).",
             setOf(
                 "android.permission.READ_MEDIA_IMAGES",
                 "android.permission.READ_MEDIA_VIDEO",
@@ -94,6 +105,42 @@ class PrivacyPolicyTest {
                 "android.permission.INTERNET",
             ),
             declared,
+        )
+    }
+
+    /**
+     * r24 (WorkManager): the merger REMOVAL MARKERS in the source manifest
+     * are pinned exactly --- ACCESS_NETWORK_STATE and FOREGROUND_SERVICE,
+     * the two of androidx.work's four manifest injections this app
+     * declines (no network-constrained work, no foreground workers). The
+     * accepted pair (WAKE_LOCK, RECEIVE_BOOT_COMPLETED) is merged FROM THE
+     * LIBRARY and deliberately NOT declared in the source manifest --- a
+     * source-side declaration of either would be a grant the pinned-set
+     * test above rejects. Shrinking the removal set would silently widen
+     * the merged manifest's network-capability surface; growing it would
+     * silently break WorkManager's execution guarantees. Both directions
+     * are ADR-level decisions recorded in docs/phase-2/privacy-gate.md.
+     */
+    @Test
+    fun `r24 WorkManager permission removal markers are exactly the two declined injections`() {
+        val manifest = moduleFile("src/main/AndroidManifest.xml").readText()
+        val removals = Regex("""<(uses-permission|uses-permission-sdk-\d+)[^>]*tools:node="remove"[^>]*>""")
+            .findAll(manifest)
+            .flatMap { element ->
+                Regex("""android:name\s*=\s*"(android\.permission\.[A-Z_]+)"""")
+                    .findAll(element.value)
+                    .map { it.groupValues[1] }
+            }
+            .toSet()
+        assertEquals(
+            "The r24 removal markers must remove exactly androidx.work's ACCESS_NETWORK_STATE and " +
+                "FOREGROUND_SERVICE injections --- see the manifest's r24 note and " +
+                "docs/phase-2/privacy-gate.md.",
+            setOf(
+                "android.permission.ACCESS_NETWORK_STATE",
+                "android.permission.FOREGROUND_SERVICE",
+            ),
+            removals,
         )
     }
 
@@ -246,7 +293,10 @@ class PrivacyPolicyTest {
         val hostLike = Regex(
             "\"[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+\"",
         )
-        val nonHostLiterals = setOf("install.properties") // the provisioner's receipt file name
+        // install.properties: the provisioner's receipt file name.
+        // index-state.json: the r24 queue's state-file name (the atomic
+        // bookkeeping file inside the app-private face-index directory).
+        val nonHostLiterals = setOf("install.properties", "index-state.json")
         val found = mlDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .flatMap { file -> hostLike.findAll(file.readText()).map { m -> m.value.removeSurrounding("\"") } }

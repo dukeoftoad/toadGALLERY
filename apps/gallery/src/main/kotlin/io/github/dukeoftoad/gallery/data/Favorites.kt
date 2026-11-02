@@ -60,8 +60,18 @@ object Favorites {
      * timeline's `media_type` semantics --- the Files table also holds
      * downloads and documents, which are not gallery favorites) flagged
      * `is_favorite = 1`. One bound-parameter-free literal, pinned by tests.
+     *
+     * The `media_type` numbers are the platform constants' values
+     * (`MediaStore.Files.FileColumns`: IMAGE = 1, AUDIO = 2, VIDEO = 3), so
+     * images+videos is `IN (1, 3)`. Before r19 this literal wrongly read
+     * `IN (1, 2)` --- images+AUDIO --- which would have surfaced favorited
+     * audio rows in the pseudo-album while missing every actual video; the
+     * pinned tests now cross-check the numbers against the r17 filter
+     * engine's JVM-pure constants of the same platform values
+     * (`TimelineFilterMediaStore.MEDIA_TYPE_IMAGE` / `MEDIA_TYPE_VIDEO`)
+     * so the pair cannot drift again.
      */
-    const val FAVORITES_SELECTION = "media_type IN (1, 2) AND is_favorite = 1"
+    const val FAVORITES_SELECTION = "media_type IN (1, 3) AND is_favorite = 1"
 
     /**
      * The favorites query's sort order: newest first with the `_id`

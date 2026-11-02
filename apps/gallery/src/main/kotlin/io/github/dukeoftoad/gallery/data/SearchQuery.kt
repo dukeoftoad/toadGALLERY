@@ -26,7 +26,11 @@ package io.github.dukeoftoad.gallery.data
  *  - `"media_type"`     == `MediaStore.Files.FileColumns.MEDIA_TYPE`;
  *  - `"date_added"`     == `MediaStore.MediaColumns.DATE_ADDED`;
  *  - `"_id"`            == `MediaStore.MediaColumns._ID`;
- *  - `1` / `2`          == `MEDIA_TYPE_IMAGE` / `MEDIA_TYPE_VIDEO`.
+ *  - `1` / `2` / `3`    == `MEDIA_TYPE_IMAGE` / `MEDIA_TYPE_AUDIO` /
+ *    `MEDIA_TYPE_VIDEO` --- the values the SDK reference page lists for
+ *    `MediaStore.Files.FileColumns` (r19 corrected this file's video
+ *    literals from `2`, which is AUDIO, to `3`; see [mediaTypeClause]'s
+ *    KDoc for the regression pins).
  *
  * ## LIKE escaping (the subtle part)
  * The user query is matched with `LIKE ? ESCAPE '\'` wrapped in `%`
@@ -111,15 +115,25 @@ object SearchQuery {
 
     /**
      * The media-type clause of the selection for one filter chip. `ALL`
-     * uses `IN (1, 2)` --- the same images+videos semantics the timeline's
+     * uses `IN (1, 3)` --- the same images+videos semantics the timeline's
      * unified Files queries use (`queryTimelineWindow` / `queryTrashed`) ---
      * rather than omitting the clause, so the Files table's non-media rows
      * (downloads, documents) can never leak into results.
+     *
+     * The numbers are the platform constants' values (IMAGE = 1, AUDIO = 2,
+     * VIDEO = 3; see the mapping in the file KDoc). Before r19 both
+     * non-image literals were wrong: `ALL` read `IN (1, 2)` --- images+AUDIO,
+     * so audio files leaked into "All" results --- and `VIDEOS` read `= 2`,
+     * which presented audio rows as videos and found no actual video. The
+     * pinned tests now cross-check each clause against the r17 filter
+     * engine's JVM-pure constants
+     * (`TimelineFilterMediaStore.MEDIA_TYPE_IMAGE` / `MEDIA_TYPE_VIDEO`)
+     * and assert AUDIO's `2` appears in no clause.
      */
     fun mediaTypeClause(mediaType: SearchMediaType): String = when (mediaType) {
-        SearchMediaType.ALL -> "media_type IN (1, 2)"
+        SearchMediaType.ALL -> "media_type IN (1, 3)"
         SearchMediaType.IMAGES -> "media_type = 1"
-        SearchMediaType.VIDEOS -> "media_type = 2"
+        SearchMediaType.VIDEOS -> "media_type = 3"
     }
 
     /**

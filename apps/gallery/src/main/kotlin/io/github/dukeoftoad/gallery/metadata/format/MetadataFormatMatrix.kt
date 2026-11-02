@@ -18,8 +18,10 @@ import java.util.Locale
  * the AI indexer's eligibility checks all read the same truth.
  *
  * Scope of THIS round (read: EXIF via `androidx.exifinterface` + video
- * containers via `MediaMetadataRetriever`; write: nothing landed yet):
- * IPTC and XMP are capability entries only --- UNSUPPORTED with notes ---
+ * containers via `MediaMetadataRetriever`; write: the r15 EXIF write
+ * spine --- JPEG + WebP only, pinned per-row by `editable` and in one
+ * place by `ExifWriteFormats`): IPTC and XMP are capability entries
+ * only --- UNSUPPORTED with notes ---
  * because the audit requires the distinction to exist in the model before
  * the parsers are pinned. Swapping an UNSUPPORTED to PRESENT later is a
  * one-line matrix change plus its parser.
@@ -48,7 +50,8 @@ object MetadataFormatMatrix {
             xmp = MetadataAvailability.UNSUPPORTED,
             editable = true,
             notes = "Reference format --- full androidx.exifinterface read, " +
-                "and the one format the write round pins first.",
+                "and the first format the write round pinned (WebP joined " +
+                "it; see that row).",
         ),
         row(
             mimeType = "image/heic",
@@ -57,8 +60,11 @@ object MetadataFormatMatrix {
             iptc = MetadataAvailability.UNSUPPORTED,
             xmp = MetadataAvailability.UNSUPPORTED,
             editable = false,
-            notes = "Read follows androidx.exifinterface; attribute writing " +
-                "not pinned this round.",
+            notes = "Read follows androidx.exifinterface from API 28 only " +
+                "--- its HEIF path reads through MediaMetadataRetriever keys " +
+                "added in SDK 28, so on the app's minSdk 26/27 the read " +
+                "honestly yields empty attributes (never a crash); " +
+                "attribute writing not pinned this round.",
         ),
         row(
             mimeType = "image/heif",
@@ -67,7 +73,9 @@ object MetadataFormatMatrix {
             iptc = MetadataAvailability.UNSUPPORTED,
             xmp = MetadataAvailability.UNSUPPORTED,
             editable = false,
-            notes = "Read follows androidx.exifinterface; attribute writing " +
+            notes = "Read follows androidx.exifinterface from API 28 only " +
+                "(same SDK-28 floor as image/heic --- on minSdk 26/27 the " +
+                "read honestly yields empty attributes); attribute writing " +
                 "not pinned this round.",
         ),
         row(
@@ -88,9 +96,12 @@ object MetadataFormatMatrix {
             containerMetadata = MetadataAvailability.ABSENT,
             iptc = MetadataAvailability.ABSENT,
             xmp = MetadataAvailability.UNSUPPORTED,
-            editable = false,
+            editable = true,
             notes = "EXIF chunk read follows androidx.exifinterface; " +
-                "attribute writing not pinned this round.",
+                "attribute writing via the r15 write spine " +
+                "(ExifWriteFormats --- the androidx-writable set " +
+                "intersected with this read matrix, which keeps JPEG + " +
+                "WebP and leaves PNG until its read round).",
         ),
         row(
             mimeType = "image/gif",
@@ -109,8 +120,12 @@ object MetadataFormatMatrix {
             iptc = MetadataAvailability.ABSENT,
             xmp = MetadataAvailability.UNSUPPORTED,
             editable = false,
-            notes = "AVIF carries EXIF/XMP inside its ISOBMFF container, " +
-                "which androidx.exifinterface does not parse; revisit when " +
+            notes = "AVIF carries EXIF/XMP inside its ISOBMFF container; " +
+                "androidx.exifinterface reads it from API 31 only (empty " +
+                "attributes below --- the same verified 1.4.1 source the " +
+                "format-support catalogue's READ_BY_ANDROIDX_FROM_API_31 " +
+                "cites), so this minSdk-26 pinned reader keeps the format " +
+                "UNSUPPORTED rather than device-dependent; revisit when " +
                 "the parser set is pinned (Aves demuxes AVIF natively).",
         ),
         row(

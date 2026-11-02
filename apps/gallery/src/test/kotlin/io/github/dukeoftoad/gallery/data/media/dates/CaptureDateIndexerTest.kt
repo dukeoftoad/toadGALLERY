@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.data.media.dates
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.InMemoryMediaCatalogue
 import io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.access.MediaAccess
 import io.github.dukeoftoad.gallery.data.media.access.MediaReadHandle
 import io.github.dukeoftoad.gallery.data.media.changes.CatalogueReconciler
@@ -38,7 +39,10 @@ import org.junit.Test
  *   type);
  * - a resolver disagreement still persists the winner (the
  *   sourcesDisagree flag itself is deliberately not persisted this
- *   round --- flag observability rides a later round).
+ *   round --- flag observability rides a later round);
+ * - a row whose indexing BLOWS UP (the Room-disk-error / parse-blowup
+ *   stand-in the per-row catch exists for) is logged and skipped while
+ *   the batch survives --- its provenance write never runs.
  *
  * MIGRATION-POLICY NOTE (deliberately NOT a test): the Room v1 -> v2
  * migration (three `ALTER TABLE ... ADD COLUMN ... DEFAULT NULL`
@@ -400,6 +404,64 @@ class CaptureDateIndexerTest {
 
             assertNull(catalogue.record(vanished.localMediaKey)!!.resolvedCaptureDateMillis)
             assertEquals(t0, catalogue.record(healthy.localMediaKey)!!.resolvedCaptureDateMillis)
+        }
+
+    @Test
+    fun `a blowing-up row never aborts the batch - failure logged and skipped`() =
+        runBlocking {
+            val catalogue = InMemoryMediaCatalogue()
+            val broken = record(
+                key = "external_primary:12",
+                canonicalUri = "content://media/external/images/12",
+            )
+            val healthy = record(
+                key = "external_primary:13",
+                canonicalUri = "content://media/external/images/13",
+            )
+            catalogue.upsertAll(listOf(broken, healthy))
+            val brokenHandle = FakeHandle(byteArrayOf(1))
+            val healthyHandle = FakeHandle(byteArrayOf(1))
+            val gate = FakeGate(
+                eligibleKeys = setOf(broken.localMediaKey, healthy.localMediaKey),
+            )
+            val access = FakeMediaAccess { media ->
+                if (media.identity.canonicalUri == broken.canonicalUri) brokenHandle
+                else healthyHandle
+            }
+            val source = FakeCandidateSource { handle, _ ->
+                // A Room-disk-error / EXIF-parse-blowup stand-in: the seam
+                // contract says "never throws for an unreadable item",
+                // so a THROW here stands for the failure modes outside
+                // the seam's reach (the catalogue write, a future seam
+                // bug) --- exactly what the per-row catch must contain.
+                if (handle === brokenHandle) throw IllegalStateException("disk error")
+                CaptureDateEvidence(
+                    candidates = listOf(DateCandidate(CaptureDateSource.EXIF_ORIGINAL, t0)),
+                    availability = MetadataAvailability.PRESENT,
+                )
+            }
+            val indexer = CaptureDateIndexer(catalogue, access, source, gate)
+
+            // The per-row failure logs through DiagLog, whose default
+            // sink touches android.util.Log --- unmocked on the JVM. Swap
+            // it (the DiagLogTest pattern, as LocationIndexerTest's
+            // composite test does) and restore it no matter how the test
+            // ends.
+            val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+            DiagLog.sink = { _, _, _ -> }
+            try {
+                indexer.onRecordsApplied(listOf(broken, healthy), emptyList())
+            } finally {
+                DiagLog.sink = stockSink
+            }
+
+            // The healthy sibling was still indexed...
+            assertEquals(t0, catalogue.record(healthy.localMediaKey)!!.resolvedCaptureDateMillis)
+            // ...while the broken row's write never ran, so its existing
+            // (null) provenance stands untouched --- and because its
+            // revision did not move, no later scan re-offers it (the
+            // NULL-provenance healing pass is the pinned later round).
+            assertNull(catalogue.record(broken.localMediaKey)!!.resolvedCaptureDateMillis)
         }
 
     @Test

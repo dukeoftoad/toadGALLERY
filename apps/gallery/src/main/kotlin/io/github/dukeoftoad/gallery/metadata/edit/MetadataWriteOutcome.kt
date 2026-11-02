@@ -18,7 +18,14 @@ enum class RawWriteOutcome {
      */
     SECURITY,
 
-    /** Open or save failed (`IOException`, vanished item included). */
+    /**
+     * Open or save failed (`IOException`, vanished item included) --- and
+     * the terminal bucket for UNEXPECTED provider/runtime failures: the
+     * writer shell's backstop catch classifies them here (WARN-logged
+     * class name) rather than throwing past its classify-never-throw
+     * contract, because its caller's launch has no catch of its own (see
+     * `MediaMetadataWriter`).
+     */
     IO,
 
     /** The format is outside the pinned write set (defensive re-check). */

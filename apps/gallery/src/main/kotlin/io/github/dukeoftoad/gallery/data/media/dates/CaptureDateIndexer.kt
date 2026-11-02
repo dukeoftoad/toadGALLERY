@@ -7,6 +7,7 @@ import io.github.dukeoftoad.gallery.data.media.access.MediaAccess
 import io.github.dukeoftoad.gallery.data.media.access.MediaReadHandle
 import io.github.dukeoftoad.gallery.data.media.changes.CatalogueReconciler
 import io.github.dukeoftoad.gallery.data.media.changes.ScanIndexHook
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.identity.EligiblePublicMedia
 import io.github.dukeoftoad.gallery.data.media.identity.MediaEligibility
 import io.github.dukeoftoad.gallery.data.media.identity.MediaIdentity
@@ -16,6 +17,7 @@ import io.github.dukeoftoad.gallery.metadata.exif.ParsedExif
 import io.github.dukeoftoad.gallery.metadata.format.MetadataFormatMatrix
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The scan driver's capture-date index pass (r12 round, Phase 4 roadmap
@@ -83,7 +85,16 @@ class CaptureDateIndexer(
      * The hook the scan driver calls after applying a scan's
      * added/changed rows to the catalogue. Each row is indexed
      * independently: one unreadable item never aborts the batch (the same
-     * honest-degradation contract as [MediaReadHandle]).
+     * honest-degradation contract as [MediaReadHandle]) --- and that
+     * promise is now STRUCTURAL: the per-row index step runs inside its
+     * own catch, so a Room disk error or an EXIF parse blowup in one row
+     * is logged (DiagLog, class+message) and skipped while the batch
+     * continues. A failed row keeps its existing provenance (its write
+     * never ran), and because its revision did not move the next scan
+     * classifies it UNCHANGED --- this hook never sees it again. The
+     * NULL-provenance healing rescan pass (re-offering rows whose
+     * indexing failed) is the named later-round follow-up; this round's
+     * contract is only that one row's failure never kills the pass.
      *
      * For a changed row only the NEW state
      * ([CatalogueReconciler.ChangedRecord.new]) is consulted --- the old
@@ -110,31 +121,51 @@ class CaptureDateIndexer(
     }
 
     private suspend fun indexOne(record: CatalogueRecord) {
-        // Gate first: an ineligible item is skipped WITHOUT a catalogue
-        // write. A tombstoned key (item deleted between scan walk and
-        // index pass) also fails to gate/open in the production wiring
-        // and, even if it did, updateCaptureDate is a no-op there ---
-        // the indexer never resurrects a row.
-        val media = eligibilityGate.eligiblePublicMedia(record) ?: return
-        val handle = mediaAccess.open(media)
-        val evidence = if (handle == null) {
-            // Cannot open (vanished row, revoked grant): no bytes, so no
-            // candidates --- classified UNREADABLE, same honest
-            // degradation as a failed read below. Persisting null for a
-            // CHANGED row is deliberate: its revision moved, so any
-            // previously persisted date describes bytes that no longer
-            // exist and must not survive as truth.
-            CaptureDateEvidence(noCandidates, MetadataAvailability.UNREADABLE)
-        } else {
-            candidateSource.extractCandidates(handle, record.mimeType)
+        // The per-row failure boundary: everything this hook owns for ONE
+        // row runs inside the catch below, so a Room disk error or an EXIF
+        // parse blowup costs that row's indexing alone --- logged and
+        // skipped, never the batch (see onRecordsApplied's KDoc for the
+        // NULL-provenance follow-up).
+        try {
+            // Gate first: an ineligible item is skipped WITHOUT a catalogue
+            // write. A tombstoned key (item deleted between scan walk and
+            // index pass) also fails to gate/open in the production wiring
+            // and, even if it did, updateCaptureDate is a no-op there ---
+            // the indexer never resurrects a row.
+            val media = eligibilityGate.eligiblePublicMedia(record) ?: return
+            val handle = mediaAccess.open(media)
+            val evidence = if (handle == null) {
+                // Cannot open (vanished row, revoked grant): no bytes, so no
+                // candidates --- classified UNREADABLE, same honest
+                // degradation as a failed read below. Persisting null for a
+                // CHANGED row is deliberate: its revision moved, so any
+                // previously persisted date describes bytes that no longer
+                // exist and must not survive as truth.
+                CaptureDateEvidence(noCandidates, MetadataAvailability.UNREADABLE)
+            } else {
+                candidateSource.extractCandidates(handle, record.mimeType)
+            }
+            catalogue.updateCaptureDate(
+                record.localMediaKey,
+                resolveCaptureDateWrite(record, evidence),
+            )
+        } catch (ce: CancellationException) {
+            // Structured cancellation is not a per-row failure --- let it
+            // propagate (the same discipline every catch-all here keeps).
+            throw ce
+        } catch (t: Throwable) {
+            DiagLog.e(
+                TAG,
+                "capture-date index failed key=${record.localMediaKey} (batch unaffected)",
+                t,
+            )
         }
-        catalogue.updateCaptureDate(
-            record.localMediaKey,
-            resolveCaptureDateWrite(record, evidence),
-        )
     }
 
     private companion object {
+        /** Diagnostics tag for the per-row failure-isolation lines. */
+        private const val TAG = "CaptureDateIndexer"
+
         private val noCandidates: List<DateCandidate> = emptyList()
     }
 }

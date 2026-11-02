@@ -472,11 +472,21 @@ the consent state via `MediaLocationDisplayRules.Default`).
 
 **Named follow-ups (the honest remainder of Phase 4):** the IPTC/XMP
 read+write wrappers (they build on r15's write spine), the offline
-tile-pack sideload implementation for the map, a catalogue bucket
-column before the folder chip can be surfaced, a writable path for the
-keywords/rating EXIF tags, and the pre-existing `media_type IN (1, 2)`
-search/favorites query bug flagged by the r17 round (the platform
-reference says 2 = AUDIO, 3 = VIDEO).
+tile-pack sideload implementation for the map, and a writable path
+for the keywords/rating EXIF tags. Two of the five r14-named
+follow-ups are CLOSED by r19: the catalogue bucket column (and the
+folder chip it unblocked) and the `media_type IN (1, 2)` search/
+favorites query bug (2 = AUDIO, 3 = VIDEO — the pairs now pin
+images+videos, cross-checked by JVM tests). The r19 audit round adds
+new honest follow-ups: the scan NULL-provenance healing pass (per-row
+isolation landed; rows whose provenance stayed null after a failed
+index still never re-offer), the combined single-read EXIF extraction
+pass (capture-date + GPS currently read each row twice), volume
+hot-plug (observers exist only for volumes mounted at process start),
+the vault batch store (one index rewrite per move batch), the docs
+`screen-states.md` flips for the new Error call sites, and device
+verification of the pre-Q reduced-projection fallback on an API
+26–28 device.
 
 #### Status — r15–r18 rounds (versionCode 22): the four still-open items landed
 
@@ -509,6 +519,33 @@ CI-validated, merged in sequence #86–#89) land the rest of Phase 4:
   catalogue (48 JVM tests, the signature-level sample corpus) and
   `docs/phase-4/format-support-audit.md` — the cited format matrix
   (every platform claim carries a repo cite or an official-docs URL).
+
+#### Status — r19 round (versionCode 23): the code-improvement round
+
+The maintainer-directed whole-codebase audit (2026-11-02): three
+read-only audits (data, UI, metadata/vault) consolidated into seven
+implementation slices on six sibling branches, merged as one round.
+The headlines: the r17-flagged `media_type IN (1, 2)` favorites/search
+bug is FIXED (audio was leaking in while every favorited video
+dropped out); the vault's unlock-vs-move index race is closed by a
+store-level mutex + a ten-minute sweep grace window (a parked-stream
+JVM test pins the interleave with a blob aged past grace so only the
+lock can save it); the catalogue persists the folder dimension (Room
+v4 → v5, non-destructive; the v5 identityHash re-derived from the
+Room 2.8.5 sources with the documented method, v1–v4 reproduced as
+control) and the Photos **folder chip is surfaced** on both paths via
+a picker sheet — the r17 "engine-only" note is retired; the Albums
+screens gain honest Error states (the shared ErrorState component's
+first live call sites, closing the app's one crash-class exception
+path); Search gains the Photos permission pattern; video playback is
+lifecycle-aware (ON_STOP pauses); every grid honors the columns
+setting; the Details view rides the shared catalogue instance with a
+keyed `canonicalUri` lookup; the reconciler delegates to
+`MediaRevision.diff` (one rule, one place — a token flip alone is
+UNCHANGED); the GPS editor refuses NaN/hex input; the sniffer decides
+videos by major brand; and the format matrix agrees with the r15
+write spine again. Per maintainer directive (2026-11-02) releases
+resume: build 23 ships r13–r19.
 
 #### Tasks
 

@@ -29,8 +29,10 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * Loads one bucket's contents plus its display name. The screen is only
  * reachable after the Albums tab already loaded with granted access, so
- * there is no permission flow here; a mid-session revoke surfaces as an
- * empty grid rather than a crash (the query is defensive).
+ * there is no permission flow here; a mid-session revoke surfaces as the
+ * honest [AlbumDetailState.Error] with a retry action (r19) instead of
+ * the pre-r19 fake --- the defensive fallback used to mask a failed read
+ * as an empty bucket.
  *
  * ## Favorites pseudo-bucket (issue #66)
  * When [bucketId] is the sentinel [Favorites.FAVORITES_BUCKET_ID] (the
@@ -139,13 +141,27 @@ class AlbumDetailViewModel(
     }
 
     /**
-     * Re-queries the bucket and republishes [AlbumDetailState.Ready].
-     * Called by the screen after file-ops activity settles (issue #64)
-     * and by the debounced MediaStore observer above; safe to call while
-     * another query is in flight --- the generation guard in [load] keeps
-     * only the youngest result.
+     * Re-queries the bucket and republishes the fresh snapshot ---
+     * [AlbumDetailState.Ready], or [AlbumDetailState.Error] since r19 when
+     * the provider fails. Called by the screen after file-ops activity
+     * settles (issue #64) and by the debounced MediaStore observer above;
+     * safe to call while another query is in flight --- the generation
+     * guard in [load] keeps only the youngest result.
      */
     fun refresh() {
+        load()
+    }
+
+    /**
+     * Re-runs the bucket query after an [AlbumDetailState.Error] (the
+     * error state's retry action): re-enters [AlbumDetailState.Loading]
+     * first, so the user sees the honest spinner while the retry is in
+     * flight. Deliberately NOT folded into [refresh], whose observer and
+     * file-ops callers must keep the current grid on screen while the
+     * re-query runs (no spinner flash over a working grid).
+     */
+    fun retry() {
+        _state.value = AlbumDetailState.Loading
         load()
     }
 
@@ -167,33 +183,49 @@ class AlbumDetailViewModel(
         super.onCleared()
     }
 
-    /** One defensive bucket query; failures map to an empty bucket. */
+    /**
+     * One bucket query (the favorites pseudo-bucket routes to the
+     * favorites query, newest-first in v1). Since r19 a failure maps to
+     * the honest [AlbumDetailState.Error] via `runCatching { ... }` ---
+     * pre-r19 the fallback fabricated an empty bucket, telling the user
+     * a folder they had navigated from was EMPTY when the provider had
+     * actually failed (permission revoked mid-session, a provider
+     * SQLiteException, a missing column), the honesty gap this screen's
+     * KDoc carried as a documented residual. The catches sit INSIDE the
+     * IO hop, so cancellation of the hop itself still propagates ---
+     * `runCatching` sees only provider throws (the queries are plain
+     * blocking calls with no suspension points of their own).
+     */
     private fun load() {
         val generation = ++loadGeneration
         val favorites = Favorites.isFavoritesBucket(bucketId)
         val sort = _sort.value
         val app = getApplication<Application>()
         viewModelScope.launch {
-            val content: BucketContent = withContext(Dispatchers.IO) {
+            val content: BucketContent? = withContext(Dispatchers.IO) {
                 if (favorites) {
                     // Issue #66: the sentinel routes to the favorites query;
                     // newest-first in v1 (the sort state is ignored here by
                     // design --- the screen hides the menu).
-                    BucketContent(
-                        bucketName = app.getString(R.string.albums_favorites_title),
-                        items = runCatching { source.queryFavorites() }
-                            .getOrElse { emptyList() },
-                    )
+                    runCatching {
+                        BucketContent(
+                            bucketName = app.getString(R.string.albums_favorites_title),
+                            items = source.queryFavorites(),
+                        )
+                    }
                 } else {
                     runCatching { source.queryBucket(bucketId, sort) }
-                        .getOrElse { BucketContent(bucketName = "", items = emptyList()) }
                 }
-            }
+            }.getOrNull()
             if (generation == loadGeneration) {
-                _state.value = AlbumDetailState.Ready(
-                    bucketName = content.bucketName.ifEmpty { "Album" },
-                    items = content.items,
-                )
+                _state.value = if (content != null) {
+                    AlbumDetailState.Ready(
+                        bucketName = content.bucketName.ifEmpty { "Album" },
+                        items = content.items,
+                    )
+                } else {
+                    AlbumDetailState.Error
+                }
             }
         }
     }
@@ -219,6 +251,16 @@ class AlbumDetailViewModel(
 
 sealed interface AlbumDetailState {
     data object Loading : AlbumDetailState
+
+    /**
+     * The bucket query failed (r19): permission revoked mid-session, a
+     * provider SQLiteException, a missing column. The screen renders the
+     * shared `ErrorState` with a retry action under the
+     * `album_detail_state_error` tag reserved for this call site in
+     * docs/architecture/screen-states.md §2 --- never the pre-r19 fake
+     * "empty folder".
+     */
+    data object Error : AlbumDetailState
 
     data class Ready(
         val bucketName: String,

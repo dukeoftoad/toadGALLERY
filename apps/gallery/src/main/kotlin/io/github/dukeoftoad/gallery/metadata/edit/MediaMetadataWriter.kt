@@ -7,6 +7,7 @@ import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The thin Android WRITE shell of the metadata edit round (Phase 4
@@ -50,11 +51,22 @@ import kotlinx.coroutines.withContext
  *    it again --- that is the library's documented in-place mechanics,
  *    disclosed here for honesty; this app never writes a sidecar or
  *    persists any copy.)
- *  - **Never crashes for expected failures**: every open/parse/save
- *    failure maps to a [RawWriteOutcome]; the provider's ownership
- *    refusal arrives as `SecurityException` (which covers
+ *  - **Never crashes, expected or not**: every open/parse/save failure
+ *    maps to a [RawWriteOutcome]; the provider's ownership refusal
+ *    arrives as `SecurityException` (which covers
  *    `RecoverableSecurityException`, its superclass) and surfaces as
- *    SECURITY for the pure flow to classify.
+ *    SECURITY for the pure flow to classify. Beyond the expected set,
+ *    each method ends in a TERMINAL catch that classifies an unexpected
+ *    provider/runtime failure (a wrapped parcel or SQLite error out of
+ *    the resolver, a library bug) as the IO-kind outcome and WARN-logs
+ *    the exception class --- because the shell's contract is
+ *    "classifies, never throws" and `DetailsViewModel`'s launch calls
+ *    [write]/[readCurrentValues] with no backstop of its own. The catch
+ *    set stays honest: unexpected failures are NOT re-labelled as any
+ *    expected kind, they land in the IO bucket as "could not complete
+ *    the file operation", which is true of every one of them.
+ *    Structured cancellation is the one thing that still propagates
+ *    (a cancelled coroutine is not a write failure).
  *
  * POST-WRITE INTERPLAY (the r12/r13 eventual-consistency contract): a
  * successful write changes the item's bytes and therefore its
@@ -77,8 +89,10 @@ class MediaMetadataWriter(private val resolver: ContentResolver) {
      * Reads the CURRENT values of the editable tags for [uri] (the
      * editor's prefill), through the same androidx reader the write will
      * go through. `null` when the item cannot be opened or parsed
-     * (vanished, revoked, corrupt) --- the editor then says "current
-     * value unreadable" honestly; a blank-but-open file yields a
+     * (vanished, revoked, corrupt), and for the terminal-catch family
+     * too --- an unexpected provider/runtime failure reads as the same
+     * honest "current value unreadable" rather than a crash (see the
+     * class KDoc's never-throws bullet); a blank-but-open file yields a
      * values object whose fields are all `null` ("not set").
      *
      * Read mode only ("r"): the read grants the app already holds cover
@@ -105,6 +119,15 @@ class MediaMetadataWriter(private val resolver: ContentResolver) {
             } catch (e: IOException) {
                 DiagLog.i(TAG, "read: ${e.javaClass.name} -> null")
                 null
+            } catch (ce: CancellationException) {
+                // A cancelled coroutine is not a read failure.
+                throw ce
+            } catch (e: Exception) {
+                // Terminal backstop (class KDoc): unexpected
+                // provider/runtime failures read as the same honest
+                // unreadable outcome instead of crashing the caller.
+                DiagLog.w(TAG, "read: ${e.javaClass.name} -> null")
+                null
             }
         }
 
@@ -114,7 +137,11 @@ class MediaMetadataWriter(private val resolver: ContentResolver) {
      * sets each attribute (null value removes the tag), saves in place,
      * and reports the RAW outcome for the pure
      * [MetadataWriteFlow.classify] to turn into the UI's honest state.
-     * Never throws for expected failures.
+     * Never throws --- for the expected failure set, and for the
+     * terminal-catch family of unexpected provider/runtime failures,
+     * which classify as [RawWriteOutcome.IO] (WARN-logged class name)
+     * because "could not complete the file operation" is true of every
+     * one of them (see the class KDoc).
      */
     suspend fun write(
         uri: Uri,
@@ -153,6 +180,16 @@ class MediaMetadataWriter(private val resolver: ContentResolver) {
             RawWriteOutcome.SECURITY
         } catch (e: IOException) {
             DiagLog.i(TAG, "write: ${e.javaClass.name} -> IO")
+            RawWriteOutcome.IO
+        } catch (ce: CancellationException) {
+            // A cancelled coroutine is not a write failure.
+            throw ce
+        } catch (e: Exception) {
+            // Terminal backstop (class KDoc): the caller's launch has no
+            // catch of its own, so an unexpected provider/runtime
+            // failure classifies as the IO-kind outcome --- WARN, class
+            // name only, per the repo's diagnostics convention.
+            DiagLog.w(TAG, "write: ${e.javaClass.name} -> IO")
             RawWriteOutcome.IO
         }
     }

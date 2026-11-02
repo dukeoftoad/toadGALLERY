@@ -36,6 +36,16 @@ import androidx.room.PrimaryKey
  * dedicated projection (see `CatalogueDao`'s r16 section), and widening the
  * record + [io.github.dukeoftoad.gallery.data.catalogue.MediaCatalogue]
  * interface is the Phase 5 Places index's contract to settle.
+ *
+ * The r19 folder/bucket ride-alongs (bucketId, bucketDisplayName) close
+ * exactly that gap for the folder dimension: they ARE on
+ * [CatalogueRecord][io.github.dukeoftoad.gallery.data.catalogue
+ * .CatalogueRecord] and ride every scan upsert --- they are ROW-SOURCED
+ * (the provider's own `bucket_id` / `bucket_display_name` columns), never
+ * hook-refilled, so the record->row mapper below carries them like every
+ * ride-along and NO wipe-and-refill sequencing applies. Nullable columns,
+ * `ADD COLUMN` only in [MediaCatalogueDatabase.MIGRATION_4_5], the v1 ->
+ * v2 shape again.
  */
 @Entity(tableName = "catalogue_items")
 data class CatalogueItemEntity(
@@ -145,4 +155,37 @@ data class CatalogueItemEntity(
      * Defaults to `null` for the reason [latitude]'s KDoc gives.
      */
     val locationSource: String? = null,
+
+    // --- folder/bucket ride-alongs (r19 round) ------------------------------
+
+    /**
+     * The provider `bucket_id` --- the folder/bucket dimension the
+     * timeline's folder filter matches (`WHERE bucketId = ?`). Nullable
+     * for the honest "not resolvable on this API path" (a provider that
+     * drops the column, or the row source's reduced-projection defensive
+     * fallback, leaves the row honestly bucketless) --- deliberately NOT a
+     * 0 sentinel, which would collide with a real bucket id. NULL in the
+     * migration matches the entity's no-default nullable declaration
+     * byte-for-byte, the MIGRATION_1_2 discipline.
+     *
+     * DEFAULTS TO `null` as a construction-site convenience ONLY (Kotlin
+     * defaults are invisible to Room --- the generated CREATE TABLE and
+     * the v5 schema JSON declare no column default), the latitude KDoc
+     * pattern; unlike the location columns the mapper in
+     * [RoomMediaCatalogue] DOES carry the record's value: bucket is
+     * row-sourced and must survive every upsert unchanged, because no
+     * index hook re-fills it.
+     */
+    val bucketId: Long? = null,
+
+    /**
+     * The bucket's display name (`bucket_display_name`, the DATA-column
+     * derived name --- NOT `_display_name`; the same semantics
+     * `MediaStoreSource.queryCollection` surfaces buckets with), `null`
+     * when the provider reported none. Carried so a folder surface can
+     * label the filter without a second MediaStore round trip; the filter
+     * itself matches [bucketId] only. Defaults to `null` for the reason
+     * [bucketId]'s KDoc gives.
+     */
+    val bucketDisplayName: String? = null,
 )

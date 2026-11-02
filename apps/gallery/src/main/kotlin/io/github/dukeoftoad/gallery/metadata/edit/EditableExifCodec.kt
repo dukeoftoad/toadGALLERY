@@ -182,11 +182,13 @@ object EditableExifCodec {
      *    datetime + the offset (blank offset CLEARS the offset tag ---
      *    the camera convention of "no zone evidence" is a legitimate
      *    state, and the dates package records the assumption).
-     *  - GPS: both coordinates must be decimal degrees in range; BOTH
-     *    blank clears all four GPS tags (an honest "remove location");
-     *    exactly one blank is invalid (EXIF GPS is a lat+lng pair, and a
-     *    half block is corrupt, not partial data). Writes the DMS
-     *    rationals + reference characters ([decimalToDmsText]).
+     *  - GPS: both coordinates must be FINITE decimal numbers (plain
+     *    decimal text only --- `NaN` and the exotic `toDoubleOrNull`
+     *    literals are refused; see the strict parse in this object) in
+     *    range; BOTH blank clears all four GPS tags (an honest "remove
+     *    location"); exactly one blank is invalid (EXIF GPS is a lat+lng
+     *    pair, and a half block is corrupt, not partial data). Writes the
+     *    DMS rationals + reference characters ([decimalToDmsText]).
      *  - COPYRIGHT / COMMENT: the trimmed text is written; blank CLEARS
      *    the tag.
      *  - KEYWORDS / RATING / COLOUR_LABEL: [FieldInvalidReason.UNSUPPORTED_FIELD]
@@ -231,11 +233,11 @@ object EditableExifCodec {
                         ),
                     )
                 }
-                val latitude = latitudeText.toDoubleOrNull()
+                val latitude = decimalDegreesOrNull(latitudeText)
                 if (latitude == null || latitude < -90.0 || latitude > 90.0) {
                     return FieldEditResult.Invalid(FieldInvalidReason.LATITUDE)
                 }
-                val longitude = longitudeText.toDoubleOrNull()
+                val longitude = decimalDegreesOrNull(longitudeText)
                 if (longitude == null || longitude < -180.0 || longitude > 180.0) {
                     return FieldEditResult.Invalid(FieldInvalidReason.LONGITUDE)
                 }
@@ -344,6 +346,23 @@ object EditableExifCodec {
     private fun textOrClear(tag: String, text: String): ExifTagWrite =
         ExifTagWrite(tag, text.trim().takeIf { it.isNotEmpty() })
 
+    /**
+     * The strict decimal-degrees parse for editor input: `null` unless
+     * [text] is a FINITE number written in the plain decimal grammar
+     * (optional sign, digits with an optional fraction, optional
+     * exponent --- exactly the forms [Double.toString] can produce, so
+     * a [prefill] always re-parses). `toDoubleOrNull` alone accepts far
+     * more: `"NaN"`, which then passes every range check VACUOUSLY
+     * (each comparison with NaN is false) and would silently write GPS
+     * (0,0) into the file's EXIF via the reference characters' sign
+     * logic, plus `"Infinity"`, hex floats (`"0x1p3"`) and suffixed
+     * forms (`"1.5d"`). The grammar gate refuses all of them up front.
+     */
+    private fun decimalDegreesOrNull(text: String): Double? {
+        if (!DECIMAL_DEGREES.matches(text)) return null
+        return text.toDoubleOrNull()?.takeIf { it.isFinite() }
+    }
+
     private fun nonBlank(tagValues: Map<String, String>, tag: String): String? =
         tagValues[tag]?.trim()?.takeIf { it.isNotEmpty() }
 
@@ -370,4 +389,12 @@ object EditableExifCodec {
 
     /** 60.0 s expressed in 1e-7 s units: the carry threshold. */
     private const val SECONDS_PER_MINUTE_X_1E7 = 60L * SECONDS_DENOMINATOR
+
+    /**
+     * The plain decimal grammar editor coordinates must be written in
+     * (see [decimalDegreesOrNull] for why `toDoubleOrNull` alone is too
+     * generous for a value that lands in a file).
+     */
+    private val DECIMAL_DEGREES =
+        Regex("[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 }

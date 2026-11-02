@@ -24,6 +24,13 @@ import io.github.dukeoftoad.gallery.data.catalogue.MetadataCacheState
  * The natural producer is a cursor walk over `MediaStoreSource` building
  * rows from `MediaIdentity.toKeyString()` + the provider columns;
  * [toRecord] then converts a fresh row into the catalogue cache entry.
+ *
+ * From the r19 round the row also carries the FOLDER/BUCKET ride-alongs
+ * ([bucketId], [bucketDisplayName]) --- the folder dimension the
+ * timeline's folder filter matches, row-sourced straight from the
+ * provider's own bucket columns (never EXIF-derived, never re-filled by a
+ * scan index hook), so they ride the upsert itself; see the r19 note
+ * below the constructor for the carry-through contract.
  */
 data class MediaScanRow(
     /** The stable local media key (MediaIdentity.toKeyString()). */
@@ -83,6 +90,23 @@ data class MediaScanRow(
      * provider has the column, Q+). NON-REVISION ride-along.
      */
     val isFavorite: Boolean = false,
+
+    // --- folder/bucket ride-alongs (r19 round) -----------------------------
+
+    /**
+     * The provider `bucket_id` --- the folder/bucket dimension (r19). `null`
+     * is the honest "not resolvable on this API path" (the provider dropped
+     * the column, or the walk fell back to the reduced projection), never a
+     * 0 sentinel. NON-REVISION ride-along --- see the r19 note below.
+     */
+    val bucketId: Long? = null,
+
+    /**
+     * The bucket's display name (`bucket_display_name`, the DATA-column
+     * derived name --- NOT `_display_name`), or `null` when the provider
+     * reported none. NON-REVISION ride-along --- see the r19 note below.
+     */
+    val bucketDisplayName: String? = null,
 ) {
     // NOTE ON THE FIVE DISPLAY/SHAPE FIELDS ABOVE (r13 round): they are
     // NON-REVISION fields in the same class as mimeType/canonicalUri ---
@@ -105,6 +129,21 @@ data class MediaScanRow(
     // refresh with it. Dimensions and display names only change when the
     // bytes change --- which IS a revision change --- so the edge is
     // favorites-only in practice.
+    //
+    // NOTE ON THE TWO FOLDER/BUCKET FIELDS ABOVE (r19 round): they are
+    // NON-REVISION ride-alongs in the display/shape group's sense, but
+    // with one crucial difference in how they TRAVEL: display data merely
+    // rides the upsert, while the bucket pair is ROW-SOURCED with NO hook
+    // refill --- there is no ScanIndexHook for folders, so a row's bucket
+    // pair must survive every upsert unchanged (a mapper that nulls them
+    // for a later re-fill, the capture-date/location wipe-and-refill
+    // pattern, would LOSE the folder for good until the next
+    // revision-visible change). They still never enter changedVersus(): a
+    // folder move is a provider-row move in practice (MediaStore rewrites
+    // date_modified on a move, which IS a revision change), so the pair
+    // refreshes with the row's next CHANGED sighting; the same Q-only
+    // pathological edge the note above documents applies if a move ever
+    // touched no revision field.
 
     /**
      * Converts the row into the catalogue cache entry for a first sighting
@@ -122,6 +161,11 @@ data class MediaScanRow(
      * goes through this same mapping in `ScanDriverPolicy
      * .recordForAppliedChange`); they are not revision state and never
      * participate in reconciliation.
+     *
+     * The folder/bucket pair (r19) travels verbatim the same way: the
+     * record mirrors the row's bucket, and NO hook re-fills it later ---
+     * this mapping is the ONLY place the folder dimension enters the
+     * catalogue.
      */
     fun toRecord(): CatalogueRecord =
         CatalogueRecord(
@@ -137,6 +181,8 @@ data class MediaScanRow(
             height = height,
             durationMs = durationMs,
             isFavorite = isFavorite,
+            bucketId = bucketId,
+            bucketDisplayName = bucketDisplayName,
             metadataWriteRevision = 0,
             metadataCacheState = MetadataCacheState.EMPTY,
             lastSeenAtMillis = 0L,

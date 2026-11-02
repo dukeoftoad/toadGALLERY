@@ -203,10 +203,30 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
      * Re-queries albums through the existing [MediaStoreSource.queryAlbums]
      * (issue #29's query, no new pipeline). Called every time the picker
      * opens --- counts and buckets change as moves land.
+     *
+     * r19: the query runs inside `runCatching { ... }.getOrElse { ... }`
+     * because this fires the moment the user opens the Move picker from a
+     * selection, and a provider failure (permission revoked mid-session, a
+     * provider SQLiteException, a missing column) previously escaped
+     * `viewModelScope.launch` uncaught and killed the process mid-dialog.
+     * The fallback publishes the EMPTY list --- the picker state its
+     * dialog already renders as "no targets", distinct from null, its
+     * spinner (a failed query must not spin forever) --- and narrates
+     * through the same snackbar event channel the op outcomes use. The
+     * catch sits INSIDE the IO hop, so cancellation of the hop itself
+     * still propagates (the query is a plain blocking call).
      */
     fun refreshAlbums() {
         viewModelScope.launch {
-            _albums.value = withContext(Dispatchers.IO) { albumSource.queryAlbums() }
+            _albums.value = withContext(Dispatchers.IO) {
+                runCatching { albumSource.queryAlbums() }
+                    .getOrElse {
+                        _events.tryEmit(
+                            FileOpsEvent.ShowSnackbar(R.string.file_ops_albums_failed),
+                        )
+                        emptyList()
+                    }
+            }
         }
     }
 

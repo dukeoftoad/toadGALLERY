@@ -32,6 +32,11 @@ class MetadataFormatMatrixTest {
             assertEquals(MetadataAvailability.PRESENT, heif.exif)
             assertEquals(MetadataAvailability.ABSENT, heif.containerMetadata)
             assertFalse(heif.editable)
+            // The row models the verified SDK-28 floor: on the app's
+            // minSdk 26/27 the androidx read yields empty attributes,
+            // and the note must say so rather than claiming an
+            // unconditional read.
+            assertTrue(heif.notes!!.contains("API 28"))
         }
     }
 
@@ -45,10 +50,15 @@ class MetadataFormatMatrixTest {
     }
 
     @Test
-    fun `webp reads exif and gif carries none`() {
+    fun `webp reads and writes exif this round while gif carries none`() {
         val webp = MetadataFormatMatrix.capabilitiesFor("image/webp")
         assertEquals(MetadataAvailability.PRESENT, webp.exif)
-        assertFalse(webp.editable)
+        // Drift guard: the r15 write spine (ExifWriteFormats --- the
+        // androidx-writable set intersected with this read matrix) makes
+        // WebP EDITABLE, and MediaEditCapabilityTest pins the same; this
+        // row must agree with the gate, never re-declare a second truth.
+        assertTrue(webp.editable)
+        assertTrue(webp.notes!!.contains("r15 write spine"))
         val gif = MetadataFormatMatrix.capabilitiesFor("image/gif")
         assertEquals(MetadataAvailability.ABSENT, gif.exif)
         assertEquals(MetadataAvailability.ABSENT, gif.iptc)
@@ -56,12 +66,20 @@ class MetadataFormatMatrixTest {
     }
 
     @Test
-    fun `avif exif is unsupported this round`() {
+    fun `avif exif is unsupported this round with the api-31 floor stated`() {
         val avif = MetadataFormatMatrix.capabilitiesFor("image/avif")
         assertEquals(MetadataAvailability.UNSUPPORTED, avif.exif)
         assertEquals(MetadataAvailability.ABSENT, avif.containerMetadata)
         assertEquals(MetadataAvailability.UNSUPPORTED, avif.xmp)
         assertFalse(avif.editable)
+        // Drift guard: the note must not claim androidx "does not parse"
+        // AVIF --- the pinned 1.4.1 reads it from API 31 (empty below),
+        // exactly what the format-support catalogue's
+        // READ_BY_ANDROIDX_FROM_API_31 documents; the row's honest claim
+        // is that THIS minSdk-26 pinned reader keeps the format
+        // UNSUPPORTED.
+        assertTrue(avif.notes!!.contains("API 31"))
+        assertFalse(avif.notes!!.contains("does not parse"))
     }
 
     @Test

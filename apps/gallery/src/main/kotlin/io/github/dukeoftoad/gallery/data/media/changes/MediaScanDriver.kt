@@ -135,7 +135,10 @@ object ScanDriverPolicy {
      *   upserts nothing), so its stored copy survives until the next
      *   revision-visible change --- together with the reconciler's
      *   revision-only comparison this is why display data refreshes for
-     *   free on real changes but never CAUSES one.
+     *   free on real changes but never CAUSES one. The r19 folder/bucket
+     *   pair (bucketId, bucketDisplayName) rides the exact same way ---
+     *   row-sourced, never hook-refilled, so it must survive every upsert
+     *   unchanged (the MediaScanRow r19 field-group note).
      */
     fun recordForAppliedChange(
         changed: CatalogueReconciler.ChangedRecord,

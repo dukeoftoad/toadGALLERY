@@ -154,6 +154,34 @@ class EditableExifCodecTest {
             FieldInvalidReason.LONGITUDE,
             (writes(MediaEditField.GPS, "0.0", "-180.5") as FieldEditResult.Invalid).reason,
         )
+        // The exotic-literal family toDoubleOrNull ACCEPTS: "NaN" passes
+        // every range comparison vacuously (NaN < -90.0 and NaN > 90.0
+        // are both false) and would silently write GPS (0,0) into the
+        // file's EXIF instead of refusing; the hex and suffixed forms
+        // ("0x1p3" = 8.0, "1.5d" = 1.5, both in range!) are the same
+        // bug one grammar gate fixes.
+        for (bad in listOf("NaN", "Infinity", "-Infinity", "0x1p3", "1.5d")) {
+            assertEquals(
+                FieldInvalidReason.LATITUDE,
+                (writes(MediaEditField.GPS, bad, "0.0") as FieldEditResult.Invalid).reason,
+            )
+        }
+        assertEquals(
+            FieldInvalidReason.LONGITUDE,
+            (writes(MediaEditField.GPS, "0.0", "NaN") as FieldEditResult.Invalid).reason,
+        )
+    }
+
+    @Test
+    fun `prefill-produced scientific notation re-parses`() {
+        // Double.toString goes scientific for small magnitudes (a
+        // 0.0001-degree fix is ~11 m --- a legitimate coordinate), so a
+        // prefill can seed "1.0E-4"; the strict grammar must accept
+        // exactly what our own prefill can produce, or the edit
+        // round-trip (prefill -> edit -> writesFor) breaks.
+        assertTrue(
+            writes(MediaEditField.GPS, "1.0E-4", "-1.0E-4") is FieldEditResult.Valid,
+        )
     }
 
     @Test

@@ -14,7 +14,11 @@ import org.junit.Test
  * additions pin the display/shape ride-alongs --- the fields the timeline's
  * cells render from --- which must travel verbatim while NEVER entering the
  * reconciler's revision comparison (a favorite toggle or dimension refresh
- * must not cost an embedding recompute).
+ * must not cost an embedding recompute). The r19 additions pin the
+ * folder/bucket pair --- the fields the timeline's folder filter matches ---
+ * through the same verbatim-travel contract (there is NO hook refill for
+ * folders; if this mapping ever drops them, the folder is LOST until the
+ * row's next revision-visible change).
  */
 class MediaScanRowTest {
 
@@ -124,5 +128,69 @@ class MediaScanRowTest {
         assertEquals(0, record.height)
         assertEquals(0L, record.durationMs)
         assertFalse(record.isFavorite)
+    }
+
+    // --- folder/bucket ride-alongs (r19 round) -------------------------------
+
+    @Test
+    fun `toRecord carries the folder bucket pair verbatim`() {
+        // The folder filter matches [CatalogueRecord.bucketId], and the
+        // row->record mapping is the ONLY place the folder dimension
+        // enters the catalogue (no hook re-fills it) --- the pair must
+        // travel the bridge untouched or the folder is lost.
+        val row = MediaScanRow(
+            localMediaKey = "external_primary:41",
+            canonicalUri = "content://media/external/images/41",
+            mimeType = "image/jpeg",
+            sizeBytes = 2_048L,
+            dateModifiedMillis = 2_000L,
+            dateAddedMillis = 1_000L,
+            bucketId = 4_711L,
+            bucketDisplayName = "Pictures",
+        )
+
+        val record = row.toRecord()
+
+        assertEquals(4_711L, record.bucketId)
+        assertEquals("Pictures", record.bucketDisplayName)
+    }
+
+    @Test
+    fun `folder bucket ride-alongs default to the honest null zero-point`() {
+        // NOT a 0 sentinel: a null bucketId is the honest "not resolvable
+        // on this API path" (the reduced-projection fallback walk, a
+        // provider that dropped the column), and 0 would be a REAL bucket
+        // id shape the folder filter would wrongly match.
+        val record = MediaScanRow(
+            localMediaKey = "external_primary:1",
+            canonicalUri = "content://media/external/images/1",
+            mimeType = "image/jpeg",
+            sizeBytes = 1L,
+            dateModifiedMillis = 1L,
+            dateAddedMillis = 1L,
+        ).toRecord()
+
+        assertNull(record.bucketId)
+        assertNull(record.bucketDisplayName)
+    }
+
+    @Test
+    fun `a bucket without a name still carries the id`() {
+        // The provider can report a bucket id with no display name
+        // (the queryAlbums "sometimes null for one collection" case):
+        // the dimension is id-based, so the name degrades alone.
+        val record = MediaScanRow(
+            localMediaKey = "external_primary:7",
+            canonicalUri = "content://media/external/images/7",
+            mimeType = "image/jpeg",
+            sizeBytes = 1L,
+            dateModifiedMillis = 1L,
+            dateAddedMillis = 1L,
+            bucketId = 42L,
+            bucketDisplayName = null,
+        ).toRecord()
+
+        assertEquals(42L, record.bucketId)
+        assertNull(record.bucketDisplayName)
     }
 }

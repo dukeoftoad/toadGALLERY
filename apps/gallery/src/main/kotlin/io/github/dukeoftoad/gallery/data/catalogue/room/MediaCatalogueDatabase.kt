@@ -51,6 +51,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *   the v1 -> v2 shape again. Existing rows read `NULL` for all three
  *   ("no persisted location"), which is exactly the honest default: the
  *   location indexer fills them on each row's next add/change sighting.
+ * - v4 -> v5 (r19 round): the folder/bucket ride-along columns (`bucketId`,
+ *   `bucketDisplayName`) added to `catalogue_items` by [MIGRATION_4_5] ---
+ *   two plain nullable columns, `ADD COLUMN` only, the v1 -> v2 shape
+ *   again. Existing rows read `NULL` for both ("no persisted folder"),
+ *   which is exactly the honest default: the folder dimension is
+ *   ROW-SOURCED (never hook-refilled), so each row's bucket pair fills
+ *   with its next add/change upsert, not from a migration back-fill.
  *
  * The v4 schema snapshot (4.json) is hand-written in this round (no local
  * KSP available); its `identityHash` was computed with Room 2.8.5's own
@@ -59,6 +66,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * room-compiler-2.8.5-sources.jar, androidx/room/vo/SchemaIdentityKey.kt et
  * al.) and VALIDATED by reproducing the committed v1/v2/v3 hashes
  * byte-for-byte with the same computation before extrapolating to v4.
+ * The v5 snapshot (5.json) is hand-written the same way: the same
+ * re-implementation was re-run against all four committed hashes (v1-v4
+ * reproduce byte-for-byte) and then extended with the two new columns;
+ * the derivation (field-by-field hash input) is recorded in the r19
+ * commit body. RELEASE GATE, non-negotiable: a wrong identityHash bricks
+ * every upgraded install at DB open, so CI's first KSP build MUST
+ * regenerate the v5 snapshot and diff it against the hand-written 5.json
+ * --- any identityHash or createSql mismatch blocks the release until
+ * reconciled.
  *
  * Untested Android-adjacent code per ADR-0016; behavior is pinned by the
  * pure-type tests around [io.github.dukeoftoad.gallery.data.catalogue
@@ -70,7 +86,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CatalogueTombstoneEntity::class,
         ScanCheckpointEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class MediaCatalogueDatabase : RoomDatabase() {
@@ -196,13 +212,45 @@ abstract class MediaCatalogueDatabase : RoomDatabase() {
         }
 
         /**
+         * v4 -> v5 (r19 round): adds the folder/bucket ride-along columns to
+         * `catalogue_items` --- the folder dimension the timeline's folder
+         * filter matches (`WHERE bucketId = ?`, projected by the pure filter
+         * engine) plus the bucket's display name for folder-surface
+         * labeling. Two nullable columns, `ADD COLUMN` only --- no table
+         * rebuild, no index, no data loss; existing rows keep every value
+         * and read `NULL` ("no persisted folder"), which is exactly the
+         * honest default for ROW-SOURCED ride-alongs: the scan's upsert
+         * carries each row's bucket pair on its next add/change sighting,
+         * and no hook (or migration back-fill) re-derives them.
+         *
+         * `DEFAULT NULL` for the same reason as [MIGRATION_1_2]: it makes
+         * the migrated schema identical to the CREATE TABLE Room generates
+         * for the v5 entity (a nullable column with no declared default),
+         * so open-time schema validation passes without `@ColumnInfo
+         * (defaultValue = ...)` annotations. INTEGER affinity matches the
+         * Kotlin `Long?` property; TEXT matches `String?`.
+         */
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE catalogue_items " +
+                        "ADD COLUMN bucketId INTEGER DEFAULT NULL",
+                )
+                db.execSQL(
+                    "ALTER TABLE catalogue_items " +
+                        "ADD COLUMN bucketDisplayName TEXT DEFAULT NULL",
+                )
+            }
+        }
+
+        /**
          * Builds the singleton-scope database for the app. Callers own the
          * instance lifetime (one per process, via whatever dependency
          * holder the app settles on); [context.applicationContext] is used
          * so no Activity can leak through the builder. Explicit
          * migrations only ([MIGRATION_1_2], [MIGRATION_2_3],
-         * [MIGRATION_3_4]) --- NO `fallbackToDestructiveMigration`, ever;
-         * see the class KDoc.
+         * [MIGRATION_3_4], [MIGRATION_4_5]) --- NO
+         * `fallbackToDestructiveMigration`, ever; see the class KDoc.
          */
         fun build(context: Context): MediaCatalogueDatabase =
             Room.databaseBuilder(
@@ -213,7 +261,7 @@ abstract class MediaCatalogueDatabase : RoomDatabase() {
                 // class KDoc. An incompatible future schema must fail loud
                 // (IllegalStateException on open), not wipe silently.
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

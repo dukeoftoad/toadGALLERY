@@ -11,6 +11,7 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
+import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import io.github.dukeoftoad.gallery.data.TimelineSort
@@ -122,7 +123,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * [TimelineDirection] ([toCatalogueDirection]) when the generation runs on
  * the catalogue backend.
  *
- * ## Smart-filter chips (r17)
+ * ## Smart-filter chips (r17) + the folder chip (r19b)
  * [filter] is per-session ViewModel state (same persistence scope as
  * [sort]: deliberately NOT persisted), written through [onFilterChange]
  * and applied to BOTH data paths by the SAME generation mechanics a sort
@@ -130,9 +131,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * captures the filter, so every window of the generation tiles ONE
  * filtered total order:
  *  - CATALOGUE: [RoomMediaCatalogue.filteredTimelineWindow] applies the
- *    pure engine's WHERE projection (mimeType/isFavorite/dateAddedMillis
- *    --- the columns `CatalogueItemEntity` already persists) before the
- *    LIMIT/OFFSET, keeping windows positional over the FILTERED order;
+ *    pure engine's WHERE projection (mimeType/isFavorite/bucketId/
+ *    dateAddedMillis --- the columns `CatalogueItemEntity` persists; the
+ *    bucket pair since the r19 Room v5) before the LIMIT/OFFSET, keeping
+ *    windows positional over the FILTERED order;
  *  - MEDIA_STORE_FALLBACK, API 30+: the engine's MediaStore selection
  *    projection AND-joins into `queryTimelineWindow`'s base selection
  *    (fragment via `QUERY_ARG_SQL_SELECTION`, value-dimension args via
@@ -145,15 +147,34 @@ import kotlin.time.Duration.Companion.milliseconds
  *    exact because the snapshot is fully materialized first. (The one
  *    dimension memory cannot evaluate --- a bucket, no bucket field on
  *    `MediaItem` --- fails CLOSED there: a visibly empty timeline, never a
- *    silently unfiltered one; no surfaced chip can produce it.)
+ *    silently unfiltered one. Since r19b the surfaced folder chip CAN
+ *    reach this leg on a pre-30 device; the nothing-matched state keeps
+ *    the chips row rendered, so the way back from that honest dead end
+ *    is one tap, not a dead UI.)
  *
- * The backend ladder itself ([timelineSource]) is filter-aware: a filter
- * the catalogue cannot serve (a bucket --- no column; or a non-Room
- * catalogue binding, which has no filtered-window method) keeps the
- * generation on the MediaStore fallback, which serves every filter the
- * UI can surface. The grid, the empty state and the item count therefore
- * stay honest on every path: nothing is filtered client-side after
- * paging.
+ * The backend ladder itself ([timelineSource]) is filter-aware: since the
+ * r19 Room v5 bucket columns the catalogue projection serves every
+ * dimension the engine defines ([TimelineFilterCatalogue.canServe]), so
+ * only a non-Room catalogue binding (test wiring, which has no
+ * filtered-window method) keeps a generation on the MediaStore fallback,
+ * which serves every filter the UI can surface. The grid, the empty state
+ * and the item count therefore stay honest on every path: nothing is
+ * filtered client-side after paging.
+ *
+ * ## The folder chip + picker (r19b)
+ * The folder dimension ([TimelineFilter.bucketId]) is surfaced as the
+ * chips row's LEADING chip, which opens a picker sheet rather than
+ * toggling in place --- its value space is the device's bucket list, not
+ * a fixed enum. The sheet lists the folders the move picker's own query
+ * returns (`MediaStoreSource.queryAlbums`, re-queried on every open),
+ * and the ViewModel keeps two extra pieces of per-session state for it:
+ *  - [selectedFolderName]: the active bucket's display name (the pure
+ *    filter carries only the id --- names collide across volumes, ids do
+ *    not); [onFilterChange] drops it whenever the bucket dimension
+ *    changes, and only [onFolderSelected] re-fills it;
+ *  - [folders]: the picker sheet's list state, which distinguishes a
+ *    FAILED query (the sheet renders its honest error + retry) from a
+ *    loaded list --- never a silent empty list.
  *
  * ## Dataset drift -> generational invalidation (issue #38, finding 1)
  * LIMIT/OFFSET windows are positional: if the dataset changes between two
@@ -252,6 +273,30 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val _filter = MutableStateFlow(TimelineFilter())
     val filter: StateFlow<TimelineFilter> = _filter.asStateFlow()
+
+    /**
+     * The display name of the filter's selected folder (r19b): the label
+     * the chips row's folder chip carries while the bucket dimension is
+     * active. The pure [TimelineFilter] stores only the bucket ID --- ids
+     * are the filter dimension, names collide across volumes --- so the
+     * name rides here as per-session ViewModel state (same survival scope
+     * as the filter itself), kept honest by [onFilterChange]: any filter
+     * change that moves or clears the bucket drops the name, and only
+     * [onFolderSelected], which knows the picked name, re-fills it.
+     */
+    private val _selectedFolderName = MutableStateFlow<String?>(null)
+    val selectedFolderName: StateFlow<String?> = _selectedFolderName.asStateFlow()
+
+    /**
+     * The folder-picker sheet's list state (r19b), written by
+     * [refreshFolders]. Distinguishing a FAILED query from a loaded-but-
+     * empty list is the state's whole point: the sheet renders the honest
+     * error with its own retry for the former, never a silent empty list.
+     * Loading is also the pre-first-open value --- the sheet only composes
+     * while open, so a stale list never renders.
+     */
+    private val _folders = MutableStateFlow<PhotosFoldersState>(PhotosFoldersState.Loading)
+    val folders: StateFlow<PhotosFoldersState> = _folders.asStateFlow()
 
     /**
      * The [WindowPagingSource] of the CURRENT Pager generation (issue #38
@@ -371,8 +416,21 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
         startGeneration()
     }
 
-    /** Called when the user denies the permission or revokes it later. */
+    /**
+     * Called when the user denies the permission or revokes it later.
+     * Since the r19b permission-race fix (audit B6) this also tears down
+     * any in-flight generation build and forgets the live generation's
+     * source/backend: a build launched while access was briefly granted
+     * must not complete INTO a stale [PhotosState.Ready] over the denial
+     * (the grid would render un-grantable thumbnails behind the permission
+     * state), and the debounced change collectors must find nothing live
+     * to invalidate. The next grant rebuilds fresh from scratch
+     * ([onPermissionGranted]).
+     */
     fun onPermissionDenied() {
+        generationJob?.cancel()
+        currentSource = null
+        currentBackend = null
         _state.value = PhotosState.PermissionNeeded
     }
 
@@ -400,39 +458,120 @@ class PhotosViewModel(app: Application) : AndroidViewModel(app) {
      * mid-flight --- the same total-order argument as a sort change). While
      * the shell is not `Ready` (permission pending) the value is only
      * stored --- the next grant builds with it. The screen also feeds the
-     * Collections hand-off ([PhotosFilterHandoff]) through here.
+     * Collections hand-off ([PhotosFilterHandoff]) through here, and every
+     * folder-dimension write ([onFolderSelected] / [onFolderCleared])
+     * lands here too, keeping ONE filter pipeline.
      */
     fun onFilterChange(newFilter: TimelineFilter) {
-        if (_filter.value == newFilter) return
+        val oldFilter = _filter.value
+        if (oldFilter == newFilter) return
         _filter.value = newFilter
+        // Folder-name sync (r19b): the folder chip's active label needs
+        // the selected bucket's display name, which the pure filter
+        // cannot carry. Drop the cached name whenever the bucket
+        // dimension changes --- every filter writer flows through here
+        // (the type/favorites toggles, the All chip, the Clear action,
+        // the Collections hand-off), and only [onFolderSelected] knows a
+        // newly picked name, so it re-fills the name after this call. A
+        // dropped name renders the honest generic label; a kept-stale
+        // one would label the WRONG folder.
+        if (newFilter.bucketId != oldFilter.bucketId) {
+            _selectedFolderName.value = null
+        }
         if (_state.value is PhotosState.Ready) {
             startGeneration()
         }
     }
 
     /**
+     * Re-queries the device's media folders for the picker sheet (r19b):
+     * the SAME [MediaStoreSource.queryAlbums] query the file-ops move
+     * picker lists (bucket ids + display names + live item counts,
+     * images and videos merged per bucket), run on this ViewModel's own
+     * source. Called every time the sheet opens, and by the sheet's
+     * retry --- buckets and counts change as ops land. Mirrors
+     * [FileOpsViewModel.refreshAlbums]'s guarded shape (the runCatching
+     * sits INSIDE the IO hop, so cancellation of the hop itself still
+     * propagates) but maps a failure onto [PhotosFoldersState.Error]
+     * instead of a snackbar + empty list: the folder sheet renders the
+     * honest failure itself, with its own retry action.
+     */
+    fun refreshFolders() {
+        _folders.value = PhotosFoldersState.Loading
+        viewModelScope.launch {
+            val queried = withContext(Dispatchers.IO) {
+                runCatching { source.queryAlbums() }.getOrNull()
+            }
+            _folders.value = if (queried != null) {
+                PhotosFoldersState.Ready(queried)
+            } else {
+                PhotosFoldersState.Error
+            }
+        }
+    }
+
+    /**
+     * Applies the picker sheet's picked folder (r19b): writes the bucket
+     * dimension through [onFilterChange] --- the same fresh-generation
+     * mechanics every filter change uses, composing AND with the
+     * type/favorites dimensions on BOTH backends --- then re-fills
+     * [selectedFolderName], which [onFilterChange]'s bucket-change sync
+     * just dropped. Re-picking the already-selected folder changes
+     * nothing observable (the filter write no-ops; the name re-set is
+     * idempotent).
+     */
+    fun onFolderSelected(album: Album) {
+        onFilterChange(_filter.value.copy(bucketId = album.bucketId))
+        _selectedFolderName.value = album.bucketName
+    }
+
+    /**
+     * Clears the folder dimension only (r19b): the picker sheet's "All
+     * folders" row --- deliberately distinct from the chips row's All
+     * chip and Clear action, which reset EVERY dimension. The type and
+     * favorites dimensions pass through untouched; no-op when no folder
+     * is selected.
+     */
+    fun onFolderCleared() {
+        if (_filter.value.bucketId == null) return
+        onFilterChange(_filter.value.copy(bucketId = null))
+    }
+
+    /**
      * One debounced catalogue change landed (r13): the timeline must
      * re-read, and HOW depends on whether the change also flipped the
-     * backend choice.
+     * backend choice. Since the r19b permission-race fix (audit B6) the
+     * method reacts only to a READY timeline:
      *
-     *  - FLIP (first scan populated the catalogue; the theoretical reverse,
-     *    a wiped library emptying it): only a fresh generation can switch
-     *    backends --- the live Pager's factory captured its backend when it
-     *    was built. [startGeneration] also covers the Loading edge: a first
-     *    generation that resolved its choice just before the first scan
-     *    batch landed would otherwise publish a stale fallback.
-     *  - SAME backend, Ready: a plain [WindowPagingSource.invalidate] ---
-     *    the anchored-refresh path the MediaStore observer has always
-     *    driven --- because the order key did not change, only the content
-     *    under it (new shots, resolved capture dates, tombstones).
-     *  - PermissionNeeded: nothing is live; the next grant resolves the
+     *  - FLIP (first scan populated the catalogue; the theoretical
+     *    reverse, a wiped library emptying it): only a fresh generation
+     *    can switch backends --- the live Pager's factory captured its
+     *    backend when it was built.
+     *  - SAME backend: a plain [WindowPagingSource.invalidate] --- the
+     *    anchored-refresh path the MediaStore observer has always
+     *    driven --- because the order key did not change, only the
+     *    content under it (new shots, resolved capture dates,
+     *    tombstones).
+     *  - PermissionNeeded: nothing is live ([onPermissionDenied] also
+     *    cancelled any in-flight build); the next grant resolves the
      *    backend against the settled catalogue anyway.
+     *  - Loading: the system permission dialog is up, or a just-granted
+     *    build is still resolving its backend. The pre-r19b code let the
+     *    first case build a generation behind the dialog (the B6 race:
+     *    an un-grantable Ready grid rendered behind the dialog, then a
+     *    grant that early-returns "already Ready" leaves broken cells);
+     *    awaiting the grant is strictly better --- the grant path builds
+     *    fresh against the settled catalogue. The second case's residual
+     *    edge (the change consumed while the granted build is mid-flight)
+     *    is a millisecond window whose worst case is the pre-r13 fallback
+     *    ordering until the NEXT catalogue change flips it --- correct
+     *    content, superseded ordering, self-healing.
      */
     private suspend fun onCatalogueChanged() {
-        if (_state.value is PhotosState.PermissionNeeded) return
+        if (_state.value !is PhotosState.Ready) return
         if (currentTimelineSource() != currentBackend) {
             startGeneration()
-        } else if (_state.value is PhotosState.Ready) {
+        } else {
             currentSource?.invalidate()
         }
     }
@@ -672,11 +811,12 @@ internal enum class TimelineSource {
  * `date_added`; the first catalogue change flips the generation onto the
  * catalogue path (see `onCatalogueChanged`).
  *
- * A filter the catalogue CANNOT serve (r17: a bucket dimension --- the
- * entity has no bucket column --- or a non-Room catalogue binding, which
- * has no filtered-window method) also keeps the generation on the
- * MediaStore fallback, which serves every engine dimension; the Android
- * side composes the boolean from the binding and the pure engine's
+ * A filter the catalogue CANNOT serve (a non-Room catalogue binding,
+ * which has no filtered-window method --- test wiring only; since the
+ * r19 Room v5 bucket columns the projection serves every dimension the
+ * engine defines) also keeps the generation on the MediaStore fallback,
+ * which serves every engine dimension; the Android side composes the
+ * boolean from the binding and the pure engine's
  * `TimelineFilterCatalogue.canServe` gate, keeping this decision itself
  * JVM-pure.
  */
@@ -832,4 +972,31 @@ sealed interface PhotosState {
      * Photos re-collects this same flow.
      */
     data class Ready(val pagingData: Flow<PagingData<MediaItem>>) : PhotosState
+}
+
+/**
+ * The folder-picker sheet's list state (r19b), written by
+ * [PhotosViewModel.refreshFolders] and rendered by the chips file's
+ * picker sheet. One sealed state instead of a nullable list because the
+ * sheet must tell a FAILED query from a loaded-but-empty list apart: a
+ * failure renders the honest error copy with a retry, an empty list the
+ * honest empty line --- never a silent empty list that reads as "the
+ * device has no folders" when the provider was merely unreadable.
+ */
+sealed interface PhotosFoldersState {
+    /**
+     * A (re)query is in flight --- also the value before the sheet ever
+     * opens, which never renders: the sheet composes only while open,
+     * and opening triggers the query.
+     */
+    data object Loading : PhotosFoldersState
+
+    /** The queried folders; an empty list is a REAL result, not a failure. */
+    data class Ready(val folders: List<Album>) : PhotosFoldersState
+
+    /**
+     * The provider query failed; retry re-runs
+     * [PhotosViewModel.refreshFolders].
+     */
+    data object Error : PhotosFoldersState
 }

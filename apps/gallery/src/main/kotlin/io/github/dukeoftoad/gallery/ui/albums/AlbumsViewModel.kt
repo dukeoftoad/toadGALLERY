@@ -24,9 +24,11 @@ import kotlin.time.Duration.Companion.milliseconds
  * State holder for the Albums tab (Phase 3, issue #29; favorites pseudo-album
  * and live counts since #66).
  *
- * Mirrors the Photos tab's three-state model (issue #25) so both tabs feel
- * identical: Loading → PermissionNeeded → Ready. `Ready` with an empty list
- * means the user granted access but has no media on the device.
+ * Mirrors the Photos tab's state model (issue #25) so both tabs feel
+ * identical: Loading → PermissionNeeded → Ready, plus --- since r19 --- the
+ * honest Error arm every sibling screen already had. `Ready` with an empty
+ * list means the user granted access but has no media on the device;
+ * Error is a failed read, never a disguised empty one.
  *
  * ## Favorites pseudo-album (issue #66)
  * `Ready` is pinned with a "Favorites" entry carrying
@@ -95,6 +97,17 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = AlbumsState.PermissionNeeded
     }
 
+    /**
+     * Re-runs the album queries after an [AlbumsState.Error] (the error
+     * state's retry action). Re-enters [AlbumsState.Loading] first --- the
+     * same contract as `TrashViewModel.refresh` --- so a slow retry never
+     * leaves a stale error card on screen while the query is in flight.
+     */
+    fun retry() {
+        _state.value = AlbumsState.Loading
+        reload()
+    }
+
     override fun onCleared() {
         albumsObserver?.let { source.unregisterTimelineObserver(it) }
         albumsObserver = null
@@ -106,32 +119,55 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
      * pinned on top (issue #66). The favorites query returns empty below Q
      * (see `MediaStoreSource.queryFavorites`), which simply means no card;
      * the per-bucket list is unchanged by the favorites feature.
+     *
+     * r19: the queries run inside `runCatching { ... }.getOrElse { ... }`
+     * (the guard `AlbumDetailViewModel.load` already uses) because a
+     * provider hiccup --- permission revoked mid-session, a provider
+     * SQLiteException, an IllegalArgumentException from a missing column
+     * --- previously escaped `viewModelScope.launch` UNCAUGHT and killed
+     * the process; the UI audit found the Albums tab the only screen with
+     * that escape (Search/Trash map to their Error states, Photos to the
+     * Paging LoadState.Error, AlbumDetail to runCatching). The catch sits
+     * INSIDE the IO hop, so cancellation of the hop itself still
+     * propagates --- `runCatching` sees only provider throws (the queries
+     * are plain blocking calls with no suspension points of their own).
      */
     private fun reload() {
         viewModelScope.launch {
-            val (albums, favorites) = withContext(Dispatchers.IO) {
-                source.queryAlbums() to source.queryFavorites()
-            }
-            val ready = if (favorites.isEmpty()) {
-                AlbumsState.Ready(albums)
-            } else {
-                // queryFavorites is newest-first, so the first row is the
-                // cover; the pseudo-album keeps newest-first contents (v1).
-                val newest = favorites.first()
-                AlbumsState.Ready(
-                    listOf(
-                        Album(
-                            bucketId = Favorites.FAVORITES_BUCKET_ID,
-                            bucketName = getApplication<Application>()
-                                .getString(R.string.albums_favorites_title),
-                            itemCount = favorites.size,
-                            coverUri = newest.uri,
-                            latestDateSec = newest.dateAddedSec,
-                        ),
-                    ) + albums,
-                )
+            val ready: AlbumsState = withContext(Dispatchers.IO) {
+                runCatching { queryReadyState() }
+                    .getOrElse { AlbumsState.Error }
             }
             _state.value = ready
+        }
+    }
+
+    /**
+     * The success path of [reload]: both provider queries plus the Ready
+     * assembly over them --- main-thread-free by construction (pure data
+     * classes and a `getString`), so it runs whole inside the IO hop.
+     */
+    private fun queryReadyState(): AlbumsState.Ready {
+        val albums = source.queryAlbums()
+        val favorites = source.queryFavorites()
+        return if (favorites.isEmpty()) {
+            AlbumsState.Ready(albums)
+        } else {
+            // queryFavorites is newest-first, so the first row is the
+            // cover; the pseudo-album keeps newest-first contents (v1).
+            val newest = favorites.first()
+            AlbumsState.Ready(
+                listOf(
+                    Album(
+                        bucketId = Favorites.FAVORITES_BUCKET_ID,
+                        bucketName = getApplication<Application>()
+                            .getString(R.string.albums_favorites_title),
+                        itemCount = favorites.size,
+                        coverUri = newest.uri,
+                        latestDateSec = newest.dateAddedSec,
+                    ),
+                ) + albums,
+            )
         }
     }
 
@@ -152,6 +188,15 @@ sealed interface AlbumsState {
 
     /** No media access; show the permission state with a Grant button. */
     data object PermissionNeeded : AlbumsState
+
+    /**
+     * The provider query failed (permission revoked mid-session, a
+     * provider SQLiteException, a missing column); the screen shows the
+     * error state with a retry action (r19). Distinct from `Ready` with an
+     * empty list --- that one is a clean library, this one is a failed
+     * read; the honest-states doctrine forbids masking one as the other.
+     */
+    data object Error : AlbumsState
 
     /**
      * Media access granted; `albums` may be empty (clean library, not an

@@ -45,6 +45,13 @@ import javax.crypto.SecretKey
  *  - **Concurrency**: generation is [synchronized] with a re-check, so two
  *    racing first-unlocks cannot mint two different keys under one alias
  *    (the loser would silently orphan every blob the winner seals).
+ *  - **Handle cache**: [key] used to run a full AndroidKeyStore
+ *    load+getEntry (2-3 binder IPCs) for EVERY crypto operation the store
+ *    makes; the handle is now cached after the first successful load ---
+ *    an AndroidKeyStore `SecretKey` handle stays valid for the process
+ *    lifetime (a fresh install or factory reset replaces the key, and
+ *    both kill this process with it). [probeExistingKey] reads the same
+ *    cache; [invalidateCache] is the use-time-failure hook.
  *  - **Diagnostics** (W1): every [key]/[probeExistingKey] outcome lands in
  *    [DiagLog] under the shared "ToadVault" tag --- outcome class and
  *    duration only, never key material.
@@ -78,13 +85,31 @@ object AndroidVaultKeys : VaultCrypto.VaultKeyProvider {
      */
     private var loggedReuse = false
 
+    /**
+     * The cached AndroidKeyStore handle (guarded by [lock]): populated on
+     * the first successful load/generation and served for the rest of the
+     * process lifetime. Re-fetching it instead costs a full keystore
+     * load+getEntry (2-3 binder IPCs) per vault operation. [invalidateCache]
+     * clears it; nothing else ever replaces it (aliases are one per
+     * install).
+     */
+    private var cachedKey: SecretKey? = null
+
     override fun key(): SecretKey = synchronized(lock) {
+        cachedKey?.let { cached ->
+            if (!loggedReuse) {
+                DiagLog.i(TAG, "key: existing keystore key reused")
+                loggedReuse = true
+            }
+            return cached
+        }
         val existing = loadExistingKey()
         if (existing != null) {
             if (!loggedReuse) {
                 DiagLog.i(TAG, "key: existing keystore key reused")
                 loggedReuse = true
             }
+            cachedKey = existing
             return existing
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -92,6 +117,7 @@ object AndroidVaultKeys : VaultCrypto.VaultKeyProvider {
                 val startedAt = System.nanoTime()
                 val key = generateStrongBoxKey()
                 DiagLog.i(TAG, "key: generated (StrongBox) in ${elapsedMs(startedAt)} ms")
+                cachedKey = key
                 return key
             } catch (e: StrongBoxUnavailableException) {
                 // No StrongBox secure element on this device (the common
@@ -123,7 +149,24 @@ object AndroidVaultKeys : VaultCrypto.VaultKeyProvider {
         val startedAt = System.nanoTime()
         val key = generateKeystoreKey()
         DiagLog.i(TAG, "key: generated (TEE) in ${elapsedMs(startedAt)} ms")
+        cachedKey = key
         key
+    }
+
+    /**
+     * The use-time-failure hook: clears [cachedKey] so the next [key]
+     * re-loads the handle from the keystore ONCE instead of serving the
+     * cached one for the rest of the process. Handles are valid for the
+     * process lifetime, so this is belt-and-braces for the rare case where
+     * a keystore-side hiccup surfaces as a use-time failure in the caller
+     * (the media key carries NO auth binding, so it is never *invalidated*;
+     * the hook exists so a future caller that catches such a failure has
+     * one honest way to force the re-load). No caller in this round invokes
+     * it --- the failure sites live outside the vault's data layer; the
+     * hook is the documented seam.
+     */
+    fun invalidateCache() {
+        synchronized(lock) { cachedKey = null }
     }
 
     /**
@@ -132,9 +175,21 @@ object AndroidVaultKeys : VaultCrypto.VaultKeyProvider {
      * when the keystore itself cannot be read (WARN-logged --- a probe
      * failure must never crash the About screen). NEVER generates; the
      * first real crypto operation through [key] owns that decision.
+     * Consults [cachedKey] first (a cached handle IS existence proof) and
+     * populates the cache when the load succeeds, so the probe costs at
+     * most one keystore round-trip per process.
      */
     fun probeExistingKey(): Boolean = try {
-        loadExistingKey() != null
+        synchronized(lock) {
+            if (cachedKey != null) {
+                return@synchronized true
+            }
+            val existing = loadExistingKey()
+            if (existing != null) {
+                cachedKey = existing
+            }
+            existing != null
+        }
     } catch (e: Exception) {
         DiagLog.w(TAG, "probe: keystore probe failed", e)
         false

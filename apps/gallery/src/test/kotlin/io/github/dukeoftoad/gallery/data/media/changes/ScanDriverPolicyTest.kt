@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.data.media.changes
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.MetadataCacheState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -265,6 +266,48 @@ class ScanDriverPolicyTest {
         // This row is an image: duration stays the unknown zero-point.
         assertEquals(0L, merged.durationMs)
         assertTrue(merged.isFavorite)
+    }
+
+    // --- recordForAppliedChange: folder/bucket ride-alongs (r19 round) --------
+
+    @Test
+    fun `changed record refreshes the folder bucket pair from the fresh row`() {
+        // The bucket pair is ROW-SOURCED with no hook refill: the FRESH
+        // provider row is the authority, so a CHANGED row's record mirrors
+        // its bucket --- NOT the old record's. A folder move is the
+        // canonical CHANGED sighting here (MediaStore rewrites
+        // date_modified on a move), and the merged record must land in the
+        // row's new folder or the timeline's folder filter would keep
+        // serving the item from the old one.
+        val merged = ScanDriverPolicy.recordForAppliedChange(
+            CatalogueReconciler.ChangedRecord(
+                old = oldRecord().copy(bucketId = 111L, bucketDisplayName = "Camera"),
+                new = changedRow().new.copy(bucketId = 222L, bucketDisplayName = "Screenshots"),
+            ),
+            lastSeenAtMillis = 9_000L,
+        )
+
+        assertEquals(222L, merged.bucketId)
+        assertEquals("Screenshots", merged.bucketDisplayName)
+    }
+
+    @Test
+    fun `changed record with no bucket on the fresh row lands honestly bucketless`() {
+        // The row-sourced honest null must travel like any value: a walk
+        // that could not resolve buckets (the reduced-projection fallback,
+        // a provider that dropped the column) upserts a null pair, never a
+        // fake 0 --- and never the old record's stale bucket, which would
+        // be the wipe-free rule silently violated.
+        val merged = ScanDriverPolicy.recordForAppliedChange(
+            CatalogueReconciler.ChangedRecord(
+                old = oldRecord().copy(bucketId = 111L, bucketDisplayName = "Camera"),
+                new = changedRow().new,
+            ),
+            lastSeenAtMillis = 9_000L,
+        )
+
+        assertNull(merged.bucketId)
+        assertNull(merged.bucketDisplayName)
     }
 
     @Test

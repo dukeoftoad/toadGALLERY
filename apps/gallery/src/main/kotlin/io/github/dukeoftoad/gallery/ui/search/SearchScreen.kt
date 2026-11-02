@@ -40,6 +40,10 @@ import io.github.dukeoftoad.gallery.data.SearchQuery
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaGrid
+import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
+import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
+import io.github.dukeoftoad.gallery.ui.settings.LayoutStyle
+import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
 
 /**
@@ -51,6 +55,12 @@ import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
  * action Search, focused on entry) over a single-select row of filter chips
  * (All / Photos / Videos), then the state surface:
  *
+ *  - PermissionNeeded (r19a): the SHARED [MediaPermissionState] surface
+ *    (Grant + Settings affordances) the Photos and Albums tabs render ---
+ *    revoked media access used to surface here as an endless generic
+ *    "Error + Retry" loop. The field and chips stay visible and usable
+ *    above it; the pipeline simply refuses to query until a grant lands
+ *    (see [SearchViewModel]'s permission gate).
  *  - Idle + empty field  : the StateScreen invitation (icon + title + body,
  *    the issue #13 visual language);
  *  - Idle + short query  : the "keep typing" hint (the 2-character gate);
@@ -59,9 +69,16 @@ import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
  *  - Error               : StateScreen with the shared Retry action;
  *  - Results             : a "n results" header over the SHARED [MediaGrid]
  *    --- the exact cell UX (aspect-aware staggered cells, video duration
- *    overlay, GIF badge) the Photos timeline and album detail render, 3
- *    columns / 2dp gaps / `uri.toString()` keys, taps handing the shell's
- *    `onOpenViewer(window, index)` the full result list.
+ *    overlay, GIF badge) the Photos timeline and album detail render, with
+ *    the shell's photos-per-row setting and the GRID layout's square cells
+ *    threaded through (r19a; 3 columns / 2dp gaps / `uri.toString()` keys
+ *    remain the defaults), taps handing the shell's `onOpenViewer(window,
+ *    index)` the full result list.
+ *
+ * Appearance (r19a): the shell-scoped [settingsViewModel] feeds the
+ * configured column count and layout into the results grid, the SAME
+ * wiring PhotosScreen/AlbumDetailScreen use --- every media grid in the
+ * app now honors the setting.
  *
  * TextField + chips render from the ViewModel's StateFlows (the same source
  * of truth the debounced query pipeline reads); every keystroke goes
@@ -80,17 +97,31 @@ import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
 @Composable
 fun SearchScreen(
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
+    settingsViewModel: SettingsViewModel,
     viewModel: SearchViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val query by viewModel.query.collectAsState()
     val mediaType by viewModel.mediaType.collectAsState()
+    val appearance by settingsViewModel.appearance.collectAsState()
+
+    // The SAME permission wiring PhotosScreen uses (r19a): the request
+    // fires on every tab entry (the launcher returns immediately, without
+    // UI, when access is already granted --- so re-entries stay cheap) and
+    // the answer drives the ViewModel's permission gate. A deny renders
+    // the shared Grant + Settings surface below instead of an error loop.
+    val requester = rememberMediaPermissionRequester(
+        onResult = { granted ->
+            if (granted) viewModel.onPermissionGranted() else viewModel.onPermissionDenied()
+        }
+    )
 
     // Focus on entry (issue #62): the tab is a search-first surface, so the
     // field takes focus (and the keyboard) the moment the tab opens.
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) { requester.launch() }
 
     Column(
         modifier = Modifier
@@ -165,6 +196,15 @@ fun SearchScreen(
                 .padding(top = ToadSpacing.md),
         ) {
             when (val s = state) {
+                SearchUiState.PermissionNeeded -> Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("search_state_permission"),
+                ) {
+                    // The shared Grant + Settings surface (the field and
+                    // chips above stay usable; the pipeline gates itself).
+                    MediaPermissionState(onGrant = requester::launch)
+                }
                 SearchUiState.Idle -> {
                     // Idle covers both "nothing typed" and "short query";
                     // the live text disambiguates (pure gate: isSearchable).
@@ -218,9 +258,13 @@ fun SearchScreen(
                     )
                     // The shared staggered grid: same cells, keys, spacing
                     // and tap contract as the album detail view; the tap
-                    // hands the viewer the whole result list + index.
+                    // hands the viewer the whole result list + index. The
+                    // shell's photos-per-row / GRID-layout settings feed
+                    // through (r19a), exactly like the Photos timeline.
                     MediaGrid(
                         items = s.items,
+                        columns = appearance.columns,
+                        uniformCells = appearance.layout == LayoutStyle.GRID,
                         onItemTap = { index, _ -> onOpenViewer(s.items, index) },
                     )
                 }

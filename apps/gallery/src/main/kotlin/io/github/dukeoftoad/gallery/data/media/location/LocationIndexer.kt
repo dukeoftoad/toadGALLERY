@@ -281,8 +281,16 @@ class LocationIndexer(
     /**
      * The hook the scan driver calls after applying a scan's added/changed
      * rows. Each row is indexed independently: one unreadable item never
-     * aborts the batch. The consent gate is read ONCE per call --- see
-     * the class KDoc.
+     * aborts the batch --- and that promise is now STRUCTURAL: the per-row
+     * index step runs inside its own catch, so a Room disk error or an EXIF
+     * parse blowup in one row is logged (DiagLog, class+message) and
+     * skipped while the batch continues. A failed row keeps its existing
+     * provenance (its write never ran), and because its revision did not
+     * move the next scan classifies it UNCHANGED --- this hook never sees
+     * it again; the NULL-provenance healing rescan pass is the named
+     * later-round follow-up (the capture-date indexer documents the same
+     * remainder). The consent gate is read ONCE per call --- see the
+     * class KDoc.
      */
     override suspend fun onRecordsApplied(
         added: List<CatalogueRecord>,
@@ -302,28 +310,50 @@ class LocationIndexer(
     }
 
     private suspend fun indexOne(record: CatalogueRecord, gpsReadable: Boolean) {
-        // Gate first: an ineligible item is skipped WITHOUT a catalogue
-        // write (vault gate by type; a tombstoned key additionally makes
-        // the writer's UPDATE a no-op --- the indexer never resurrects).
-        val media = eligibilityGate.eligiblePublicMedia(record) ?: return
-        val exifCapable =
-            MetadataFormatMatrix.capabilitiesFor(record.mimeType).exif == MetadataAvailability.PRESENT
-        val resolved = if (!gpsReadable) {
-            // No bytes read: the platform would hand back redacted tags
-            // anyway (class KDoc), so the write is decided from the
-            // consent state + format capability alone.
-            resolveLocationWrite(gpsReadable = false, exifCapable = exifCapable, evidence = null)
-        } else {
-            val handle = mediaAccess.open(media)
-            val evidence = if (handle == null) null else candidateSource.extractCoordinates(handle, record.mimeType)
-            resolveLocationWrite(gpsReadable = true, exifCapable = exifCapable, evidence = evidence)
+        // The per-row failure boundary: everything this hook owns for ONE
+        // row runs inside the catch below, so a Room disk error or an EXIF
+        // parse blowup costs that row's indexing alone --- logged and
+        // skipped, never the batch (see onRecordsApplied's KDoc for the
+        // NULL-provenance follow-up).
+        try {
+            // Gate first: an ineligible item is skipped WITHOUT a catalogue
+            // write (vault gate by type; a tombstoned key additionally makes
+            // the writer's UPDATE a no-op --- the indexer never resurrects).
+            val media = eligibilityGate.eligiblePublicMedia(record) ?: return
+            val exifCapable =
+                MetadataFormatMatrix.capabilitiesFor(record.mimeType).exif == MetadataAvailability.PRESENT
+            val resolved = if (!gpsReadable) {
+                // No bytes read: the platform would hand back redacted tags
+                // anyway (class KDoc), so the write is decided from the
+                // consent state + format capability alone.
+                resolveLocationWrite(gpsReadable = false, exifCapable = exifCapable, evidence = null)
+            } else {
+                val handle = mediaAccess.open(media)
+                val evidence = if (handle == null) null else candidateSource.extractCoordinates(handle, record.mimeType)
+                resolveLocationWrite(gpsReadable = true, exifCapable = exifCapable, evidence = evidence)
+            }
+            locationWriter.updateLocation(
+                localMediaKey = record.localMediaKey,
+                latitude = resolved.latitude,
+                longitude = resolved.longitude,
+                sourceName = resolved.source?.name,
+            )
+        } catch (ce: CancellationException) {
+            // Structured cancellation is not a per-row failure --- let it
+            // propagate (the same discipline every catch-all here keeps).
+            throw ce
+        } catch (t: Throwable) {
+            DiagLog.e(
+                TAG,
+                "location index failed key=${record.localMediaKey} (batch unaffected)",
+                t,
+            )
         }
-        locationWriter.updateLocation(
-            localMediaKey = record.localMediaKey,
-            latitude = resolved.latitude,
-            longitude = resolved.longitude,
-            sourceName = resolved.source?.name,
-        )
+    }
+
+    private companion object {
+        /** Diagnostics tag for the per-row failure-isolation lines. */
+        private const val TAG = "LocationIndexer"
     }
 }
 

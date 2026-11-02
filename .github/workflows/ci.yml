@@ -3,6 +3,8 @@ name: CI
 # toadGALLERY CI --- ADR-0013
 # Canonical build, lint, and test workflow. JDK 17 + Android SDK + Gradle.
 # No Flutter (ADR-0008). A green CI check is required to merge any PR.
+# Since r21 the workflow also gates the vendored Ente ML engine (engine/)
+# with cargo check + fmt + clippy (ADR-0020 context; see engine/NOTICE.md).
 
 on:
   push:
@@ -15,6 +17,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  engine:
+    name: Vendored engine (cargo check + fmt + clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust (stable, minimal)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      # Host-target gate for the vendored Ente crates: any rot (dependency
+      # drift, accidental edits breaking the workspace) fails the PR. Clippy
+      # mirrors UPSTREAM's own gate (workspace lints on lib/bins, no
+      # --all-targets: the vendored tests are byte-identical upstream code and
+      # must not be re-linted under stricter flags than Ente itself uses). The
+      # Android ABI build via cargo-ndk lands with the r22 JNI bridge spike;
+      # ORT native resolution happens at real build/link time, not check time.
+      - name: cargo check
+        working-directory: engine
+        run: cargo check --workspace --all-targets
+
+      - name: cargo fmt
+        working-directory: engine
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        working-directory: engine
+        run: cargo clippy --workspace
+
   build:
     name: Build + lint + test
     runs-on: ubuntu-latest

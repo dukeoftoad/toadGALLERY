@@ -4,7 +4,8 @@
     <!-- Phase 3: media access for the Photos timeline (issue #25).
          API 33+ uses the granular READ_MEDIA_* permissions; pre-33 falls back
          to READ_EXTERNAL_STORAGE capped at maxSdkVersion=32.
-         No INTERNET, ever (ADR-0014). -->
+         No INTERNET (ADR-0014 Layer 1; ADR-0020's model-download-only grant
+         arrives with the r22 downloader, not before). -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission

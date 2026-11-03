@@ -91,9 +91,10 @@
      and the privacy posture spelled out — the ADR-0010 opt-in rule and
      ADR-0020's on-device model delivery mean face clustering and
      people data never leave the device. -->
-<resources>
+
 
     <!-- The People screen's hidden section (the r26 unhide surface). -->
     <string name="people_hidden_header">Hidden people</string>
     <string name="people_hidden_body">Hidden people stay out of the grid above. Unhide to bring someone back — no reset, names intact.</string>
-    <string name="people_unhide">Unhide</string></resources>
+    <string name="people_unhide">Unhide</string>
+</resources>

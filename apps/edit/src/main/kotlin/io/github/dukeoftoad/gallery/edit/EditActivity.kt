@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
@@ -277,6 +278,20 @@ class EditActivity : ComponentActivity() {
     }
 
     /**
+     * The device's allocatable bytes (the r31 storage preflight), or null
+     * when the platform answer is unavailable --- an unknown value must
+     * never block an export (MediaStore enforces regardless).
+     */
+    internal fun queryAllocatableBytes(): Long? = try {
+        val storageManager = getSystemService(StorageManager::class.java) ?: return null
+        storageManager.getAllocatableBytes(StorageManager.UUID_DEFAULT)
+    } catch (_: IOException) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    }
+
+    /**
      * The export pipeline. IO dispatcher; on ANY failure the pending row is
      * cancelled (Q+) and RESULT_ERROR answers --- never a partial entry.
      * On success the sidecar is CLEARED (the edit resolved into the copy).
@@ -288,14 +303,54 @@ class EditActivity : ComponentActivity() {
         val format = export.format
         try {
 
-            // 1. Full-resolution decode.
+            // 1. The cheap bounds pass: the large-file decode guard refuses
+            //    a source the pipeline could not hold anyway (r31) --- the
+            //    honest failure is ERROR_UNSUPPORTED before any work.
+            val bounds = decodeBounds(sourceUri)
+            if (bounds != null &&
+                ExportPreflight.decodeGuard(
+                    bounds.outWidth,
+                    bounds.outHeight,
+                    ExportPreflight.MAX_EXPORT_PIXELS,
+                ) == ExportPreflight.Decision.INSUFFICIENT
+            ) {
+                throw ExportException(
+                    EditContract.ERROR_UNSUPPORTED,
+                    "the image is too large to edit on this device",
+                )
+            }
+
+            // 2. The storage preflight: refuse to start an insert the device
+            //    cannot hold (advisory --- unknown availability proceeds;
+            //    MediaStore still enforces). The error rides ERROR_IO so the
+            //    frozen v1 contract surface stays untouched.
+            val allocatable = queryAllocatableBytes()
+            if (allocatable != null) {
+                val assumedPixels =
+                    if (bounds != null && bounds.outWidth > 0 && bounds.outHeight > 0) {
+                        bounds.outWidth.toLong() * bounds.outHeight.toLong()
+                    } else {
+                        ExportPreflight.ASSUMED_PIXELS
+                    }
+                val estimated = ExportPreflight.estimateBytes(assumedPixels, format, export.quality)
+                if (ExportPreflight.decide(estimated, allocatable) ==
+                    ExportPreflight.Decision.INSUFFICIENT
+                ) {
+                    throw ExportException(
+                        EditContract.ERROR_IO,
+                        "not enough free storage for the exported copy",
+                    )
+                }
+            }
+
+            // 3. Full-resolution decode.
             val source = decodeBitmap(sourceUri, Int.MAX_VALUE)
                 ?: throw ExportException(
                     EditContract.ERROR_UNSUPPORTED,
                     "cannot decode the source at full resolution",
                 )
 
-            // 2. The ordered pipeline (geometry first, then colour/detail).
+            // 4. The ordered pipeline (geometry first, then colour/detail).
             val width = source.width
             val height = source.height
             val pixels = IntArray(width * height)
@@ -308,7 +363,7 @@ class EditActivity : ComponentActivity() {
                 pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height,
             )
 
-            // 3. Insert the NEW MediaStore row (IS_PENDING on Q+).
+            // 5. Insert the NEW MediaStore row (IS_PENDING on Q+).
             val displayName = ExportPlan.displayNameFor(sourceDisplayName(sourceUri), format)
             val collection = if (api29Plus) {
                 MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -326,7 +381,7 @@ class EditActivity : ComponentActivity() {
                 ?: throw ExportException(EditContract.ERROR_IO, "MediaStore refused the insert")
             outputUri = inserted
 
-            // 4. Compress into the pending row (quality: lossy formats only).
+            // 6. Compress into the pending row (quality: lossy formats only).
             val compressFormat = when (format) {
                 ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
                 ExportFormat.PNG -> Bitmap.CompressFormat.PNG
@@ -340,10 +395,10 @@ class EditActivity : ComponentActivity() {
                 out.flush()
             } ?: throw ExportException(EditContract.ERROR_IO, "cannot open the output stream")
 
-            // 5. Apply the EXIF metadata policy exactly (contract 4.4).
+            // 7. Apply the EXIF metadata policy exactly (contract 4.4).
             applyMetadataPolicy(sourceUri, inserted, export.metadataPolicy)
 
-            // 6. Finalize (clear IS_PENDING).
+            // 8. Finalize (clear IS_PENDING).
             if (api29Plus) {
                 val finalize = ContentValues()
                 ExportPlan.finalizeValues(api29Plus).forEach { (key, value) ->
@@ -352,7 +407,7 @@ class EditActivity : ComponentActivity() {
                 contentResolver.update(inserted, finalize, null, null)
             }
 
-            // 7. The sidecar's edit resolved into the copy: clear it BEFORE
+            // 9. The sidecar's edit resolved into the copy: clear it BEFORE
             // reporting success (a failure here answers OK --- the export
             // itself succeeded; a leftover sidecar self-heals on next load).
             try {

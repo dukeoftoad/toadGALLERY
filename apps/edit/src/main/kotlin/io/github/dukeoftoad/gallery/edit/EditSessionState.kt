@@ -35,11 +35,11 @@ class EditSessionState(
         }
         history.addLast(recipe)
         pointer = history.lastIndex
-        // Bound the depth: drop the OLDEST entries (the launch state is the
-        // first to go, which is honest --- undo cannot outlive the cap).
-        // maxDepth counts the UNDO STEPS (the tests pin 9,8,7,6 for
-        // maxDepth 4), so the history holds at most maxDepth+1 recipes
-        // (the current one plus the undoable trail).
+        // Bound the depth: maxDepth counts the UNDO STEPS (the tests pin
+        // 9,8,7,6 for maxDepth 4), so the history holds at most maxDepth+1
+        // recipes (the current one plus the undoable trail). Drop the
+        // OLDEST entries (the launch state is the first to go, which is
+        // honest --- undo cannot outlive the cap).
         while (history.size > maxDepth + 1) {
             history.removeFirst()
             pointer -= 1

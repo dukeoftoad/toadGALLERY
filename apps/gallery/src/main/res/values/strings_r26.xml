@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r26 slice: the Magic Search round (Workstream 7 of the Phase 5 plan)
+     — the semantic ("Magic") search over the on-device CLIP index: the
+     Search tab's Content mode, the semantic background index queue beside
+     the r24 face queue, the SEMANTIC model download card beside the FACE
+     one, and the "Magic search" consent row beside the People one. Same
+     copy rules as every round file: honest plain language, escaped
+     apostrophes, and the privacy posture spelled out — the ADR-0010
+     opt-in rule (off by default) and ADR-0020's on-device model delivery
+     mean queries, embeddings and thumbnails never leave the device; the
+     allowlisted host serves the model pack and nothing else. The
+     allowlisted HOST is deliberately NOT spelled here —
+     ml/engine/HttpModelDownloader.kt's MODEL_HOST is the one auditable
+     host literal (pinned by PrivacyPolicyTest), and user copy never
+     duplicates it. -->
+<resources>
+
+    <!-- The Settings AI-section consent row (ADR-0010: opt-in, off by
+         default), beside the r25 People row. -->
+    <string name="settings_magic_search">Magic search</string>
+    <string name="settings_magic_search_body">Search photos by what is in them, not just by file name. Content matching runs entirely on this device — queries, embeddings and photos never leave your phone. Off by default.</string>
+
+    <!-- The SEMANTIC model download card (the r22 FACE card's shape; the
+         size is the manifest pin's SEMANTIC total, 213,397,048 bytes,
+         passed in already formatted — never duplicated here). -->
+    <string name="settings_ai_semantic_body">Semantic models for content search (CLIP image + text encoders and the BPE vocabulary), downloaded on demand from the same single allowlisted model host and verified before install.</string>
+    <string name="settings_ai_semantic_state_none">Semantic models: not downloaded</string>
+    <string name="settings_ai_semantic_state_partial">Semantic models: partially downloaded</string>
+    <string name="settings_ai_semantic_state_ready">Semantic models: ready</string>
+    <string name="settings_ai_semantic_download">Download semantic models (~%1$s)</string>
+    <string name="settings_ai_semantic_delete">Delete semantic models</string>
+    <string name="settings_ai_semantic_download_done">Semantic models installed and verified.</string>
+    <string name="settings_ai_semantic_download_failed">Download failed: %1$s</string>
+    <string name="settings_ai_semantic_deleted">Semantic models deleted.</string>
+
+    <!-- The r26 semantic-index queue card (the r24 face queue card's
+         shape). The reset's scope is stated honestly: the queue's own
+         bookkeeping; the stored index rides the r24 Reset face index. -->
+    <string name="settings_ai_semantic_queue_start">Start semantic index (r26 dogfood)</string>
+    <string name="settings_ai_semantic_queue_body">Builds the content-search index in the background: one whole-photo embedding per JPEG, in bounded batches that survive app restarts, re-indexing only photos that actually changed. Needs the face AND semantic models (the engine session is face-based in this round). Runs on-device; no network access. Reset below restarts the queue — erasing the stored index itself is the Reset face index above.</string>
+    <string name="settings_ai_semantic_queue_cancel">Cancel semantic indexing</string>
+    <string name="settings_ai_semantic_queue_reset">Reset semantic index</string>
+
+    <!-- Live states. -->
+    <string name="settings_ai_semantic_queue_enqueued">Semantic indexing queued…</string>
+    <string name="settings_ai_semantic_queue_progress">Indexing %1$d of %2$d this run · %3$d left in queue</string>
+
+    <!-- Outcomes. -->
+    <string name="settings_ai_semantic_queue_done">Semantic queue drained: indexed %1$d photos · %2$d skipped as up-to-date · %3$d photos in the content index</string>
+    <string name="settings_ai_semantic_fill">Reconciliation pass: %1$s — %2$d rows, %3$d indexed, %4$d skipped, resumed: %5$s</string>
+    <string name="settings_ai_semantic_fill_resumed_yes">yes</string>
+    <string name="settings_ai_semantic_fill_resumed_no">no</string>
+    <string name="settings_ai_semantic_queue_failed">Semantic indexing failed: %1$s</string>
+    <string name="settings_ai_semantic_queue_cancelled">Semantic indexing cancelled — finished photos stay indexed; start again to resume the queue.</string>
+
+    <!-- The Search tab's "Search by" mode row (Name = the existing
+         filename pipeline; Content = Magic Search). -->
+    <string name="search_mode_name">Name</string>
+    <string name="search_mode_content">Content</string>
+
+    <!-- The Content mode's honest states (the policy's gating cards +
+         the query states). -->
+    <string name="magic_state_empty_title">Search by what\'s in your photos</string>
+    <string name="magic_state_empty_body">Type what you are looking for — “beach at sunset”, “birthday cake”, “snowy mountains” — and content search matches the photos themselves, entirely on this device.</string>
+    <string name="magic_short_query_title">Keep typing</string>
+    <string name="magic_short_query_body">Type at least 2 characters (and at most 200) to search by what\'s in your photos.</string>
+    <string name="magic_state_consent_title">Magic search is off</string>
+    <string name="magic_state_consent_body">Enable Magic search in Settings to find photos by what\'s in them. Content matching runs entirely on this device — nothing is uploaded.</string>
+    <string name="magic_state_open_settings">Open Settings</string>
+    <string name="magic_state_engine_title">AI engine not in this build</string>
+    <string name="magic_state_engine_body">This build was compiled without the AI engine, so content search cannot run here.</string>
+    <string name="magic_state_models_title">Semantic models not downloaded</string>
+    <string name="magic_state_models_body">Content search needs the semantic models (~%1$s), downloaded once in Settings → AI engine → Download semantic models. They are verified before install and used only on this device.</string>
+    <string name="magic_state_not_indexed_title">No content index yet</string>
+    <string name="magic_state_not_indexed_body">Photos become searchable by content after the semantic index runs. Start it from Settings → AI engine → Start semantic index.</string>
+    <string name="magic_no_results_title">No matches</string>
+    <string name="magic_no_results_body">No photos in your library match that description. Try different or fewer words.</string>
+    <string name="magic_state_error_title">Couldn\'t search by content</string>
+    <plurals name="magic_results_count">
+        <item quantity="one">%1$d photo matches</item>
+        <item quantity="other">%1$d photos match</item>
+    </plurals>
+</resources>

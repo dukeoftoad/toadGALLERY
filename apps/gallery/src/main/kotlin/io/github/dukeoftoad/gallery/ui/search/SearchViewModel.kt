@@ -20,6 +20,23 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
+ * The Search tab's query-target mode (r26, Workstream 7): NAME is the
+ * issue #62 filename pipeline; CONTENT is Magic Search --- the on-device
+ * CLIP content query over the r26 semantic index (`MagicSearchViewModel`,
+ * a sibling pipeline with its own states and its own debounced
+ * collector). The mode is a ViewModel concern (not screen-local state)
+ * so both pipelines gate themselves on ONE shared truth and exactly one
+ * query pipeline ever runs.
+ */
+enum class SearchMode {
+    /** The filename pipeline ([SearchViewModel]'s own MediaStore query). */
+    NAME,
+
+    /** Magic Search ([MagicSearchViewModel]'s CLIP content query). */
+    CONTENT,
+}
+
+/**
  * Screen states of the Search tab (issue #62).
  *
  * `Idle` covers BOTH "nothing typed yet" and "short query" --- the screen
@@ -28,6 +45,11 @@ import kotlin.time.Duration.Companion.milliseconds
  * `PermissionNeeded` (r19a) is the honest fourth state before any query
  * runs: revoked media access used to surface as endless generic
  * "Error + Retry".
+ *
+ * r26 note: these states are the NAME pipeline's; the CONTENT mode
+ * renders [MagicSearchUiState] instead (its own honest gating arms). The
+ * two state machines never mix --- the screen switches wholesale on the
+ * mode row.
  */
 sealed interface SearchUiState {
     /** No results to show: empty field or a query under the minimum length. */
@@ -96,7 +118,11 @@ sealed interface SearchUiState {
  * Name query + photo/video filter only. Advanced smart filters (date,
  * album, people, OCR) are roadmap Phase 5 and would extend
  * [SearchQuery.build] --- the pure, tested seam this ViewModel already
- * consumes.
+ * consumes. r26 (Workstream 7) adds the CONTENT mode's sibling pipeline
+ * ([MagicSearchViewModel]) WITHOUT touching this pipeline's logic: the
+ * only change is the [searchMode] gate below, which settles this machine
+ * to [SearchUiState.Idle] while the Content mode owns the tab (no wasted
+ * MediaStore round-trips, no state-slot fights).
  *
  * Privacy (ADR-0006 / ADR-0014): results are local content URIs read from
  * MediaStore; the app holds no INTERNET permission, so nothing a query
@@ -118,6 +144,14 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     val mediaType: StateFlow<SearchMediaType> = _mediaType.asStateFlow()
 
     /**
+     * The live "Search by" mode (r26): NAME (this pipeline) or CONTENT
+     * (Magic Search's sibling pipeline). Default NAME --- the issue #62
+     * behavior is the untouched default.
+     */
+    private val _searchMode = MutableStateFlow(SearchMode.NAME)
+    val searchMode: StateFlow<SearchMode> = _searchMode.asStateFlow()
+
+    /**
      * Retry counter: a StateFlow (not SharedFlow) so `combine` has an
      * initial value and emits from the first frame; `retry()` increments it,
      * which re-runs the pipeline for the current query + filter. All three
@@ -136,11 +170,19 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            combine(_query, _mediaType, retries) { query, type, _ ->
-                query to type
+            combine(_query, _mediaType, _searchMode, retries) { query, type, mode, _ ->
+                Triple(query, type, mode)
             }
                 .debounce(DEBOUNCE_MS.milliseconds)
-                .collectLatest { (rawQuery, type) ->
+                .collectLatest { (rawQuery, type, mode) ->
+                    if (mode != SearchMode.NAME) {
+                        // r26: the Content mode owns the tab --- this
+                        // pipeline settles to Idle and does no work (the
+                        // mode gate; every other branch below is the
+                        // untouched issue #62/r19a logic).
+                        _state.value = SearchUiState.Idle
+                        return@collectLatest
+                    }
                     if (!permissionGranted) {
                         _state.value = SearchUiState.PermissionNeeded
                         return@collectLatest
@@ -183,6 +225,17 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     /** Called by the filter chips (single-select); debounced upstream. */
     fun onMediaTypeChange(type: SearchMediaType) {
         _mediaType.value = type
+    }
+
+    /**
+     * Called by the "Search by" mode row (r26, single-select): switches
+     * this pipeline's engagement. The NAME behavior for a mode->NAME
+     * switch re-runs through the SAME debounced collector (a fresh plan
+     * for the live query); mode->CONTENT settles this machine to Idle.
+     */
+    fun onSearchModeChange(mode: SearchMode) {
+        if (_searchMode.value == mode) return
+        _searchMode.value = mode
     }
 
     /** Re-runs the current query + filter after an [SearchUiState.Error]. */

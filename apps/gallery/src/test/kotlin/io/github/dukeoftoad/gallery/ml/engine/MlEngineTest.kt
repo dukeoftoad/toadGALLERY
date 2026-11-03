@@ -73,6 +73,35 @@ class MlEngineTest {
         var lastRemoveClusterId: String? = null
         var lastRemoveFileIds: LongArray? = null
 
+        // ---- r26 ----
+        var initSemanticResult: Boolean = true
+        var clipImageResult: FloatArray = FloatArray(MlEngine.CLIP_EMBEDDING_DIM)
+        var clipTextResult: FloatArray = FloatArray(MlEngine.CLIP_EMBEDDING_DIM)
+        var storePutClipResult: Boolean = true
+        var storeDeleteClipsResult: Boolean = true
+        var storeClipIndexedResult: LongArray = LongArray(0)
+        var storeClipCountResult: Long = 0L
+        var storeSearchClipsResult: String = "[]"
+        var storeFillClipResult: String =
+            "{\"outcome\":\"Completed\",\"rows\":0,\"indexed\":0,\"skipped\":0,\"resumed\":false}"
+        var initSemanticCalls = 0
+        var clipImageCalls = 0
+        var clipTextCalls = 0
+        var storePutClipCalls = 0
+        var storeDeleteClipsCalls = 0
+        var storeClipIndexedCalls = 0
+        var storeClipCountCalls = 0
+        var storeSearchClipsCalls = 0
+        var storeFillClipCalls = 0
+        var lastInitSemanticArg: String? = null
+        var lastClipImageArg: ByteArray? = null
+        var lastClipTextArg: String? = null
+        var lastPutClipFileId: Long? = null
+        var lastPutClipEmbedding: FloatArray? = null
+        var lastDeleteClipsArg: LongArray? = null
+        var lastSearchQuery: FloatArray? = null
+        var lastSearchLimit: Int? = null
+
         override fun nativeInit(modelsDir: String): Boolean {
             initCalls++
             lastInitArg = modelsDir
@@ -160,6 +189,60 @@ class MlEngineTest {
             lastRemoveClusterId = clusterId
             lastRemoveFileIds = fileIds
             return storeRemoveFacesResult
+        }
+
+        // ---- r26 ----
+        override fun nativeInitSemantic(modelsDir: String): Boolean {
+            initSemanticCalls++
+            lastInitSemanticArg = modelsDir
+            return initSemanticResult
+        }
+
+        override fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray {
+            clipImageCalls++
+            lastClipImageArg = jpegBytes
+            return clipImageResult
+        }
+
+        override fun nativeClipTextEmbedding(text: String): FloatArray {
+            clipTextCalls++
+            lastClipTextArg = text
+            return clipTextResult
+        }
+
+        override fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean {
+            storePutClipCalls++
+            lastPutClipFileId = fileId
+            lastPutClipEmbedding = embedding
+            return storePutClipResult
+        }
+
+        override fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean {
+            storeDeleteClipsCalls++
+            lastDeleteClipsArg = fileIds
+            return storeDeleteClipsResult
+        }
+
+        override fun nativeStoreClipIndexedFileIds(): LongArray {
+            storeClipIndexedCalls++
+            return storeClipIndexedResult
+        }
+
+        override fun nativeStoreClipCount(): Long {
+            storeClipCountCalls++
+            return storeClipCountResult
+        }
+
+        override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String {
+            storeSearchClipsCalls++
+            lastSearchQuery = queryEmbedding
+            lastSearchLimit = limit
+            return storeSearchClipsResult
+        }
+
+        override fun nativeStoreFillClipIndex(): String {
+            storeFillClipCalls++
+            return storeFillClipResult
         }
     }
 
@@ -273,6 +356,24 @@ class MlEngineTest {
             override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean =
                 throw UnsupportedOperationException("unused in this test")
             override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeInitSemantic(modelsDir: String): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeClipTextEmbedding(text: String): FloatArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClipIndexedFileIds(): LongArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClipCount(): Long =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreFillClipIndex(): String =
                 throw UnsupportedOperationException("unused in this test")
         }
         val engine = MlEngine(bridge)
@@ -821,6 +922,24 @@ class MlEngineTest {
             override fun nativeStoreClusterFileIds(clusterId: String): LongArray = LongArray(0)
             override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean = true
             override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean = true
+            override fun nativeInitSemantic(modelsDir: String): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeClipTextEmbedding(text: String): FloatArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClipIndexedFileIds(): LongArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClipCount(): Long =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreFillClipIndex(): String =
+                throw UnsupportedOperationException("unused in this test")
         }
         val engine = MlEngine(bridge)
         engine.openFaceIndex("/data/face-index")
@@ -829,6 +948,433 @@ class MlEngineTest {
             fail("the native failure must surface")
         } catch (expected: IllegalStateException) {
             assertEquals("store read failed", expected.message)
+        }
+    }
+
+    // ---- r26: the semantic (Magic Search) layer ----
+
+    @Test
+    fun `initSemantic maps the native result to Ready and Error and release resets it`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.initialize("/data/models")
+        assertEquals(MlEngine.SemanticState.Uninitialized, engine.semanticState())
+
+        bridge.initSemanticResult = true
+        assertEquals(MlEngine.SemanticState.Ready, engine.initSemantic("/data/models"))
+        assertEquals(MlEngine.SemanticState.Ready, engine.semanticState())
+        assertEquals("/data/models", bridge.lastInitSemanticArg)
+
+        // A failed re-init flips the state to Error (the flag stays false):
+        bridge.initSemanticResult = false
+        val state = engine.initSemantic("/data/models")
+        assertTrue(state is MlEngine.SemanticState.Error)
+        assertEquals(MlEngine.SemanticState.Error((state as MlEngine.SemanticState.Error).message), engine.semanticState())
+        assertTrue("the error message must carry the failed dir", state.message.contains("/data/models"))
+
+        // Engine release tears the semantic half with it (the r26 contract):
+        engine.release()
+        assertEquals(MlEngine.SemanticState.Uninitialized, engine.semanticState())
+
+        // And re-init works after release (the r22 discipline):
+        bridge.initSemanticResult = true
+        assertEquals(MlEngine.SemanticState.Ready, engine.initSemantic("/data/models"))
+        assertEquals(3, bridge.initSemanticCalls)
+    }
+
+    @Test
+    fun `initSemantic degrades to LibraryMissing without a native call`() {
+        val bridge = FakeBridge().apply { available = false }
+        val engine = MlEngine(bridge)
+
+        assertEquals(MlEngine.SemanticState.LibraryMissing, engine.initSemantic("/data/models"))
+        assertEquals(MlEngine.SemanticState.LibraryMissing, engine.semanticState())
+        assertEquals("no native call may happen without a library", 0, bridge.initSemanticCalls)
+    }
+
+    @Test
+    fun `initSemantic needs no store but the r26 store ops follow the open-store gate`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.initialize("/data/models")
+
+        // The semantic session is independent of the face-index store:
+        assertEquals(MlEngine.SemanticState.Ready, engine.initSemantic("/data/models"))
+
+        // ...while the clip store functions require the store open:
+        val rejects = listOf<() -> Any?>(
+            { engine.putClip(7L, FloatArray(MlEngine.CLIP_EMBEDDING_DIM)) },
+            { engine.deleteClipsForFiles(longArrayOf(7L)) },
+            { engine.clipIndexedFileIds() },
+            { engine.clipCount() },
+            { engine.searchClips(FloatArray(MlEngine.CLIP_EMBEDDING_DIM), 1) },
+            { engine.fillClipIndex() },
+        )
+        for (reject in rejects) {
+            try {
+                reject()
+                fail("an r26 store op before openFaceIndex must throw")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message!!.contains("not open"))
+            }
+        }
+        assertEquals("no native store call may happen while closed", 0, bridge.storePutClipCalls)
+        assertEquals(0, bridge.storeSearchClipsCalls)
+        assertEquals(0, bridge.storeFillClipCalls)
+    }
+
+    @Test
+    fun `putClip rejects a wrong embedding dimension before any native call`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        // 192 is the FACE dimension --- the clip guard must not accept it:
+        for (badDim in intArrayOf(0, 192, 511, 513)) {
+            try {
+                engine.putClip(7L, FloatArray(badDim))
+                fail("$badDim floats must be rejected")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message!!.contains("512"))
+            }
+        }
+        assertEquals("the dimension check fires facade-side", 0, bridge.storePutClipCalls)
+
+        // The exact 512-float embedding goes through verbatim, native boolean mapped:
+        val good = FloatArray(MlEngine.CLIP_EMBEDDING_DIM) { it.toFloat() }
+        bridge.storePutClipResult = true
+        assertTrue(engine.putClip(7L, good))
+        assertEquals(1, bridge.storePutClipCalls)
+        assertEquals(7L, bridge.lastPutClipFileId)
+        assertTrue(bridge.lastPutClipEmbedding!!.contentEquals(good))
+
+        // The native failure shape maps through (false without throwing):
+        bridge.storePutClipResult = false
+        assertFalse(engine.putClip(8L, good))
+    }
+
+    @Test
+    fun `clipImageEmbedding and clipTextEmbedding pass through and map the 512-float vectors`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.initialize("/data/models")
+        engine.initSemantic("/data/models")
+
+        val imageVector = FloatArray(MlEngine.CLIP_EMBEDDING_DIM) { 0.5f }
+        bridge.clipImageResult = imageVector
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte())
+        assertTrue(engine.clipImageEmbedding(jpeg).contentEquals(imageVector))
+        assertTrue(bridge.lastClipImageArg!!.contentEquals(jpeg))
+
+        val textVector = FloatArray(MlEngine.CLIP_EMBEDDING_DIM) { -0.25f }
+        bridge.clipTextResult = textVector
+        assertTrue(engine.clipTextEmbedding("a red bicycle").contentEquals(textVector))
+        assertEquals("a red bicycle", bridge.lastClipTextArg)
+    }
+
+    @Test
+    fun `searchClips guards the query dimension and the limit before any native call`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        for (badDim in intArrayOf(0, 511, 513)) {
+            try {
+                engine.searchClips(FloatArray(badDim), 1)
+                fail("$badDim floats must be rejected")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message!!.contains("512"))
+            }
+        }
+        for (badLimit in intArrayOf(0, -1)) {
+            try {
+                engine.searchClips(FloatArray(MlEngine.CLIP_EMBEDDING_DIM), badLimit)
+                fail("$badLimit must be rejected as a limit")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message!!.contains("positive"))
+            }
+        }
+        assertEquals("the guards fire facade-side", 0, bridge.storeSearchClipsCalls)
+    }
+
+    @Test
+    fun `searchClips parses the match JSON preserving the vecdb order`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        bridge.storeSearchClipsResult =
+            "[{\"file_id\":4813,\"distance\":0.42},{\"file_id\":7,\"distance\":0.9}]"
+        val query = FloatArray(MlEngine.CLIP_EMBEDDING_DIM) { 0.1f }
+        val matches = engine.searchClips(query, 2)
+
+        // Verbatim order (the vecdb's own), content equality:
+        assertEquals(
+            listOf(MlEngine.ClipMatch(4813L, 0.42f), MlEngine.ClipMatch(7L, 0.9f)),
+            matches,
+        )
+        assertTrue(bridge.lastSearchQuery!!.contentEquals(query))
+        assertEquals(2, bridge.lastSearchLimit)
+        assertEquals(1, bridge.storeSearchClipsCalls)
+
+        // The empty array is the honest "no matches":
+        bridge.storeSearchClipsResult = "[]"
+        assertEquals(emptyList<MlEngine.ClipMatch>(), engine.searchClips(query, 2))
+    }
+
+    @Test
+    fun `malformed clip matches JSON fails as IllegalStateException`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+        val query = FloatArray(MlEngine.CLIP_EMBEDDING_DIM)
+
+        for (bad in listOf(
+            "not json at all",
+            "{\"file_id\":1}", // an object, not the array envelope
+            "[{\"file_id\":1}]", // missing the distance field
+            "[{\"distance\":0.5}]", // missing the file_id field
+            "[{\"file_id\":null,\"distance\":0.5}]", // null file_id
+            "[{\"file_id\":\"nope\",\"distance\":0.5}]", // unparsable file id
+            "[{\"file_id\":{},\"distance\":0.5}]", // wrong type: object file id
+            "[{\"file_id\":1,\"distance\":{}}]", // wrong type: object distance
+        )) {
+            bridge.storeSearchClipsResult = bad
+            try {
+                engine.searchClips(query, 1)
+                fail("malformed clip matches JSON must fail: $bad")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message!!.contains("malformed clip matches"))
+            }
+        }
+    }
+
+    @Test
+    fun `fillClipIndex parses all three pinned outcomes`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        for ((outcome, resumed) in listOf(
+            "Completed" to false,
+            "AlreadyFilled" to false,
+            "Superseded" to true,
+        )) {
+            bridge.storeFillClipResult =
+                "{\"outcome\":\"$outcome\",\"rows\":4,\"indexed\":2,\"skipped\":2,\"resumed\":$resumed}"
+            assertEquals(
+                MlEngine.ClipFillReport(outcome, 4, 2, 2, resumed),
+                engine.fillClipIndex(),
+            )
+        }
+        assertEquals(3, bridge.storeFillClipCalls)
+    }
+
+    @Test
+    fun `malformed clip fill report JSON fails as IllegalStateException`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        for (bad in listOf(
+            "not json at all",
+            "[]", // an array, not the object envelope
+            "{\"outcome\":\"Completed\"}", // missing the count fields
+            "{\"outcome\":\"Completed\",\"rows\":1,\"indexed\":1,\"skipped\":0}", // missing resumed
+            "{\"rows\":1,\"indexed\":1,\"skipped\":0,\"resumed\":false}", // missing outcome
+            "{\"outcome\":\"Restarted\",\"rows\":1,\"indexed\":1,\"skipped\":0,\"resumed\":false}", // not a pinned outcome
+            "{\"outcome\":\"Completed\",\"rows\":{},\"indexed\":1,\"skipped\":0,\"resumed\":false}", // wrong type
+            "{\"outcome\":\"Completed\",\"rows\":1,\"indexed\":1,\"skipped\":0,\"resumed\":\"yes\"}", // wrong type: string resumed
+        )) {
+            bridge.storeFillClipResult = bad
+            try {
+                engine.fillClipIndex()
+                fail("malformed clip fill report JSON must fail: $bad")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message!!.contains("malformed clip fill report"))
+            }
+        }
+    }
+
+    @Test
+    fun `clipIndexedFileIds maps the native long array through the open-store gate`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: the state-machine rejection, no native call.
+        try {
+            engine.clipIndexedFileIds()
+            fail("clipIndexedFileIds before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeClipIndexedCalls)
+
+        // Open store: the bridge's long array verbatim, as a List.
+        engine.openFaceIndex("/data/face-index")
+        bridge.storeClipIndexedResult = longArrayOf(4L, 8L, 15L)
+        assertEquals(listOf(4L, 8L, 15L), engine.clipIndexedFileIds())
+        assertEquals(1, bridge.storeClipIndexedCalls)
+
+        // Empty is honest empty (nothing indexed at the current version):
+        bridge.storeClipIndexedResult = LongArray(0)
+        assertEquals(emptyList<Long>(), engine.clipIndexedFileIds())
+    }
+
+    @Test
+    fun `deleteClipsForFiles passes the file ids through and maps the result`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: rejected before any native call.
+        try {
+            engine.deleteClipsForFiles(longArrayOf(1L, 2L))
+            fail("deleteClipsForFiles before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeDeleteClipsCalls)
+
+        // Open store: ids passed verbatim, native result mapped, empty no-op.
+        engine.openFaceIndex("/data/face-index")
+        bridge.storeDeleteClipsResult = true
+        assertTrue(engine.deleteClipsForFiles(longArrayOf(1L, 2L)))
+        assertTrue(bridge.lastDeleteClipsArg!!.contentEquals(longArrayOf(1L, 2L)))
+        assertTrue(engine.deleteClipsForFiles(LongArray(0)))
+        assertTrue(bridge.lastDeleteClipsArg!!.isEmpty())
+        assertEquals(2, bridge.storeDeleteClipsCalls)
+
+        // The native failure shape maps through (false without throwing):
+        bridge.storeDeleteClipsResult = false
+        assertFalse(engine.deleteClipsForFiles(longArrayOf(9L)))
+    }
+
+    @Test
+    fun `clipCount maps the native count through the open-store gate`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Closed store: rejected before any native call.
+        try {
+            engine.clipCount()
+            fail("clipCount before openFaceIndex must throw")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storeClipCountCalls)
+
+        // Open store: the native count verbatim.
+        engine.openFaceIndex("/data/face-index")
+        bridge.storeClipCountResult = 4813L
+        assertEquals(4813L, engine.clipCount())
+        assertEquals(1, bridge.storeClipCountCalls)
+    }
+
+    @Test
+    fun `release closes the store and resets the semantic state for the r26 operations`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.initialize("/data/models")
+        engine.initSemantic("/data/models")
+        engine.openFaceIndex("/data/face-index")
+        assertTrue(engine.release())
+
+        try {
+            engine.putClip(1L, FloatArray(MlEngine.CLIP_EMBEDDING_DIM))
+            fail("engine release must close the face-index store for r26 writes too")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals(0, bridge.storePutClipCalls)
+
+        // The semantic state reset with the engine (the r26 contract):
+        assertEquals(MlEngine.SemanticState.Uninitialized, engine.semanticState())
+    }
+
+    @Test
+    fun `a library-less build rejects every r26 operation explicitly`() {
+        val bridge = FakeBridge().apply { available = false }
+        val engine = MlEngine(bridge)
+
+        val rejects = listOf<() -> Any?>(
+            { engine.clipImageEmbedding(byteArrayOf(1)) },
+            { engine.clipTextEmbedding("a red bicycle") },
+            { engine.putClip(1L, FloatArray(MlEngine.CLIP_EMBEDDING_DIM)) },
+            { engine.deleteClipsForFiles(longArrayOf(1L)) },
+            { engine.clipIndexedFileIds() },
+            { engine.clipCount() },
+            { engine.searchClips(FloatArray(MlEngine.CLIP_EMBEDDING_DIM), 1) },
+            { engine.fillClipIndex() },
+        )
+        for (reject in rejects) {
+            try {
+                reject()
+                fail("an r26 op on a library-less build must fail explicitly, not UnsatisfiedLinkError")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message!!.contains("not in this build"))
+            }
+        }
+        assertEquals("no native call may happen without a library", 0, bridge.clipImageCalls)
+        assertEquals(0, bridge.clipTextCalls)
+        assertEquals(0, bridge.storePutClipCalls)
+        assertEquals(0, bridge.storeDeleteClipsCalls)
+        assertEquals(0, bridge.storeClipIndexedCalls)
+        assertEquals(0, bridge.storeClipCountCalls)
+        assertEquals(0, bridge.storeSearchClipsCalls)
+        assertEquals(0, bridge.storeFillClipCalls)
+    }
+
+    @Test
+    fun `a native r26 failure surfaces unchanged with its message`() {
+        val bridge = object : MlEngine.Bridge {
+            override val available = true
+            override fun nativeInit(modelsDir: String) = true
+            override fun nativeEngineInfo(): String? = null
+            override fun nativeDetectFacesJpeg(jpegBytes: ByteArray): FloatArray = FloatArray(0)
+            override fun nativeRelease() = true
+            override fun nativeDetectFaceEmbeddingsJpeg(jpegBytes: ByteArray): FloatArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreOpen(dir: String) = true
+            override fun nativeStorePutFace(fileId: Long, embedding: FloatArray) = 1L
+            override fun nativeStoreFaceCount() = 0L
+            override fun nativeStoreCluster(distanceThreshold: Double) = "{}"
+            override fun nativeStoreClose() = true
+            override fun nativeStoreIndexedFaceFileIds(): LongArray = LongArray(0)
+            override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean = true
+            override fun nativeStoreFaceClusters(): String =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClusterFileIds(clusterId: String): LongArray = LongArray(0)
+            override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean = true
+            override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean = true
+            override fun nativeInitSemantic(modelsDir: String): Boolean = true
+            override fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeClipTextEmbedding(text: String): FloatArray =
+                throw IllegalStateException(
+                    "semantic models are not initialized; call nativeInitSemantic(modelsDir) first"
+                )
+            override fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClipIndexedFileIds(): LongArray =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreClipCount(): Long =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
+                throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreFillClipIndex(): String =
+                throw UnsupportedOperationException("unused in this test")
+        }
+        val engine = MlEngine(bridge)
+        try {
+            engine.clipTextEmbedding("a red bicycle")
+            fail("the native failure must surface")
+        } catch (expected: IllegalStateException) {
+            assertEquals(
+                "semantic models are not initialized; call nativeInitSemantic(modelsDir) first",
+                expected.message,
+            )
         }
     }
 }

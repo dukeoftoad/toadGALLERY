@@ -207,7 +207,36 @@ android {
         // OFF by default; face-derived data never leaves the device).
         // Per maintainer directive: NO new device builds until Phase 5
         // completes; this and subsequent rounds ride CI from main only.
-        versionCode = 29
+        // versionCode 30 (r26 round): the Magic Search round (Workstream
+        // 7) --- offline semantic search over an on-device CLIP index:
+        // the Search tab's new Content mode beside the untouched filename
+        // pipeline. The toad-ml-jni bridge extends from sixteen to
+        // twenty-five externals (nativeInitSemantic --- the CLIP half of
+        // an engine session as a third open/closed state --- the CLIP
+        // image/text encoders, and a CLIP store surface over the SAME
+        // ml-index.sqlite the faces live in: put with the 512-dim guard,
+        // delete-for-files, indexed-file-ids, count, top-K vecdb search,
+        // and the once-per-drain fillClipIndex reconciliation pass), the
+        // Kotlin semantic background queue as the r24 face queue's
+        // sibling (ClipIndexQueue + ClipIndexWorker over its own unique
+        // WorkManager chain, honest FACE-then-SEMANTIC session gates, the
+        // atomic clip-index-state.json bookkeeping in the same
+        // backup-excluded face-index directory), the ml/search domain
+        // (MagicSearchEngineSeam + adapter, the pure six-state
+        // MagicSearchContentPolicy, the 2--200-character query gate, the
+        // order-preserving ranking, the no-cache repository + the chunked
+        // 999-limit media query), the Compose surfaces (the Search by
+        // mode row, the MagicSearchViewModel with its honest gating
+        // cards, results on the shared grid in the vecdb's own order),
+        // and the Settings surfaces (the magicSearchEnabled consent row
+        // --- ADR-0010 opt-in, OFF by default; the SEMANTIC model
+        // download card, ~213 MB manifest-derived; the semantic queue
+        // card with start/cancel/reset). Queries never touch the network
+        // --- the only egress is the ADR-0020 model download; vault
+        // media can never become candidates. Per maintainer directive:
+        // NO new device builds until Phase 5 completes; this and
+        // subsequent rounds ride CI from main only.
+        versionCode = 30
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

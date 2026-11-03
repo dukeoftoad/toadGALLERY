@@ -29,6 +29,20 @@ package io.github.dukeoftoad.gallery.ml.engine
  * recomputes assignments --- the r25 contract carries that caveat
  * honestly.
  *
+ * r26 adds the semantic (Magic Search) surface: the CLIP session
+ * (`nativeInitSemantic` --- registers + warms up the pinned MobileCLIP-S2
+ * image/text encoders and the BPE vocab ON TOP of the face engine; a
+ * failed warm-up restores a consistent face-only engine), the two CLIP
+ * encoders (`nativeClipImageEmbeddingJpeg` /
+ * `nativeClipTextEmbedding` --- 512-float vectors; a runtime dimension
+ * drift off 512 is an IllegalStateException), and the CLIP vector-index
+ * store functions over the SAME face-index store
+ * (`nativeStorePutClip` with the putFace-style dimension guard,
+ * `nativeStoreDeleteClipsForFiles`, `nativeStoreClipIndexedFileIds`,
+ * `nativeStoreClipCount`, `nativeStoreSearchClips` and
+ * `nativeStoreFillClipIndex` --- both JSON; the search result preserves
+ * the vecdb's own order verbatim).
+ *
  * Library packaging: the `.so` is built ONLY with the engine property and
  * is ABSENT from plain CI/dev builds. A missing library is a graceful
  * state, never a crash: the try-load in the `init` block catches
@@ -210,6 +224,95 @@ object MlEngineJni {
      */
     @JvmStatic
     external fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean
+
+    // ---- r26: the semantic (CLIP) session + the CLIP vector-index store ----
+
+    /**
+     * Initializes the semantic (CLIP) half of an ALREADY-initialized
+     * engine session over [modelsDir]: the three pinned files (CLIP image
+     * encoder, CLIP text encoder, BPE vocab) are validated (exact catalog
+     * sizes) and the combined face + CLIP model paths registered with the
+     * runtime, then a warm-up CLIP inference builds the image session so
+     * init fails fast. True on success (idempotent: an already-semantic
+     * engine returns true without reloading). A failed warm-up leaves a
+     * consistent face-only engine. Throws IllegalStateException when no
+     * engine session is open or the pipeline fails.
+     */
+    @JvmStatic
+    external fun nativeInitSemantic(modelsDir: String): Boolean
+
+    /**
+     * Runs the CLIP image encoder over one JPEG's bytes. Returns the
+     * 512-float L2-normalized MobileCLIP-S2 embedding. Throws
+     * IllegalStateException when the engine (or its semantic half) is
+     * not initialized, the call fails, or the runtime embedding
+     * dimension is not 512.
+     */
+    @JvmStatic
+    external fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray
+
+    /**
+     * Runs the CLIP text encoder over [text] (upstream's run_clip_text
+     * with the pinned text model + BPE vocab). Returns the 512-float
+     * embedding. Throws IllegalStateException when the engine (or its
+     * semantic half) is not initialized, the call fails, or the runtime
+     * embedding dimension is not 512.
+     */
+    @JvmStatic
+    external fun nativeClipTextEmbedding(text: String): FloatArray
+
+    /**
+     * Upserts one CLIP embedding row for [fileId] (the SQLite row AND
+     * the live vector-index key together; a re-insert replaces). Returns
+     * true on success. Throws IllegalArgumentException when the
+     * embedding dimension is not 512 (before any store access) and
+     * IllegalStateException on a closed store or DB failure.
+     */
+    @JvmStatic
+    external fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean
+
+    /**
+     * Deletes every CLIP row for [fileIds] (rows + vector-index keys;
+     * an empty array is a no-op). Returns true on success; throws
+     * IllegalStateException on a closed store or DB failure.
+     */
+    @JvmStatic
+    external fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean
+
+    /**
+     * The file IDs that currently carry CLIP rows at the vendored pin's
+     * model version, sorted ascending. An empty array means no indexed
+     * files. Throws IllegalStateException when the store is not open.
+     */
+    @JvmStatic
+    external fun nativeStoreClipIndexedFileIds(): LongArray
+
+    /**
+     * Total CLIP rows in the store. Throws IllegalStateException when
+     * the store is not open.
+     */
+    @JvmStatic
+    external fun nativeStoreClipCount(): Long
+
+    /**
+     * Runs the top-K vector search over the CLIP index and returns the
+     * JSON array `[{"file_id":123,"distance":0.42},…]` in the vecdb's
+     * own order (nearest first; preserved verbatim --- never re-sorted).
+     * Throws IllegalStateException when the store is not open, the
+     * search fails, or the query embedding dimension is not 512.
+     */
+    @JvmStatic
+    external fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String
+
+    /**
+     * Fills the CLIP vector index from the SQLite rows and returns the
+     * JSON report `{"outcome":"Completed"|"AlreadyFilled"|"Superseded",
+     * "rows":N,"indexed":M,"skipped":K,"resumed":true|false}`. Throws
+     * IllegalStateException when the store is not open or the fill
+     * fails.
+     */
+    @JvmStatic
+    external fun nativeStoreFillClipIndex(): String
 
     /**
      * Closes the face-index store. Idempotent; returns true.

@@ -30,6 +30,18 @@
 //! honest caveat carried by every doc comment below: manual edits
 //! persist only until the next `cluster()` pass recomputes assignments
 //! from the embeddings.
+//!
+//! r26 adds the CLIP vector-index store functions over the SAME open
+//! store, all still upstream's own functions verbatim: the upsert +
+//! per-file delete pair (`MlStore::put_clip` / `MlStore::delete_clip`,
+//! which maintain the SQLite rows AND the ente-vecdb index together),
+//! the resumability read (`MlDb::clip_indexed_file_with_version`,
+//! filtered to the vendored [`CLIP_ML_VERSION`] and sorted ascending),
+//! the row count (`MlDb::count_clip_rows`), the top-K vector search
+//! (`MlStore::search` over `Index::Clip`) and the index fill
+//! (`MlStore::fill_clip_index`). The search result and the fill report
+//! are serialized as the r26 manual-JSON shapes (no serde). Still no
+//! new SQL of our own.
 
 use std::{
     collections::HashMap,
@@ -37,8 +49,8 @@ use std::{
     sync::{Mutex, MutexGuard, OnceLock, PoisonError},
 };
 
-use ente_photos_ml::ml_db::{FACE_ML_VERSION, FaceRow};
-use ente_photos_ml::ml_store::MlStore;
+use ente_photos_ml::ml_db::{CLIP_ML_VERSION, ClipEmbedding, FACE_ML_VERSION, FaceRow};
+use ente_photos_ml::ml_store::{FillOutcome, FillReport, Index, MlStore, SearchParams};
 
 /// The face-index SQLite file the store opens inside the caller's dir.
 pub(crate) const ML_INDEX_FILE_NAME: &str = "ml-index.sqlite";
@@ -46,6 +58,10 @@ pub(crate) const ML_INDEX_FILE_NAME: &str = "ml-index.sqlite";
 /// The face-embedding dimension the store accepts (upstream MobileFaceNet
 /// output; the vendored clustering's `CLUSTER_CENTROID_DIMENSIONS`).
 pub(crate) const FACE_EMBEDDING_DIM: usize = 192;
+
+/// The CLIP-embedding dimension the store accepts (upstream MobileCLIP-S2
+/// output; the vendored `ml_db`'s `CLIP_EMBEDDING_DIMENSIONS`).
+pub(crate) const CLIP_EMBEDDING_DIM: usize = 512;
 
 /// Message used when a store operation runs before a successful open.
 const NOT_OPEN: &str = "face index store is not open; call nativeStoreOpen(dir) first";
@@ -394,6 +410,193 @@ pub(crate) fn remove_faces_from_cluster(
             .map_err(|error| format!("remove faces from cluster \"{cluster_id}\": {error}"))?;
         Ok(true)
     })
+}
+
+/// Inserts one CLIP embedding row for `file_id` (r26), through the vendored
+/// upstream upsert path (`MlStore::put_clip`: the SQLite row AND the live
+/// vecdb key together; an INSERT OR REPLACE, so re-inserting a file
+/// replaces rather than duplicates).
+///
+/// Upstream's `ClipEmbedding` stores `Vec<f64>` (its SQLite blob encodes
+/// f32 regardless), so the r26 f32 JNI wire widens here — a lossless
+/// conversion. The embedding dimension is validated HERE, at the Rust
+/// boundary, before any store access; a mismatch is a
+/// `java.lang.IllegalArgumentException` at the JNI layer (the Kotlin facade
+/// already rejects it before the native call — this is defense in depth,
+/// the exact `put_face` discipline).
+pub(crate) fn put_clip(file_id: i64, embedding: &[f32]) -> Result<(), String> {
+    if embedding.len() != CLIP_EMBEDDING_DIM {
+        return Err(format!(
+            "embedding must be {CLIP_EMBEDDING_DIM} floats; got {}",
+            embedding.len()
+        ));
+    }
+    with_store(|store| {
+        let row = ClipEmbedding {
+            file_id,
+            embedding: embedding.iter().map(|value| f64::from(*value)).collect(),
+            version: CLIP_ML_VERSION,
+        };
+        store
+            .put_clip(&[row])
+            .map_err(|error| format!("insert clip embedding: {error}"))
+    })
+}
+
+/// Deletes every CLIP row for `file_ids` (r26), through the vendored
+/// upstream delete path (`MlStore::delete_clip`: the SQLite rows AND the
+/// vecdb keys, transactional; an empty slice is upstream's own no-op).
+/// This is the semantic twin of the r24 face invalidation delete: a
+/// re-indexed or removed file must drop its stale rows before any
+/// re-insert (the put above replaces rather than duplicates, but a file
+/// that left the library should not stay searchable).
+pub(crate) fn delete_clips_for_files(file_ids: &[i64]) -> Result<(), String> {
+    with_store(|store| {
+        store
+            .delete_clip(file_ids)
+            .map_err(|error| format!("delete clip embeddings: {error}"))
+    })
+}
+
+/// The file IDs that currently carry CLIP rows at the vendored pin's
+/// [`CLIP_ML_VERSION`] (r26), via upstream's own
+/// `MlDb::clip_indexed_file_with_version` read. Unlike the r24 face twin
+/// (whose upstream query filters by version in SQL), this upstream read
+/// returns the whole map, so the adapter filters `version >=
+/// CLIP_ML_VERSION` itself and drops the version half on the wire; keys
+/// are returned sorted ascending — the adapter's own order, stable for
+/// the Magic-Search caller's resumability walk.
+///
+/// Rows written by an OLDER model version are deliberately NOT reported
+/// (the same versioning rule the r24 face read applies): the caller
+/// treats those files as un-indexed and re-runs them.
+pub(crate) fn clip_indexed_file_ids() -> Result<Vec<i64>, String> {
+    with_store(|store| {
+        let mut file_ids: Vec<i64> = store
+            .db()
+            .clip_indexed_file_with_version()
+            .map_err(|error| format!("read clip indexed file ids: {error}"))?
+            .into_iter()
+            .filter(|&(_, version)| version >= CLIP_ML_VERSION)
+            .map(|(file_id, _)| file_id)
+            .collect();
+        file_ids.sort_unstable();
+        Ok(file_ids)
+    })
+}
+
+/// Total CLIP rows in the store (r26), via upstream's own count query
+/// (`MlDb::count_clip_rows` — every row, regardless of version).
+pub(crate) fn clip_count() -> Result<i64, String> {
+    with_store(|store| {
+        store
+            .db()
+            .count_clip_rows()
+            .map_err(|error| format!("count clip rows: {error}"))
+    })
+}
+
+/// One CLIP vector-search hit (r26): the matched file id (parsed from the
+/// vecdb key, which upstream's fill writes as the file id's decimal
+/// string) and its vector distance.
+#[derive(Debug)]
+pub(crate) struct ClipMatch {
+    pub(crate) file_id: i64,
+    pub(crate) distance: f32,
+}
+
+/// Runs the top-K vector search over the store's CLIP index (r26), via
+/// upstream's own `MlStore::search` with `Index::Clip` and a plain limit.
+/// The matches come back in the vecdb's own order (nearest first) and are
+/// preserved verbatim — the adapter never re-sorts a search result.
+///
+/// The query dimension is validated HERE, at the Rust boundary (the
+/// `put_face` caller-input precedent): a mismatch is an error naming the
+/// pinned dimension. A vecdb match key that does not parse as a file id
+/// is a broken engine contract — upstream's fill only ever writes
+/// `file_id.to_string()` keys — and surfaces as an error naming the key.
+pub(crate) fn search_clips(query: &[f32], limit: i64) -> Result<Vec<ClipMatch>, String> {
+    if query.len() != CLIP_EMBEDDING_DIM {
+        return Err(format!(
+            "query embedding must be {CLIP_EMBEDDING_DIM} floats; got {}",
+            query.len()
+        ));
+    }
+    with_store(|store| {
+        let params = SearchParams {
+            limit: Some(limit as usize),
+            ..SearchParams::default()
+        };
+        let matches = store
+            .search(Index::Clip, query, &params)
+            .map_err(|error| format!("search clip index: {error}"))?;
+        let mut hits: Vec<ClipMatch> = Vec::with_capacity(matches.len());
+        for hit in matches {
+            let key = &hit.key;
+            let file_id = key
+                .parse::<i64>()
+                .map_err(|_| format!("clip match key \"{key}\" is not a file id"))?;
+            hits.push(ClipMatch {
+                file_id,
+                distance: hit.distance,
+            });
+        }
+        Ok(hits)
+    })
+}
+
+/// Serializes the r26 search result as the JNI JSON array
+/// `[{"file_id":123,"distance":0.42},…]`, preserving the vecdb's own
+/// order verbatim. Both fields are numeric — no string ever enters this
+/// JSON — but the r25 rule holds anyway: any future string field goes
+/// through [`json_escape`].
+pub(crate) fn clip_matches_json(hits: &[ClipMatch]) -> String {
+    let items: Vec<String> = hits
+        .iter()
+        .map(|hit| {
+            format!(
+                "{{\"file_id\":{},\"distance\":{}}}",
+                hit.file_id, hit.distance
+            )
+        })
+        .collect();
+    format!("[{}]", items.join(","))
+}
+
+/// Fills the store's CLIP vector index from the SQLite rows (r26), via
+/// upstream's own non-forced `MlStore::fill_clip_index(false)`: a no-op
+/// `AlreadyFilled` when the index is current, a resume from the stored
+/// cursor when a previous fill was interrupted, and a rebuild when stale.
+/// The report is upstream's own, serialized by [`fill_report_json`].
+pub(crate) fn fill_clip_index() -> Result<FillReport, String> {
+    with_store(|store| {
+        store
+            .fill_clip_index(false)
+            .map_err(|error| format!("fill clip index: {error}"))
+    })
+}
+
+/// Serializes the r26 fill report as the JNI JSON object
+/// `{"outcome":"Completed","rows":N,"indexed":M,"skipped":K,"resumed":true|false}`.
+/// The outcome strings are pinned to the three `FillOutcome` variants
+/// (matched on the enum, never stringly derived) — the Kotlin parser
+/// rejects anything else — and ride through [`json_escape`] like every
+/// string this adapter emits. The report rides by value: upstream's
+/// `FillReport` is a small `Copy` struct.
+pub(crate) fn fill_report_json(report: FillReport) -> String {
+    let outcome = match report.outcome {
+        FillOutcome::Completed => "Completed",
+        FillOutcome::AlreadyFilled => "AlreadyFilled",
+        FillOutcome::Superseded => "Superseded",
+    };
+    format!(
+        "{{\"outcome\":\"{}\",\"rows\":{},\"indexed\":{},\"skipped\":{},\"resumed\":{}}}",
+        json_escape(outcome),
+        report.rows,
+        report.indexed,
+        report.skipped,
+        report.resumed
+    )
 }
 
 /// Runs the vendored upstream clustering over the faces in the store at
@@ -891,5 +1094,271 @@ mod tests {
         assert_eq!(json_escape("a\nb"), "a\\nb");
         assert_eq!(json_escape("a\u{1}b"), "a\\u0001b");
         assert_eq!(json_escape("\t\r\n\u{08}\u{0c}"), "\\t\\r\\n\\b\\f");
+    }
+
+    // ---- r26: the CLIP vector-index store functions ----
+
+    /// One-hot CLIP fixture (upstream's own ml_store test shape): 512
+    /// floats with a single 1.0 at `hot` --- identical vectors sit at
+    /// cosine distance 0, distinct one-hots at distance 1.
+    fn one_hot_clip(hot: usize) -> Vec<f32> {
+        let mut vector = vec![0.0_f32; CLIP_EMBEDDING_DIM];
+        vector[hot % CLIP_EMBEDDING_DIM] = 1.0;
+        vector
+    }
+
+    /// Inserts a clip row with an EXPLICIT ml_version and raw embedding,
+    /// bypassing the adapter's always-current 512-float put: stale
+    /// versions and short vectors only exist from an older/broken writer,
+    /// and the r26 wire has no version or dimension knob.
+    fn insert_clip_row(file_id: i64, embedding: Vec<f32>, version: i64) {
+        let guard = store_cell().lock().unwrap_or_else(PoisonError::into_inner);
+        let state = guard.as_ref().expect("store is open");
+        state
+            .store
+            .db()
+            .insert_clip_rows(&[ClipEmbedding {
+                file_id,
+                embedding: embedding.into_iter().map(f64::from).collect(),
+                version,
+            }])
+            .expect("insert clip row");
+    }
+
+    #[test]
+    fn r26_store_ops_before_open_fail() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        assert!(put_clip(1, &one_hot_clip(0)).is_err());
+        assert!(delete_clips_for_files(&[1]).is_err());
+        assert!(clip_indexed_file_ids().is_err());
+        assert!(clip_count().is_err());
+        assert!(search_clips(&one_hot_clip(0), 1).is_err());
+        assert!(fill_clip_index().is_err());
+
+        // The dimension guards fire before the open check (the putFace
+        // precedent) and name the pinned dimension:
+        let error = put_clip(1, &[0.0; CLIP_EMBEDDING_DIM - 1]).unwrap_err();
+        assert!(error.contains("512"));
+        let error = search_clips(&[0.0; CLIP_EMBEDDING_DIM + 1], 1).unwrap_err();
+        assert!(error.contains("512"));
+    }
+
+    #[test]
+    fn clip_put_count_indexed_delete_round_trip() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        let dir = open_temp_store("r26-round-trip");
+        assert!(clip_indexed_file_ids().unwrap().is_empty());
+        assert_eq!(clip_count().unwrap(), 0);
+
+        // putClip validates the dimension (mirrors the putFace guard):
+        assert!(put_clip(1, &[0.0; CLIP_EMBEDDING_DIM - 1]).is_err());
+        assert!(put_clip(1, &[0.0; CLIP_EMBEDDING_DIM + 1]).is_err());
+        assert_eq!(clip_count().unwrap(), 0);
+
+        // Clips on files 1, 2 and 3; re-putting file 2 REPLACES (upstream's
+        // INSERT OR REPLACE), never duplicates:
+        assert!(put_clip(1, &one_hot_clip(1)).is_ok());
+        assert!(put_clip(2, &one_hot_clip(2)).is_ok());
+        assert!(put_clip(3, &one_hot_clip(3)).is_ok());
+        assert!(put_clip(2, &one_hot_clip(2)).is_ok());
+        assert_eq!(clip_count().unwrap(), 3);
+        assert_eq!(clip_indexed_file_ids().unwrap(), vec![1, 2, 3]);
+
+        // The empty slice is upstream's own no-op:
+        assert!(delete_clips_for_files(&[]).is_ok());
+        assert_eq!(clip_count().unwrap(), 3);
+
+        // Per-file invalidation: drop 1 and 3, keep 2:
+        assert!(delete_clips_for_files(&[1, 3]).is_ok());
+        assert_eq!(clip_indexed_file_ids().unwrap(), vec![2]);
+        assert_eq!(clip_count().unwrap(), 1);
+
+        // Deleting a file with no rows stays a no-op success:
+        assert!(delete_clips_for_files(&[99]).is_ok());
+        assert_eq!(clip_count().unwrap(), 1);
+
+        close();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clip_indexed_file_ids_filters_stale_versions_and_sorts_ascending() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        let dir = open_temp_store("r26-versions");
+        // Current rows land via the adapter (insertion order scrambled on
+        // purpose --- the read must not depend on it):
+        assert!(put_clip(3, &one_hot_clip(3)).is_ok());
+        assert!(put_clip(1, &one_hot_clip(1)).is_ok());
+        // A row from an OLDER pin (stale) and one from a NEWER pin (still
+        // current-or-better) only exist via a direct insert:
+        insert_clip_row(5, one_hot_clip(5), CLIP_ML_VERSION - 1);
+        insert_clip_row(7, one_hot_clip(7), CLIP_ML_VERSION + 1);
+
+        // Ascending keys, version >= CLIP_ML_VERSION only (the r24 face
+        // rule): 5's stale row is deliberately absent.
+        assert_eq!(clip_indexed_file_ids().unwrap(), vec![1, 3, 7]);
+
+        // The stale row still counts as a row (the count is unversioned):
+        assert_eq!(clip_count().unwrap(), 4);
+
+        close();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn search_clips_round_trips_through_the_vecdb_in_its_own_order() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        let dir = open_temp_store("r26-search");
+        // A fresh store's index is STALE, so these puts land in SQLite
+        // only; the fill below builds the vecdb from the rows (upstream's
+        // own flow):
+        assert!(put_clip(1, &one_hot_clip(1)).is_ok());
+        assert!(put_clip(2, &one_hot_clip(2)).is_ok());
+        assert!(put_clip(3, &one_hot_clip(3)).is_ok());
+
+        let report = fill_clip_index().unwrap();
+        assert_eq!(
+            report,
+            FillReport {
+                outcome: FillOutcome::Completed,
+                rows: 3,
+                indexed: 3,
+                skipped: 0,
+                resumed: false
+            }
+        );
+        // A second non-forced fill is upstream's own no-op:
+        assert_eq!(
+            fill_clip_index().unwrap(),
+            FillReport {
+                outcome: FillOutcome::AlreadyFilled,
+                rows: 0,
+                indexed: 0,
+                skipped: 0,
+                resumed: false
+            }
+        );
+
+        // Nearest first, the vecdb's own order preserved verbatim: the
+        // exact one-hot is at cosine distance 0, the other two tie at
+        // distance 1 (order between ties is the vecdb's own --- only the
+        // set is asserted):
+        let hits = search_clips(&one_hot_clip(2), 3).unwrap();
+        assert_eq!(hits.len(), 3);
+        assert_eq!(hits[0].file_id, 2);
+        assert_eq!(hits[0].distance, 0.0);
+        let mut others: Vec<i64> = hits[1..].iter().map(|hit| hit.file_id).collect();
+        others.sort_unstable();
+        assert_eq!(others, vec![1, 3]);
+        assert!(hits[1..].iter().all(|hit| hit.distance == 1.0));
+
+        // The limit is the vecdb's own top-K:
+        let top = search_clips(&one_hot_clip(2), 1).unwrap();
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].file_id, 2);
+
+        // The query dimension guard:
+        assert!(search_clips(&one_hot_clip(2)[..CLIP_EMBEDDING_DIM - 1], 1).is_err());
+
+        // After the fill, upstream's put upserts straight into the LIVE
+        // index too --- file 4 is searchable without another fill:
+        assert!(put_clip(4, &one_hot_clip(4)).is_ok());
+        let nearest = search_clips(&one_hot_clip(4), 1).unwrap();
+        assert_eq!(nearest.len(), 1);
+        assert_eq!(nearest[0].file_id, 4);
+
+        close();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fill_clip_index_reports_upstream_skips_verbatim() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        let dir = open_temp_store("r26-fill");
+        // One current 512-float row plus upstream's own malformed
+        // fixtures (a short 2-float row and an empty one): the fill
+        // indexes the first and SKIPS the rest through the vecdb's
+        // dimension gate; a stale-version row with a VALID vector is
+        // still indexed (the fill does not filter versions --- only the
+        // indexed-file read does):
+        assert!(put_clip(1, &one_hot_clip(1)).is_ok());
+        insert_clip_row(2, vec![1.0, 2.0], CLIP_ML_VERSION);
+        insert_clip_row(3, Vec::new(), CLIP_ML_VERSION);
+        insert_clip_row(5, one_hot_clip(5), CLIP_ML_VERSION - 1);
+
+        assert_eq!(
+            fill_clip_index().unwrap(),
+            FillReport {
+                outcome: FillOutcome::Completed,
+                rows: 4,
+                indexed: 2,
+                skipped: 2,
+                resumed: false
+            }
+        );
+
+        close();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clip_matches_json_is_the_pinned_manual_shape() {
+        assert_eq!(clip_matches_json(&[]), "[]");
+        assert_eq!(
+            clip_matches_json(&[
+                ClipMatch {
+                    file_id: 123,
+                    distance: 0.42,
+                },
+                ClipMatch {
+                    file_id: 7,
+                    distance: 1.5,
+                },
+            ]),
+            "[{\"file_id\":123,\"distance\":0.42},{\"file_id\":7,\"distance\":1.5}]"
+        );
+    }
+
+    #[test]
+    fn fill_report_json_pins_the_three_outcome_strings() {
+        let report = |outcome| FillReport {
+            outcome,
+            rows: 4,
+            indexed: 2,
+            skipped: 2,
+            resumed: true,
+        };
+        assert_eq!(
+            fill_report_json(report(FillOutcome::Completed)),
+            "{\"outcome\":\"Completed\",\"rows\":4,\"indexed\":2,\"skipped\":2,\"resumed\":true}"
+        );
+        assert_eq!(
+            fill_report_json(report(FillOutcome::AlreadyFilled)),
+            "{\"outcome\":\"AlreadyFilled\",\"rows\":4,\"indexed\":2,\"skipped\":2,\"resumed\":true}"
+        );
+        assert_eq!(
+            fill_report_json(report(FillOutcome::Superseded)),
+            "{\"outcome\":\"Superseded\",\"rows\":4,\"indexed\":2,\"skipped\":2,\"resumed\":true}"
+        );
+        assert_eq!(
+            fill_report_json(FillReport {
+                outcome: FillOutcome::Completed,
+                rows: 0,
+                indexed: 0,
+                skipped: 0,
+                resumed: false
+            }),
+            "{\"outcome\":\"Completed\",\"rows\":0,\"indexed\":0,\"skipped\":0,\"resumed\":false}"
+        );
     }
 }

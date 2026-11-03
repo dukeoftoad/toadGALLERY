@@ -12,9 +12,12 @@ import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
+import io.github.dukeoftoad.gallery.ml.index.ClipIndexScheduler
+import io.github.dukeoftoad.gallery.ml.index.ClipIndexWorkState
+import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.index.CLIP_INDEX_STATE_FILE_NAME
 import io.github.dukeoftoad.gallery.ml.index.FaceIndexScheduler
 import io.github.dukeoftoad.gallery.ml.index.FaceIndexWorkState
-import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +45,11 @@ data class AiDogfoodState(
         ModelProvisioner.CapabilityState.NotProvisioned,
     /** FACE assets in manifest order, each with its installed/missing truth. */
     val assets: List<AssetStatus> = emptyList(),
+    /** The r26 SEMANTIC capability's provisioner state (Workstream 7). */
+    val semanticCapability: ModelProvisioner.CapabilityState =
+        ModelProvisioner.CapabilityState.NotProvisioned,
+    /** SEMANTIC assets (CLIP image/text/vocab) in manifest order (r26). */
+    val semanticAssets: List<AssetStatus> = emptyList(),
     /** Whether `libtoad_ml_jni.so` is present in THIS build (per-process fixed). */
     val engineLibraryPresent: Boolean = false,
     /** The last download/delete outcome, or null. */
@@ -50,7 +58,7 @@ data class AiDogfoodState(
     val selfTest: SelfTestResult? = null,
 ) {
 
-    /** One FACE asset's presence row. */
+    /** One model asset's presence row. */
     data class AssetStatus(val fileName: String, val installed: Boolean)
 
     /** Last download/delete action outcome. */
@@ -63,6 +71,15 @@ data class AiDogfoodState(
 
         /** invalidateCapability(FACE) ran; rows re-derived from disk. */
         object Deleted : Note
+
+        /** Every SEMANTIC asset is receipt-verified installed (r26). */
+        object SemanticDownloaded : Note
+
+        /** The SEMANTIC provisioning run threw (r26). */
+        data class SemanticDownloadFailed(val reason: String) : Note
+
+        /** invalidateCapability(SEMANTIC) ran (r26). */
+        object SemanticDeleted : Note
     }
 
     /** The engine self-test outcome (one JPEG, one inference, timed). */
@@ -119,7 +136,18 @@ data class AiDogfoodState(
  *    [deleteFaceModels]);
  *  - [setThreshold] (r24): the clustering distance threshold the queue
  *    clusters at (upstream's recommended 0.24 by default, tuned through
- *    the card's slider, persisted in the `toad_settings` preferences).
+ *    the card's slider, persisted in the `toad_settings` preferences);
+ *  - [downloadSemanticModels]/[deleteSemanticModels] (r26, Workstream 7):
+ *    the SAME provision/invalidate flow over the SEMANTIC capability
+ *    (`provision(SEMANTIC)` / `invalidateCapability(SEMANTIC)`), driving
+ *    the CLIP image/text/vocab assets the Magic Search round needs;
+ *  - [startSemanticIndex]/[cancelSemanticIndex]/[resetSemanticIndex]
+ *    (r26): the SEMANTIC background queue's lifecycle over
+ *    [ClipIndexScheduler] (the r24 face queue's card, sibling edition:
+ *    live progress, terminal outcome lines, and a reset whose scope the
+ *    card copy states honestly --- the queue's OWN bookkeeping only;
+ *    the store-level full reset remains the r24 Reset face index, which
+ *    deletes the whole `ml-index.sqlite` directory both queues share).
  */
 class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -179,6 +207,102 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = withContext(Dispatchers.IO) {
                 provisioner.invalidateCapability(ModelManifest.Capability.FACE)
                 snapshot().copy(note = AiDogfoodState.Note.Deleted)
+            }
+        }
+    }
+
+    // ---- r26: the SEMANTIC model pack + the semantic background queue ----
+
+    /**
+     * The honest size label for the SEMANTIC download button and the
+     * Magic Search cards: the pack's total, derived from the manifest
+     * pin (never a hand-maintained copy) and formatted with the house
+     * byte formatter.
+     */
+    val semanticModelsSize: String = io.github.dukeoftoad.gallery.data.DataSizeFormats.formatBytes(
+        ModelManifest.forCapability(ModelManifest.Capability.SEMANTIC).sumOf { it.sizeBytes },
+    )
+
+    /** Provisions the SEMANTIC capability from the allowlisted host (ADR-0020; r26). */
+    fun downloadSemanticModels() {
+        if (_state.value.busy) return
+        // Same synchronous single-flight claim as the FACE download: a
+        // second action can never interleave with a provisioning pass
+        // over the same temp files.
+        _state.value = _state.value.copy(busy = true)
+        viewModelScope.launch {
+            _state.value = withContext(Dispatchers.IO) {
+                val note = try {
+                    provisioner.provision(ModelManifest.Capability.SEMANTIC) {
+                        _state.value = snapshot().copy(busy = true)
+                    }
+                    AiDogfoodState.Note.SemanticDownloaded
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    AiDogfoodState.Note.SemanticDownloadFailed(
+                        e.message ?: e.javaClass.simpleName,
+                    )
+                }
+                snapshot().copy(note = note)
+            }
+        }
+    }
+
+    /** Removes every installed SEMANTIC asset (file + receipt entry; r26). */
+    fun deleteSemanticModels() {
+        if (_state.value.busy) return
+        _state.value = _state.value.copy(busy = true)
+        viewModelScope.launch {
+            _state.value = withContext(Dispatchers.IO) {
+                provisioner.invalidateCapability(ModelManifest.Capability.SEMANTIC)
+                snapshot().copy(note = AiDogfoodState.Note.SemanticDeleted)
+            }
+        }
+    }
+
+    /**
+     * The r26 semantic queue's live state, collected from WorkManager for
+     * as long as this ViewModel lives (the r24 [queueState] wiring,
+     * sibling edition --- its own unique work name, so the face queue's
+     * card is untouched).
+     */
+    val clipQueueState: StateFlow<ClipIndexWorkState> =
+        ClipIndexScheduler.observe(getApplication())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), ClipIndexWorkState.Idle)
+
+    /** Starts the semantic background queue (r26). */
+    fun startSemanticIndex() {
+        ClipIndexScheduler.enqueue(getApplication())
+    }
+
+    /** Cancels the semantic background queue chain (r26). */
+    fun cancelSemanticIndex() {
+        ClipIndexScheduler.cancel(getApplication())
+    }
+
+    /**
+     * The r26 semantic reset: cancel the chain, close any open store
+     * THIS process holds, then delete the queue's OWN bookkeeping
+     * (`clip-index-state.json`). HONEST SCOPE (the card copy states it):
+     * the CLIP ROWS in `ml-index.sqlite` do NOT go --- `MlEngine` exposes
+     * no delete-all-clips in the r26 contract, and the store-level full
+     * reset already exists as the r24 "Reset face index", whose recursive
+     * directory delete erases the whole `ml-index.sqlite` both queues
+     * share (semantic reset rides that shape). Deleting the state file
+     * alone is still the honest queue reset: the next run re-plans from
+     * nothing, and every photo re-indexes delete-first (a `putClip`
+     * upsert, so no rows duplicate).
+     */
+    fun resetSemanticIndex() {
+        if (_state.value.busy) return
+        _state.value = _state.value.copy(busy = true)
+        viewModelScope.launch {
+            _state.value = withContext(Dispatchers.IO) {
+                ClipIndexScheduler.cancel(getApplication())
+                engine.closeFaceIndex()
+                File(faceIndexDir(), CLIP_INDEX_STATE_FILE_NAME).delete()
+                snapshot().copy(note = null)
             }
         }
     }
@@ -311,9 +435,14 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
     /** Presence truth from the provisioner's own derivation (disk-backed). */
     private fun snapshot(): AiDogfoodState {
         val faceAssets = ModelManifest.forCapability(ModelManifest.Capability.FACE)
+        val semanticAssets = ModelManifest.forCapability(ModelManifest.Capability.SEMANTIC)
         return AiDogfoodState(
             faceCapability = provisioner.capabilityState(ModelManifest.Capability.FACE),
             assets = faceAssets.map {
+                AiDogfoodState.AssetStatus(it.fileName, provisioner.installedFile(it) != null)
+            },
+            semanticCapability = provisioner.capabilityState(ModelManifest.Capability.SEMANTIC),
+            semanticAssets = semanticAssets.map {
                 AiDogfoodState.AssetStatus(it.fileName, provisioner.installedFile(it) != null)
             },
             engineLibraryPresent = engine.available,

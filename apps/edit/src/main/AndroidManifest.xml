@@ -3,7 +3,7 @@
 
     <!-- r29 (Issue #14 gate; contract section 4.5): the editor NEVER
          requires network. There is deliberately NO INTERNET permission here
-         --- not even an allowlisted one --- and the module's build-time
+         (not even an allowlisted one) and the module's build-time
          merged-manifest gate fails the build if a dependency ever injects
          it. The gallery's ADR-0020 models.ente.com grant belongs to the
          GALLERY app only. -->

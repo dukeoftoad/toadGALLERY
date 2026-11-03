@@ -455,10 +455,16 @@ data class EditorUiState(
     val canRedo: Boolean,
 )
 
-/** The export sheet's state: format + quality chosen by the user. */
+/**
+ * The export sheet's state: format, quality, and the per-export metadata
+ * policy chosen by the user. A `null` [metadataPolicy] means "no override"
+ * --- the launch request's policy rides as-is (r31: the request's policy is
+ * the privacy floor; the sheet may strip more, never less).
+ */
 data class ExportChoice(
     val format: ExportFormat = ExportPlan.DEFAULT_FORMAT,
     val quality: Int = ExportPlan.DEFAULT_QUALITY,
+    val metadataPolicy: MetadataPolicy? = null,
 )
 
 /**
@@ -627,7 +633,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     recipe = committed,
                     format = choice.format,
                     quality = choice.quality,
-                    metadataPolicy = policy,
+                    // The per-export choice, resolved against the request's
+                    // privacy floor (contract 4.4: never strip less than asked).
+                    metadataPolicy = ExportPolicyChoice.effectivePolicy(
+                        policy,
+                        choice.metadataPolicy,
+                    ),
                 ),
             )
         }
@@ -794,6 +805,44 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+
+                // ---- The per-export metadata-policy choice (r31) ----
+                // The launch request's policy is the privacy floor: options
+                // that would strip LESS than the request are disabled (the
+                // editor respects the requested policy exactly, contract 4.4).
+                Text(
+                    text = stringResource(R.string.editor_section_metadata),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    MetadataPolicy.entries.forEach { option ->
+                        FilterChip(
+                            selected = (choice.metadataPolicy ?: policy) == option,
+                            onClick = { exportChoice = choice.copy(metadataPolicy = option) },
+                            enabled = !exporting &&
+                                !ExportPolicyChoice.isBlockedByFloor(policy, option),
+                            label = { Text(policyLabel(option)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+                if (policy != MetadataPolicy.PRESERVE) {
+                    Text(
+                        text = stringResource(
+                            R.string.editor_metadata_floor,
+                            policyLabel(policy),
+                        ),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.editor_metadata_note),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
                 Button(onClick = { requestSave() }, modifier = Modifier.padding(top = 4.dp)) {
                     Text(stringResource(R.string.editor_save_copy))
                 }
@@ -1032,8 +1081,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             )
 
             // ---- The always-visible honesty line ----
+            // Reflects the policy this export would apply: the pending
+            // per-export choice resolved against the request's floor.
             Text(
-                text = stringResource(R.string.editor_policy_line, policyLabel(policy)),
+                text = stringResource(
+                    R.string.editor_policy_line,
+                    policyLabel(
+                        ExportPolicyChoice.effectivePolicy(policy, exportChoice?.metadataPolicy),
+                    ),
+                ),
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Start,

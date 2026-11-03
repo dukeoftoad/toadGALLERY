@@ -124,6 +124,19 @@ class EditActivity : ComponentActivity() {
     internal lateinit var sidecarStore: EditRecipeStore
         private set
 
+    /**
+     * The bundled `.cube` looks (r33), parsed ONCE and shared by the
+     * preview and every export --- the same [CubeLut] instances, so the
+     * look cannot differ between what the user previews and what the
+     * pipeline exports. Lazily evaluated off the main thread by the
+     * first reader (the composition's loader or an export); a broken
+     * asset is simply absent (the conformance test pins the committed
+     * set, so an absence means a broken build, not bad data).
+     */
+    internal val bundledLooks: Map<String, CubeLut> by lazy {
+        BundledLuts.loadAll { path -> assets.open(path) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -353,11 +366,14 @@ class EditActivity : ComponentActivity() {
                 )
 
             // 4. The ordered pipeline (geometry first, then colour/detail).
+            //    The r33 look stage resolves through the SAME lazy cache
+            //    the preview used --- one parse, one shared instance.
             val width = source.width
             val height = source.height
             val pixels = IntArray(width * height)
             source.getPixels(pixels, 0, width, 0, 0, width, height)
-            val pipelined = EditPipeline.apply(pixels, width, height, export.recipe)
+            val look = export.recipe.lut?.let { bundledLooks[it.lutId] }
+            val pipelined = EditPipeline.apply(pixels, width, height, export.recipe, look)
             val adjusted = Bitmap.createBitmap(
                 pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888,
             )
@@ -611,6 +627,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
     // The ONE live-drag draft (key -> value); committed on release.
     var draft by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    // The parsed bundled looks (r33); empty until the IO load lands ---
+    // the chip row shows what parsed, the preview re-runs when it does.
+    var looks by remember { mutableStateOf<Map<String, CubeLut>>(emptyMap()) }
 
     val committed = uiState.recipe
 
@@ -623,6 +642,16 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // r32: the straighten drag previews live too (it previously
             // waited for release, burning a per-tick re-render for nothing).
             d.first == "straighten" -> committed.copy(straightenDeg = d.second.toDouble())
+            // r33: the intensity drag previews live, exactly like the
+            // adjustment sliders (the look commits on release).
+            d.first == "lut-intensity" -> {
+                val selection = committed.lut
+                if (selection != null) {
+                    committed.copy(lut = selection.copy(intensity = d.second))
+                } else {
+                    committed
+                }
+            }
             else -> committed
         }
     }
@@ -637,7 +666,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // First composition: decode the bounded preview.
+    // First composition: decode the bounded preview + parse the bundled
+    // looks (both off the main thread; the looks feed the chip row and
+    // the preview's filter stage --- the export shares the same cache).
     LaunchedEffect(Unit) {
         val decoded = withContext(Dispatchers.IO) {
             activity.decodeBitmap(activity.request.sourceUri, PREVIEW_MAX_DIMENSION)
@@ -650,20 +681,23 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         } else {
             previewBase = decoded
         }
+        looks = withContext(Dispatchers.IO) { activity.bundledLooks }
     }
 
     // Live preview: re-run the ordered pipeline (without the crop --- the
-    // crop draws as the overlay rect) whenever the effective recipe changes.
-    LaunchedEffect(previewBase, committed, draft) {
+    // crop draws as the overlay rect) whenever the effective recipe or
+    // the loaded look set changes.
+    LaunchedEffect(previewBase, committed, draft, looks) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
         val displayRecipe = effective.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0))
+        val look = effective.lut?.let { looks[it.lutId] }
         previewImage = withContext(Dispatchers.Default) {
             val width = base.width
             val height = base.height
             val pixels = IntArray(width * height)
             base.getPixels(pixels, 0, width, 0, 0, width, height)
-            val pipelined = EditPipeline.apply(pixels, width, height, displayRecipe)
+            val pipelined = EditPipeline.apply(pixels, width, height, displayRecipe, look)
             val out = Bitmap.createBitmap(pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888)
             out.setPixels(pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height)
             // The crop overlay rect rides the POST-geometry frame of the
@@ -1116,6 +1150,81 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 )
             }
 
+            // ---- Filters (r33: the bundled .cube looks at an intensity) ----
+            // One None chip + one chip per look that PARSED; the preview and
+            // the export resolve the selection through the same shared cache,
+            // so what the user sees is what the pipeline exports. A selection
+            // this build cannot resolve (a version-skewed sidecar) selects no
+            // chip --- the tolerance contract, shown honestly.
+            Text(
+                text = stringResource(R.string.editor_section_filters),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            val selection = committed.lut
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(
+                    selected = selection == null,
+                    onClick = { commit(committed.copy(lut = null)) },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_filter_none)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                BundledLuts.ORDERED
+                    .filter { looks.containsKey(it.id) }
+                    .forEach { entry ->
+                        FilterChip(
+                            selected = selection?.lutId == entry.id,
+                            onClick = {
+                                // A new look keeps the current intensity
+                                // (continuity while auditioning looks).
+                                commit(
+                                    committed.copy(
+                                        lut = LutSelection(
+                                            lutId = entry.id,
+                                            intensity = selection?.intensity ?: 100,
+                                        ),
+                                    ),
+                                )
+                            },
+                            enabled = !exporting,
+                            label = { Text(stringResource(lookNameRes(entry.id))) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+            }
+            if (selection != null && looks.containsKey(selection.lutId)) {
+                // The intensity slider, live-dragged like every other
+                // slider (r32 pattern): the draft previews, release commits.
+                val live =
+                    if (draft?.first == "lut-intensity") draft!!.second else selection.intensity
+                val intensityLabel = stringResource(R.string.editor_filter_intensity, live)
+                val intensityName = stringResource(R.string.editor_a11y_filter_intensity)
+                Text(
+                    text = intensityLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = live.toFloat(),
+                    onValueChange = { draft = Pair("lut-intensity", it.toInt()) },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "lut-intensity" && committed.lut != null) {
+                                commit(committed.copy(lut = committed.lut!!.copy(intensity = d.second)))
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = intensityName
+                        stateDescription = intensityLabel
+                    },
+                )
+            }
+
             // ---- Per-channel HSL: band selector + three sliders ----
             Text(
                 text = stringResource(R.string.editor_section_hsl),
@@ -1258,6 +1367,16 @@ private fun bandNameRes(name: String): Int = when (name) {
     "blue" -> R.string.editor_band_blue
     "purple" -> R.string.editor_band_purple
     else -> R.string.editor_band_magenta
+}
+
+/** The bundled look's display name (r33); ids are the BundledLuts registry ids. */
+private fun lookNameRes(id: String): Int = when (id) {
+    "warm-film" -> R.string.editor_filter_warm_film
+    "cool-chrome" -> R.string.editor_filter_cool_chrome
+    "silver-mono" -> R.string.editor_filter_silver_mono
+    "matte-fade" -> R.string.editor_filter_matte_fade
+    "vivid-punch" -> R.string.editor_filter_vivid_punch
+    else -> R.string.editor_filter_none
 }
 
 @Composable

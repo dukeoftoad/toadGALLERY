@@ -182,7 +182,7 @@ class EditRecipeTest {
 
 
     @Test(expected = IllegalArgumentException::class)
-    fun `an export quality outside 1..100 is rejected`() {
+    fun `an export quality outside the 1-to-100 range is rejected`() {
         ExportRequest(EditRecipe(), ExportFormat.JPEG, quality = 0, metadataPolicy = io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy.PRESERVE)
     }
 }
@@ -194,6 +194,10 @@ class EditPipelineTest {
 
     private fun argb(r: Int, g: Int, b: Int) =
         (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+
+    /** The explicit-alpha form the geometry tests use (the name spells the order). */
+    private fun argb(a: Int, r: Int, g: Int, b: Int) =
+        (a shl 24) or (r shl 16) or (g shl 8) or b
     private fun redOf(p: Int) = (p ushr 16) and 0xFF
 
     @Test

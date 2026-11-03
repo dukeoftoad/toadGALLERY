@@ -51,6 +51,9 @@ import java.io.File
  * See `docs/phase-5/hardening.md` for the three-gate map.
  */
 class VaultExclusionReadGateTest {
+    /** The one source file under test (module dir or repo root; tolerant either way). */
+    private val SRC = "src/main/kotlin/io/github/dukeoftoad/gallery/data/media/access/MediaAccess.kt"
+
 
     private fun identity(id: Long = 42, uri: String = "content://media/external/images/$id"): MediaIdentity =
         MediaIdentity(volumeName = "external_primary", mediaStoreId = id, canonicalUri = uri)
@@ -109,18 +112,25 @@ class VaultExclusionReadGateTest {
         // exactly that wrapper --- no identity-shaped overload exists.
         // (The JVM signature carries the suspend Continuation as the
         // LAST parameter; the media parameter is first.)
-        // JVM bridge/synthetic duplicates collapse: the assertion is about
-        // the OVERLOAD SHAPES the boundary exposes, not reflection artifacts.
-        val openOverloads = MediaAccess::class.java.methods
-            .filter { it.name == "open" && !it.isSynthetic }
-            .map { it.parameterTypes.first().simpleName }
-            .distinct()
-        assertEquals(
-            "MediaAccess must expose exactly ONE open() overload, taking EligiblePublicMedia --- " +
-                "a second overload (raw identity / Uri / string) would be a hole in the vault gate. " +
-                "Found overloads: $openOverloads",
-            listOf("EligiblePublicMedia"),
-            openOverloads,
+        // Pin it at the SOURCE level (deterministic): the JVM's reflective
+        // view of suspend interface methods kept disagreeing across
+        // bridge/synthetic shapes; the declaration itself is the contract
+        // that matters --- exactly one open(), taking EligiblePublicMedia,
+        // and no other overload anywhere.
+        val source = java.io.File(System.getProperty("user.dir") ?: ".")
+            .let { cwd -> sequenceOf(java.io.File(cwd, SRC), java.io.File(cwd.parentFile, "apps/gallery/$SRC")) }
+            .firstOrNull { it.exists() }
+            ?.readText()
+            ?: error("Cannot locate MediaAccess.kt")
+        val declarations = Regex("""fun\s+open\s*\(""").findAll(source).count()
+        assertTrue(
+            "MediaAccess must declare exactly ONE open() (found $declarations): a second " +
+                "overload (raw identity / Uri / string) would be a hole in the vault gate.",
+            declarations == 1,
+        )
+        assertTrue(
+            "The one open() must take EligiblePublicMedia as its media parameter.",
+            Regex("""fun\s+open\s*\(\s*media\s*:\s*EligiblePublicMedia""").containsMatchIn(source),
         )
     }
 

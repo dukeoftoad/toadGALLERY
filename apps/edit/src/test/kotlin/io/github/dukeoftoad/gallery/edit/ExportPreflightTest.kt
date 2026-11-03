@@ -60,7 +60,7 @@ class ExportPreflightTest {
     }
 
     @Test
-    fun `exactly the headroom boundary proceeds; one byte below refuses`() {
+    fun `exactly the headroom boundary proceeds --- one byte below refuses`() {
         // need = est + est/2 = 1_500_000 for est = 1_000_000.
         assertEquals(
             ExportPreflight.Decision.PROCEED,

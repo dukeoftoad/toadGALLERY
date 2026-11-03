@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- r29/r30: the toadGALLERY Edit user-facing strings. Same copy rules as
      the gallery: honest plain language, no dark patterns, no network
-     promises. The editor never narrates success itself --- it answers the
+     promises. The editor never narrates success itself — it answers the
      contract result and the GALLERY narrates (the saved copy appears
      through MediaStore observation). -->
 <resources>
@@ -57,6 +57,13 @@
     <!-- Export sheet -->
     <string name="editor_quality">Quality: %1$d</string>
     <string name="editor_png_lossless">PNG is lossless — no quality control applies.</string>
+
+    <!-- Per-export metadata-policy choice (r31; contract 4.4: the launch
+         request policy is the privacy floor — the sheet may strip
+         more, never less). -->
+    <string name="editor_section_metadata">Metadata for this copy</string>
+    <string name="editor_metadata_floor">The gallery requested at least: %1$s</string>
+    <string name="editor_metadata_note">Applies to the saved copy only — the original is never modified.</string>
 
     <!-- The always-visible metadata honesty line (contract 4.4). -->
     <string name="editor_policy_line">%1$s · saves a copy</string>

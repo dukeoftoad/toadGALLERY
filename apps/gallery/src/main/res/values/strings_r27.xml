@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r27 slice: the MI-style organisational UX round — Places (the
+     offline region buckets), the Moments timeline (the WEEK grain +
+     counted headers), the Stories shelf, the collage creator, and the
+     slideshow. Same copy rules as every round file: honest plain
+     language, escaped apostrophes, and the privacy posture spelled out
+     — the region labels are offline math (zero reverse geocoding),
+     stories and moments derive from the local catalogue, and every
+     render and export is on-device. -->
+<resources>
+
+    <!-- ========================= Places ========================= -->
+
+    <!-- The Albums tab's Places section. -->
+    <string name="albums_places_header">Places</string>
+    <string name="albums_places_see_all">See all</string>
+    <string name="albums_places_consent_off">Places are off — allow location data for photos in Settings to group them by where they were taken.</string>
+    <string name="albums_places_empty">No places yet — photos that carry GPS information appear here as the library is scanned.</string>
+
+    <!-- The Places screen's honest states. -->
+    <string name="places_title">Places</string>
+    <string name="places_state_consent_title">Location access is off</string>
+    <string name="places_state_consent_body">Android hides photo locations from apps until you allow location data. Places are built from those coordinates on this device — nothing is uploaded, and no internet lookup is made.</string>
+    <string name="places_state_consent_action">Open Settings</string>
+    <string name="places_state_empty_title">No places yet</string>
+    <string name="places_state_empty_body">Photos that carry GPS information group into places here as the library is scanned. Labels are coordinate bands — they are computed offline, with no internet and no place-name lookups.</string>
+    <plurals name="places_region_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <plurals name="places_note_pending_locations">
+        <item quantity="one">%1$d photo was scanned while location access was off. It appears here after its next change.</item>
+        <item quantity="other">%1$d photos were scanned while location access was off. They appear here after their next change.</item>
+    </plurals>
+    <string name="cd_place_cover">Cover photo of a place</string>
+
+    <!-- The Place detail screen. -->
+    <string name="place_detail_fallback_title">Place</string>
+    <string name="place_detail_error_title">Couldn\'t load this place</string>
+    <string name="place_detail_empty_title">No photos</string>
+    <string name="place_detail_empty_body">This place\'s photos are no longer in your library.</string>
+
+    <!-- ======================= Moments ======================== -->
+
+    <!-- The Settings "Group by" row's new WEEK option (the Moments round). -->
+    <string name="settings_group_by_week">Week</string>
+
+    <!-- The grouped-timeline headers: the count suffix and the WEEK
+         grain's prefix. -->
+    <string name="moments_week_of">Week starting %1$s</string>
+    <string name="moments_header_with_count">%1$s · %2$s</string>
+    <plurals name="moments_header_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+
+    <!-- ======================== Stories ======================== -->
+
+    <!-- The Stories shelf on the Photos tab. -->
+    <string name="stories_header">Stories</string>
+    <string name="cd_story_cover">Cover photo of a story</string>
+    <plurals name="stories_card_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+
+    <!-- ======================== Slideshow ======================== -->
+
+    <!-- The viewer's slideshow controls (r27). -->
+    <string name="cd_viewer_action_slideshow_start">Start slideshow</string>
+    <string name="cd_viewer_action_slideshow_stop">Stop slideshow</string>
+    <string name="cd_viewer_action_slideshow_interval">Slideshow speed</string>
+    <string name="slideshow_interval_option">%1$d seconds</string>
+
+    <!-- ======================= Collage ======================== -->
+
+    <!-- The collage creator. -->
+    <string name="collage_title">Collage</string>
+    <string name="collage_action_save">Save</string>
+    <string name="collage_picker_label">Layout</string>
+    <string name="cd_collage_action">Create a collage from the selected photos</string>
+    <string name="cd_collage_template">Layout for %1$d photos</string>
+    <string name="collage_empty_title">No photos selected</string>
+    <string name="collage_empty_body">Select 2 to 9 photos on the Photos tab and tap the collage action to lay them out here.</string>
+    <string name="collage_empty_action">Go back</string>
+    <string name="collage_saved">Collage saved to Pictures</string>
+    <string name="collage_save_failed">Couldn\'t save the collage — try again.</string>
+</resources>

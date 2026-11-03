@@ -14,8 +14,9 @@ package io.github.dukeoftoad.gallery.ui.settings
  *    forced to `1f` aspect (see `MediaThumb`'s `forceSquare`), the look of a
  *    classic dense gallery;
  *  - [GroupBy.NONE] is the flat timeline of today; [GroupBy.DAY] /
- *    [GroupBy.MONTH] layer full-line date headers between the cells (the
- *    `TimelineRows` model + the paging grid's header slots).
+ *    [GroupBy.WEEK] (r27) / [GroupBy.MONTH] layer full-line date headers
+ *    between the cells (the `TimelineRows` model + the paging grid's
+ *    header slots).
  *
  * The defaults (COLLAGE / 3 columns / NONE) are the values the app rendered
  * before this slice existed, so a fresh install keeps its render
@@ -44,13 +45,25 @@ enum class LayoutStyle {
     GRID,
 }
 
-/** The timeline's grouping grain (Ente's "Group by" row). */
+/**
+ * The timeline's grouping grain (Ente's "Group by" row).
+ */
 enum class GroupBy {
     /** Flat timeline --- the render shipped with #25/#28. */
     NONE,
 
     /** A full-line header before the first cell of each new day. */
     DAY,
+
+    /**
+     * A full-line header before the first cell of each new ISO-8601
+     * week (r27, the Moments round): the header anchors the week's
+     * Monday, carries the section's item count, and groups the
+     * Sunday-night / Monday-morning boundary the DAY grain splits. The
+     * grouping math lives in the pure `MomentGrouper` (data/moments),
+     * projected onto timeline rows by `buildTimelineRows`.
+     */
+    WEEK,
 
     /** A full-line header before the first cell of each new month. */
     MONTH,

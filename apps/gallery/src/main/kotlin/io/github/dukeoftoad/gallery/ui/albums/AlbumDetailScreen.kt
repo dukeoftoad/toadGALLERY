@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -173,6 +174,13 @@ fun AlbumDetailScreen(
     onBack: () -> Unit,
     settingsViewModel: SettingsViewModel,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
+    /**
+     * r27 (Slideshow): starts a slideshow over the album's materialized
+     * item list --- the shell arms the shared viewer + slideshow and
+     * navigates (the round's "launchable from album surfaces via an
+     * overflow action").
+     */
+    onStartSlideshow: (window: List<MediaItem>) -> Unit = {},
 ) {
     // The Application is process-scoped; capturing it for the ViewModel
     // factory is the standard Android pattern (outlives the composition).
@@ -312,6 +320,25 @@ fun AlbumDetailScreen(
                         }
                     },
                     actions = {
+                        // r27: the slideshow launch, visible only over a
+                        // non-empty Ready list (an action that cannot run is
+                        // a lying control). The run covers the WHOLE album
+                        // --- this surface's list is materialized, unlike
+                        // the paged Photos timeline.
+                        val readyItems = (state as? AlbumDetailState.Ready)?.items
+                        if (readyItems != null && readyItems.isNotEmpty()) {
+                            IconButton(
+                                onClick = { onStartSlideshow(readyItems) },
+                                modifier = Modifier.testTag("album_detail_action_slideshow"),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.PlayArrow,
+                                    contentDescription = stringResource(
+                                        R.string.cd_viewer_action_slideshow_start
+                                    ),
+                                )
+                            }
+                        }
                         // Issue #66: the shared sort menu. Hidden for the
                         // favorites pseudo-bucket --- its detail stays
                         // newest-first in v1 (see AlbumDetailViewModel).

@@ -26,8 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
+import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.settings.GroupBy
 import java.util.Locale
@@ -61,6 +64,14 @@ import java.util.Locale
  * layout interval beyond the current rows degrades to `"row_<index>"`.
  * Headers render with
  * [StaggeredGridItemSpan.FullLine] and the `timeline_header` test tag.
+ *
+ * ## Moment headers (r27): counts + the week grain
+ * Since the Moments round every grouped header also carries its section's
+ * ITEM COUNT (`headerCellCounts` over the same derived rows --- a trailing
+ * section's count honestly grows as Paging appends windows), and WEEK
+ * headers (the new [GroupBy.WEEK] grain) wrap their Monday-anchored date
+ * label in the localized "Week starting …" prefix. The pre-r27 day/month
+ * labels render exactly as before, plus the count suffix.
  *
  * ## Uniform grid mode (appearance settings slice, roadmap Phase 3)
  * [uniformCells] (default `false`) switches every cell to the Ente-style
@@ -125,9 +136,17 @@ fun MediaPagingGrid(
     // snapshot-state backed, so appended windows and refreshes re-run the
     // derivation) and re-derived when the grouping itself or the paging
     // instance changes (see the KDoc --- an unkeyed remember would go stale).
-    val rows = remember(groupBy, items) {
-        derivedStateOf { buildTimelineRows(items.itemSnapshotList, groupBy) }
+    // r27: the header COUNTS ride the SAME derivation (one pass, one
+    // snapshot read --- deriving them separately would double the row
+    // builds per recomposition for no benefit).
+    val grouping = remember(groupBy, items) {
+        derivedStateOf {
+            val built = buildTimelineRows(items.itemSnapshotList, groupBy)
+            built to headerCellCounts(built)
+        }
     }.value
+    val rows = grouping.first
+    val headerCounts = grouping.second
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(columns),
         modifier = modifier.fillMaxSize(),
@@ -168,15 +187,37 @@ fun MediaPagingGrid(
             },
         ) { rowIndex ->
             when (val row = rows.getOrNull(rowIndex)) {
-                is TimelineRow.Header -> Text(
-                    text = formatGroupLabel(row, Locale.getDefault()),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 4.dp, top = 12.dp, bottom = 4.dp)
-                        .testTag("timeline_header"),
-                )
+                is TimelineRow.Header -> {
+                    // r27: the base date label, the WEEK grain's localized
+                    // prefix, and the section's item count (the Moments
+                    // round's "… · 42 items" suffix; the count is absent
+                    // only in the impossible zero-cell degenerate).
+                    val dateLabel = formatGroupLabel(row, Locale.getDefault())
+                    val baseLabel = if (row.isWeek) {
+                        stringResource(R.string.moments_week_of, dateLabel)
+                    } else {
+                        dateLabel
+                    }
+                    val count = headerCounts[row.groupKey] ?: 0
+                    val label = if (count > 0) {
+                        stringResource(
+                            R.string.moments_header_with_count,
+                            baseLabel,
+                            pluralStringResource(R.plurals.moments_header_count, count, count),
+                        )
+                    } else {
+                        baseLabel
+                    }
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 4.dp, top = 12.dp, bottom = 4.dp)
+                            .testTag("timeline_header"),
+                    )
+                }
                 is TimelineRow.Cell -> cellItem(items, row.index)?.let { item ->
                     if (onItemTap != null && onItemLongPress != null) {
                         // Interactive cell: long-press enters selection even in

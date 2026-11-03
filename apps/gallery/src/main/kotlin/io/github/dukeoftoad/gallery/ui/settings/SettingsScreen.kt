@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -158,6 +160,7 @@ import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
  * [SettingsViewModel] under the `peopleAlbumEnabled` key. See
  * `AiEngineViewModel` for the dogfood rows.
  */
+@OptIn(ExperimentalLayoutApi::class) // r27: FlowRow for the four group-by chips
 @Composable
 fun SettingsScreen(
     pickedViewModel: PickedPhotosViewModel,
@@ -295,7 +298,10 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 16.dp),
         )
-        Row(
+        // r27: a FlowRow, not a Row --- the Moments round's WEEK option
+        // makes four chips, which no longer fit one narrow-screen line
+        // (the pre-r27 three did). FlowRow wraps instead of clipping.
+        FlowRow(
             modifier = Modifier.padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -308,6 +314,7 @@ fun SettingsScreen(
                         when (option) {
                             GroupBy.NONE -> "settings_group_by_none"
                             GroupBy.DAY -> "settings_group_by_day"
+                            GroupBy.WEEK -> "settings_group_by_week"
                             GroupBy.MONTH -> "settings_group_by_month"
                         }
                     ),
@@ -1290,5 +1297,6 @@ private val GroupBy.labelRes: Int
     get() = when (this) {
         GroupBy.NONE -> R.string.settings_group_by_none
         GroupBy.DAY -> R.string.settings_group_by_day
+        GroupBy.WEEK -> R.string.settings_group_by_week
         GroupBy.MONTH -> R.string.settings_group_by_month
     }

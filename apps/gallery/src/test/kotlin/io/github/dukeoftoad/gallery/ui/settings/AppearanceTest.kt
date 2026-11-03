@@ -71,6 +71,7 @@ class AppearanceTest {
     fun `parseGroupBy maps known names to their enum values`() {
         assertEquals(GroupBy.NONE, parseGroupBy("NONE"))
         assertEquals(GroupBy.DAY, parseGroupBy("DAY"))
+        assertEquals(GroupBy.WEEK, parseGroupBy("WEEK"))
         assertEquals(GroupBy.MONTH, parseGroupBy("MONTH"))
     }
 

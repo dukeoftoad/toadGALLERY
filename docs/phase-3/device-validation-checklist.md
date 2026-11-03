@@ -566,3 +566,29 @@ decisions behind every row are pinned in `ExportPolicyTest` /
 - [ ] **Distinct failure narrations**: the three failure classes
       (unsupported / storage / I-O) each narrate their own honest
       message through the gallery — never a generic "something failed".
+
+## 21. r32 pass — the editor accessibility sweep (versionCode 4, UNRELEASED)
+
+The r32 hardening round's device half: the code asserts the semantics
+(`contentDescription` + `stateDescription` on every slider); the device
+confirms the ANNOUNCEMENTS, their live updates, and the touch targets.
+
+- [ ] **The adjustment slider announcements**: with TalkBack on, focus
+      each of the 10 adjustment sliders (Exposure … Sharpness) — each
+      must announce its NAME and its live value, and the spoken value
+      must update as the thumb moves (scrub with the volume keys).
+- [ ] **The HSL band rows**: select a band (e.g. Red) — the three rows
+      must announce "Red: Hue" / "Red: Saturation" / "Red: Luminance";
+      switching the band must change the announced prefix.
+- [ ] **The flip chips**: both flip toggles announce their label with
+      the on/off text AND the selected/not-selected state; each touch
+      target is at least 48dp (tap accuracy at the chip edges).
+- [ ] **The straighten live drag**: dragging straighten moves the thumb
+      and updates the preview DURING the drag (not only on release);
+      the label's degree value follows.
+- [ ] **The export quality slider**: announces "Export quality" + the
+      number, updating live as the value changes.
+- [ ] **The crop presets still crop correctly after the pure-inverse
+      refactor**: each preset (1:1, 4:3, 3:4, 16:9, 9:16) produces the
+      expected output aspect on export (the §19 round trip re-run with
+      one preset applied covers this end to end).

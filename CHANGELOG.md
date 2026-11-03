@@ -77,6 +77,20 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[toadGALLERY Edit] The accessibility + hardening pass** (r32 round,
+  riding the r31 exit branch `tg-p6-edit-v1-exit`): every editor slider —
+  the 10 adjustment sliders, straighten, export quality and the three HSL
+  band controls — now announces its NAME and live VALUE to TalkBack
+  (semantics `contentDescription` + `stateDescription`; the HSL rows
+  speak "BAND: CONTROL" so the selected band is always spoken); the flip
+  toggles are proper FilterChips (48dp touch targets, state highlights,
+  selected/not-selected announcements) instead of a text label
+  overflowing an IconButton and a sub-48dp clickable text; the straighten
+  slider follows the drag live (thumb + preview, like every other
+  slider, dropping a wasted per-tick re-render) and displays fractional
+  sidecar values exactly; and the crop presets commit through the new
+  tested pure inverse `CropRect.fromPixelRect` (5 JVM tests). Editor
+  `versionCode 4` (`0.3.1-edit-alpha`).
 - **[toadGALLERY Edit] The Edit v1 exit** (r31 round, the Phase 6
   code-side completion on the r30 core): the **per-export
   metadata-policy choice** — the launch request's policy is the privacy

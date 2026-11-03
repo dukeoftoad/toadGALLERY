@@ -1046,6 +1046,21 @@ the §19 round trip — is checklist-ready and **human-only**; the
 CI-gated merge chain (#104 → #105 → #106) closes the rounds. Editor at
 `versionCode 3` (`0.3.0-edit-alpha`).
 
+**Status (r32): hardened.** The maintainer's follow-up window ran a
+contained hardening round on the same `tg-p6-edit-v1-exit` branch (riding
+PR #106, ledger row #107): the **accessibility sweep** over the whole
+editor surface — every slider (the 10 adjustments, straighten, export
+quality, the three HSL band controls) announces its name + live value via
+`semantics`, the HSL rows speak "BAND: CONTROL", and the flip toggles are
+proper FilterChips with 48dp targets — the **straighten live-drag fix**
+(the thumb and preview follow the drag; the old path burned a per-tick
+re-render for an unchanged preview), and the tested pure
+`CropRect.fromPixelRect` inverse replacing the crop-preset UI's inline
+division. 5 new JVM tests (GeometryTest 19 → 24); editor `versionCode 4`
+(`0.3.1-edit-alpha`); the on-device TalkBack pass rides checklist §21.
+Phase 6 remains code-side complete; the exit still rides the §19/§20/§21
+device rows + the merge chain.
+
 **Purpose:** Ship the first version of the editor APK with the
 adjustment suite and the non-destructive pipeline that all later editor
 phases build on.

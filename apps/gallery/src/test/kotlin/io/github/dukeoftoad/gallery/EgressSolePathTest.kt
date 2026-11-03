@@ -101,7 +101,7 @@ class EgressSolePathTest {
                 "else is an untested network surface; route fetches through HttpModelDownloader " +
                 "(ADR-0020). Found: $found",
             mapOf(
-                "ui/settings/AboutScreen.kt" to "\"https://github.com/dukeoftoad/toadGALLERY\"",
+                "io/github/dukeoftoad/gallery/ui/settings/AboutScreen.kt" to "\"https://github.com/dukeoftoad/toadGALLERY\"",
             ),
             found,
         )
@@ -121,7 +121,7 @@ class EgressSolePathTest {
         assertEquals(
             "java.net types are the network surface: only HttpModelDownloader.kt --- the ADR-0020 " +
                 "single-host, fail-closed transport --- may import them. Found importers: $importers",
-            listOf("ml/engine/HttpModelDownloader.kt"),
+            listOf("io/github/dukeoftoad/gallery/ml/engine/HttpModelDownloader.kt"),
             importers,
         )
     }

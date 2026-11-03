@@ -128,7 +128,7 @@ class EnginePackagingPolicyTest {
         )
         assertTrue(
             "x86_64 must remain the explicit --all opt-in, never a default target.",
-            Regex("\\[ \"\\\$ALL\" -eq 1 \\] && RUST_TARGETS\\+=\\(\x86_64-linux-android\\)").containsMatchIn(script),
+            Regex("\\[ \"\\\$ALL\" -eq 1 \\] && RUST_TARGETS\\+=\\(x86_64-linux-android\\)").containsMatchIn(script),
         )
         assertTrue(
             "cargo-ndk must be invoked with the arm64-v8a target by default.",

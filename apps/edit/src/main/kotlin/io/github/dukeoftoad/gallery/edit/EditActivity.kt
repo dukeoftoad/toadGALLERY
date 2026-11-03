@@ -1040,7 +1040,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // ---- Crop aspect presets (centered fits over the post-geometry frame) ----
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 listOf(
-                    "free" to CropAspect.FREE,
+                    null to CropAspect.FREE, // the ratios are locale-neutral; the word is not (r32)
                     "1:1" to CropAspect.SQUARE,
                     "4:3" to CropAspect.RATIO_4_3,
                     "3:4" to CropAspect.RATIO_3_4,
@@ -1074,7 +1074,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 )
                             }
                         },
-                        label = { Text(label) },
+                        label = {
+                            Text(label ?: stringResource(R.string.editor_crop_free))
+                        },
                         modifier = Modifier.padding(end = 8.dp),
                         enabled = !exporting,
                     )

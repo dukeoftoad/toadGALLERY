@@ -170,7 +170,9 @@ class EditSessionStateTest {
         val session = EditSessionState()
         session.commit(recipe(brightness = 40))
         assertTrue(session.canUndo)
-        assertEquals(recipe(brightness = 40), session.undo())
+        // undo() returns the state undone TO (the identity); the committed
+        // recipe is where redo() goes.
+        assertEquals(EditRecipe(), session.undo())
         assertFalse(session.canUndo)
         assertTrue(session.current.isIdentity)
         assertTrue(session.canRedo)

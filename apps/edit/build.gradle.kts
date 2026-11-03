@@ -58,8 +58,36 @@ android {
         // capped at maxSdkVersion=28 --- MediaStore inserts on API 29+ are
         // own-contribution permissionless; pre-Q devices need the legacy
         // write grant at export time only.
-        versionCode = 1
-        versionName = "0.1.0-edit-alpha"
+        // versionCode 2 (r30 round): the Phase 6 v1 pipeline round --- the
+        // r29 prototype grows into the real editor core: (1) the ADR-0011
+        // NON-DESTRUCTIVE SIDECAR: the whole session is one versioned
+        // EditRecipe (geometry + tone + colour + grade + detail), serialized
+        // JSON in app-private edit-sidecars/ keyed by the SHA-256 of the
+        // source URI (atomic tmp+rename writes, corrupt-file self-heal,
+        // additive-versioned codec --- unknown keys ignored, out-of-range
+        // values clamped, malformed JSON a structured failure), saved on
+        // every committed change, restored on relaunch, cleared on export;
+        // (2) the GEOMETRY TOOLSET (pure, JVM-tested): normalized CropRect
+        // + aspect presets, flips, straighten on an expanded canvas
+        // (bilinear, transparent fill), the quad perspective correction;
+        // (3) the FULL ADJUSTMENT SUITE (pure, JVM-tested): exposure /
+        // brightness / contrast / highlights / shadows as ONE composed
+        // per-channel LUT, saturation + temperature/tint as the full-pixel
+        // stage, eight-band per-channel HSL (cosine-hat band weights),
+        // radial vignette, 3x3 unsharp sharpen --- every zero state skipped
+        // for an EXACT identity; (4) the EditPipeline orchestrator with the
+        // one documented stage order (preview and export agree by
+        // construction); (5) EXPORT CONTROL: JPEG quality slider, PNG,
+        // WebP --- the honest encodable set (the platform Bitmap has no
+        // HEIC encoder; HEIC stays decode-only), format-aware MediaStore
+        // naming; and (6) the
+        // editor surfaces for all of it (geometry row, straighten slider,
+        // crop aspect presets, the ten-slider adjust section, the band
+        // selector + per-band sliders, the export sheet). The pipeline
+        // cores are all in pure Kotlin --- the session, sidecar, pipeline,
+        // geometry and export plans are JVM-tested end to end.
+        versionCode = 2
+        versionName = "0.2.0-edit-alpha"
     }
 
     buildFeatures {
@@ -203,7 +231,11 @@ dependencies {
     // --- Theme resource for the manifest activity ---
     implementation(libs.material)
 
-    // --- JVM tests (the real org.json is NOT needed here; the manifest
-    // conformance test parses XML via javax.xml, on the JDK) ---
+    // --- JVM tests (r30): the REAL org.json for the recipe/sidecar tests
+    // --- android.jar's stub throws "not mocked" on the platform classes;
+    // test classpath ONLY (the release APK ships the platform org.json,
+    // zero new runtime surface). The same convention as the gallery's
+    // r23 org-json note in the version catalog.
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }

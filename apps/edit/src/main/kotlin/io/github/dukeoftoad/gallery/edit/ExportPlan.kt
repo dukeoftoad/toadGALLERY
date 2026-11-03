@@ -9,40 +9,42 @@ import io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy
  *
  *  - the export is an INSERT of a NEW entry --- the source URI is never
  *    opened for write, never updated, never deleted (contract section 4.1;
- *    the prototype has no replace-original path at all);
+ *    there is no replace-original path at all);
  *  - the insert carries IS_PENDING on API 29+ while the bytes are written,
- *    and a FAILED write must CANCEL the pending row --- no partial MediaStore
- *    entry survives (spec test matrix: "no partial files in MediaStore");
- *  - the display name derives from the source name, JPEG extension (the
- *    prototype always exports JPEG q95).
+ *    and a FAILED write must CANCEL the pending row --- no partial
+ *    MediaStore entry survives (spec test matrix);
+ *  - the display name derives from the source name, the extension follows
+ *    the chosen export format;
+ *  - quality applies to the lossy formats (JPEG, WebP);
+ *    PNG is lossless and ignores it.
  */
 object ExportPlan {
 
     /** The export sub-directory under Pictures (API 29+ RELATIVE_PATH). */
     const val RELATIVE_DIR: String = "Pictures/toadGALLERY Edit"
 
-    /** The prototype's fixed export format. */
-    const val EXPORT_MIME: String = "image/jpeg"
-    const val JPEG_QUALITY: Int = 95
+    /** The v1 default (the r29 default carried forward): JPEG at quality 95. */
+    val DEFAULT_FORMAT: ExportFormat = ExportFormat.JPEG
+    const val DEFAULT_QUALITY: Int = 95
 
     /** The pending-state flag values mirrored from MediaStore for JVM tests. */
     const val IS_PENDING_TRUE: Int = 1
     const val IS_PENDING_FALSE: Int = 0
 
     /**
-     * Derives the saved-copy display name from the source display name:
-     * extension replaced with .jpg and an "-edit" suffix, stripped of
-     * path separators and control characters. `null` source (provider gave
-     * no name) falls back to a stable generic name.
+     * Derives the saved-copy display name from the source display name and
+     * the chosen format: extension replaced, an "-edit" suffix added,
+     * path separators and control characters stripped. `null` source falls
+     * back to a stable generic name.
      */
-    fun displayNameFor(sourceDisplayName: String?): String {
+    fun displayNameFor(sourceDisplayName: String?, format: ExportFormat): String {
         val base = (sourceDisplayName ?: "image")
             .substringAfterLast('/')
             .replace(Regex("[\\p{Cntrl}\\\\/:*?\"<>|]"), "")
             .trim()
             .ifEmpty { "image" }
             .substringBeforeLast('.')
-        return "$base-edit.jpg"
+        return "$base-edit.${format.extension}"
     }
 
     /**
@@ -52,11 +54,12 @@ object ExportPlan {
      */
     fun insertValues(
         displayName: String,
+        format: ExportFormat,
         api29Plus: Boolean,
     ): Map<String, Any> {
         val values = linkedMapOf<String, Any>(
             "_display_name" to displayName,
-            "mime_type" to EXPORT_MIME,
+            "mime_type" to format.mimeType,
         )
         if (api29Plus) {
             values["relative_path"] = RELATIVE_DIR
@@ -76,10 +79,9 @@ object ExportPlan {
     /**
      * Failure-recovery decision (pure): a failed export must cancel the
      * pending row when one exists (API 29+), and must NOT attempt any
-     * cleanup on pre-Q (an insert there is visible immediately; the row is
-     * the user's to delete and a failed pre-Q stream leaves a 0-byte file
-     * the gallery's trash flow handles --- deleting another app-visible row
-     * from the editor would need permissions the editor refuses to hold).
+     * cleanup on pre-Q (an insert there is visible immediately; deleting
+     * another app-visible row would need permissions the editor refuses
+     * to hold --- the row is the user's to remove).
      */
     fun failureRecovery(api29Plus: Boolean): Recovery = if (api29Plus) Recovery.CANCEL_PENDING_ROW else Recovery.LEAVE_ROW
 

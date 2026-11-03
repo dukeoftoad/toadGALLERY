@@ -117,7 +117,8 @@ class VaultExclusionReadGateTest {
             .distinct()
         assertEquals(
             "MediaAccess must expose exactly ONE open() overload, taking EligiblePublicMedia --- " +
-                "a second overload (raw identity / Uri / string) would be a hole in the vault gate.",
+                "a second overload (raw identity / Uri / string) would be a hole in the vault gate. " +
+                "Found overloads: $openOverloads",
             listOf("EligiblePublicMedia"),
             openOverloads,
         )

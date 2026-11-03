@@ -58,7 +58,7 @@ private const val COLLAGE_BASE_NAME = "Collage.jpg"
  * gray stand-in). One decode pipeline serves BOTH the on-screen preview
  * and the export (see `CollageViewModel`'s KDoc).
  */
-internal fun decodeCollageBitmaps(
+internal suspend fun decodeCollageBitmaps(
     app: Application,
     photos: List<MediaItem>,
 ): List<Bitmap?> = photos.map { photo ->

@@ -17,6 +17,11 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  # 2026-11-03 (orchestrator): dispatch added after pull_request event
+  # delivery stalled (~04:03Z) while workflow_dispatch kept working ---
+  # every PR head stays verifiable on demand: dispatch this workflow at
+  # the head's ref, then gate the merge on that run's conclusion.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

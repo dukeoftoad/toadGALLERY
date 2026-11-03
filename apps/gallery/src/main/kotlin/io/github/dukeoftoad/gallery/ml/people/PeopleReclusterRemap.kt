@@ -1,5 +1,7 @@
 package io.github.dukeoftoad.gallery.ml.people
 
+import java.util.TreeSet
+
 /**
  * The r26 edit-preserving reclustering overlay (the People follow-ups
  * round): the PURE planner that keeps user edits alive across the face

@@ -2,6 +2,7 @@ package io.github.dukeoftoad.gallery.edit
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -87,6 +88,58 @@ class GeometryTest {
         assertEquals(40, fitted.width)
         assertEquals((40 * 9 / 16.0).toInt(), fitted.height) // 22.5 -> 22
         assertEquals(16.0 / 9.0, fitted.width.toDouble() / fitted.height, 0.05)
+    }
+
+    // ---- CropRect.fromPixelRect (r32) ----
+
+    @Test
+    fun `fromPixelRect is the exact inverse of toPixels`() {
+        val normalized = CropRect.fromPixelRect(PixelRect(1, 1, 3, 3), 4, 4)
+        assertEquals(CropRect(0.25, 0.25, 0.75, 0.75), normalized)
+        // The exact round trip: pixels -> normalized -> the same pixels.
+        assertEquals(PixelRect(1, 1, 3, 3), normalized.toPixels(4, 4))
+    }
+
+    @Test
+    fun `the full frame normalizes to the identity crop`() {
+        assertEquals(
+            CropRect(0.0, 0.0, 1.0, 1.0),
+            CropRect.fromPixelRect(PixelRect(0, 0, 40, 30), 40, 30),
+        )
+    }
+
+    @Test
+    fun `the round trip never expands the crop`() {
+        // toPixels rounds inward (or exactly); converting back can only
+        // move each edge by less than one pixel's worth of normalization.
+        val original = CropRect(0.3, 0.2, 0.83, 0.91).normalized()
+        val roundTrip = CropRect.fromPixelRect(original.toPixels(320, 240), 320, 240)
+        assertTrue(roundTrip.left >= original.left - 1.0 / 320)
+        assertTrue(roundTrip.top >= original.top - 1.0 / 240)
+        assertTrue(roundTrip.right <= original.right + 1.0 / 320)
+        assertTrue(roundTrip.bottom <= original.bottom + 1.0 / 240)
+    }
+
+    @Test
+    fun `a preset fit survives the recipe round trip`() {
+        // The crop-preset path: fit a 16:9 rect inside a 40x30 frame, take
+        // it to normalized (what the sidecar recipe stores), bring it back
+        // (what the pipeline crops) --- the pixel rect is stable.
+        val fitted = CropAspect.RATIO_16_9.fit(PixelRect(0, 0, 40, 30), 40, 30)
+        val normalized = CropRect.fromPixelRect(fitted, 40, 30)
+        val back = normalized.toPixels(40, 30)
+        assertEquals(fitted.width, back.width)
+        assertEquals(fitted.height, back.height)
+    }
+
+    @Test
+    fun `non-positive frames are rejected`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            CropRect.fromPixelRect(PixelRect(0, 0, 1, 1), 0, 30)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            CropRect.fromPixelRect(PixelRect(0, 0, 1, 1), 40, 0)
+        }
     }
 
     // ---- Flip ----

@@ -30,6 +30,18 @@ data class RawResult(
     val metadataPolicyApplied: String?,
 )
 
+/**
+ * The contract section 5 honesty-UI triggers (additive r31) over the
+ * applied-policy echo: the gallery narrates WHAT was stripped, never a
+ * bare "saved". A `null` applied policy (a pre-r29 editor) makes no claim
+ * at all --- both triggers are false and the narration stays generic.
+ */
+val EditOutcome.SavedCopy.stripsAllMetadata: Boolean
+    get() = metadataPolicyApplied == MetadataPolicy.STRIP_ALL
+
+val EditOutcome.SavedCopy.removesLocation: Boolean
+    get() = stripsAllMetadata || metadataPolicyApplied == MetadataPolicy.STRIP_LOCATION
+
 object EditResultParser {
 
     fun parse(result: RawResult): EditOutcome {

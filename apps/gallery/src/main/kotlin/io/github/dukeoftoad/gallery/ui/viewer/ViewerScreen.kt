@@ -105,6 +105,8 @@ import io.github.dukeoftoad.gallery.data.RenameCheck
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
 import io.github.dukeoftoad.gallery.edit.contract.EditOutcome
+import io.github.dukeoftoad.gallery.edit.contract.removesLocation
+import io.github.dukeoftoad.gallery.edit.contract.stripsAllMetadata
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
@@ -279,8 +281,17 @@ fun ViewerScreen(
     ) { result ->
         when (val outcome = parseEditResult(result.resultCode, result.data)) {
             is EditOutcome.SavedCopy -> scope.launch {
+                // The r31 honesty narration: the echo says WHAT was stripped
+                // (contract section 5) --- never a bare "saved" when the
+                // copy's metadata was reduced.
                 snackbarHostState.showSnackbar(
-                    context.getString(R.string.viewer_edit_saved),
+                    context.getString(
+                        when {
+                            outcome.stripsAllMetadata -> R.string.viewer_edit_saved_stripped
+                            outcome.removesLocation -> R.string.viewer_edit_saved_location
+                            else -> R.string.viewer_edit_saved
+                        },
+                    ),
                 )
             }
             is EditOutcome.Canceled -> Unit // nothing was modified anywhere

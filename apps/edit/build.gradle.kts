@@ -86,8 +86,14 @@ android {
         // selector + per-band sliders, the export sheet). The pipeline
         // cores are all in pure Kotlin --- the session, sidecar, pipeline,
         // geometry and export plans are JVM-tested end to end.
-        versionCode = 2
-        versionName = "0.2.0-edit-alpha"
+        // versionCode 3 (r31 round): the Phase 6 exit round --- the
+        // per-export metadata-policy choice (the launch request's policy as
+        // the privacy floor; the sheet may strip more, never less) and the
+        // export preflight (the 48 MP decode guard, the 1.5x-headroom
+        // storage check, the documented process-death policy). The on-device
+        // half rides the device checklist section 20.
+        versionCode = 3
+        versionName = "0.3.0-edit-alpha"
     }
 
     buildFeatures {

@@ -6,7 +6,6 @@ import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.fail
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -237,7 +236,7 @@ class FaceIndexQueueVaultExclusionTest {
         val outcome = FaceIndexQueueProcessor(engine, Dispatchers.Unconfined).processBatch(
             plan = plan,
             stateStore = store,
-            readBytes = { fail("no bytes may be read: the plan indexes nothing (vault exclusion at enqueue)") },
+            readBytes = { error("no bytes may be read: the plan indexes nothing (vault exclusion at enqueue)") },
             nowMillis = { 11_000L },
         )
 

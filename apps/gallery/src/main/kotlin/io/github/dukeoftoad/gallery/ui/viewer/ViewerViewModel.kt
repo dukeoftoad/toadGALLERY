@@ -61,4 +61,52 @@ class ViewerViewModel : ViewModel() {
         if (index < 0) return
         _window.value = current.withoutPageAt(index)
     }
+
+    // ---- Slideshow (r27, the MI-style organisational UX round) ----
+
+    /**
+     * Whether the viewer's slideshow auto-advance is running. Shell-scoped
+     * ON PURPOSE: the Stories shelf and the grid/album overflow actions
+     * launch the viewer WITH the slideshow armed (they call [open] then
+     * [startSlideshow] before navigating), so the flag must live where
+     * the LAUNCHERS can reach it --- the same reason the window itself is
+     * shell-scoped.
+     *
+     * Lifecycle: the screen STOPS the slideshow on dispose (leaving the
+     * viewer always ends a run --- a later plain grid tap re-enters with
+     * the flag honestly off), and [open] itself does not touch it, so an
+     * armed launch survives the navigate() frame between the two calls.
+     */
+    private val _slideshowActive = MutableStateFlow(false)
+
+    /** Whether the slideshow is running; see the property KDoc. */
+    val slideshowActive: StateFlow<Boolean> = _slideshowActive.asStateFlow()
+
+    /**
+     * The auto-advance interval, one of [SlideshowTiming.INTERVALS_MILLIS]
+     * (coerced on every write). Shell-scoped with the active flag so a
+     * Stories launch and a manual launch share the user's last choice in
+     * one session; per-session only --- persisting it is a Settings-round
+     * concern, not this round's.
+     */
+    private val _slideshowIntervalMillis =
+        MutableStateFlow(SlideshowTiming.DEFAULT_INTERVAL_MILLIS)
+
+    /** The slideshow's auto-advance interval in milliseconds. */
+    val slideshowIntervalMillis: StateFlow<Long> = _slideshowIntervalMillis.asStateFlow()
+
+    /** Arms (or re-arms) the slideshow's auto-advance. */
+    fun startSlideshow() {
+        _slideshowActive.value = true
+    }
+
+    /** Stops the slideshow's auto-advance (the screen's stop action + dispose). */
+    fun stopSlideshow() {
+        _slideshowActive.value = false
+    }
+
+    /** Sets the interval, snapped to the catalog by [SlideshowTiming.coerceInterval]. */
+    fun setSlideshowInterval(millis: Long) {
+        _slideshowIntervalMillis.value = SlideshowTiming.coerceInterval(millis)
+    }
 }

@@ -1,0 +1,16 @@
+<!-- r27: the collage creator's action glyph (the selection bar's icon
+     action, the ic_vault pattern). A 2x2 grid of rounded cells --- the
+     feature's simplest template, drawn as four plain rects so the shape
+     reads at 24dp. Material's own grid icon is extended-set (this repo
+     depends on material-icons-core only), so the vector is hand-drawn in
+     the same 24dp viewport every core icon uses. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,4h7v7h-7z M13,4h7v7h-7z M4,13h7v7h-7z M13,13h7v7h-7z" />
+</vector>

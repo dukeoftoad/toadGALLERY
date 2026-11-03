@@ -1,6 +1,8 @@
 package io.github.dukeoftoad.gallery.ui.media
 
 import io.github.dukeoftoad.gallery.data.MediaItem
+import io.github.dukeoftoad.gallery.data.moments.MomentGrouper
+import io.github.dukeoftoad.gallery.data.moments.MomentGranularity
 import io.github.dukeoftoad.gallery.ui.settings.GroupBy
 import java.time.Instant
 import java.time.LocalDate
@@ -19,18 +21,31 @@ import java.util.Locale
  * slot by its `uri` and hand selection/tap code the same snapshot position
  * it always used. That indirection is what lets headers interleave with the
  * paging windows without touching any call site's window math.
+ *
+ * Since r27 (the Moments timeline round) a header also carries [isWeek]:
+ * `true` for the WEEK grain's ISO-week groups ("Week starting …"),
+ * `false` for the pre-r27 day/month groups. Defaulted so every existing
+ * constructor call site and equality assertion stays source- and
+ * behavior-identical.
  */
 sealed interface TimelineRow {
 
     /**
      * A full-line group header rendered before the first cell of a new
      * group. [groupKey] is the stable LazyLayout key suffix (`"d<epochDay>"`
-     * for days, `"m<year>-<month>"` for months); [epochDay] doubles as the
-     * label date (the month's first day for [isMonth] groups, the day
-     * itself otherwise); [isMonth] picks the label pattern in
-     * [formatGroupLabel].
+     * for days, `"m<year>-<month>"` for months, `"w<year>-<week>"` for
+     * ISO weeks since r27); [epochDay] doubles as the label date (the
+     * month's first day for [isMonth] groups, the week's MONDAY for
+     * [isWeek] groups, the day itself otherwise); [isMonth] picks the
+     * label pattern in [formatGroupLabel].
      */
-    data class Header(val groupKey: String, val epochDay: Long, val isMonth: Boolean) : TimelineRow
+    data class Header(
+        val groupKey: String,
+        val epochDay: Long,
+        val isMonth: Boolean,
+        /** Whether this header labels an ISO-week group (r27, Moments). */
+        val isWeek: Boolean = false,
+    ) : TimelineRow
 
     /** One media cell: [index] into the paging snapshot (see the file KDoc). */
     data class Cell(val index: Int) : TimelineRow
@@ -51,6 +66,12 @@ sealed interface TimelineRow {
  *  - [GroupBy.MONTH]: the same with [YearMonth] groups; the header's
  *    [TimelineRow.Header.epochDay] is the month's FIRST day
  *    (`groupKey = "m<year>-<month>"`, unpadded month).
+ *  - [GroupBy.WEEK] (r27, the Moments round): the same with ISO-8601 week
+ *    groups --- a thin projection of the pure [MomentGrouper]'s WEEK
+ *    output (`groupKey = "w<weekBasedYear>-<week>"`, anchor = the week's
+ *    Monday, [TimelineRow.Header.isWeek] = true). A Sunday-night photo and
+ *    the Monday-morning photo after it share ONE header; a photo from the
+ *    PREVIOUS Sunday starts a new one.
  *
  * ## The effective instant (r13)
  * [effectiveDateMillisOf] returns the instant that orders and groups the
@@ -132,6 +153,33 @@ fun <T> buildTimelineRows(
                 rows.add(TimelineRow.Cell(index))
             }
         }
+        GroupBy.WEEK -> {
+            // r27 (the Moments round): a thin projection of the pure
+            // MomentGrouper's WEEK output onto rows --- the grouping math
+            // (ISO weeks, week-based-year keys, Monday anchors) lives in
+            // the pure, JVM-tested engine, and this branch only maps its
+            // sections to Header/Cell pairs. The DAY/MONTH branches above
+            // keep their own streaming implementations untouched (their
+            // behavior is pinned by the pre-r27 tests; the grouper's DAY
+            // mode is pinned to AGREE with the DAY branch by
+            // MomentGrouperTest's equivalence tests).
+            for (section in MomentGrouper.group(
+                items,
+                effectiveDateMillisOf,
+                MomentGranularity.WEEK,
+                zone,
+            )) {
+                rows.add(
+                    TimelineRow.Header(
+                        groupKey = section.groupKey,
+                        epochDay = section.anchorEpochDay,
+                        isMonth = false,
+                        isWeek = true,
+                    )
+                )
+                section.memberIndexes.forEach { rows.add(TimelineRow.Cell(it)) }
+            }
+        }
     }
     return rows
 }
@@ -193,9 +241,53 @@ fun <T> timelineCellKey(
  * localized by [locale], matching the rest of the app's date presentation;
  * [TimelineRow.Header.epochDay] is the date being labeled (a month group
  * labels its first day, whose month is the group).
+ *
+ * WEEK headers (r27) label their Monday with the same "d MMMM yyyy"
+ * pattern; the grid wraps that label in the localized "Week starting %s"
+ * prefix (`moments_week_of`) --- the pure function stays pattern-only and
+ * the localized PROSE lives in the string resource, the same split the
+ * plurals use.
  */
 fun formatGroupLabel(header: TimelineRow.Header, locale: Locale): String {
     val pattern = if (header.isMonth) "MMMM yyyy" else "d MMMM yyyy"
     return LocalDate.ofEpochDay(header.epochDay)
         .format(DateTimeFormatter.ofPattern(pattern, locale))
+}
+
+/**
+ * The moment sections' header COUNTS (r27, the Moments round): how many
+ * cells follow each header before the next header (or the end of the
+ * rows) --- the "March 2026 · 42 items" suffix the grouped timeline
+ * renders. A pure post-pass over the built row list: [buildTimelineRows]
+ * streams headers before it can know their sizes, so the count is
+ * measured afterwards, exactly once, deterministically.
+ *
+ * Returns a [groupKey] -> count map covering EVERY header in [rows]
+ * (headers always have at least one following cell by construction, but
+ * the map answers 0 rather than being absent for a degenerate tail).
+ * The grid derives this alongside its rows (same `derivedStateOf`, see
+ * `MediaPagingGrid`); because the rows recompute as Paging appends
+ * windows, a trailing header's count honestly GROWS with each window ---
+ * the same reactivity the rows themselves have.
+ */
+fun headerCellCounts(rows: List<TimelineRow>): Map<String, Int> {
+    if (rows.isEmpty()) return emptyMap()
+    val counts = LinkedHashMap<String, Int>(rows.size / 8)
+    var openKey: String? = null
+    for (row in rows) {
+        when (row) {
+            is TimelineRow.Header -> {
+                openKey = row.groupKey
+                // A repeated key (impossible from buildTimelineRows, which
+                // emits a header only on CHANGE) would need care; putIfAbsent
+                // semantics via the explicit contains check keep the FIRST
+                // header's count the authoritative one either way.
+                if (!counts.containsKey(row.groupKey)) counts[row.groupKey] = 0
+            }
+            is TimelineRow.Cell -> openKey?.let { key ->
+                counts[key] = (counts[key] ?: 0) + 1
+            }
+        }
+    }
+    return counts
 }

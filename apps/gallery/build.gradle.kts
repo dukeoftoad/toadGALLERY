@@ -257,7 +257,28 @@ android {
         // the device. Per maintainer directive: NO new device builds
         // until Phase 5 completes; this and subsequent rounds ride CI
         // from main only.
-        versionCode = 31
+        // versionCode 32 (r27 round): the MI organisational UX round ---
+        // five product surfaces over the existing catalogue, zero new
+        // permissions and zero engine changes: Places (the offline coarse
+        // region buckets over the Room GPS coordinates: the pure 12x6
+        // PlacesRegionGrid + band labels with ZERO reverse geocoding, the
+        // PlacesScreen / PlaceDetailScreen sub-pages, the Albums-tab
+        // Places section, the pure PlacesContentPolicy consent/empty/
+        // ready states over the r14 display gate), Moments (the WEEK
+        // grain of the grouped timeline over the pure MomentGrouper's
+        // ISO-week output, the counted headers via headerCellCounts, the
+        // FlowRow group-by setting), Stories (the StoriesShelf of recent
+        // 36h-gap time clusters the pure StorySets engine derives from
+        // the paging snapshot, playback through the existing viewer), the
+        // collage creator (the 2..9-photo template catalogue + render
+        // math in the pure CollageLayouts, the Compose preview and the
+        // Q+ MediaStore exporter through the file-ops naming/pending-row
+        // discipline), and the slideshow (the pure SlideshowTiming +
+        // ViewerCrossfade cores, the shell-scoped armed launch, the
+        // in-session interval choice). Per maintainer directive: NO new
+        // device builds until Phase 5 completes; this and subsequent
+        // rounds ride CI from main only.
+        versionCode = 32
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

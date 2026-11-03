@@ -2,7 +2,7 @@
 <!-- r29 (Issue #14 gate): the toadGALLERY Edit prototype's user-facing
      strings. Same copy rules as the gallery: honest plain language, no
      dark patterns, no network promises. The editor never narrates success
-     itself --- it answers the contract result and the GALLERY narrates
+     itself — it answers the contract result and the GALLERY narrates
      (the saved copy appears through MediaStore observation). -->
 <resources>
 

@@ -233,8 +233,8 @@ class ExportPlanTest {
             ExportPlan.displayNameFor("photo.jpeg", ExportFormat.PNG),
         )
         assertEquals(
-            "IMG_2024-edit.heic",
-            ExportPlan.displayNameFor("IMG_2024", ExportFormat.HEIC), // no extension
+            "IMG_2024-edit.webp",
+            ExportPlan.displayNameFor("IMG_2024", ExportFormat.WEBP), // forced extension
         )
     }
 
@@ -256,8 +256,8 @@ class ExportPlanTest {
         assertEquals("image/jpeg", values["mime_type"])
         assertEquals("Pictures/toadGALLERY Edit", values["relative_path"])
         assertEquals(ExportPlan.IS_PENDING_TRUE, values["is_pending"])
-        val heic = ExportPlan.insertValues("a-edit.heic", ExportFormat.HEIC, api29Plus = true)
-        assertEquals("image/heic", heic["mime_type"])
+        val webp = ExportPlan.insertValues("a-edit.webp", ExportFormat.WEBP, api29Plus = true)
+        assertEquals("image/webp", webp["mime_type"])
         val finalize = ExportPlan.finalizeValues(api29Plus = true)
         assertEquals(ExportPlan.IS_PENDING_FALSE, finalize["is_pending"])
     }

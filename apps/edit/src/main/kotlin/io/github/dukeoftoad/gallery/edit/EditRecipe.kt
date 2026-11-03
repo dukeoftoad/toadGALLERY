@@ -264,12 +264,15 @@ class EditRecipeStore(private val dir: File) {
 
 /**
  * The export-time choices (NOT part of the recipe --- the recipe is the
- * edit state; format/quality are per-export decisions).
+ * edit state; format/quality are per-export decisions). JPEG, PNG and
+ * WebP only: the platform Bitmap has NO HEIC encoder (HEIC is decode-only
+ * in this app's manifest filter), so offering it would be a lie --- the
+ * honest set is what the encoder can actually write.
  */
-enum class ExportFormat(val mimeType: String, val extension: String, val minSdk: Int) {
-    JPEG("image/jpeg", "jpg", 26),
-    PNG("image/png", "png", 26),
-    HEIC("image/heic", "heic", 28);
+enum class ExportFormat(val mimeType: String, val extension: String) {
+    JPEG("image/jpeg", "jpg"),
+    PNG("image/png", "png"),
+    WEBP("image/webp", "webp");
 
     companion object {
         fun fromWire(value: String?): ExportFormat? = entries.firstOrNull { it.name == value }
@@ -280,7 +283,7 @@ enum class ExportFormat(val mimeType: String, val extension: String, val minSdk:
 data class ExportRequest(
     val recipe: EditRecipe,
     val format: ExportFormat,
-    /** JPEG quality 1..100 (ignored by PNG; HEIC uses it where the encoder honors it). */
+    /** JPEG/WebP quality 1..100 (PNG ignores it --- lossless). */
     val quality: Int,
     val metadataPolicy: MetadataPolicy,
 ) {

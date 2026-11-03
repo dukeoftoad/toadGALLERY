@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -91,7 +92,7 @@ import kotlinx.coroutines.withContext
  *     [EditPipeline] over a bounded decode; every stage's zero state is
  *     skipped exactly. The sidecar is saved on every commit.
  *  4. EXPORT (Save copy): full-resolution decode -> [EditPipeline] ->
- *     compress (JPEG quality / PNG lossless / HEIC where the device
+ *     compress (JPEG quality / PNG lossless / WebP; the honest set
  *     encoder supports it, honest JPEG fallback otherwise) -> MediaStore
  *     INSERT of a NEW row (IS_PENDING on Q+, cancelled on failure --- no
  *     partial entry) -> EXIF metadata policy applied exactly ->
@@ -284,14 +285,8 @@ class EditActivity : ComponentActivity() {
         val api29Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         val sourceUri = request.sourceUri
         var outputUri: Uri? = null
-        var format = export.format
+        val format = export.format
         try {
-            // HEIC honestly falls back when the device cannot encode it.
-            if (format == ExportFormat.HEIC &&
-                (Build.VERSION.SDK_INT < ExportFormat.HEIC.minSdk || !deviceHasHeicEncoder())
-            ) {
-                format = ExportPlan.heicFallback()
-            }
 
             // 1. Full-resolution decode.
             val source = decodeBitmap(sourceUri, Int.MAX_VALUE)
@@ -332,16 +327,10 @@ class EditActivity : ComponentActivity() {
             outputUri = inserted
 
             // 4. Compress into the pending row (quality: lossy formats only).
-            // The HEIC fallback above guarantees SDK >= 28 on the HEIF arm;
-            // the explicit SDK guard keeps the NewApi lint check satisfied.
             val compressFormat = when (format) {
                 ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
                 ExportFormat.PNG -> Bitmap.CompressFormat.PNG
-                ExportFormat.HEIC -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    Bitmap.CompressFormat.HEIF
-                } else {
-                    Bitmap.CompressFormat.JPEG
-                }
+                ExportFormat.WEBP -> Bitmap.CompressFormat.WEBP
             }
             val effectiveQuality = if (format == ExportFormat.PNG) 100 else export.quality
             contentResolver.openOutputStream(inserted)?.use { out ->
@@ -399,18 +388,6 @@ class EditActivity : ComponentActivity() {
                 finishWithError(EditContract.ERROR_INTERNAL, e.message ?: "unexpected export failure")
             }
         }
-    }
-
-    /** The HEIC encoder probe (API 28+; MediaCodecList has no I/O side effects). */
-    private fun deviceHasHeicEncoder(): Boolean = try {
-        android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
-            .codecInfos.any { info ->
-                info.isEncoder && info.supportedTypes.any {
-                    it.equals("image/vnd.android.heic", ignoreCase = true)
-                }
-            }
-    } catch (_: RuntimeException) {
-        false
     }
 
     /** Cancels a pending row on Q+ so no partial entry survives a failed write. */
@@ -549,6 +526,7 @@ private fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = whe
     else -> copy(magenta = band)
 }
 
+@OptIn(ExperimentalMaterial3Api::class) // FilterChip in the export sheet
 @Composable
 private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     val policy = activity.request.metadataPolicy
@@ -784,20 +762,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             ) {
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     ExportFormat.entries.forEach { format ->
-                        val sdkOk = Build.VERSION.SDK_INT >= format.minSdk
                         FilterChip(
                             selected = choice.format == format,
                             onClick = { exportChoice = choice.copy(format = format) },
-                            enabled = sdkOk && !exporting,
-                            label = {
-                                Text(
-                                    if (sdkOk) {
-                                        format.name
-                                    } else {
-                                        stringResource(R.string.editor_format_unavailable, format.name)
-                                    },
-                                )
-                            },
+                            enabled = !exporting,
+                            label = { Text(format.name) },
                             modifier = Modifier.padding(end = 8.dp),
                         )
                     }

@@ -172,17 +172,13 @@ class EditRecipeTest {
     fun `export formats carry their wire names, mimes and min sdks`() {
         assertEquals("image/jpeg", ExportFormat.JPEG.mimeType)
         assertEquals("image/png", ExportFormat.PNG.mimeType)
-        assertEquals("image/heic", ExportFormat.HEIC.mimeType)
-        assertEquals(28, ExportFormat.HEIC.minSdk)
+        assertEquals("image/webp", ExportFormat.WEBP.mimeType)
+        assertEquals("webp", ExportFormat.WEBP.extension)
         assertEquals(ExportFormat.JPEG, ExportFormat.fromWire("JPEG"))
         assertNull(ExportFormat.fromWire("WEBP"))
         assertNull(ExportFormat.fromWire(null))
     }
 
-    @Test
-    fun `the heic fallback is jpeg`() {
-        assertEquals(ExportFormat.JPEG, ExportPlan.heicFallback())
-    }
 
     @Test(expected = IllegalArgumentException::class)
     fun `an export quality outside 1..100 is rejected`() {

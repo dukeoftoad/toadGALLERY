@@ -51,14 +51,37 @@ class EditManifestConformanceTest {
                     "true",
                     activity.attributes.getNamedItem("android:exported").nodeValue,
                 )
-                val text = activity.textContent
+                // The filter's action/category live in the CHILD ELEMENTS'
+                // attributes --- textContent is whitespace-only here.
+                val filters = activity.getElementsByTagName("intent-filter")
+                var hasAction = false
+                var hasDefault = false
+                for (j in 0 until filters.length) {
+                    val children = filters.item(j).childNodes
+                    for (k in 0 until children.length) {
+                        val node = children.item(k)
+                        if (node !is org.w3c.dom.Element) continue
+                        when (node.nodeName) {
+                            "action" ->
+                                if (node.getAttribute("android:name") == EditContract.ACTION_EDIT) {
+                                    hasAction = true
+                                }
+                            "category" ->
+                                if (node.getAttribute("android:name") ==
+                                    "android.intent.category.DEFAULT"
+                                ) {
+                                    hasDefault = true
+                                }
+                        }
+                    }
+                }
                 assertTrue(
                     "the activity must carry the contract intent-filter action",
-                    text.contains(EditContract.ACTION_EDIT),
+                    hasAction,
                 )
                 assertTrue(
                     "the intent-filter must keep the DEFAULT category",
-                    text.contains("android.intent.category.DEFAULT"),
+                    hasDefault,
                 )
             }
         }

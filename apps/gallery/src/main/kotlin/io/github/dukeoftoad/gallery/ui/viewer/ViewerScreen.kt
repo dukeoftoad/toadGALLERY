@@ -104,6 +104,7 @@ import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.RenameCheck
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
+import io.github.dukeoftoad.gallery.edit.contract.EditOutcome
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel

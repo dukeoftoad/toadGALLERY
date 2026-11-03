@@ -1,6 +1,5 @@
 package io.github.dukeoftoad.gallery.ui
 
-import io.github.dukeoftoad.gallery.edit.contract.EditContract
 import io.github.dukeoftoad.gallery.ui.viewer.EditorCandidate
 import io.github.dukeoftoad.gallery.ui.viewer.EditorResolution
 import io.github.dukeoftoad.gallery.ui.viewer.EditorResolver

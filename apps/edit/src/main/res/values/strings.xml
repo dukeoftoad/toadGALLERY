@@ -18,7 +18,28 @@
     <string name="editor_preview">Edited preview of the photo</string>
     <string name="editor_brightness">Brightness: %1$d</string>
     <string name="editor_contrast">Contrast: %1$d</string>
+    <string name="editor_exposure">Exposure: %1$d</string>
+    <string name="editor_highlights">Highlights: %1$d</string>
+    <string name="editor_shadows">Shadows: %1$d</string>
+    <string name="editor_saturation">Saturation: %1$d</string>
+    <string name="editor_temperature">Temperature: %1$d</string>
+    <string name="editor_tint">Tint: %1$d</string>
+    <string name="editor_vignette">Vignette: %1$d</string>
+    <string name="editor_sharpness">Sharpness: %1$d</string>
     <string name="editor_rotate_left">Rotate left</string>
+    <string name="editor_flip_h">Flip horizontal</string>
+    <string name="editor_flip_h_on">Undo horizontal flip</string>
+    <string name="editor_flip_v">Flip vertical</string>
+    <string name="editor_flip_v_on">Undo vertical flip</string>
+
+    <!-- The export dialog (r30): format + quality. -->
+    <string name="editor_export_title">Save a copy</string>
+    <string name="editor_export_format">Format</string>
+    <string name="editor_export_follow_source">Follow source (%1$s)</string>
+    <string name="editor_export_quality">Quality: %1$d</string>
+    <string name="editor_export_png_lossless">PNG is lossless — quality doesn’t apply.</string>
+    <string name="editor_export_heic_note">HEIC sources save as JPEG (the platform has no HEIC encoder); nothing is silently recompressed to a worse format than you pick here.</string>
+    <string name="editor_export_cancel">Cancel</string>
 
     <!-- The always-visible metadata honesty line (contract 4.4). -->
     <string name="editor_policy_line">%1$s · saves a copy</string>

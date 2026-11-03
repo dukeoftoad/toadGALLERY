@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy
 
 /** The LUT adjustment math + the rotation grid math (the prototype's real "modify" step). */
 class PixelAdjusterTest {
@@ -151,8 +150,11 @@ class PixelAdjusterTest {
     }
 }
 
-/** The undo/redo session stack (contract 4.2). */
+/** The undo/redo session stack over whole recipes (contract 4.2). */
 class EditSessionStateTest {
+
+    private fun recipe(brightness: Int = 0, contrast: Int = 0, quarterTurns: Int = 0) =
+        EditRecipe(brightness = brightness, contrast = contrast, quarterTurns = quarterTurns)
 
     @Test
     fun `a fresh session is at the identity and cannot undo`() {
@@ -165,37 +167,35 @@ class EditSessionStateTest {
     @Test
     fun `commit then undo returns to identity then redo forward`() {
         val session = EditSessionState()
-        session.commit(EditParameters(brightness = 40))
+        session.commit(recipe(brightness = 40))
         assertTrue(session.canUndo)
-        // undo() returns the state undone TO (the identity); the committed
-        // parameters are where redo() goes.
-        assertEquals(EditParameters(), session.undo())
+        assertEquals(recipe(brightness = 40), session.undo())
         assertFalse(session.canUndo)
         assertTrue(session.current.isIdentity)
         assertTrue(session.canRedo)
-        assertEquals(EditParameters(brightness = 40), session.redo())
+        assertEquals(recipe(brightness = 40), session.redo())
         assertFalse(session.canRedo)
     }
 
     @Test
     fun `committing after undo truncates the redo tail`() {
         val session = EditSessionState()
-        session.commit(EditParameters(brightness = 40))
+        session.commit(recipe(brightness = 40))
         session.undo()
-        session.commit(EditParameters(contrast = -30))
+        session.commit(recipe(contrast = -30))
         assertFalse(session.canRedo)
-        assertEquals(EditParameters(contrast = -30), session.current)
+        assertEquals(recipe(contrast = -30), session.current)
         // Undo goes to identity, NOT to the abandoned brightness=40 branch.
-        assertEquals(EditParameters(), session.undo())
+        assertEquals(EditRecipe(), session.undo())
     }
 
     @Test
     fun `depth is bounded and the oldest entries fall off`() {
         val session = EditSessionState(maxDepth = 4)
         for (b in 1..10) {
-            session.commit(EditParameters(brightness = b))
+            session.commit(recipe(brightness = b))
         }
-        assertEquals(EditParameters(brightness = 10), session.current)
+        assertEquals(recipe(brightness = 10), session.current)
         // Only maxDepth snapshots remain: undo walks 9, 8, 7, 6 --- then stops.
         assertEquals(9, session.undo()!!.brightness)
         assertEquals(8, session.undo()!!.brightness)
@@ -205,15 +205,17 @@ class EditSessionStateTest {
     }
 
     @Test
-    fun `identity detection covers rotation`() {
-        assertFalse(EditParameters(quarterTurns = 2).isIdentity)
-        assertFalse(EditParameters(quarterTurns = 5).isIdentity) // 5 % 4 = 1
-        assertTrue(EditParameters(quarterTurns = 4).isIdentity)
+    fun `identity detection covers rotation and the colour grade`() {
+        assertFalse(recipe(quarterTurns = 2).isIdentity)
+        assertFalse(EditRecipe(sharpness = 1).isIdentity)
+        assertFalse(
+            EditRecipe(hslBands = HslBands(red = HslBandAdjust(hue = 5))).isIdentity,
+        )
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun `commits outside the parameter range are rejected`() {
-        EditSessionState().commit(EditParameters(brightness = 1000))
+    fun `recipes outside the parameter range are rejected`() {
+        EditSessionState().commit(EditRecipe(brightness = 1000))
     }
 }
 
@@ -221,34 +223,48 @@ class EditSessionStateTest {
 class ExportPlanTest {
 
     @Test
-    fun `display names derive with the -edit suffix and jpg extension`() {
-        assertEquals("IMG_2024-edit.jpg", ExportPlan.displayNameFor("IMG_2024.png"))
-        assertEquals("photo-edit.jpg", ExportPlan.displayNameFor("photo.jpeg"))
-        assertEquals("IMG_2024-edit.jpg", ExportPlan.displayNameFor("IMG_2024")) // no extension
+    fun `display names derive with the -edit suffix and the format extension`() {
+        assertEquals(
+            "IMG_2024-edit.jpg",
+            ExportPlan.displayNameFor("IMG_2024.png", ExportFormat.JPEG),
+        )
+        assertEquals(
+            "photo-edit.png",
+            ExportPlan.displayNameFor("photo.jpeg", ExportFormat.PNG),
+        )
+        assertEquals(
+            "IMG_2024-edit.heic",
+            ExportPlan.displayNameFor("IMG_2024", ExportFormat.HEIC), // no extension
+        )
     }
 
     @Test
     fun `hostile display names are sanitized`() {
-        assertEquals("evil-edit.jpg", ExportPlan.displayNameFor("../../evil.jpg"))
-        assertEquals("x-edit.jpg", ExportPlan.displayNameFor("x:*?.jpg"))
-        assertEquals("image-edit.jpg", ExportPlan.displayNameFor("   "))
-        assertEquals("image-edit.jpg", ExportPlan.displayNameFor(null))
+        assertEquals(
+            "evil-edit.jpg",
+            ExportPlan.displayNameFor("../../evil.jpg", ExportFormat.JPEG),
+        )
+        assertEquals("x-edit.jpg", ExportPlan.displayNameFor("x:*?.jpg", ExportFormat.JPEG))
+        assertEquals("image-edit.jpg", ExportPlan.displayNameFor("   ", ExportFormat.JPEG))
+        assertEquals("image-edit.jpg", ExportPlan.displayNameFor(null, ExportFormat.JPEG))
     }
 
     @Test
-    fun `api 29+ inserts carry the pending discipline and the relative path`() {
-        val values = ExportPlan.insertValues("a-edit.jpg", api29Plus = true)
+    fun `api 29+ inserts carry the pending discipline, the relative path and the format mime`() {
+        val values = ExportPlan.insertValues("a-edit.jpg", ExportFormat.JPEG, api29Plus = true)
         assertEquals("a-edit.jpg", values["_display_name"])
         assertEquals("image/jpeg", values["mime_type"])
         assertEquals("Pictures/toadGALLERY Edit", values["relative_path"])
         assertEquals(ExportPlan.IS_PENDING_TRUE, values["is_pending"])
+        val heic = ExportPlan.insertValues("a-edit.heic", ExportFormat.HEIC, api29Plus = true)
+        assertEquals("image/heic", heic["mime_type"])
         val finalize = ExportPlan.finalizeValues(api29Plus = true)
         assertEquals(ExportPlan.IS_PENDING_FALSE, finalize["is_pending"])
     }
 
     @Test
     fun `pre-q inserts carry no pending or path columns`() {
-        val values = ExportPlan.insertValues("a-edit.jpg", api29Plus = false)
+        val values = ExportPlan.insertValues("a-edit.jpg", ExportFormat.JPEG, api29Plus = false)
         assertFalse(values.containsKey("is_pending"))
         assertFalse(values.containsKey("relative_path"))
         assertTrue(ExportPlan.finalizeValues(api29Plus = false).isEmpty())

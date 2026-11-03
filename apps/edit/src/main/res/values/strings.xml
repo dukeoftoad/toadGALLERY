@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- r29 (Issue #14 gate): the toadGALLERY Edit prototype's user-facing
-     strings. Same copy rules as the gallery: honest plain language, no
-     dark patterns, no network promises. The editor never narrates success
-     itself — it answers the contract result and the GALLERY narrates
-     (the saved copy appears through MediaStore observation). -->
+<!-- r29/r30: the toadGALLERY Edit user-facing strings. Same copy rules as
+     the gallery: honest plain language, no dark patterns, no network
+     promises. The editor never narrates success itself (it answers the
+     contract result and the GALLERY narrates (the saved copy appears
+     through MediaStore observation). -->
 <resources>
 
     <string name="editor_app_name">toadGALLERY Edit</string>
@@ -13,12 +13,50 @@
     <string name="editor_undo">Undo</string>
     <string name="editor_redo">Redo</string>
     <string name="editor_save_copy">Save copy</string>
+    <string name="editor_cancel_export">Cancel export choice</string>
 
     <!-- Session -->
     <string name="editor_preview">Edited preview of the photo</string>
+    <string name="editor_on">on</string>
+    <string name="editor_off">off</string>
+
+    <!-- Geometry section -->
+    <string name="editor_section_geometry">Geometry</string>
+    <string name="editor_rotate_left">Rotate left (quarter turn)</string>
+    <string name="editor_flip_horizontal_toggle">Flip horizontal: %1$s</string>
+    <string name="editor_flip_vertical_toggle">Flip vertical: %1$s</string>
+    <string name="editor_straighten">Straighten: %1$d°</string>
+
+    <!-- Adjustment section -->
+    <string name="editor_section_adjust">Adjust</string>
+    <string name="editor_exposure">Exposure: %1$d</string>
     <string name="editor_brightness">Brightness: %1$d</string>
     <string name="editor_contrast">Contrast: %1$d</string>
-    <string name="editor_rotate_left">Rotate left</string>
+    <string name="editor_saturation">Saturation: %1$d</string>
+    <string name="editor_temperature">Temperature: %1$d</string>
+    <string name="editor_tint">Tint: %1$d</string>
+    <string name="editor_highlights">Highlights: %1$d</string>
+    <string name="editor_shadows">Shadows: %1$d</string>
+    <string name="editor_vignette">Vignette: %1$d</string>
+    <string name="editor_sharpness">Sharpness: %1$d</string>
+
+    <!-- Per-channel HSL section -->
+    <string name="editor_section_hsl">Colour channels (HSL)</string>
+    <string name="editor_hsl_hue">Hue: %1$d°</string>
+    <string name="editor_hsl_saturation">Saturation: %1$d</string>
+    <string name="editor_hsl_luminance">Luminance: %1$d</string>
+    <string name="editor_band_red">Red</string>
+    <string name="editor_band_orange">Orange</string>
+    <string name="editor_band_yellow">Yellow</string>
+    <string name="editor_band_green">Green</string>
+    <string name="editor_band_aqua">Aqua</string>
+    <string name="editor_band_blue">Blue</string>
+    <string name="editor_band_purple">Purple</string>
+    <string name="editor_band_magenta">Magenta</string>
+
+    <!-- Export sheet -->
+    <string name="editor_quality">Quality: %1$d</string>
+    <string name="editor_png_lossless">PNG is lossless — no quality control applies.</string>
 
     <!-- The always-visible metadata honesty line (contract 4.4). -->
     <string name="editor_policy_line">%1$s · saves a copy</string>

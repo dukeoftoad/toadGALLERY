@@ -5,7 +5,73 @@ All notable changes to toadGALLERY are documented here. The format follows
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
 ## [0.4.2-alpha] — unreleased on main (versionCode 32; per maintainer
-  directive no new device builds until Phase 5 completes)
+  directive no new device builds until Phase 5 completes — **the Phase 5
+  release freeze is lifted as of the r28 exit gate**; the next release
+  may proceed)
+
+### Added
+
+- **The Phase 5 hardening round + exit gate** (r28 round; Workstream 8,
+  `docs/phase-5/hardening.md`): the proof workstream that lifts the
+  Phase 5 release freeze. **The egress proof** — `EgressSolePathTest`
+  pins `https://models.ente.com/` as the app's SOLE network path by
+  scanning the whole production tree for every surface that could open
+  one: the only quoted URL literal is the About screen's
+  `ACTION_VIEW` repository link (the browser connects, the app never
+  does), `java.net` imports are confined to `HttpModelDownloader.kt`, no
+  network client library and no raw socket/DNS API exists, the manifest
+  carries no cleartext or network-security-config escape hatch, the
+  INTERNET allowlist is pinned to exactly the one ADR-0020 entry, and
+  the Gradle merged-manifest gates
+  (`gateDebugInternetPermission`/`gateReleaseInternetPermission`) stay
+  wired with their allowlist input and assemble/bundle/check anchors.
+  `HttpModelDownloaderRedirectTest` drives the full 301/302/303/307/308
+  fail-closed matrix with never-follow single-request proofs
+  (cross-host absolute Locations, same-URL loops, Location-less
+  redirects). **The three-gate vault exclusion** — one focused suite per
+  Phase 4 audit gate: `FaceIndexQueueVaultExclusionTest` (enqueue: the
+  vault-move model end-to-end over the real in-memory reference
+  catalogue — a moved photo is unrepresentable as a candidate, and a
+  previously-indexed one's face rows are orphan-DELETED before any
+  inference), `VaultExclusionReadGateTest` (pre-byte-read: the
+  `EligiblePublicMedia` type gate, the read-time permission re-check,
+  the gate-before-handle ordering, the refuse-whole 64 MiB cap) and
+  `PeopleVaultExclusionPersistenceTest` (pre-persistence: the all-vault
+  cluster resolves to no photos, stale names prune, hide never mutates
+  the store, and the face-index directory's backup/transfer exclusion
+  is pinned in both rule files). **The 10k/50k library benchmarks** —
+  `LibraryScaleBenchmarkTest` over seeded synthetic libraries: timeline
+  and folder window reads, the `WindowPagingSource` walk, the
+  `CatalogueReconciler` diff with realistic churn and the filter
+  projection, with generous-but-meaningful time budgets (30–150×
+  expected cost; an O(n²) at 50k rows fails every budget) and the
+  measured CI numbers recorded in the hardening doc. **The low-memory /
+  ABI matrix** — documented in `docs/phase-5/hardening.md` §4 (paging
+  windows, the 64 MiB refuse-whole cap, decode planning, one-JPEG-at-a-
+  time queue batches, in-memory vault thumbnails, Room-not-RAM
+  catalogue; the per-build ABI matrix with the honest 32-bit-device
+  statement) and pinned by `EnginePackagingPolicyTest` (the
+  withEngine/withBundledModels build gates, the default arm64-v8a
+  discipline, the pinned NDK + sha256-verified ONNX Runtime AAR, the
+  16 KB page-size link flags for all three Android targets, the SDK
+  envelope). **The ADR-0020 offline model pack** (the retained second
+  half of the delivery decision): `BundledModelAssets` +
+  `BundledFirstModelDownloader` — bundled model bytes first, the
+  ordinary HTTP transport as fallback, the shared structural name guard
+  before the asset lookup, and the provisioner's
+  verify-then-stage-then-commit discipline unchanged (a tampered pack
+  fails the SHA-256 pin and installs nothing) — wired into the app's
+  provisioner, gated behind the `-PwithBundledModels` Gradle property
+  (build-dir assets srcDir; a default build is byte-for-byte
+  unchanged), and built by the new branch-scoped additive
+  `modelpack-apk.yml` workflow (the `engine-apk.yml` pattern:
+  `tg-modelpack-*` branches, the pinned FACE pack fetched from
+  `models.ente.com` and size+SHA-256 verified at build time, gates on
+  the native libraries, the `assets/models/` presence and the APK
+  identity, a 14-day-retention artifact; no tags, no GitHub Releases).
+  53 new JVM tests (927 → 980); versionCode 32; versionName stays
+  0.4.2-alpha (the freeze lift is a records update; the next release
+  tags the whole 0.4.2-alpha line, codes 27–32).
 
 ### Added
 

@@ -15,7 +15,7 @@ def check(path: str) -> str:
     i, n = 0, len(text)
     stack = []
     line = 1
-    state = "code"  # code | line_comment | block_comment | string | char
+    state = "code"  # code | line_comment | block_comment | string | char | backtick
     while i < n:
         c = text[i]
         nxt = text[i + 1] if i + 1 < n else ""
@@ -36,6 +36,13 @@ def check(path: str) -> str:
                 continue
             if c == "'":
                 state = "char"
+                i += 1
+                continue
+            if c == "`":
+                # A backtick identifier (test names): everything up to the
+                # closing backtick is inert --- including apostrophes that
+                # are NOT char literals ("the pipeline's frame").
+                state = "backtick"
                 i += 1
                 continue
             if c in "([{":
@@ -76,6 +83,11 @@ def check(path: str) -> str:
                 i += 2
                 continue
             if c == "'":
+                state = "code"
+        elif state == "backtick":
+            if c == "\n":
+                return f"{path}:{line}: unterminated backtick identifier"
+            if c == "`":
                 state = "code"
         i += 1
     if stack:

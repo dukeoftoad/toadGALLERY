@@ -40,6 +40,8 @@ data class EditRecipe(
     val hslBands: HslBands = HslBands(),
     val vignette: Int = 0,
     val sharpness: Int = 0,
+    // ---- Filter (r33, Phase 7 v2: the .cube look layer) ----
+    val lut: LutSelection? = null,
 ) {
 
     val isGeometryIdentity: Boolean
@@ -52,7 +54,12 @@ data class EditRecipe(
             shadows == 0 && saturation == 0 && temperature == 0 && tint == 0 &&
             hslBands.isIdentity && vignette == 0 && sharpness == 0
 
-    val isIdentity: Boolean get() = isGeometryIdentity && isAdjustmentIdentity
+    /** A selected look at intensity 0 is dialed out --- no contribution. */
+    val isFilterIdentity: Boolean
+        get() = lut == null || lut.isIdentity
+
+    val isIdentity: Boolean
+        get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity
 
     init {
         require(quarterTurns in 0..3) { "quarterTurns must be in 0..3" }
@@ -69,6 +76,27 @@ data class EditRecipe(
         const val CURRENT_SCHEMA_VERSION: Int = 1
         const val MIN_SUPPORTED_SCHEMA_VERSION: Int = 1
     }
+}
+
+/**
+ * The selected LUT look (r33, Phase 7 v2): WHICH bundled `.cube` look
+ * and HOW MUCH of it. The id is the [BundledLuts] registry id; an id
+ * the registry cannot resolve (a version skew, a hand-edited sidecar)
+ * SURVIVES the round-trip untouched --- the recipe is the user's data ---
+ * but the pipeline stage degrades to no-look rather than crashing.
+ */
+data class LutSelection(
+    val lutId: String,
+    /** 0..100, the recipe's Int-slider convention; /100 at apply time. */
+    val intensity: Int = 100,
+) {
+    init {
+        require(lutId.isNotBlank()) { "lutId must not be blank" }
+        require(intensity in 0..100) { "intensity must be in 0..100" }
+    }
+
+    /** A dialed-out look contributes nothing: the pipeline skips it. */
+    val isIdentity: Boolean get() = intensity == 0
 }
 
 /**
@@ -127,6 +155,14 @@ object EditRecipeCodec {
         root.put("hsl", hsl)
         root.put("vignette", recipe.vignette)
         root.put("sharpness", recipe.sharpness)
+        recipe.lut?.let {
+            root.put(
+                "lut",
+                org.json.JSONObject()
+                    .put("lutId", it.lutId)
+                    .put("intensity", it.intensity),
+            )
+        }
         return root.toString()
     }
 
@@ -185,6 +221,7 @@ object EditRecipeCodec {
             hslBands = hsl,
             vignette = root.optInt("vignette", 0).coerceIn(-100, 100),
             sharpness = root.optInt("sharpness", 0).coerceIn(-100, 100),
+            lut = readLut(root.optJSONObject("lut")),
         )
         ParseResult.Valid(recipe)
     } catch (e: org.json.JSONException) {
@@ -200,6 +237,19 @@ object EditRecipeCodec {
             saturation = band.optInt("saturation", 0).coerceIn(-100, 100),
             luminance = band.optInt("luminance", 0).coerceIn(-100, 100),
         )
+    }
+
+    /**
+     * The optional `lut` object: absent (a pre-r33 sidecar) or carrying
+     * a blank id means NO look; the intensity coerces like every other
+     * Int slider. An unknown-but-present id is KEPT --- the recipe is
+     * the user's data; resolution is the applier's problem.
+     */
+    private fun readLut(lut: org.json.JSONObject?): LutSelection? {
+        if (lut == null) return null
+        val id = lut.optString("lutId", "").trim()
+        if (id.isEmpty()) return null
+        return LutSelection(lutId = id, intensity = lut.optInt("intensity", 100).coerceIn(0, 100))
     }
 
     private fun bandJson(band: HslBandAdjust): org.json.JSONObject =

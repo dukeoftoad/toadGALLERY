@@ -172,10 +172,13 @@ jobs:
         run: |
           APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
           EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
-          VERSION_NAME="$(grep -m1 -oE 'versionName = \"[^\"]+\"' apps/gallery/build.gradle.kts | sed -e 's/versionName = \"//' -e 's/\"$//')"
-          RNN="$(grep -B 80 -m1 \"versionCode = ${EXPECTED_VC}\" apps/gallery/build.gradle.kts | grep -oE \"versionCode ${EXPECTED_VC} \\(r[0-9]+ round\\)\" | tail -1 | grep -oE 'r[0-9]+')"
-          [ -n "$VERSION_NAME" ] || { echo "::error::could not derive versionName"; exit 1; }
-          [ -n "$RNN" ] || { echo "::error::could not derive the rNN tag from the versionCode ${EXPECTED_VC} round comment"; exit 1; }
+          VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/gallery/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
+          LAST_ROUND="$(grep -oE 'versionCode [0-9]+ . r[0-9]+ round' apps/gallery/build.gradle.kts | tail -1)"
+          RNN="$(printf '%s' "$LAST_ROUND" | grep -oE 'r[0-9]+')"
+          ROUND_VC="$(printf '%s' "$LAST_ROUND" | grep -oE '[0-9]+' | head -1)"
+          [ -n "$VERSION_NAME" ] || { echo '::error::could not derive versionName'; exit 1; }
+          [ -n "$RNN" ] || { echo '::error::could not derive the rNN tag from the last round comment'; exit 1; }
+          [ "$ROUND_VC" = "$EXPECTED_VC" ] || { echo "::error::the last round comment does not own versionCode $EXPECTED_VC ($LAST_ROUND)"; exit 1; }
           echo "RNN=$RNN" >> "$GITHUB_ENV"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           STAGED="toadGALLERY-${VERSION_NAME}-${RNN}-engine-debug.apk"

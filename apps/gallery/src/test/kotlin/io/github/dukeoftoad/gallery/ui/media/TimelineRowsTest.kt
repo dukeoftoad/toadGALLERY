@@ -487,7 +487,7 @@ class TimelineRowsTest {
         // The DAY grain's canonical hard boundary lands in different ISO
         // weeks too (10 vs 11): a new header, anchored on the new week's
         // Monday (2026-03-09).
-        val sundayNight = millisOf(LocalDate.of(2026, 3, 8), 23)
+        val sundayNight = millisOf(LocalDate.of(2026, 3, 8)) + 23 * 3_600_000L
         val mondayMorning = millisOf(LocalDate.of(2026, 3, 9)) + 30 * 60_000L
         val rows = rows(listOf(mondayMorning, sundayNight), GroupBy.WEEK)
         val headers = rows.filterIsInstance<TimelineRow.Header>()

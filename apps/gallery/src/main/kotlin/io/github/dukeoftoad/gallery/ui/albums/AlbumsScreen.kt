@@ -275,7 +275,9 @@ private fun AlbumGrid(
  *  - Loading -> nothing at all (the albums grid is the content; a
  *    transient sub-second section flash would be noise, not honesty);
  *  - ConsentOff / EngineMissing / NotIndexed / Ready-with-everyone-hidden
- *    -> one honest card saying exactly why there is no row of people;
+ *    -> one honest card saying exactly why there is no row of people
+ *      (the all-hidden card carries the r26 way back: an action into
+ *      the People screen's hidden section, where unhide lives);
  *  - Error -> the honest card with a retry action
  *    ([AlbumsViewModel.refreshPeople]);
  *  - Ready -> the header + a horizontal `LazyRow` of the SHARED
@@ -311,6 +313,11 @@ private fun PeopleSection(
                 if (state.visible.isEmpty()) {
                     PeopleInfoCard(
                         text = stringResource(R.string.albums_people_all_hidden),
+                        // r26: the way back is the People screen's hidden
+                        // section (unhide, no index reset) --- the card
+                        // points straight at it.
+                        actionLabel = stringResource(R.string.albums_people_see_all),
+                        onAction = onOpenPeople,
                     )
                 } else {
                     Row(

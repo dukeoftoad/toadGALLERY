@@ -170,4 +170,168 @@ class PeopleStateStoreTest {
         assertTrue(pruned.prunedTo(setOf("live", "live-2")) === pruned)
         assertTrue(PeopleState.EMPTY.prunedTo(emptySet()) === PeopleState.EMPTY)
     }
+
+    // ---- the r26 overlay books ----
+
+    @Test
+    fun `the state file round-trips the r26 overlay books`() {
+        val (file, store) = newFile()
+        val state = PeopleState(
+            names = mapOf("c1" to "Alice"),
+            hidden = setOf("c2"),
+            memberships = mapOf("c1" to setOf(101L, 102L), "c2" to setOf(103L)),
+            merges = listOf(PeopleMerge("c1", setOf(101L, 102L, 103L))),
+            removals = mapOf("c1" to setOf(104L)),
+        )
+
+        runBlocking { store.save(state) }
+        val loaded = runBlocking { store.load() }
+
+        assertEquals(state, loaded.state)
+        assertFalse(loaded.recoveredFromCorruptFile)
+        assertEquals(setOf("people-state.json"), file.parentFile!!.listFiles()!!.map { it.name }.toSet())
+    }
+
+    @Test
+    fun `an r25 file loads with empty overlay books - the upgrade loses nothing`() {
+        val (file, store) = newFile()
+        file.writeText(
+            """
+            {"version":1,
+             "names":{"c1":"Alice"},
+             "hidden":["c2"]}
+            """.trimIndent(),
+        )
+
+        val loaded = runBlocking { store.load() }
+
+        // The r25 shape (no memberships/merges/removals keys) is the same
+        // schema version: names/hidden intact, the r26 books empty.
+        assertEquals(PeopleState(names = mapOf("c1" to "Alice"), hidden = setOf("c2")), loaded.state)
+        assertFalse(loaded.recoveredFromCorruptFile)
+    }
+
+    @Test
+    fun `hand-edited overlay books degrade forgivingly - empty ids and garbage values are skipped`() {
+        val (file, store) = newFile()
+        file.writeText(
+            """
+            {"version":1,
+             "names":{"c1":"Alice"},
+             "hidden":[],
+             "memberships":{"c1":[101,102],"":[103],"c3":[]},
+             "merges":[{"target":"c1","files":[101,102]},{"target":"","files":[9]},{"files":[9]}],
+             "removals":{"c1":[107],"":[108]}}
+            """.trimIndent(),
+        )
+
+        val loaded = runBlocking { store.load() }
+
+        assertEquals(
+            PeopleState(
+                names = mapOf("c1" to "Alice"),
+                memberships = mapOf("c1" to setOf(101L, 102L)),
+                merges = listOf(PeopleMerge("c1", setOf(101L, 102L))),
+                removals = mapOf("c1" to setOf(107L)),
+            ),
+            loaded.state,
+        )
+        assertFalse(loaded.recoveredFromCorruptFile)
+    }
+
+    @Test
+    fun `withMembership and withRemoval accumulate and no-op cleanly`() {
+        val base = PeopleState(names = mapOf("c1" to "Alice"))
+
+        val withMembership = base.withMembership("c1", setOf(1L, 2L))
+        assertEquals(mapOf("c1" to setOf(1L, 2L)), withMembership.memberships)
+        // Same fingerprint -> same instance:
+        assertTrue(withMembership.withMembership("c1", setOf(1L, 2L)) === withMembership)
+
+        val withRemoval = withMembership.withRemoval("c1", setOf(2L))
+        assertEquals(mapOf("c1" to setOf(2L)), withRemoval.removals)
+        // Accumulating is additive, idempotent, and an empty set is a no-op:
+        val again = withRemoval.withRemoval("c1", setOf(2L)).withRemoval("c1", setOf(3L))
+        assertEquals(mapOf("c1" to setOf(2L, 3L)), again.removals)
+        assertTrue(withRemoval.withRemoval("c1", emptySet()) === withRemoval)
+    }
+
+    @Test
+    fun `withoutClusterEdits drops every edit keyed to the id`() {
+        val state = PeopleState(
+            names = mapOf("c1" to "Alice", "c2" to "Bob"),
+            hidden = setOf("c1"),
+            memberships = mapOf("c1" to setOf(1L)),
+            merges = listOf(PeopleMerge("c1", setOf(1L, 2L))),
+            removals = mapOf("c1" to setOf(3L)),
+        )
+
+        val cleared = state.withoutClusterEdits("c1")
+        assertEquals(PeopleState(names = mapOf("c2" to "Bob")), cleared)
+
+        // Nothing keyed -> same instance:
+        assertTrue(cleared.withoutClusterEdits("c3") === cleared)
+    }
+
+    @Test
+    fun `mergeRecorded folds the source into the target - newest record replaces the older`() {
+        val state = PeopleState(
+            names = mapOf("src" to "Doomed", "tgt" to "Taylor"),
+            memberships = mapOf("src" to setOf(10L), "tgt" to setOf(20L)),
+            removals = mapOf("src" to setOf(99L)),
+            merges = listOf(PeopleMerge("tgt", setOf(20L))),
+        )
+
+        val merged = state.mergeRecorded("src", "tgt", setOf(10L, 20L))
+
+        // The source's name/hidden/membership are gone; its removals follow
+        // the person into the target; the target's merge record is REPLACED
+        // by the newest merged set:
+        assertEquals(mapOf("tgt" to "Taylor"), merged.names)
+        assertEquals(mapOf("tgt" to setOf(10L, 20L)), merged.memberships)
+        assertEquals(mapOf("tgt" to setOf(99L)), merged.removals)
+        assertEquals(listOf(PeopleMerge("tgt", setOf(10L, 20L))), merged.merges)
+    }
+
+    @Test
+    fun `canonicalized drops fingerprints without edits and empty records`() {
+        val state = PeopleState(
+            names = mapOf("c1" to "Alice"),
+            memberships = mapOf("c1" to setOf(1L), "ghost" to setOf(2L), "empty" to emptySet()),
+            removals = mapOf("gone" to setOf(3L), "void" to emptySet()),
+            merges = listOf(PeopleMerge("c1", setOf(1L)), PeopleMerge("dead", emptySet())),
+        )
+
+        val canonical = state.canonicalized()
+
+        assertEquals(
+            PeopleState(
+                names = mapOf("c1" to "Alice"),
+                memberships = mapOf("c1" to setOf(1L)),
+                merges = listOf(PeopleMerge("c1", setOf(1L))),
+            ),
+            canonical,
+        )
+        // Already canonical -> same instance:
+        assertTrue(canonical.canonicalized() === canonical)
+        assertTrue(PeopleState.EMPTY.canonicalized() === PeopleState.EMPTY)
+    }
+
+    @Test
+    fun `editedClusterIds and carriesEdits cover every book`() {
+        val state = PeopleState(
+            names = mapOf("named" to "Alice"),
+            hidden = setOf("hid"),
+            memberships = mapOf("lonely" to setOf(1L)),
+            merges = listOf(PeopleMerge("merged", setOf(1L))),
+            removals = mapOf("pruned" to setOf(2L)),
+        )
+
+        assertEquals(setOf("named", "hid", "merged", "pruned"), state.editedClusterIds)
+        assertTrue(state.carriesEdits("named") && state.carriesEdits("hid"))
+        assertTrue(state.carriesEdits("merged") && state.carriesEdits("pruned"))
+        // A membership fingerprint alone preserves nothing:
+        assertFalse(state.carriesEdits("lonely"))
+        assertFalse(PeopleState.EMPTY.carriesEdits("anything"))
+    }
 }

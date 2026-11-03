@@ -236,7 +236,28 @@ android {
         // media can never become candidates. Per maintainer directive:
         // NO new device builds until Phase 5 completes; this and
         // subsequent rounds ride CI from main only.
-        versionCode = 30
+        // versionCode 31 (r26 round): the People follow-ups round
+        // (Workstream 6 closeout) --- the two r25 deferrals shipped:
+        // (1) EDIT-PRESERVING RECLUSTERING, the cluster-id remapping
+        // overlay: people-state.json grows three additive books inside
+        // schema version 1 (per-edited-cluster membership fingerprints
+        // captured at edit time over the SAME clusterFileIds JNI read,
+        // recorded merge intents, accumulated remove-from-person
+        // corrections), and the pure PeopleReclusterRemap planner maps
+        // fresh post-recluster ids back onto them by photo-membership
+        // overlap (deterministic best-match; merges re-fold the split,
+        // removals re-apply the re-derived), with the repository
+        // executing the plan's engine mutations over the EXISTING
+        // 16-external JNI surface --- zero Rust-side changes, the
+        // vendored crates stay byte-identical to the r23 pin; (2) the
+        // UNHIDE surface: PeopleScreen's hidden section (the pure
+        // PeopleContentPolicy.hiddenPersons mapping) with a per-person
+        // Unhide action --- the way back from a hide no longer costs
+        // the index-erasing r24 Reset. Face-derived data never leaves
+        // the device. Per maintainer directive: NO new device builds
+        // until Phase 5 completes; this and subsequent rounds ride CI
+        // from main only.
+        versionCode = 31
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

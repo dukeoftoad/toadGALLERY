@@ -155,12 +155,12 @@
   * [ ] Install an engine-enabled build on the Xiaomi test device (`2201116PI`, Android 36).
   * [ ] Open `Settings → AI engine (r22 dogfood)` and download the FACE model pack (~36 MiB from `models.ente.com`).
   * [ ] Open `Settings → Start background index (r24 dogfood)`, let the queue drain the library, verify live progress + the drain outcome line, exercise Cancel (resume) and Reset, and evaluate the clustering threshold through the r24 tuning control on a real library.
-  * [ ] Dogfood the r25 People surfaces on-device: enable `Settings → People albums`, browse the People grid + person details, rename/merge/remove-from-person/hide, and verify the honest off/engine-missing/not-indexed states.
+  * [ ] Dogfood the r25/r26 People surfaces on-device: enable `Settings → People albums`, browse the People grid + person details, rename/merge/remove-from-person/hide, unhide from the People screen's hidden section, and verify the honest off/engine-missing/not-indexed states.
   * [ ] Dogfood the r26 Magic Search surfaces on-device: enable `Settings → Magic search`, download the SEMANTIC pack (~213 MB), start the semantic index, then search the Content mode with natural-language queries and verify the honest consent/engine/models/not-indexed states.
   * [ ] Run pending device validation checklist sections (`docs/phase-3/device-validation-checklist.md` §§13–18, including Room v4→v6 over-install migrations and pre-Q fallback check).
-* [ ] **People UI Follow-ups (deferred from r25, documented in `docs/phase-5/people-ui.md`)**:
-  * [ ] Edit-preserving reclustering (cluster-id remapping overlay so names/hidden/merges survive the queue's recluster passes).
-  * [ ] Unhide UI for hidden persons (r25 way back is the r24 Reset face index).
+* [x] **People UI Follow-ups (deferred from r25, documented in `docs/phase-5/people-ui.md`; shipped as the `r26` round, branch `tg-r26-people-followups`)**:
+  * [x] Edit-preserving reclustering (cluster-id remapping overlay so names/hidden/merges survive the queue's recluster passes) — the additive `people-state.json` books (membership fingerprints, merge intents, removal records), the pure `PeopleReclusterRemap` planner and the repository's reconcile-on-read-and-edit execution, all Kotlin-side over the existing 16-external JNI surface (the vendored crates stay byte-identical to the r23 pin).
+  * [x] Unhide UI for hidden persons (r25 way back is the r24 Reset face index) — the People screen's hidden section (`PeopleContentPolicy.hiddenPersons`) with a per-person Unhide action, no queue reset; the r25 reset-path copy re-worded in place.
 * [ ] **Magic Search Follow-ups (deferred from r26, documented in `docs/phase-5/magic-search.md`)**:
   * [x] MobileCLIP image embedding indexing (`mobileclip_s2_image_gelu_opset20.onnx`), BPE tokenizer (`bpe_simple_vocab_16e6.txt`), text encoder (`mobileclip_s2_text_opset18_quant.onnx`) and offline semantic search in the Search tab — DONE in r26 over `ente-vecdb` (the r26 JNI surface + queue + domain + UI above).
   * [ ] Semantic-only engine sessions (drop the FACE-model requirement the r26 session carries).

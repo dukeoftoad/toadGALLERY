@@ -711,11 +711,13 @@ private fun MergeTargetRow(
 }
 
 /**
- * The hide confirmation (r25): honest copy about what hiding means (out
- * of every People surface) and the documented way back --- the face
- * index RESET in Settings, which erases the whole index (names, hidden
- * sets and all) by design. r25 ships no unhide affordance; pretending
- * otherwise in this dialog would be the dishonest shape.
+ * The hide confirmation (r25; copy updated by the r26 follow-ups
+ * round): honest copy about what hiding means (out of every People
+ * surface) and the r26 way back --- the People screen's HIDDEN
+ * SECTION with its per-person Unhide action. The person stays in the
+ * index with their name; the r24 "Reset face index" (which erases the
+ * whole index by design) is no longer the only path, so the dialog
+ * no longer threatens it.
  */
 @Composable
 private fun PersonHideDialog(

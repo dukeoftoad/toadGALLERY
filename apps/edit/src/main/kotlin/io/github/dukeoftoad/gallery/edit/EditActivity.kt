@@ -1001,11 +1001,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
             // r32: the straighten slider follows the drag live (the label,
             // the thumb, the preview) exactly like the adjustment sliders;
-            // it previously held the committed value until release.
-            val straightenLive = draft?.takeIf { it.first == "straighten" }?.second
-                ?: committed.straightenDeg.toInt()
+            // it previously held the committed value until release. The
+            // value stays a Double so a fractional sidecar straighten (e.g.
+            // 7.5) displays exactly, not truncated.
+            val straightenLive = draft?.takeIf { it.first == "straighten" }?.second?.toDouble()
+                ?: committed.straightenDeg
             val straightenName = stringResource(R.string.editor_a11y_straighten)
-            val straightenState = stringResource(R.string.editor_straighten, straightenLive)
+            val straightenState = stringResource(R.string.editor_straighten, straightenLive.toInt())
             Text(
                 text = straightenState,
                 color = Color.White,

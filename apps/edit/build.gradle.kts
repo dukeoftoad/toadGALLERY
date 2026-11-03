@@ -92,8 +92,16 @@ android {
         // export preflight (the 48 MP decode guard, the 1.5x-headroom
         // storage check, the documented process-death policy). The on-device
         // half rides the device checklist section 20.
-        versionCode = 3
-        versionName = "0.3.0-edit-alpha"
+        // versionCode 4 (r32 round): the Phase 6 hardening pass --- the
+        // accessibility sweep over the whole editor surface (every slider
+        // announces its name + live value via semantics; the HSL rows speak
+        // the selected band; the flip toggles are proper FilterChips with
+        // 48dp targets and selected-state announcements), the straighten
+        // slider follows the drag live like every other slider, and the
+        // crop-preset chips commit through the tested pure inverse
+        // CropRect.fromPixelRect (5 new JVM tests).
+        versionCode = 4
+        versionName = "0.3.1-edit-alpha"
     }
 
     buildFeatures {

@@ -710,6 +710,48 @@ recluster pass (an edit-preserving overlay is future work). 927 JVM
 tests (+42) + 526 vendored Rust tests + 20 JNI tests (8 new);
 versionCode 29, no device build per the Phase-5-completion directive.
 
+#### Status — r26 round (versionCode 30): the Magic Search round
+
+Workstream 7 of the Phase 5 plan
+(`docs/phase-5/magic-search.md`): offline semantic ("Magic") search
+over an on-device CLIP index — the Search tab's new **Content** mode,
+opt-in per ADR-0010 and **off by default**. The JNI bridge extends
+from sixteen to twenty-five externals (`nativeInitSemantic` — the CLIP
+half of an engine session as a third open/closed state — the CLIP
+image/text encoders, and a CLIP store surface over the SAME
+`ml-index.sqlite` the faces live in: put/delete-for-files/indexed-
+file-ids/count, top-K vecdb search preserving the store's own order,
+and the once-per-drain `fillClipIndex` reconciliation pass with its
+own report). The semantic background queue is the r24 face queue's
+SIBLING: the same three truths, the same `MediaRevision.diff`
+mapping (delete-first kept even though `putClip` upserts — one
+diff→action table across both queues), ONE whole-photo embedding per
+photo, its own unique WorkManager chain with self-re-enqueue and
+honest FACE-then-SEMANTIC session gates (the r26 session is
+face-based — the round's documented limitation), and the atomic
+`clip-index-state.json` bookkeeping inside the backup-excluded
+face-index directory. The `ml/search` domain carries the
+`MagicSearchEngineSeam` (+ the adapter), the pure six-state
+`MagicSearchContentPolicy` (Error dominates; consent before
+capability; ModelsNotProvisioned covers either pack; NotIndexed
+distinct from Ready), the 2–200-character query gate (over-long
+refused, never truncated), the order-preserving/dedupe/limit ranking
+(no distance surfaced in v1) and the no-cache repository with typed
+honest outcomes. The UI: the "Search by" mode row (Name untouched vs
+Content), the debounced sibling `MagicSearchViewModel` whose policy
+gates render as honest cards (consent/engine/models/not-indexed, each
+pointing at its own recovery surface), results on the SAME shared
+grid in the vecdb's own relevance order with the same viewer
+hand-off. Settings gains the `magicSearchEnabled` consent row, the
+SEMANTIC model download card (~213 MB, manifest-derived) and the
+semantic queue card (start/cancel/reset — the reset's honest scope:
+the queue's own bookkeeping; the stored index rides the r24 Reset
+face index). Queries never touch the network — the only egress is
+the ADR-0020 model download; vault media can never become candidates
+(three-gate discipline). 982 JVM tests (+55) + 32 JNI tests (12
+new); versionCode 30, no device build per the Phase-5-completion
+directive.
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

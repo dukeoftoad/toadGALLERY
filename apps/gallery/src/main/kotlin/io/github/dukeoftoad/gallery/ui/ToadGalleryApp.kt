@@ -40,10 +40,13 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
 import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
+import io.github.dukeoftoad.gallery.ui.collage.CollageScreen
 import io.github.dukeoftoad.gallery.ui.details.DetailsScreen
 import io.github.dukeoftoad.gallery.ui.map.MapScreen
 import io.github.dukeoftoad.gallery.ui.people.PeopleScreen
 import io.github.dukeoftoad.gallery.ui.people.PersonDetailScreen
+import io.github.dukeoftoad.gallery.ui.places.PlaceDetailScreen
+import io.github.dukeoftoad.gallery.ui.places.PlacesScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosScreen
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
@@ -103,6 +106,31 @@ object Destinations {
     const val PERSON_DETAIL = "person/{clusterId}"
 
     /**
+     * The Places browse sub-screen (r27, the organisational UX round):
+     * the offline region buckets over the catalogue's GPS coordinates.
+     * Not top-level (sub-page UX like People; the bottom bar hides):
+     * reached from the Albums tab's Places section via its "See all"
+     * action.
+     */
+    const val PLACES = "places"
+
+    /**
+     * Route pattern for the Place detail sub-screen (r27): one region
+     * bucket's media grid. The region key is a STRING nav argument
+     * ("r<row>c<column>", the pure PlacesRegionGrid identity) --- the
+     * durable fallback for the one-shot PlaceMediaHandoff request.
+     */
+    const val PLACE_DETAIL = "place/{regionKey}"
+
+    /**
+     * The collage creator sub-screen (r27): the Photos tab's
+     * multi-selection (2..9 photos, carried by the CollageHandoff ---
+     * far too large for nav args) laid out by a template and exportable
+     * as one new image. Argument-free like the viewer route.
+     */
+    const val COLLAGE = "collage"
+
+    /**
      * Sub-screen for the system-Photo-Picker selection (issue #27). Not
      * top-level on purpose: the bottom bar hides here (sub-page UX like
      * album detail) and the route is reachable only from the Settings tab.
@@ -160,6 +188,10 @@ object Destinations {
     fun personDetail(clusterId: String): String =
         "person/${Uri.encode(clusterId)}"
 
+    /** Builds the Place detail route for [regionKey], encoding the key. */
+    fun placeDetail(regionKey: String): String =
+        "place/${Uri.encode(regionKey)}"
+
     /** Builds the details route for [mediaId], encoding the [uri] argument. */
     fun details(mediaId: Long, uri: Uri): String =
         "details/$mediaId?uri=${Uri.encode(uri.toString())}"
@@ -211,6 +243,15 @@ fun ToadGalleryApp() {
         val settingsViewModel: SettingsViewModel = viewModel()
         val openViewer: (window: List<MediaItem>, index: Int) -> Unit = { window, index ->
             viewerViewModel.open(window, index)
+            navController.navigate(Destinations.VIEWER)
+        }
+        // r27 (Slideshow + Stories): the viewer opened WITH its slideshow
+        // mode armed --- the same shell-scoped hand-off [openViewer] uses,
+        // plus the slideshow flag the Stories shelf and the grid/album
+        // overflow actions set before navigating.
+        val openSlideshow: (window: List<MediaItem>) -> Unit = { window ->
+            viewerViewModel.open(window, 0)
+            viewerViewModel.startSlideshow()
             navController.navigate(Destinations.VIEWER)
         }
         // Auto-lock (issue #32, ADR-0017): the unlocked vault session is
@@ -277,6 +318,12 @@ fun ToadGalleryApp() {
                         onOpenViewer = openViewer,
                         vaultViewModel = vaultViewModel,
                         settingsViewModel = settingsViewModel,
+                        // r27: the Stories shelf's playback hand-off, the
+                        // header bar's slideshow launch, and the selection
+                        // bar's collage launch.
+                        onOpenStory = openSlideshow,
+                        onStartSlideshow = openSlideshow,
+                        onStartCollage = { navController.navigate(Destinations.COLLAGE) },
                     )
                 }
                 composable(Destinations.ALBUMS) {
@@ -284,6 +331,8 @@ fun ToadGalleryApp() {
                     // r25: the shell hands the People section's two navigations
                     // down --- "See all" opens the People sub-screen, a person
                     // card opens that person's detail (the album cards' pattern).
+                    // r27: the Places section's pair --- "See all" opens the
+                    // Places sub-screen, a region chip opens that region's grid.
                     AlbumsScreen(
                         onOpenAlbum = { bucketId ->
                             navController.navigate(Destinations.albumDetail(bucketId))
@@ -291,6 +340,10 @@ fun ToadGalleryApp() {
                         onOpenPeople = { navController.navigate(Destinations.PEOPLE) },
                         onOpenPerson = { clusterId ->
                             navController.navigate(Destinations.personDetail(clusterId))
+                        },
+                        onOpenPlaces = { navController.navigate(Destinations.PLACES) },
+                        onOpenPlace = { regionKey ->
+                            navController.navigate(Destinations.placeDetail(regionKey))
                         },
                     )
                 }
@@ -305,8 +358,58 @@ fun ToadGalleryApp() {
                             onBack = { navController.popBackStack() },
                             onOpenViewer = openViewer,
                             settingsViewModel = settingsViewModel,
+                            // r27: the album surface's slideshow launch (the
+                            // overflow action the round contract names).
+                            onStartSlideshow = openSlideshow,
                         )
                     }
+                }
+                composable(Destinations.PLACES) {
+                    // r27: the Places browse sub-screen over the offline
+                    // region buckets. The consent state's "Open Settings"
+                    // action routes to the Settings tab with the same
+                    // single-top-level-stack discipline the People and Map
+                    // screens use.
+                    PlacesScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenPlace = { regionKey ->
+                            navController.navigate(Destinations.placeDetail(regionKey))
+                        },
+                        onOpenSettings = {
+                            navController.navigate(Destinations.SETTINGS) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
+                }
+                composable(
+                    route = Destinations.PLACE_DETAIL,
+                    arguments = listOf(navArgument("regionKey") { type = NavType.StringType }),
+                ) { backStackEntry ->
+                    // r27: one region's media grid. The ViewModel is
+                    // screen-scoped (per-region state, the PersonDetail
+                    // factory pattern); photo taps open the SAME
+                    // shell-scoped viewer hand-off the grid screens use.
+                    val regionKey = backStackEntry.arguments?.getString("regionKey")
+                    if (!regionKey.isNullOrEmpty()) {
+                        PlaceDetailScreen(
+                            regionKey = regionKey,
+                            onBack = { navController.popBackStack() },
+                            onOpenViewer = openViewer,
+                        )
+                    }
+                }
+                composable(Destinations.COLLAGE) {
+                    // r27: the collage creator over the selection the
+                    // Photos tab stashed in the CollageHandoff (the
+                    // viewer's argument-free hand-off pattern).
+                    CollageScreen(
+                        onBack = { navController.popBackStack() },
+                    )
                 }
                 composable(Destinations.PEOPLE) {
                     // r25 (Workstream 6): the People browse sub-screen over the

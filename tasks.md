@@ -165,8 +165,8 @@
   * [x] MobileCLIP image embedding indexing (`mobileclip_s2_image_gelu_opset20.onnx`), BPE tokenizer (`bpe_simple_vocab_16e6.txt`), text encoder (`mobileclip_s2_text_opset18_quant.onnx`) and offline semantic search in the Search tab — DONE in r26 over `ente-vecdb` (the r26 JNI surface + queue + domain + UI above).
   * [ ] Semantic-only engine sessions (drop the FACE-model requirement the r26 session carries).
   * [ ] Things dynamic collections + smart-filter integration (named semantic clusters over the SAME CLIP index, image-side queries).
-* [ ] **MI-Style Organisational UX (Roadmap Phase 5 / Reconciled Phase 6)**:
-  * [ ] Places (offline coarse region bucketing over Room v4 GPS coordinates, zero reverse-geocoding network calls), Moments timeline, Stories, collage creator, and slideshow.
+* [x] **MI-Style Organisational UX (Roadmap Phase 5 / Reconciled Phase 6)**:
+  * [x] Places (offline coarse region bucketing over Room v4 GPS coordinates, zero reverse-geocoding network calls), Moments timeline, Stories, collage creator, and slideshow. (r27, PR #103: the pure `PlacesRegionGrid`/`PlacesRegionLabels`/`PlacesContentPolicy` + Places screens and the Albums-tab section; the pure `MomentGrouper` with the WEEK grain + counted headers; the pure `StorySets` + Stories shelf; the pure `CollageLayouts` + collage creator with the Q+ exporter; the pure `SlideshowTiming`/`ViewerCrossfade` + the viewer slideshow. 84 new JVM tests; `versionCode 32`.)
 * [ ] **Phase 5 Hardening & Exit Gate (Workstream 8)**:
   * [ ] Egress tests proving `models.ente.com` is the sole network path, three-gate Vault exclusion tests (at enqueue, pre-byte-read, pre-persistence), 10k/50k library benchmarks, low-memory/ABI matrix verification, and optional offline model-pack CI release build → lifts Phase 5 release freeze.
 

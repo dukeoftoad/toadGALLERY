@@ -325,7 +325,6 @@ android {
         // Phase 5 completes; this and subsequent rounds ride CI from main
         // only.
         versionCode = 33
-in/main
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

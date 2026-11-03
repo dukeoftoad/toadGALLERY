@@ -169,13 +169,14 @@ class EditRecipeTest {
     // ---- ExportFormat / ExportRequest ----
 
     @Test
-    fun `export formats carry their wire names, mimes and min sdks`() {
+    fun `export formats carry their wire names and mimes`() {
         assertEquals("image/jpeg", ExportFormat.JPEG.mimeType)
         assertEquals("image/png", ExportFormat.PNG.mimeType)
         assertEquals("image/webp", ExportFormat.WEBP.mimeType)
         assertEquals("webp", ExportFormat.WEBP.extension)
         assertEquals(ExportFormat.JPEG, ExportFormat.fromWire("JPEG"))
-        assertNull(ExportFormat.fromWire("WEBP"))
+        assertEquals(ExportFormat.WEBP, ExportFormat.fromWire("WEBP"))
+        assertNull(ExportFormat.fromWire("HEIC")) // decode-only: never offered as an export
         assertNull(ExportFormat.fromWire(null))
     }
 

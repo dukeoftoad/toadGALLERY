@@ -64,10 +64,49 @@ look must not change what the vignette and the sharpen masks see.
 
 ## Deliberately NOT in this round
 
-- **User-imported `.cube` files** (the SAF pick-and-copy flow indexing
-  alongside the bundled set). The engine, registry, recipe field and
-  pipeline stage are built for it; it is a UI + storage round of its
-  own (the next Phase 7 round).
+- **Tetrahedral interpolation** (the quality upgrade over trilinear).
+  Trilinear is the tested baseline; tetrahedral changes sample values
+  and would need its own hand-verified probe set — a deliberate,
+  separate change if it ever comes.
+- **Look thumbnails on the chips** (rendering each look over a small
+  crop of the current image). A device-experience polish; the chip
+  labels are honest without it.
+
+## The r34 import experience
+
+The user-import half of the task-1 bullet (r34, `tg-p7-lut-import`):
+
+- **The SAF document picker** (`ActivityResultContracts.OpenDocument`,
+  mime `*/*`) — no permission, no manifest entry; the picked bytes go
+  through the store's parse-BEFORE-write `import` (a rejected import
+  leaves the store byte-identical; the picked display name is the id
+  fallback via the existing `sourceDisplayName` query).
+- **The ONE merged session registry** — pure `LookRegistry.merge`
+  (bundled first in registry order, imports id-sorted after; the
+  defensive bundled-precedence pin; unmodifiable publication),
+  published by the activity's `loadSessionLooks()` into the
+  `@Volatile sessionLooks` map and read at BOTH resolve sites (the
+  preview's loader and the export pipeline call). A refresh replaces
+  the whole map — never mutates the published one — so what the user
+  previews is byte-identical to what exports, now including user
+  looks.
+- **The Filters row**: user-look chips labelled with their parsed
+  TITLES (the file's own authorship), the import `AssistChip` (the
+  Filled.Add icon, a labelled content description), the remove
+  affordance for a selected user look (the store deletes the bytes;
+  the sidecar keeps the id and degrades to no-look per the tolerance
+  contract — sidecars are never rewritten by a deletion), and the
+  inline import/remove outcome line announcing via a polite live
+  region (this surface has no snackbar scaffold).
+- **8 new JVM tests** (`LookRegistryImportTest`): the merge contract
+  (equality, order, the precedence pin, unmodifiability) and the
+  import/refresh path (title round-trip with the 0.5/0.5/0.5 identity
+  probe, the one-map session refresh over a real store, the
+  delete-drops-out-of-refresh tolerance path, the rejected-import
+  cleanliness). The edit module is at 207.
+
+Still deliberately not built:
+
 - **Tetrahedral interpolation** (the quality upgrade over trilinear).
   Trilinear is the tested baseline; tetrahedral changes sample values
   and would need its own hand-verified probe set — a deliberate,

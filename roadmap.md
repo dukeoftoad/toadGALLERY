@@ -1077,10 +1077,25 @@ third-party LUT data --- the licensing record is
 `docs/phase-7/bundled-luts.md`), and the Filters chip row + intensity
 slider over the ONE shared look cache (preview ≡ export). Editor
 `versionCode 5` (`0.4.0-edit-alpha`); 41 new JVM tests (the edit
-module at 199). **Remaining Phase 7 tasks**: the user-import `.cube`
-flow (SAF pick + the indexed store), the text tool, stickers,
+module at 199). **Remaining Phase 7 tasks**: the text tool, stickers,
 freehand drawing, mosaic/blur regions, frames, and the undo/redo
 extension across them.
+
+**Status (r34): the user-import `.cube` flow is built**
+(`tg-p7-lut-import`, stacked on `tg-p7-lut-engine`): the SAF document
+picker (no permission, no manifest entry) over the r33-extension
+store's parse-BEFORE-write import (a rejected import leaves the store
+byte-identical), the ONE merged session registry (pure
+`LookRegistry.merge` --- bundled first, imports id-sorted after, the
+defensive bundled-precedence pin, unmodifiable publication) at BOTH
+resolve sites so preview ≡ export now including user looks, the
+user-look chips carrying their parsed titles, the remove affordance
+(the sidecar keeps the id and degrades to no-look per the tolerance
+contract), and the inline import/remove outcome line (polite live
+region). Editor `versionCode 6` (`0.5.0-edit-alpha`); 8 new JVM tests
+(the edit module at 207). **Remaining Phase 7 tasks**: the text tool,
+stickers, freehand drawing, mosaic/blur regions, frames, and the
+undo/redo extension across them.
 
 **Purpose:** Add the creative layer on top of the Phase 6 pipeline:
 filters, text, stickers, drawing, mosaic, frames.

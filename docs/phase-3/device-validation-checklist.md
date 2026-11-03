@@ -630,3 +630,39 @@ matches the export.
 - [ ] **Undo/redo covers the look**: select a look, undo — the look
       clears; redo — it returns with its intensity (the look is one
       recipe snapshot like every other edit).
+
+## 23. r34 pass — the `.cube` import experience (versionCode 6, UNRELEASED)
+
+The import path is permissionless (SAF); everything below runs in the
+toadGALLERY Edit app on the device. Precondition: the §22 look pass.
+
+- [ ] **A valid import lands**: tap **Import .cube**, pick a valid
+      `.cube` file — the chip row gains a chip labelled with the
+      file's TITLE (or the file-name stem), the import outcome line
+      reads "Imported <title>", and the new look is SELECTED
+      immediately at the previous intensity (audition continuity).
+- [ ] **The imported look grades the preview AND the export**: with an
+      imported look at ~60% intensity, export a copy and compare it
+      against the preview — identical grade (the merged session
+      registry is the same map object at both resolve sites).
+- [ ] **A rejected import changes nothing**: pick a text file or a
+      truncated `.cube` — the outcome line reports the rejection
+      reason, NO chip appears, and re-opening the app shows no new
+      entry (parse happens before any write; the store is
+      byte-identical).
+- [ ] **Ids never shadow the bundled set**: import a `.cube` whose
+      TITLE is "Warm Film" — the derived id is collision-suffixed; a
+      SECOND distinct chip appears (the bundled Warm Film chip is
+      unchanged and still selects the bundled look).
+- [ ] **Remove is honest**: select an imported look, tap **Remove
+      look** — the chip disappears, the selection clears to None, and
+      the outcome line notes that edits using it now use no look. A
+      sidecar saved BEFORE the removal (another source edited with
+      that look) still restores with the id and renders with no look
+      (the tolerance contract, visible).
+- [ ] **Imports survive process death**: import a look, force-stop the
+      editor, relaunch — the imported chip is still on the row (the
+      directory listing is the index; nothing to drift).
+- [ ] **No permission prompts**: the entire flow (import, audition,
+      export, remove) never raises a permission dialog (SAF needs
+      none; the editor's manifest gains nothing).

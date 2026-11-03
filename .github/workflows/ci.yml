@@ -140,12 +140,34 @@ jobs:
         # Binding since the issue #20 privacy policy tests landed; lint stays
         # non-binding until the Phase 2 cleanup pass.
 
+      # --- r29 (Issue #14 gate): the toadGALLERY Edit prototype + the shared
+      # contract module join the canonical gate. The editor's assemble ALSO
+      # runs its own stricter merged-manifest INTERNET gate (no allowlist
+      # mechanism at all); the contract module is pure JVM.
+      - name: Build editor debug APK (Phase 6 prototype)
+        run: ./gradlew :apps:edit:assembleDebug --no-daemon --stacktrace
+
+      - name: Run editor lint
+        run: ./gradlew :apps:edit:lintDebug --no-daemon --stacktrace
+
+      - name: Run editor + contract unit tests
+        run: ./gradlew :apps:edit:testDebugUnitTest :shared:editor-contract:test --no-daemon --stacktrace
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: gallery-debug-apk
           path: apps/gallery/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload editor APK artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: edit-debug-apk
+          path: apps/edit/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
           retention-days: 14
 

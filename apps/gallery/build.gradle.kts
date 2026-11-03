@@ -304,7 +304,27 @@ android {
         // Phase 5 release-freeze lift is a records update; the next
         // release tags the whole 0.4.2-alpha line (codes 27-32; 30 and 31
         // are the parallel r26/r27 sibling rounds, cut from the same 29).
-        versionCode = 32
+        // versionCode 33 (r29 round): the Issue #14 contract-gate round ---
+        // the Phase 6 entry gate. The versioned Gallery <-> Edit contract
+        // (ADR-0002 / ADR-0007) leaves the spec page and becomes code: the
+        // pure-JVM :shared:editor-contract module (identity match, version
+        // negotiation, request validation, result parsing --- one truth
+        // compiled once and consumed by BOTH apps), the :apps:edit
+        // prototype APK (the exported EditActivity on
+        // org.toadgallery.action.EDIT with the v1 meta-data marker, a real
+        // brightness/contrast LUT + rotation session with undo/redo, and
+        // the non-destructive save-copy export: MediaStore INSERT only,
+        // IS_PENDING discipline, EXIF metadata policy, three terminal
+        // states, zero network --- its own stricter INTERNET gate), and the
+        // gallery half: the exact-match editor resolution + launch from the
+        // viewer's new Edit op (image pages), the third-party fallback for
+        // the not-installed state, the <queries> visibility block, and the
+        // MediaStore-observation refresh (no rescan). No new permissions;
+        // no engine changes; the vendored crates stay byte-identical to the
+        // r23 pin. Per maintainer directive: NO new device builds until
+        // Phase 5 completes; this and subsequent rounds ride CI from main
+        // only.
+        versionCode = 33
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
@@ -596,6 +616,10 @@ ksp {
 }
 
 dependencies {
+    // --- The versioned Gallery <-> Edit contract (r29, ADR-0002/0007):
+    // pure-JVM module shared with :apps:edit (one truth, both apps) ---
+    implementation(project(":shared:editor-contract"))
+
     // --- Privacy test suite (issue #20) ---
     // JVM policy tests (manifest + allowlist invariants); run in testDebugUnitTest.
     testImplementation(libs.junit)

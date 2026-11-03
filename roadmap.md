@@ -945,6 +945,20 @@ organisational affordances, all on-device.
 
 ### Phase 6 --- toadGALLERY Edit v1: core adjustments + non-destructive pipeline
 
+**Status (r29):** The **Issue #14 gate is landed** --- the versioned
+Gallery <-> Edit contract is code (`shared/editor-contract/`, pure JVM),
+the **toadGALLERY Edit prototype APK** exists (`apps/edit/`,
+`io.github.dukeoftoad.gallery.edit`, versionCode 1: contract launch, a
+real brightness/contrast LUT + rotation session with undo/redo, the
+non-destructive MediaStore-INSERT save-copy export with the EXIF
+metadata policy, the three terminal states, zero network with its own
+stricter INTERNET gate), and the gallery resolves/launches it from the
+viewer's Edit op with the third-party fallback and the
+MediaStore-observation refresh (`docs/phase-6/contract-gate.md`). The
+adjustment-suite expansion below (the remaining parameters, the
+perspective tool, the JSON sidecar recipe layer) builds on this round's
+session/export pipeline.
+
 **Purpose:** Ship the first version of the editor APK with the
 adjustment suite and the non-destructive pipeline that all later editor
 phases build on.

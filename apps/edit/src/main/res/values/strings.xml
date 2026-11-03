@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r29 (Issue #14 gate): the toadGALLERY Edit prototype's user-facing
+     strings. Same copy rules as the gallery: honest plain language, no
+     dark patterns, no network promises. The editor never narrates success
+     itself --- it answers the contract result and the GALLERY narrates
+     (the saved copy appears through MediaStore observation). -->
+<resources>
+
+    <string name="editor_app_name">toadGALLERY Edit</string>
+
+    <!-- Top bar -->
+    <string name="editor_close">Close without saving</string>
+    <string name="editor_undo">Undo</string>
+    <string name="editor_redo">Redo</string>
+    <string name="editor_save_copy">Save copy</string>
+
+    <!-- Session -->
+    <string name="editor_preview">Edited preview of the photo</string>
+    <string name="editor_brightness">Brightness: %1$d</string>
+    <string name="editor_contrast">Contrast: %1$d</string>
+    <string name="editor_rotate_left">Rotate left</string>
+
+    <!-- The always-visible metadata honesty line (contract 4.4). -->
+    <string name="editor_policy_line">%1$s · saves a copy</string>
+    <string name="editor_policy_preserve">metadata preserved</string>
+    <string name="editor_policy_strip_location">metadata preserved, location removed</string>
+    <string name="editor_policy_strip_all">metadata stripped</string>
+
+</resources>

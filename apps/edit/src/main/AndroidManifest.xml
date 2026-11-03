@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- r29 (Issue #14 gate; contract section 4.5): the editor NEVER
+         requires network. There is deliberately NO INTERNET permission here
+         --- not even an allowlisted one --- and the module's build-time
+         merged-manifest gate fails the build if a dependency ever injects
+         it. The gallery's ADR-0020 models.ente.com grant belongs to the
+         GALLERY app only. -->
+
+    <!-- Pre-Q MediaStore inserts (the save-copy export) need the legacy
+         external-storage WRITE grant; on API 29+ own-contribution inserts
+         into Pictures need no permission at all, so this is capped at
+         maxSdkVersion=28. It is requested at export time only, on devices
+         where it applies. A storage permission, never a network one. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <application
+        android:allowBackup="false"
+        android:appCategory="image"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/editor_app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+
+        <!-- The contract launch activity (spec section 1): exported, filtered
+             on the contract action, and carrying the v1 contract-version
+             meta-data the gallery's negotiator reads. The activity supports
+             exactly the formats the prototype decodes (JPEG / PNG / WebP /
+             HEIC); everything else returns ERROR_UNSUPPORTED per the spec. -->
+        <activity
+            android:name=".EditActivity"
+            android:exported="true"
+            android:label="@string/editor_app_name">
+            <intent-filter>
+                <action android:name="org.toadgallery.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/webp" />
+                <data android:mimeType="image/heic" />
+            </intent-filter>
+
+            <!-- The contract version marker: the value the gallery's
+                 EditorVersionNegotiator resolves. Bumped only per the
+                 contract's additive-versioning rule. -->
+            <meta-data
+                android:name="org.toadgallery.contract.EDIT"
+                android:value="1" />
+        </activity>
+    </application>
+
+</manifest>

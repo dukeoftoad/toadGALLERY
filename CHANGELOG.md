@@ -4,10 +4,43 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.2-alpha] — unreleased on main (versionCode 32; per maintainer
+## [0.4.2-alpha] — unreleased on main (versionCode 33; per maintainer
   directive no new device builds until Phase 5 completes)
 
 ### Added
+
+- **The Gallery ↔ Edit contract gate** (r29 round, the Phase 6 entry gate
+  — Issue #14 closed): the versioned editor integration contract
+  (ADR-0002 / ADR-0007) became code in three pieces. **(1)**
+  `:shared:editor-contract`, a new pure-JVM module both apps consume —
+  the frozen v1 constants, the exact editor identity match (release ID +
+  the documented `.debug` dogfood suffix), the additive version
+  negotiation, the shared request validator (`content://`-only source
+  URIs, `save_copy`-only v1, total metadata-policy parse) and the total
+  result parser (all three terminal states; unknown codes degrade to
+  structured `ERROR_INTERNAL`, never a crash). **(2)**
+  [toadGALLERY Edit] `:apps:edit`, the separate installable editor
+  prototype APK (`io.github.dukeoftoad.gallery.edit`, its own version
+  line starting at `0.1.0-edit-alpha` / versionCode 1): the exported
+  contract activity (JPEG/PNG/WebP/HEIC), a REAL brightness + contrast
+  LUT adjust with left rotation, live bounded preview, draft sliders and
+  a 64-deep undo/redo stack, and the non-destructive save-copy export —
+  MediaStore INSERT of a NEW row only (IS_PENDING on Q+, cancelled on
+  failure so no partial entry survives), the EXIF metadata policy
+  (preserve / strip location / strip all) through
+  `androidx.exifinterface`, and the source URI read-only by
+  construction. Zero network, enforced by the editor's own
+  merged-manifest INTERNET gate — stricter than the gallery's (no
+  allowlist mechanism exists in the editor; contract §4.5). **(3)** The
+  gallery half: exact-match editor resolution with version refusal and
+  the disabled state, the viewer's new Edit op (image pages), the
+  third-party ACTION_EDIT fallback chooser for the not-installed state,
+  the `<queries>` visibility block, and refresh via MediaStore
+  observation — no rescan. CI gains the editor's assemble/lint/tests +
+  the contract module's JVM suite + the `edit-debug-apk` artifact; a
+  manifest-conformance suite pins the editor's contract surface on the
+  JVM; the physical round trip + original-untouched hash compare join
+  the device checklist (§19).
 
 - **The MI organisational UX surfaces** (r27 round: Places, Moments,
   Stories, the collage creator, the slideshow): five product surfaces

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r29 slice: the Gallery <-> Edit contract launch (Issue #14 gate). The
+     viewer's new Edit op resolves the toadGALLERY Edit prototype through
+     the versioned contract (ADR-0002 / ADR-0007) and narrates every
+     resolution state honestly. Same copy rules: plain language, escaped
+     apostrophes, no promises the prototype cannot keep. -->
+<resources>
+
+    <!-- The Edit op itself. -->
+    <string name="cd_viewer_action_edit">Edit in toadGALLERY Edit</string>
+
+    <!-- Resolution narrations (contract section 1 states). -->
+    <string name="viewer_edit_not_installed">toadGALLERY Edit isn\'t installed — pick another editor below, or install it to edit with the full pipeline.</string>
+    <string name="viewer_edit_outdated">toadGALLERY Edit is outdated for this gallery\'s contract — update the editor and try again.</string>
+    <string name="viewer_edit_disabled">toadGALLERY Edit is disabled — enable it in system settings and try again.</string>
+
+    <!-- Export narrations (the editor replies through the contract). -->
+    <string name="viewer_edit_saved">Saved copy — the gallery picked it up through MediaStore.</string>
+    <string name="viewer_edit_error">The editor could not save: %1$s</string>
+
+</resources>

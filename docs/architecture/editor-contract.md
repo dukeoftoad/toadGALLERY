@@ -6,6 +6,25 @@ separate **toadGALLERY Edit** APK. It exists so the two apps can ship and update
 independently (roadmap Phase 6). The contract is additive-versioned: v1 fields below are
 frozen; v2 adds optional fields only, or bumps `MIN_SUPPORTED` explicitly.
 
+> **r29 implementation note (Issue #14 gate).** The contract is now code:
+> `shared/editor-contract/` compiles every constant and decision rule below
+> as a pure-JVM module both apps consume, `apps/edit/` is the prototype
+> editor APK (applicationId `io.github.dukeoftoad.gallery.edit`, debug
+> builds suffixed `.debug`), and the gallery resolves/launches it from the
+> viewer's Edit op (`apps/gallery/.../ui/viewer/EditorLaunch.kt`). Three
+> deltas against the text below, all additive and recorded here because the
+> spec is the source of truth: **(1)** `EditorIdentity` also accepts the
+> EXACT `applicationId + ".debug"` package (both apps' dogfood builds carry
+> Gradle's standard `.debug` suffix; the release ID stays the only other
+> accepted value and hostile prefix extensions are rejected); **(2)**
+> `RESULT_OK` additionally carries `EXTRA_METADATA_POLICY_APPLIED`
+> (`org.toadgallery.extra.METADATA_POLICY_APPLIED`, the metadata policy the
+> editor actually applied, per §4.4's honesty-report requirement — absent
+> on pre-r29 editors and tolerated by the parser); **(3)** the prototype
+> exports JPEG-only (`image/jpeg`, quality 95) and pre-declares
+> `image/jpeg|png|webp|heic` in its filter — undecodable formats answer
+> `ERROR_UNSUPPORTED`. See `docs/phase-6/contract-gate.md`.
+
 ## 1. Identity & discovery
 
 | Item | Value |

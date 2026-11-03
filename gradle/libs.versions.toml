@@ -126,6 +126,11 @@ android = { id = "com.android.application", version.ref = "gradlePlugins-agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 # Compose compiler plugin ships with Kotlin 2.0+ (ADR-0009)
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# Pure-JVM Kotlin library module (r29): :shared:editor-contract --- the
+# versioned Gallery <-> Edit integration contract (ADR-0002 / ADR-0007)
+# compiled with the SAME Kotlin 2.3.10 toolchain as the Compose plugin, no
+# Android surface at all, consumed by both apps.
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 # KSP for the Room compiler (Phase 4 media catalogue): annotation processing
 # without kapt. Declared here and applied in apps/gallery alongside the
 # room-compiler artifact.

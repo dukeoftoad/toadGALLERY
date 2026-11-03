@@ -171,11 +171,13 @@ class StorySetsTest {
 
     @Test
     fun `a story spanning midnight labels both calendar days`() {
-        // 23:00 on the 7th and 00:30 on the 8th: one cluster (90 minutes
-        // apart) whose range honestly spans both days.
+        // 22:00 / 23:00 on the 7th and 00:30 on the 8th: one cluster (the
+        // widest gap 90 minutes) whose range honestly spans both days ---
+        // THREE members, the min-3 cut would drop a two-photo "story".
+        val evening = millisOf(LocalDate.of(2026, 3, 7), 22)
         val night = millisOf(LocalDate.of(2026, 3, 7), 23)
         val morning = millisOf(LocalDate.of(2026, 3, 8), 0) + 30 * 60_000L
-        val sets = stories(listOf(morning, night))
+        val sets = stories(listOf(morning, night, evening))
         assertEquals(1, sets.size)
         val story = sets.single()
         assertEquals(LocalDate.of(2026, 3, 7).toEpochDay(), story.startEpochDay)

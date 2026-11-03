@@ -505,7 +505,7 @@ class TimelineRowsTest {
         // --- week 53 of the week-based year 2026 (week 1 of 2027 starts
         // 2027-01-04). Keying it "w2027-1" would be a lie.
         val rows = rows(listOf(millisOf(LocalDate.of(2027, 1, 2))), GroupBy.WEEK)
-        val header = rows.single() as TimelineRow.Header
+        val header = rows.first() as TimelineRow.Header
         assertEquals("w2026-53", header.groupKey)
         assertEquals(LocalDate.of(2026, 12, 28).toEpochDay(), header.epochDay)
     }
@@ -542,12 +542,12 @@ class TimelineRowsTest {
         // 2026-03-08T20:00Z is Sunday (week 10) in UTC but already Monday
         // 2026-03-09 (week 11) in Asia/Tokyo.
         val instant = Instant.parse("2026-03-08T20:00:00Z").toEpochMilli()
-        val utc = rows(listOf(instant), GroupBy.WEEK, ZoneOffset.UTC).single() as TimelineRow.Header
+        val utc = rows(listOf(instant), GroupBy.WEEK, ZoneOffset.UTC).first() as TimelineRow.Header
         val tokyo = rows(
             listOf(instant),
             GroupBy.WEEK,
             ZoneId.of("Asia/Tokyo"),
-        ).single() as TimelineRow.Header
+        ).first() as TimelineRow.Header
         assertEquals("w2026-10", utc.groupKey)
         assertEquals("w2026-11", tokyo.groupKey)
     }

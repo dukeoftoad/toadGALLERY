@@ -65,7 +65,7 @@ class PlacesRegionGridTest {
         assertEquals(0, PlacesRegionGrid.longitudeBand(-180.0))
         assertEquals(0, PlacesRegionGrid.longitudeBand(-179.9))
         assertEquals(5, PlacesRegionGrid.longitudeBand(-30.0))
-        assertEquals(6, PlacesRegionGrid.longitudeBand(-29.9))
+        assertEquals(5, PlacesRegionGrid.longitudeBand(-29.9))
         assertEquals(6, PlacesRegionGrid.longitudeBand(0.0))
         assertEquals(11, PlacesRegionGrid.longitudeBand(179.9))
         // +180 normalizes to -180 (the equirectangular wrap), so the SAME
@@ -172,21 +172,24 @@ class PlacesRegionGridTest {
     }
 
     @Test
-    fun `antimeridian neighbors share one region and average near the meridian`() {
-        // +179.9 and -179.9 are a few kilometers apart across the
-        // antimeridian; they must bucket together and their mean must sit
-        // near 180 (not near 0, which a naive signed average would give).
+    fun `the exact antimeridian pair shares one region and averages at the canonical meridian`() {
+        // +180.0 and -180.0 are the SAME meridian after the equirectangular
+        // wrap (normalizeLongitude canonicalizes both to -180), so they
+        // bucket together and their mean sits AT the meridian. Cells either
+        // side of it (+-179.9) honestly land in different bands --- a fixed
+        // 12-column grid cannot merge across the antimeridian, and the band
+        // asserts above pin exactly that.
         val rows = listOf(
-            row(0, latitude = 10.0, longitude = 179.9),
-            row(1, latitude = 10.0, longitude = -179.9),
+            row(0, latitude = 10.0, longitude = 180.0),
+            row(1, latitude = 10.0, longitude = -180.0),
         )
         val regions = PlacesRegionGrid.bucket(rows)
         assertEquals(1, regions.size)
         assertEquals(2, regions.single().count)
         val mean = regions.single().meanLongitude
         assertTrue(
-            "mean longitude near the antimeridian (got $mean)",
-            mean > 179.0 || mean < -179.0,
+            "mean longitude at the canonical antimeridian (got $mean)",
+            mean <= -179.0 || mean >= 179.0,
         )
     }
 

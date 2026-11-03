@@ -164,7 +164,10 @@ object PlacesRegionGrid {
     fun latitudeBand(latitude: Double, rowsPerGrid: Int = ROWS): Int {
         if (latitude.isNaN() || latitude >= 90.0) return 0
         if (latitude <= -90.0) return rowsPerGrid - 1
-        val band = ((90.0 - latitude) / (180.0 / rowsPerGrid)).toInt()
+        // CEIL-1 so an exact band edge lands in its UPPER band (the one
+        // closer to the pole --- pinned by PlacesRegionGridTest): a plain
+        // floor drops 30.0N into the 0..30N band it only touches.
+        val band = (kotlin.math.ceil((90.0 - latitude) / (180.0 / rowsPerGrid)).toInt() - 1)
         return band.coerceIn(0, rowsPerGrid - 1)
     }
 

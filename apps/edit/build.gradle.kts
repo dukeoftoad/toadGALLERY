@@ -203,7 +203,11 @@ dependencies {
     // --- Theme resource for the manifest activity ---
     implementation(libs.material)
 
-    // --- JVM tests (the real org.json is NOT needed here; the manifest
-    // conformance test parses XML via javax.xml, on the JDK) ---
+    // --- JVM tests (r30): the REAL org.json for the recipe/sidecar tests
+    // --- android.jar's stub throws "not mocked" on the platform classes;
+    // test classpath ONLY (the release APK ships the platform org.json,
+    // zero new runtime surface). The same convention as the gallery's
+    // r23 org-json note in the version catalog.
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }

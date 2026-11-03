@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  r32 (Phase 6 hardening): the accessibility semantics strings. Every editor
+  slider announces its NAME (contentDescription) and its live VALUE
+  (stateDescription reusing the existing formatted label strings); the HSL
+  band sliders announce "BAND: CONTROL" so the selected band is always
+  spoken. Name-only strings live here; the wire surface is untouched.
+-->
+<resources>
+    <string name="editor_a11y_exposure">Exposure</string>
+    <string name="editor_a11y_brightness">Brightness</string>
+    <string name="editor_a11y_contrast">Contrast</string>
+    <string name="editor_a11y_saturation">Saturation</string>
+    <string name="editor_a11y_temperature">Temperature</string>
+    <string name="editor_a11y_tint">Tint</string>
+    <string name="editor_a11y_highlights">Highlights</string>
+    <string name="editor_a11y_shadows">Shadows</string>
+    <string name="editor_a11y_vignette">Vignette</string>
+    <string name="editor_a11y_sharpness">Sharpness</string>
+    <string name="editor_a11y_straighten">Straighten</string>
+    <string name="editor_a11y_quality">Export quality</string>
+    <string name="editor_a11y_band_control">%1$s: %2$s</string>
+    <string name="editor_a11y_hue">Hue</string>
+    <string name="editor_a11y_luminance">Luminance</string>
+</resources>

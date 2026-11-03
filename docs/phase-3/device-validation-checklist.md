@@ -630,3 +630,20 @@ matches the export.
 - [ ] **Undo/redo covers the look**: select a look, undo — the look
       clears; redo — it returns with its intensity (the look is one
       recipe snapshot like every other edit).
+- [ ] **The import flow — the happy path**: tap "Import look…", pick a
+      valid `.cube` from the document picker — the look appears in the
+      chip row (after the bundled five, titled from the file's TITLE
+      or its name) AND is auto-selected; its intensity slider works
+      exactly like a bundled look's; export carries it.
+- [ ] **The import flow — the honest rejection**: pick a non-`.cube`
+      or malformed file — nothing is added to the row, and the reason
+      line appears under the chips (no crash, no partial state).
+- [ ] **The import survives everything**: force-stop and relaunch —
+      the imported look is still in the row (the app-private store);
+      re-importing the same file yields a suffixed second copy, never
+      a shadow of the first or of a bundled look.
+- [ ] **Remove look**: with an IMPORTED look selected, "Remove look"
+      deletes it, clears the selection, and the chip row reloads
+      without it; bundled looks never show the affordance; a sidecar
+      still naming the removed look degrades to no-look (the chip row
+      shows no selection) — the tolerance contract on device.

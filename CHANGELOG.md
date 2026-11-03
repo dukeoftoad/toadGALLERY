@@ -92,9 +92,15 @@ All notable changes to toadGALLERY are documented here. The format follows
   id round-trips verbatim and degrades to no-look, never a crash),
   pipeline stage 10 between the HSL bands and the spatial effects, and
   the ONE shared look cache so the preview and the export are
-  byte-identical by construction. Editor `versionCode 5`
-  (`0.4.0-edit-alpha`); 41 new JVM tests (the edit module at 199);
-  the on-device pass rides checklist §22.
+  byte-identical by construction. **The user-import flow completes the
+  feature**: an "Import look…" chip (SAF document picker — the
+  zero-network editor reads local files only) whose picks are validated
+  before anything is written, stored verbatim with derived
+  collision-free ids that can never shadow the bundled set, shown in
+  the merged chip row, and removable with a per-import "Remove look"
+  affordance. Editor `versionCode 6` (`0.4.1-edit-alpha`); 51 new JVM
+  tests (the edit module at 209); the on-device pass rides checklist
+  §22.
 - **[toadGALLERY Edit] The accessibility + hardening pass** (r32 round,
   riding the r31 exit branch `tg-p6-edit-v1-exit`): every editor slider —
   the 10 adjustment sliders, straighten, export quality and the three HSL

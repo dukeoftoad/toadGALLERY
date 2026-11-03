@@ -72,6 +72,147 @@ All notable changes to toadGALLERY are documented here. The format follows
   53 new JVM tests (927 → 980); versionCode 32; versionName stays
   0.4.2-alpha (the freeze lift is a records update; the next release
   tags the whole 0.4.2-alpha line, codes 27–32).
+
+### Added
+
+- **The MI organisational UX surfaces** (r27 round: Places, Moments,
+  Stories, the collage creator, the slideshow): five product surfaces
+  over the existing Room catalogue — zero new permissions, zero engine
+  changes, zero reverse geocoding, every feature a pure JVM-tested core
+  plus a thin Android seam. **Places**: offline coarse region bucketing
+  over the catalogue's persisted GPS coordinates — the pure
+  `PlacesRegionGrid` (12x6, one cell per 30°, closed-form deterministic
+  bands with pole-side band edges, first-appearance newest-first region
+  order, antimeridian-normalized means, the exact ±180 meridian ONE band
+  from both directions) with `PlacesRegionLabels` coordinate-band labels
+  (ISO-6709-style pure math; no place name is ever invented, fetched or
+  guessed), the pure `PlacesContentPolicy` (the r14 consent display gate
+  decides FIRST — consent off shows the consent state even over
+  persisted rows — then the honest empty-with-footnote, then Ready), the
+  `PlaceMediaHandoff` one-shot tap hand-off (nav argument as the durable
+  fallback), the `PlacesScreen` region grid and `PlaceDetailScreen`
+  media grid (viewer hand-offs the map-sheet way), and the Albums-tab
+  Places section. Vault/trash exclusion is inherited: the surfaces read
+  the catalogue's live-rows `geotaggedRows` projection only. **Moments**:
+  the `GroupBy.WEEK` grain of the grouped timeline — the pure
+  `MomentGrouper` (ISO-8601 weeks, Monday-anchored, week-based-year keys
+  so a 2 January can be week 53 of the year before) with
+  `buildTimelineRows`' WEEK branch as a thin projection (the DAY/MONTH
+  streaming implementations untouched; DAY equivalence pinned by tests),
+  counted headers via `headerCellCounts`, and the FlowRow group-by chips.
+  **Stories**: the `StoriesShelf` on the Photos tab — recent time
+  clusters the pure `StorySets` engine derives from the SAME paging
+  snapshot the grid renders (36h gap rule, min 3 members, cap 8
+  most-recent, zero persistence); playback IS the existing viewer with
+  the slideshow armed. **The collage creator**: the pure `CollageLayouts`
+  (17 grid-variant templates for 2..9 photos, exact tiling pinned
+  test-by-template; `slotPixels`' single rounding rule and
+  `centerCropSource`'s center-crop math shared by the Compose preview
+  and the exporter, so what the preview shows is what the export saves),
+  the `CollageScreen` template picker, and the Q+ MediaStore exporter
+  riding the file-ops naming/pending-row discipline ("Collage.jpg",
+  "Collage (2).jpg", …; a failed export deletes its pending row).
+  **The slideshow**: the pure `SlideshowTiming` (3/5/10-second catalog,
+  nearest-snap with ties to the shorter option, wrap-around advance) and
+  `ViewerCrossfade` cores, the shell-scoped armed launch (Stories shelf,
+  the Photos header action, the album detail action), the viewer's
+  start/stop toggle plus the in-session interval menu, and crossfade
+  page alphas while a run is active; leaving the viewer always stops the
+  run. 84 new JVM tests (963 → 1047 on the rebased base): the
+  `MomentGrouperTest` / `StorySetsTest` / `CollageLayoutsTest` /
+  `PlacesRegionLabelsTest` / `PlacesContentPolicyTest` /
+  `PlaceMediaHandoffTest` / `SlideshowTimingTest` files, the WEEK-grain +
+  `headerCellCounts` sections of `TimelineRowsTest`, and the WEEK cases
+  of `PlacesRegionGridTest` / `AppearanceTest`.
+
+- **Magic Search**- **Magic Search** (r26 round; Workstream 7 of the Phase 5 plan,
+  `docs/phase-5/magic-search.md`): offline semantic search over an
+  on-device CLIP index — the Search tab's new **Content** mode. The JNI
+  bridge extends from sixteen to twenty-five externals (`nativeInitSemantic`
+  — the CLIP half of an engine session as a third open/closed state —
+  the CLIP image/text encoders, and a CLIP store surface over the SAME
+  `ml-index.sqlite` the faces live in: put (512-dim guard on both sides
+  of the bridge), delete-for-files, indexed-file-ids, count, top-K
+  vecdb search in the vecdb's own order, and the once-per-drain
+  `fillClipIndex` reconciliation pass with its own report — 12 new JNI
+  Rust tests). Kotlin side, the semantic background queue as the r24
+  face queue's SIBLING: `ClipIndexQueue` (the same three truths, the
+  same `MediaRevision.diff` mapping — with the honest caveat that the
+  delete-first pass is kept even though `putClip` upserts, so the two
+  queues share one diff→action table; ONE whole-photo embedding per
+  photo; whole-photo cancellation with `NonCancellable` persistence;
+  fill exactly once at drain) and `ClipIndexWorker` (its own unique
+  WorkManager chain, FACE-then-SEMANTIC session gates in the honest
+  order, self-re-enqueue, bounded retries, honest permanent failures).
+  The `ml/search` domain: `MagicSearchEngineSeam` (+ the
+  `PeopleEngineAdapter`-pattern production adapter extended with
+  `initSemantic`), the pure six-state `MagicSearchContentPolicy`
+  (Error dominates; consent before capability; EngineMissing is the
+  build shape; ModelsNotProvisioned covers EITHER pack — the r26
+  session is face-based, honestly; NotIndexed distinct from Ready),
+  the pure query gate (2–200 trimmed characters; over-long queries are
+  refused, never truncated), the pure order-preserving/dedupe/limit
+  ranking (no distance surfaced in v1), the no-cache repository with
+  typed honest outcomes, and the chunked 999-limit MediaStore query.
+  The UI: the "Search by" mode row (Name untouched vs Content), the
+  debounced sibling `MagicSearchViewModel` whose policy gates render as
+  honest cards (consent → Settings toggle with affordance; engine →
+  build shape; models → download pointer naming the manifest-derived
+  ~213 MB; not indexed → queue pointer), results on the SAME shared
+  grid with the same viewer hand-off. Settings: the `magicSearchEnabled`
+  consent row (default FALSE, ADR-0010), the SEMANTIC model download
+  card (per-asset presence, Download/Delete) and the semantic queue
+  card (start/cancel/reset — reset erases the queue's own
+  `clip-index-state.json`; the stored index rides the r24 Reset face
+  index, stated honestly). Queries never touch the network; the only
+  egress is the ADR-0020 model download; vault media can never become
+  candidates (three-gate discipline). Rust suite 32 JNI tests (+12);
+  JVM suite 982 tests (+55).
+- **Edit-preserving reclustering — the cluster-id remapping overlay**
+  (r26 round; the People follow-ups, Workstream 6 closeout): user
+  edits now SURVIVE the face index's re-clustering passes instead of
+  being pruned away. Every clustering pass (each draining
+  background-queue run, each threshold change, each model
+  re-provision) re-rolls ALL cluster ids (upstream `new_cluster_id` is
+  random per pass); the overlay keys edits to the one identity a pass
+  cannot re-roll — photo membership (face rows key on MediaStore file
+  ids, stable since the r23 put path). `people-state.json` grows three
+  additive books inside schema version 1 (an r25 file loads with them
+  empty — the upgrade loses nothing): per-edited-cluster membership
+  fingerprints (captured at edit time over the same
+  `nativeStoreClusterFileIds` read), recorded merge intents
+  (`PeopleMerge`: target + the post-merge membership) and accumulated
+  remove-from-person corrections. The pure `PeopleReclusterRemap`
+  planner maps fresh post-recluster ids onto the preserved state by
+  overlap — deterministic (most shared files; ties by bigger cluster,
+  then smaller id; name collisions by score then old id; a live id's
+  own name always wins), re-folds a merge the pass split back into one
+  cluster (majority-descendant rule), re-applies a removal the pass
+  re-derived (only the files that actually came back) and refreshes
+  the fingerprints to the predicted post-mutation memberships.
+  `PeopleRepository` runs the reconcile on every read AND every edit
+  (a mid-window edit on a stale UI id is re-keyed through the
+  composite mapping); a declined engine mutation aborts the save with
+  the old state intact — the next read replans (self-healing, never
+  corrupting). Edits without a fingerprint (made before the r26
+  upgrade) still drop via the r25 prune — the documented fallback, not
+  a silent loss. 100% Kotlin-side over the EXISTING 16-external JNI
+  surface: zero Rust changes, the vendored crates stay byte-identical
+  to the r23 pin.
+- **The unhide surface** (r26 round): the People screen gains a
+  hidden-persons section — the pure
+  `PeopleContentPolicy.hiddenPersons` mirror of the visible mapping —
+  with a per-person Unhide action (`PeopleRepository.unhide`: a pure
+  hidden-set flip; no queue reset, names and every other edit intact).
+  An unhide failure is an honest one-shot snackbar, never a silent
+  no-op. The r25 copy that named the index-erasing "Reset face index"
+  as the only way back from a hide (the Person-detail hide dialog, the
+  People screen's everyone-hidden body, the Albums tab's all-hidden
+  card) was re-worded in place — the Albums card now carries a "See
+  all" action straight into the hidden section. JVM suite 963 tests
+  (+36: the new `PeopleReclusterRemapTest`, the r26 sections of
+  `PeopleRepositoryTest`/`PeopleStateStoreTest`/
+  `PeopleContentPolicyTest`).
 - **The People auto-album** (r25 round; Workstream 6 of the Phase 5 plan,
   `docs/phase-5/people-ui.md`): the r23/r24 face index gains its product
   surface — an opt-in (ADR-0010, **off by default**) People grid. The

@@ -27,14 +27,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -102,6 +108,7 @@ import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
 import io.github.dukeoftoad.gallery.ui.photos.UndoPayload
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -219,6 +226,18 @@ fun ViewerScreen(
         // window empties it, and closing the viewer is the honest result.
         LaunchedEffect(Unit) { onBack() }
         return
+    }
+
+    // ---- Slideshow (r27) ----
+    // The shell-scoped flag the Stories shelf / grid overflow actions armed
+    // (or the top bar's own toggle flips); the interval is the user's last
+    // in-session choice. Leaving the viewer ALWAYS stops a run --- a
+    // slideshow must never silently survive into the next plain tap-to-view
+    // --- so the screen owns exactly one dispose-side stop.
+    val slideshowActive by viewModel.slideshowActive.collectAsState()
+    val slideshowIntervalMillis by viewModel.slideshowIntervalMillis.collectAsState()
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.stopSlideshow() }
     }
 
     // ---- Viewer file operations (issue #63) ----
@@ -436,6 +455,28 @@ fun ViewerScreen(
             window.items.size
         }
 
+        // The slideshow's auto-advance loop (r27): while active, sleep the
+        // configured interval, then advance one page (wrapping to the first
+        // after the last --- the pure [SlideshowTiming.nextIndex] rule) with
+        // the pager's own settle animation, whose position sweep is what the
+        // crossfade layer below consumes. Restarted (not re-timed) when the
+        // interval, the window, or the active flag changes; a MANUAL swipe
+        // during a run does not reset the running timer (documented v1
+        // behavior --- the advance lands on the page the user landed on,
+        // via the fresh pagerState.currentPage read each iteration). A
+        // one-page window keeps the loop honest: nextIndex answers 0, so
+        // the "advance" re-settles the only page there is.
+        LaunchedEffect(slideshowActive, slideshowIntervalMillis, window) {
+            while (slideshowActive) {
+                delay(slideshowIntervalMillis)
+                val next = SlideshowTiming.nextIndex(
+                    pagerState.currentPage,
+                    window.items.size,
+                )
+                pagerState.animateScrollToPage(next)
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -449,23 +490,41 @@ fun ViewerScreen(
                 key = { page -> window.items[page].uri.toString() },
             ) { page ->
                 val item = window.items[page]
-                if (item.isVideo) {
-                    VideoPage(
-                        item = item,
-                        // The SAME current-page seam PhotoPage receives
-                        // (r19a): a video page pauses its player the
-                        // moment it stops being the settled page, the
-                        // audio-side mirror of PhotoPage's leave-resets-
-                        // zoom. See VideoPage for the semantics.
-                        isCurrentPage = pagerState.currentPage == page,
-                    )
+                // The slideshow's crossfade (r27): while active, each page's
+                // alpha falls with its distance from the settling position
+                // (the pure ViewerCrossfade rule); the graphicsLayer lambda
+                // reads the pager state DEFERRED, so the fade animates on
+                // scroll frames without recomposing the page. The plain
+                // swipe keeps the pager's stock look byte-identical.
+                val fadeModifier = if (slideshowActive) {
+                    Modifier.graphicsLayer {
+                        alpha = ViewerCrossfade.pageAlpha(
+                            page,
+                            pagerState.currentPage + pagerState.currentPageOffsetFraction,
+                        )
+                    }
                 } else {
-                    PhotoPage(
-                        item = item,
-                        isCurrentPage = pagerState.currentPage == page,
-                        onTap = { chromeVisible = !chromeVisible },
-                        onZoomedChanged = { zoomed -> currentPageZoomed = zoomed },
-                    )
+                    Modifier
+                }
+                Box(modifier = Modifier.fillMaxSize().then(fadeModifier)) {
+                    if (item.isVideo) {
+                        VideoPage(
+                            item = item,
+                            // The SAME current-page seam PhotoPage receives
+                            // (r19a): a video page pauses its player the
+                            // moment it stops being the settled page, the
+                            // audio-side mirror of PhotoPage's leave-resets-
+                            // zoom. See VideoPage for the semantics.
+                            isCurrentPage = pagerState.currentPage == page,
+                        )
+                    } else {
+                        PhotoPage(
+                            item = item,
+                            isCurrentPage = pagerState.currentPage == page,
+                            onTap = { chromeVisible = !chromeVisible },
+                            onZoomedChanged = { zoomed -> currentPageZoomed = zoomed },
+                        )
+                    }
                 }
             }
             ViewerTopBar(
@@ -478,6 +537,16 @@ fun ViewerScreen(
                 // guard NewApi lint recognizes.
                 canModify = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
                 isFavorite = favoriteStateOf(window.items[pagerState.currentPage]),
+                slideshowActive = slideshowActive,
+                slideshowIntervalMillis = slideshowIntervalMillis,
+                onToggleSlideshow = {
+                    if (slideshowActive) {
+                        viewModel.stopSlideshow()
+                    } else {
+                        viewModel.startSlideshow()
+                    }
+                },
+                onSlideshowInterval = viewModel::setSlideshowInterval,
                 onBack = onBack,
                 onInfo = { infoTarget = window.items[pagerState.currentPage] },
                 onShare = { shareItem(window.items[pagerState.currentPage]) },
@@ -1073,11 +1142,20 @@ private fun VideoPage(item: MediaItem, isCurrentPage: Boolean) {
  * PlayerView's own controls, so the top bar simply follows the last
  * toggled state there.
  *
+ * r27 adds the slideshow controls after the counter: a toggle
+ * (PlayArrow while stopped / an X while running, both CORE icons --- the
+ * slideshow STOPS rather than pauses, and the glyph says so) and, while a
+ * run is active, an interval menu (DateRange, CORE) with the three
+ * [SlideshowTiming] options check-marked. Config-while-relevant: the
+ * interval button appears only during a run (the default 5s applies
+ * otherwise), keeping the bar's resting density unchanged for everyone
+ * who never starts a slideshow.
+ *
  * Every action is an `IconButton` --- the 48dp touch floor DesignTokens
  * mandates --- with a `cd_viewer_action_*` content description, and all
  * icons come from the material-icons CORE set the repo already depends on
- * (Info, Share, Edit, Delete, Favorite, FavoriteBorder; no extended-icons
- * dependency is added).
+ * (Info, Share, Edit, Delete, Favorite, FavoriteBorder, PlayArrow, Clear,
+ * DateRange, Check; no extended-icons dependency is added).
  */
 @Composable
 private fun ViewerTopBar(
@@ -1086,6 +1164,10 @@ private fun ViewerTopBar(
     total: Int,
     canModify: Boolean,
     isFavorite: Boolean,
+    slideshowActive: Boolean,
+    slideshowIntervalMillis: Long,
+    onToggleSlideshow: () -> Unit,
+    onSlideshowInterval: (Long) -> Unit,
     onBack: () -> Unit,
     onInfo: () -> Unit,
     onShare: () -> Unit,
@@ -1094,6 +1176,9 @@ private fun ViewerTopBar(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The interval menu's open flag, local to the bar (the menu closes on
+    // any pick or outside tap; the CHOICE rides the callback up).
+    var intervalMenuOpen by remember { mutableStateOf(false) }
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(),
@@ -1121,6 +1206,74 @@ private fun ViewerTopBar(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f),
             )
+            // ---- Slideshow (r27) ----
+            IconButton(
+                onClick = onToggleSlideshow,
+                modifier = Modifier.testTag("viewer_action_slideshow"),
+            ) {
+                Icon(
+                    imageVector = if (slideshowActive) {
+                        Icons.Filled.Clear
+                    } else {
+                        Icons.Filled.PlayArrow
+                    },
+                    contentDescription = stringResource(
+                        if (slideshowActive) {
+                            R.string.cd_viewer_action_slideshow_stop
+                        } else {
+                            R.string.cd_viewer_action_slideshow_start
+                        }
+                    ),
+                    tint = Color.White,
+                )
+            }
+            if (slideshowActive) {
+                Box {
+                    IconButton(
+                        onClick = { intervalMenuOpen = true },
+                        modifier = Modifier.testTag("viewer_action_slideshow_interval"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DateRange,
+                            contentDescription = stringResource(
+                                R.string.cd_viewer_action_slideshow_interval
+                            ),
+                            tint = Color.White,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = intervalMenuOpen,
+                        onDismissRequest = { intervalMenuOpen = false },
+                    ) {
+                        SlideshowTiming.INTERVALS_MILLIS.forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            R.string.slideshow_interval_option,
+                                            option / 1000,
+                                        )
+                                    )
+                                },
+                                onClick = {
+                                    intervalMenuOpen = false
+                                    onSlideshowInterval(option)
+                                },
+                                trailingIcon = if (option == slideshowIntervalMillis) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null, // the state is the checkmark
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
+                }
+            }
             IconButton(
                 onClick = onInfo,
                 modifier = Modifier.testTag("viewer_action_info"),

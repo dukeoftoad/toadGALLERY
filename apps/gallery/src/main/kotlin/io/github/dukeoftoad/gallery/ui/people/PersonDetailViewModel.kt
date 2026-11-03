@@ -160,9 +160,10 @@ class PersonDetailViewModel(
 
     /**
      * Hides this person (the hidden set); the refresh lands in Missing
-     * and the screen pops back. The hide confirm dialog names the
-     * honest way back ("Reset face index" in Settings --- which erases
-     * the whole index by design).
+     * and the screen pops back. The r26 way back is the People screen's
+     * HIDDEN SECTION (per-person Unhide --- no index reset, names and
+     * every other edit intact; see [io.github.dukeoftoad.gallery.ml
+     * .people.PeopleRepository.unhide]).
      */
     fun hide() {
         performOperation { repository.hide(clusterId) }

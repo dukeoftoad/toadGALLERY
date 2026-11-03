@@ -710,6 +710,105 @@ recluster pass (an edit-preserving overlay is future work). 927 JVM
 tests (+42) + 526 vendored Rust tests + 20 JNI tests (8 new);
 versionCode 29, no device build per the Phase-5-completion directive.
 
+#### Status — r26 round (versionCode 30): the Magic Search round
+
+Workstream 7 of the Phase 5 plan
+(`docs/phase-5/magic-search.md`): offline semantic ("Magic") search
+over an on-device CLIP index — the Search tab's new **Content** mode,
+opt-in per ADR-0010 and **off by default**. The JNI bridge extends
+from sixteen to twenty-five externals (`nativeInitSemantic` — the CLIP
+half of an engine session as a third open/closed state — the CLIP
+image/text encoders, and a CLIP store surface over the SAME
+`ml-index.sqlite` the faces live in: put/delete-for-files/indexed-
+file-ids/count, top-K vecdb search preserving the store's own order,
+and the once-per-drain `fillClipIndex` reconciliation pass with its
+own report). The semantic background queue is the r24 face queue's
+SIBLING: the same three truths, the same `MediaRevision.diff`
+mapping (delete-first kept even though `putClip` upserts — one
+diff→action table across both queues), ONE whole-photo embedding per
+photo, its own unique WorkManager chain with self-re-enqueue and
+honest FACE-then-SEMANTIC session gates (the r26 session is
+face-based — the round's documented limitation), and the atomic
+`clip-index-state.json` bookkeeping inside the backup-excluded
+face-index directory. The `ml/search` domain carries the
+`MagicSearchEngineSeam` (+ the adapter), the pure six-state
+`MagicSearchContentPolicy` (Error dominates; consent before
+capability; ModelsNotProvisioned covers either pack; NotIndexed
+distinct from Ready), the 2–200-character query gate (over-long
+refused, never truncated), the order-preserving/dedupe/limit ranking
+(no distance surfaced in v1) and the no-cache repository with typed
+honest outcomes. The UI: the "Search by" mode row (Name untouched vs
+Content), the debounced sibling `MagicSearchViewModel` whose policy
+gates render as honest cards (consent/engine/models/not-indexed, each
+pointing at its own recovery surface), results on the SAME shared
+grid in the vecdb's own relevance order with the same viewer
+hand-off. Settings gains the `magicSearchEnabled` consent row, the
+SEMANTIC model download card (~213 MB, manifest-derived) and the
+semantic queue card (start/cancel/reset — the reset's honest scope:
+the queue's own bookkeeping; the stored index rides the r24 Reset
+face index). Queries never touch the network — the only egress is
+the ADR-0020 model download; vault media can never become candidates
+(three-gate discipline). 982 JVM tests (+55) + 32 JNI tests (12
+new); versionCode 30, no device build per the Phase-5-completion
+directive.
+
+#### Status — r26 round (versionCode 31): the People follow-ups round
+
+Workstream 6 closeout — the two r25 deferrals
+(`docs/phase-5/people-ui.md`) shipped together. **Edit-preserving
+reclustering**: every clustering pass re-rolls ALL cluster ids
+(upstream `new_cluster_id` is random per pass); the r26 overlay keys
+user edits to the one identity a pass cannot re-roll — PHOTO
+MEMBERSHIP (face rows key on MediaStore file ids). `people-state.json`
+grows three additive books inside schema version 1 (membership
+fingerprints captured at edit time, recorded `PeopleMerge` intents,
+accumulated remove-from-person corrections; an r25 file loads with
+them empty), the pure `PeopleReclusterRemap` planner maps fresh
+post-recluster ids onto the preserved state by deterministic overlap
+(most shared files; ties by bigger cluster then smaller id; name
+collisions by score then old id), re-folds merges the pass split
+(majority-descendant rule, one engine merge per folded stray),
+re-applies removals the pass re-derived (only the files that came
+back), and `PeopleRepository` executes the plan on every read AND
+every edit (mid-window edits re-keyed; a declined mutation aborts the
+save — self-healing, never corrupting). **The unhide UI**: the People
+screen's hidden section (the pure `PeopleContentPolicy.hiddenPersons`
+mapping) with a per-person Unhide action — a pure hidden-set flip, no
+queue reset, names intact; the r25 reset-path copy re-worded in place.
+100% Kotlin-side over the existing 16-external JNI surface — zero
+Rust changes, the vendored crates byte-identical to the r23 pin. 963
+JVM tests (+36); versionCode 30, no device build per the
+Phase-5-completion directive.
+#### Status — r27 round (versionCode 32): the MI organisational UX round
+
+Workstream 6 / the roadmap Phase 5 organisational-UX scope, shipped as
+five product surfaces over the existing catalogue (zero new permissions,
+zero engine changes, zero reverse geocoding — every feature a pure
+JVM-tested core plus a thin Android seam, ADR-0016):
+
+- **Places** — the pure `PlacesRegionGrid` 12x6 coarse bucketing over the
+  Room GPS coordinates (band edges land in the pole-side band; the exact
+  antimeridian is ONE band from both directions), `PlacesRegionLabels`
+  coordinate-band labels, the pure `PlacesContentPolicy` r14 consent
+  gate, the `PlaceMediaHandoff` one-shot hand-off, the
+  `PlacesScreen`/`PlaceDetailScreen` sub-pages and the Albums-tab
+  Places section;
+- **Moments** — the `GroupBy.WEEK` grain: the pure `MomentGrouper`'s
+  ISO-week output as a thin projection in `buildTimelineRows` (the
+  DAY/MONTH streaming untouched, DAY equivalence pinned), counted
+  headers, the FlowRow group-by chips;
+- **Stories** — the pure `StorySets` 36h-gap clusters on the Photos tab,
+  playback through the existing viewer with the slideshow armed;
+- **The collage creator** — the pure `CollageLayouts` (2..9 photos,
+  exact tiling, `slotPixels`/`centerCropSource` shared by preview and
+  exporter) + the Compose preview and the Q+ MediaStore exporter on the
+  file-ops naming discipline;
+- **The slideshow** — the pure `SlideshowTiming`/`ViewerCrossfade` cores,
+  the shell-scoped armed launch, the in-session interval menu.
+
+84 new JVM tests; `versionCode 32`; the Phase 5 release freeze stands
+(no tags, no Releases — the r28 exit gate is the only lift).
+
 #### Status — r28 round (versionCode 32): the Workstream 8 hardening round + the Phase 5 exit gate
 
 The last Phase 5 workstream (`docs/phase-5/hardening.md`): tests and

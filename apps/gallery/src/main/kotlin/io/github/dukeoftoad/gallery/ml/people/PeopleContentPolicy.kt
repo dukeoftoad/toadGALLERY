@@ -131,4 +131,34 @@ object PeopleContentPolicy {
             PeopleContentState.Ready(visible)
         }
     }
+
+    /**
+     * The mirror of `Ready(visible)` for the HIDDEN half (r26, the
+     * People follow-ups round): the live clusters that ARE in
+     * [hiddenIds] --- stale hidden ids (a recluster the overlay could
+     * not match) render nothing, exactly like stale names --- with
+     * names applied and the seam's own order preserved. The People
+     * screen's hidden section renders these behind the per-person
+     * unhide action. The same "mapping, not sorter" rule as [decide].
+     */
+    fun hiddenPersons(
+        clusters: List<FaceCluster>,
+        hiddenIds: Set<String>,
+        names: Map<String, String>,
+    ): List<VisiblePerson> {
+        val hidden = ArrayList<VisiblePerson>()
+        for (cluster in clusters) {
+            if (cluster.clusterId !in hiddenIds) continue
+            val stored = names[cluster.clusterId]
+            hidden.add(
+                VisiblePerson(
+                    clusterId = cluster.clusterId,
+                    name = stored?.takeIf { it.isNotBlank() },
+                    faceCount = cluster.faceCount,
+                    coverFileId = cluster.coverFileId,
+                )
+            )
+        }
+        return hidden
+    }
 }

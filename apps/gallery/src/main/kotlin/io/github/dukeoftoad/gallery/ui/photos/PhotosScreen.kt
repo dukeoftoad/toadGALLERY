@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +66,8 @@ import io.github.dukeoftoad.gallery.data.RenameCheck
 import io.github.dukeoftoad.gallery.data.TimelineSort
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
+import io.github.dukeoftoad.gallery.data.collage.CollageHandoff
+import io.github.dukeoftoad.gallery.data.collage.CollageLayouts
 import io.github.dukeoftoad.gallery.data.filters.PhotosFilterHandoff
 import io.github.dukeoftoad.gallery.data.filters.TimelineFilter
 import io.github.dukeoftoad.gallery.ui.StateScreen
@@ -210,6 +213,19 @@ fun PhotosScreen(
     vaultViewModel: VaultViewModel,
     settingsViewModel: SettingsViewModel,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit = { _, _ -> },
+    /**
+     * r27 (Stories): opens one story's playback --- the shell arms the
+     * shared viewer with the window and its slideshow mode.
+     */
+    onOpenStory: (window: List<MediaItem>) -> Unit = {},
+    /**
+     * r27 (Slideshow): starts a slideshow over the timeline's loaded
+     * window --- the shell arms the shared viewer + slideshow and
+     * navigates.
+     */
+    onStartSlideshow: (window: List<MediaItem>) -> Unit = {},
+    /** r27 (Collage): opens the collage creator over the selection. */
+    onStartCollage: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     val sort by viewModel.sort.collectAsState()
@@ -428,6 +444,9 @@ fun PhotosScreen(
                     vaultBusy = vaultBusy,
                     snackbarHostState = snackbarHostState,
                     onOpenViewer = onOpenViewer,
+                    onOpenStory = onOpenStory,
+                    onStartSlideshow = onStartSlideshow,
+                    onStartCollage = onStartCollage,
                 )
             }
         }
@@ -472,6 +491,9 @@ private fun PhotosTimeline(
     vaultBusy: VaultBusy?,
     snackbarHostState: SnackbarHostState,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
+    onOpenStory: (window: List<MediaItem>) -> Unit,
+    onStartSlideshow: (window: List<MediaItem>) -> Unit,
+    onStartCollage: () -> Unit,
 ) {
     val selection = fileOpsState as? FileOpsUiState.Selection
     val running = fileOpsState as? FileOpsUiState.Running
@@ -517,6 +539,19 @@ private fun PhotosTimeline(
                     onExit = fileOpsViewModel::exitSelection,
                     showMoveToVault = vaultState.isConfigured,
                     onMoveToVault = { showVaultMoveConfirm = true },
+                    // r27: the collage action rides the selection bar as an
+                    // icon (the vault lock's slot --- the actions row's
+                    // four labels already fill small screens, per that
+                    // bar's own KDoc). Visible once two or more photos are
+                    // picked, enabled exactly in the creator's 2..9 range
+                    // (a disabled control beats a lying one; the content
+                    // description states the range).
+                    canCollage = selection.items.size in CollageLayouts.MIN_PHOTOS..CollageLayouts.MAX_PHOTOS,
+                    onCollage = {
+                        CollageHandoff.request(selection.items)
+                        fileOpsViewModel.exitSelection()
+                        onStartCollage()
+                    },
                 )
                 Box(modifier = Modifier.weight(1f)) {
                     PhotosGrid(
@@ -553,6 +588,13 @@ private fun PhotosTimeline(
                 PhotosHeaderBar(
                     sort = sort,
                     onSortChange = onSortChange,
+                    // r27: the slideshow launch (the round's overflow
+                    // action) --- the run covers the timeline's loaded
+                    // window, exactly the window a viewer tap hands off.
+                    onStartSlideshow = {
+                        val window = lazyItems.itemSnapshotList.filterNotNull()
+                        if (window.isNotEmpty()) onStartSlideshow(window)
+                    },
                 )
                 // The smart-filter chips (r17): under the header bar, plain
                 // timeline only (selection mode replaces the header with the
@@ -572,6 +614,16 @@ private fun PhotosTimeline(
                     onFolderClear = onFolderClear,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // The Stories shelf (r27): recent time clusters of the SAME
+                // snapshot, plain unfiltered timeline only (see
+                // StoriesShelf's KDoc for the when-it-renders rule).
+                if (!filter.isActive) {
+                    StoriesShelf(
+                        lazyItems = lazyItems,
+                        onOpenStory = onOpenStory,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Box(modifier = Modifier.weight(1f)) {
                     PhotosGrid(
                         lazyItems = lazyItems,
@@ -671,16 +723,31 @@ private fun PhotosTimeline(
  * `windowInsets = 0` for the same reason [FileOpsSelectionBar] documents:
  * the shell Scaffold already consumed the status-bar inset, so a default
  * TopAppBar would double-pad.
+ *
+ * r27 adds the slideshow launch as a second action (the round's
+ * "launchable from grid surfaces via an overflow action" --- the icon is
+ * the viewer's own PlayArrow, so the two surfaces say "slideshow" with
+ * the same glyph).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PhotosHeaderBar(
     sort: TimelineSort,
     onSortChange: (TimelineSort) -> Unit,
+    onStartSlideshow: () -> Unit,
 ) {
     TopAppBar(
         title = { Text(stringResource(R.string.nav_photos)) },
         actions = {
+            IconButton(
+                onClick = onStartSlideshow,
+                modifier = Modifier.testTag("photos_action_slideshow"),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(R.string.cd_viewer_action_slideshow_start),
+                )
+            }
             TimelineSortMenu(
                 current = sort,
                 onChange = onSortChange,
@@ -783,6 +850,8 @@ private fun FileOpsSelectionBar(
     onExit: () -> Unit,
     showMoveToVault: Boolean,
     onMoveToVault: () -> Unit,
+    canCollage: Boolean,
+    onCollage: () -> Unit,
 ) {
     TopAppBar(
         title = {
@@ -797,6 +866,22 @@ private fun FileOpsSelectionBar(
             }
         },
         actions = {
+            if (count >= CollageLayouts.MIN_PHOTOS) {
+                // r27: the collage creator's launch. An icon action in the
+                // bar's actions slot (the vault lock's pattern --- the
+                // actions ROW below keeps its four labels), enabled
+                // exactly in the 2..9 template range.
+                IconButton(
+                    onClick = onCollage,
+                    enabled = canCollage,
+                    modifier = Modifier.testTag("photos_action_collage"),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_collage),
+                        contentDescription = stringResource(R.string.cd_collage_action),
+                    )
+                }
+            }
             if (showMoveToVault) {
                 IconButton(
                     onClick = onMoveToVault,

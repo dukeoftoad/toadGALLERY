@@ -10,6 +10,7 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
@@ -17,6 +18,11 @@ import io.github.dukeoftoad.gallery.ml.people.PeopleEngineAdapter
 import io.github.dukeoftoad.gallery.ml.people.PeopleRepository
 import io.github.dukeoftoad.gallery.ml.people.PeopleStateFile
 import io.github.dukeoftoad.gallery.ml.people.PEOPLE_STATE_FILE_NAME
+import io.github.dukeoftoad.gallery.ToadGalleryApplication
+import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
+import io.github.dukeoftoad.gallery.data.media.location.MediaLocationDisplayRules
+import io.github.dukeoftoad.gallery.data.places.PlacesContentPolicy
+import io.github.dukeoftoad.gallery.data.places.PlacesContentState
 import io.github.dukeoftoad.gallery.ui.settings.KEY_PEOPLE_ALBUM_ENABLED
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -63,6 +69,16 @@ import kotlin.time.Duration.Companion.milliseconds
  * are decided from the preference and the availability flag alone),
  * which keeps the common path session-free. A provider/engine failure
  * maps to the policy's honest Error state, never a fake empty row.
+ *
+ * ## Places section (r27, the organisational UX round)
+ * [places] carries the SAME pure [PlacesContentPolicy] state the Places
+ * screen renders, refreshed by [refreshPlaces] alongside the People
+ * read on every tab re-entry. The read is the r16 map's exact supply
+ * (the catalogue's geotagged rows + the r14 consent display gate over
+ * [AndroidMediaLocationAccess]) --- no second query path, no reverse
+ * geocoding; the section derives its region buckets in the composition
+ * (the pure grid math), and a failure maps to the policy's honest
+ * Error state.
  */
 class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -109,6 +125,16 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     /** The People section's content state (the pure policy's output, r25). */
     val people: StateFlow<PeopleContentState> = _people.asStateFlow()
 
+    // ---- r27 (the organisational UX round): the Places section's state ----
+
+    /** The r14 consent source the Places read gates on (the map's machinery). */
+    private val locationAccess = AndroidMediaLocationAccess(app)
+
+    private val _places = MutableStateFlow<PlacesContentState>(PlacesContentState.Loading)
+
+    /** The Places section's content state (the pure policy's output, r27). */
+    val places: StateFlow<PlacesContentState> = _places.asStateFlow()
+
     init {
         // API 30+ only, mirroring PhotosViewModel's gating and rationale:
         // the observer watches the unified Files collection (an R-gated
@@ -125,6 +151,7 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         refreshPeople()
+        refreshPlaces()
     }
 
     /**
@@ -165,6 +192,42 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * One Places read (r27): the catalogue's geotagged rows + pending
+     * count through the r14 display gate, mapped by the SAME pure
+     * policy the Places screen uses (the map's supply, read once more
+     * per tab re-entry). Called from `init` and every screen re-entry
+     * alongside [refreshPeople], so a Settings consent change lands on
+     * the next visit.
+     *
+     * Failure handling (the honest choice for a policy with no Error
+     * arm): a failed read KEEPS the last good state (a hiccup must not
+     * wipe a working section into a fake empty card), is logged to the
+     * diagnostics ring, and leaves a first-load failure in Loading ---
+     * which the section renders as nothing (the People section's
+     * Loading precedent), never as a lying card.
+     */
+    fun refreshPlaces() {
+        viewModelScope.launch {
+            val fresh = withContext(Dispatchers.IO) {
+                runCatching {
+                    val displayable = MediaLocationDisplayRules.Default
+                        .shouldDisplayGps(locationAccess.state.value)
+                    PlacesContentPolicy.decide(
+                        gpsDisplayable = displayable,
+                        rows = getApplication<ToadGalleryApplication>()
+                            .mediaCatalogue.geotaggedRows(),
+                        pendingUngrantedRows = getApplication<ToadGalleryApplication>()
+                            .mediaCatalogue.pendingUngrantedLocations(),
+                    )
+                }.onFailure { e ->
+                    DiagLog.w(TAG, "refreshPlaces failed: ${e.message}")
+                }.getOrNull()
+            }
+            if (fresh != null) _places.value = fresh
+        }
+    }
+
+    /**
      * Called by the screen once the runtime permission grant has succeeded.
      * A repeated grant (tab re-entry) re-queries --- album lists are cheap
      * snapshots and re-entry is also the below-R refresh path.
@@ -197,7 +260,6 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
         engineAdapter.close()
         super.onCleared()
     }
-
     /**
      * One (re)load: the bucket list plus the favorites pseudo-album entry
      * pinned on top (issue #66). The favorites query returns empty below Q
@@ -256,6 +318,9 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** Diagnostics tag for the r27 Places section's read (DiagLog's W1 convention). */
+        private const val TAG = "ToadPlaces"
+
         /**
          * MediaStore change-storm debounce, in milliseconds (issue #66);
          * same value and rationale as the Photos timeline's (#38): one

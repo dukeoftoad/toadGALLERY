@@ -2,8 +2,9 @@ name: Engine APK (test build)
 
 # toadGALLERY --- isolated engine-enabled TEST APK build (2026-11-03 session).
 #
-# Maintainer directive (2026-11-03, isolated-work session): build the
-# build-29 engine-enabled DEBUG APK for on-device dogfood validation (the
+# Maintainer directive (2026-11-03, isolated-work session; identity and
+# staging generalized 2026-11-03 after the build-30 cut): build the
+# engine-enabled DEBUG APK for on-device dogfood validation (the
 # pending Phase 5 r24/r25 dogfood items in tasks.md + the device-validation
 # checklist sections) on a dedicated branch that touches NO source, NO
 # docs, and NO shared workflow --- zero file overlap with the parallel
@@ -140,37 +141,58 @@ jobs:
 
       # Test-build addition 1: pin the APK's identity in the log and fail
       # the build on any mismatch, so a wrong variant or version can never
-      # be delivered as the build-29 dogfood artifact.
-      - name: Verify APK identity (package + versionCode 29)
+      # be delivered as the branch's dogfood artifact. Generalized
+      # 2026-11-03 (the hardcoded 29 broke the build-30 cut after r26
+      # merged): the expected versionCode is DERIVED from the checkout's
+      # own build.gradle.kts.
+      - name: Verify APK identity (package + the checkout's versionCode)
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort | tail -1)"
           [ -n "$AAPT2" ] || { echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; }
           APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
+          [ -n "$EXPECTED_VC" ] || { echo "::error::could not derive versionCode from apps/gallery/build.gradle.kts"; exit 1; }
           BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
           echo "badging: $BADGE"
+          echo "derived expected versionCode: $EXPECTED_VC"
           echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.debug'" \
             || { echo "::error::unexpected application id (expected the .debug variant)"; exit 1; }
-          echo "$BADGE" | grep -q "versionCode='29'" \
-            || { echo "::error::unexpected versionCode (expected 29)"; exit 1; }
+          echo "$BADGE" | grep -q "versionCode='$EXPECTED_VC'" \
+            || { echo "::error::unexpected versionCode (expected $EXPECTED_VC, derived from the checkout)"; exit 1; }
 
       # Test-build addition 2: stage under the r23-convention name and
       # upload as a workflow artifact. NOT a release: no tag is cut and the
       # Phase 5 release freeze stands; debug key only, exactly like the r23
-      # device artifact (toadGALLERY-0.4.2-alpha-r23-engine-debug.apk).
-      - name: Stage the APK (r23-convention name)
+      # device artifact. Generalized 2026-11-03 (the hardcoded r25 name
+      # broke the build-30 cut): versionName comes from the checkout's
+      # build.gradle.kts; the rNN tag comes from the round comment that
+      # owns the current versionCode.
+      - name: Stage the APK (r23-convention name, derived)
         run: |
           APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
+          VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/gallery/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
+          LAST_ROUND="$(grep -oE 'versionCode [0-9]+ .r[0-9]+ round' apps/gallery/build.gradle.kts | tail -1 || true)"
+          RNN="$(printf '%s' "$LAST_ROUND" | grep -oE 'r[0-9]+' || true)"
+          ROUND_VC="$(printf '%s' "$LAST_ROUND" | grep -oE '[0-9]+' | head -1)"
+          [ -n "$VERSION_NAME" ] || { echo '::error::could not derive versionName'; exit 1; }
+          [ -n "$RNN" ] || { echo '::error::could not derive the rNN tag from the last round comment'; exit 1; }
+          [ "$ROUND_VC" = "$EXPECTED_VC" ] || { echo "::error::the last round comment does not own versionCode $EXPECTED_VC ($LAST_ROUND)"; exit 1; }
+          echo "RNN=$RNN" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          STAGED="toadGALLERY-${VERSION_NAME}-${RNN}-engine-debug.apk"
+          echo "staged name: $STAGED"
           mkdir -p engine-apk-staging
-          cp "$APK" "engine-apk-staging/toadGALLERY-0.4.2-alpha-r25-engine-debug.apk"
+          cp "$APK" "engine-apk-staging/$STAGED"
           ls -la engine-apk-staging/
           sha256sum engine-apk-staging/*.apk
 
       - name: Upload engine APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: toadGALLERY-0.4.2-alpha-r25-engine-debug
-          path: engine-apk-staging/toadGALLERY-0.4.2-alpha-r25-engine-debug.apk
+          name: toadGALLERY-${{ env.VERSION_NAME }}-${{ env.RNN }}-engine-debug
+          path: engine-apk-staging/toadGALLERY-${{ env.VERSION_NAME }}-${{ env.RNN }}-engine-debug.apk
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

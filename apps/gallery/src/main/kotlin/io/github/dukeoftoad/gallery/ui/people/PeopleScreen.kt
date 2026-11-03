@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -25,15 +26,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -48,9 +55,9 @@ import io.github.dukeoftoad.gallery.ml.people.VisiblePerson
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 
 /**
- * The People screen (r25, Workstream 6): the full browse surface over the
- * live face clusters, reached from the Albums tab's People section
- * ("See all").
+ * The People screen (r25, Workstream 6; the r26 follow-ups round adds
+ * the hidden section): the full browse surface over the live face
+ * clusters, reached from the Albums tab's People section ("See all").
  *
  * A sub-screen without the bottom navigation bar (hidden by the shell
  * for non-top-level routes): top app bar with the title + back arrow.
@@ -67,12 +74,21 @@ import io.github.dukeoftoad.gallery.ui.media.LoadingState
  *    `people_state_not_indexed`;
  *  - Ready(empty) -> the honest "everyone is hidden" state tagged
  *    `people_state_empty` (distinct from NotIndexed: the index RAN, the
- *    user hid every cluster);
+ *    user hid every cluster) --- with the r26 unhide section right
+ *    below it, the way back that no longer costs an index reset;
  *  - Ready(visible) -> the person grid tagged `people_grid`, with the
  *    corrupt-file note rendered above it when the persisted names were
  *    reset ([PeopleUiState.corruptNote]);
  *  - Error(message) -> [PeopleStateMessage] with the failure's own text
  *    and a retry action, tagged `people_state_error`.
+ *
+ * Every Ready state renders the r26 HIDDEN section
+ * ([HiddenPeopleSection], tagged `people_hidden_section`) when any
+ * hidden person exists: one row of compact cards, each with its own
+ * Unhide action ([PeopleViewModel.unhide] --- names and other edits
+ * stay; the r25 way back, the index-resetting r24 "Reset face index",
+ * is no longer the only one). An unhide failure surfaces as the honest
+ * one-shot snackbar, never a silent no-op.
  *
  * Tapping a person card opens the `PERSON_DETAIL` route. Person cards
  * ([PersonCard]) are shared with the Albums tab's People section so the
@@ -89,6 +105,29 @@ fun PeopleScreen(
     viewModel: PeopleViewModel = viewModel(),
 ) {
     val uiState by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is PeopleEvent.ShowSnackbar -> {
+                    val message = if (event.pluralCount >= 0) {
+                        context.resources.getQuantityString(
+                            event.messageRes, event.pluralCount, event.pluralCount,
+                        )
+                    } else if (event.formatArgs.isEmpty()) {
+                        context.getString(event.messageRes)
+                    } else {
+                        context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+                    }
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -104,6 +143,7 @@ fun PeopleScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (val content = uiState.content) {
@@ -145,29 +185,43 @@ fun PeopleScreen(
                     )
 
                 is PeopleContentState.Ready ->
-                    if (content.visible.isEmpty()) {
-                        PeopleStateMessage(
-                            titleRes = R.string.people_state_empty_title,
-                            bodyRes = R.string.people_state_empty_body,
-                            tag = "people_state_empty",
-                        )
-                    } else {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            if (uiState.corruptNote) {
-                                Text(
-                                    text = stringResource(R.string.people_corrupt_note),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (content.visible.isEmpty()) {
+                            // Everyone is hidden: the honest empty grid PLUS
+                            // the unhide way back right below it (r26 --- the
+                            // message points at the section, not at the
+                            // index-erasing r24 Reset).
+                            Box(modifier = Modifier.weight(1f)) {
+                                PeopleStateMessage(
+                                    titleRes = R.string.people_state_empty_title,
+                                    bodyRes = R.string.people_state_empty_body,
+                                    tag = "people_state_empty",
                                 )
                             }
-                            PeopleGrid(
-                                visible = content.visible,
-                                onOpenPerson = onOpenPerson,
-                            )
+                        } else {
+                            Box(modifier = Modifier.weight(1f)) {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    if (uiState.corruptNote) {
+                                        Text(
+                                            text = stringResource(R.string.people_corrupt_note),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                    PeopleGrid(
+                                        visible = content.visible,
+                                        onOpenPerson = onOpenPerson,
+                                    )
+                                }
+                            }
                         }
+                        HiddenPeopleSection(
+                            hidden = uiState.hidden,
+                            onUnhide = viewModel::unhide,
+                        )
                     }
             }
         }
@@ -201,6 +255,140 @@ private fun PeopleGrid(
             PersonCard(
                 person = person,
                 onClick = { onOpenPerson(person.clusterId) },
+            )
+        }
+    }
+}
+
+/**
+ * The r26 hidden section: every hidden person in one horizontal row of
+ * compact [HiddenPersonCard]s, each carrying its own Unhide action.
+ * Rendered only when at least one hidden person exists --- absence IS
+ * the honest empty state (a permanent "no hidden people" line would be
+ * noise, not honesty). The order is the seam's own
+ * face-count-descending one ([PeopleContentPolicy.hiddenPersons] ---
+ * mapping, not sorter), keys on the cluster id like the main grid.
+ */
+@Composable
+private fun HiddenPeopleSection(
+    hidden: List<VisiblePerson>,
+    onUnhide: (clusterId: String) -> Unit,
+) {
+    if (hidden.isEmpty()) return
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("people_hidden_section"),
+    ) {
+        Text(
+            text = stringResource(R.string.people_hidden_header),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp),
+        )
+        Text(
+            text = stringResource(R.string.people_hidden_body),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 2.dp),
+        )
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 12.dp)
+                .testTag("people_hidden_row"),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Count-based items: the GRID items extension is imported for
+            // the main grid and the LazyList list-overload shares its name
+            // (the same trick the Albums tab's People row uses).
+            items(
+                count = hidden.size,
+                key = { index -> hidden[index].clusterId },
+            ) { index ->
+                val person = hidden[index]
+                HiddenPersonCard(
+                    person = person,
+                    onUnhide = { onUnhide(person.clusterId) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One hidden person (r26): the same circular cover avatar as
+ * [PersonCard] (the honest glyph when no cover exists) with the name
+ * or "Unnamed" and the live face count --- but NOT tappable (the
+ * person detail is a visible-person surface) and carrying the Unhide
+ * action instead: one tap, [PeopleViewModel.unhide], no index reset,
+ * names and every other edit intact.
+ */
+@Composable
+private fun HiddenPersonCard(
+    person: VisiblePerson,
+    onUnhide: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .size(width = 88.dp, height = 148.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        HiddenPersonAvatar(person = person)
+        Text(
+            text = person.name ?: stringResource(R.string.people_unnamed),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Text(
+            text = pluralStringResource(
+                R.plurals.people_face_count,
+                person.faceCount,
+                person.faceCount,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        TextButton(
+            onClick = onUnhide,
+            modifier = Modifier.testTag("people_unhide_${person.clusterId}"),
+        ) {
+            Text(stringResource(R.string.people_unhide))
+        }
+    }
+}
+
+/** The hidden card's avatar: the shared cover-or-glyph circle ([PersonAvatar]'s exact shape). */
+@Composable
+private fun HiddenPersonAvatar(person: VisiblePerson) {
+    val coverUri = personCoverUri(person.coverFileId)
+    Box(
+        modifier = Modifier
+            .size(64.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (coverUri != null) {
+            AsyncImage(
+                model = coverUri,
+                contentDescription = null, // decorative; the card's name carries meaning
+                modifier = Modifier.matchParentSize(),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null, // decorative; the card's name carries meaning
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp),
             )
         }
     }

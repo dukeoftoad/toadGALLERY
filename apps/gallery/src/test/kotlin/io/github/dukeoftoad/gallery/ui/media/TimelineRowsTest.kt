@@ -39,6 +39,10 @@ class TimelineRowsTest {
     private fun secOf(date: LocalDate): Long = date.atStartOfDay(ZoneOffset.UTC).toEpochSecond()
 
     /** UTC midnight of [date], as an epoch MILLI (the effective-instant unit). */
+    /** The r27 WEEK tests' convenience: a calendar date as three ints. */
+    private fun millisOf(year: Int, month: Int, day: Int): Long =
+        millisOf(java.time.LocalDate.of(year, month, day))
+
     private fun millisOf(date: LocalDate): Long = secOf(date) * 1000
 
     /** Groups [items] (nulls = not-yet-loaded paging placeholders). */
@@ -451,5 +455,182 @@ class TimelineRowsTest {
         assertEquals("cell_99", timelineCellKey(snapshot, 99) { it })
         assertEquals("cell_-1", timelineCellKey(snapshot, -1) { it })
         assertEquals("cell_0", timelineCellKey(emptyList<String>(), 0) { it })
+    }
+
+    // ------------------------------------------------------------------
+    // WEEK grouping (r27, the Moments round): the pure MomentGrouper's
+    // WEEK output projected onto rows --- the projection itself is also
+    // pinned end-to-end by MomentGrouperTest's agreement tests.
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `WEEK groups a Monday-to-Sunday run under one Monday-anchored header`() {
+        // 2026-03-02 is a Monday; the ISO week runs Mon 2 .. Sun 8 March
+        // (ISO week 10 of 2026). A Saturday and the Sunday after it share
+        // ONE header even at the week's very end.
+        val saturday = LocalDate.of(2026, 3, 7)
+        val sunday = LocalDate.of(2026, 3, 8)
+        val monday = LocalDate.of(2026, 3, 2)
+        val rows = rows(listOf(millisOf(sunday), millisOf(saturday)), GroupBy.WEEK)
+        assertEquals(
+            listOf(
+                TimelineRow.Header("w2026-10", monday.toEpochDay(), isMonth = false, isWeek = true),
+                TimelineRow.Cell(0),
+                TimelineRow.Cell(1),
+            ),
+            rows,
+        )
+    }
+
+    @Test
+    fun `WEEK splits Sunday night from the Monday morning after it`() {
+        // The DAY grain's canonical hard boundary lands in different ISO
+        // weeks too (10 vs 11): a new header, anchored on the new week's
+        // Monday (2026-03-09).
+        val sundayNight = millisOf(LocalDate.of(2026, 3, 8)) + 23 * 3_600_000L
+        val mondayMorning = millisOf(LocalDate.of(2026, 3, 9)) + 30 * 60_000L
+        val rows = rows(listOf(mondayMorning, sundayNight), GroupBy.WEEK)
+        val headers = rows.filterIsInstance<TimelineRow.Header>()
+        assertEquals(listOf("w2026-11", "w2026-10"), headers.map { it.groupKey })
+        assertEquals(
+            listOf(LocalDate.of(2026, 3, 9).toEpochDay(), LocalDate.of(2026, 3, 2).toEpochDay()),
+            headers.map { it.epochDay },
+        )
+        assertTrue(headers.all { it.isWeek && !it.isMonth })
+    }
+
+    @Test
+    fun `WEEK keys carry the week-based year - a 2 January can be week 53`() {
+        // 2027-01-02 sits in the ISO week Mon 2026-12-28 .. Sun 2027-01-03
+        // --- week 53 of the week-based year 2026 (week 1 of 2027 starts
+        // 2027-01-04). Keying it "w2027-1" would be a lie.
+        val rows = rows(listOf(millisOf(LocalDate.of(2027, 1, 2))), GroupBy.WEEK)
+        val header = rows.first() as TimelineRow.Header
+        assertEquals("w2026-53", header.groupKey)
+        assertEquals(LocalDate.of(2026, 12, 28).toEpochDay(), header.epochDay)
+    }
+
+    @Test
+    fun `WEEK null placeholders never trigger a new group`() {
+        val saturday = LocalDate.of(2026, 3, 7)
+        val rows = rows(listOf(null, millisOf(saturday), null), GroupBy.WEEK)
+        assertEquals(
+            listOf(
+                TimelineRow.Header("w2026-10", LocalDate.of(2026, 3, 2).toEpochDay(), false, isWeek = true),
+                TimelineRow.Cell(1),
+            ),
+            rows,
+        )
+    }
+
+    @Test
+    fun `formatGroupLabel renders a WEEK header as its Monday in d MMMM yyyy`() {
+        // The week header labels its ANCHOR Monday; the localized "Week
+        // starting …" prose lives in the string resource, not the pure
+        // function (the pattern-only split the r27 file KDoc documents).
+        val header = TimelineRow.Header(
+            "w2026-10",
+            LocalDate.of(2026, 3, 2).toEpochDay(),
+            isMonth = false,
+            isWeek = true,
+        )
+        assertEquals("2 March 2026", formatGroupLabel(header, Locale.ENGLISH))
+    }
+
+    @Test
+    fun `WEEK follows the rendered zone for the boundary instant`() {
+        // 2026-03-08T20:00Z is Sunday (week 10) in UTC but already Monday
+        // 2026-03-09 (week 11) in Asia/Tokyo.
+        val instant = Instant.parse("2026-03-08T20:00:00Z").toEpochMilli()
+        val utc = rows(listOf(instant), GroupBy.WEEK, ZoneOffset.UTC).first() as TimelineRow.Header
+        val tokyo = rows(
+            listOf(instant),
+            GroupBy.WEEK,
+            ZoneId.of("Asia/Tokyo"),
+        ).first() as TimelineRow.Header
+        assertEquals("w2026-10", utc.groupKey)
+        assertEquals("w2026-11", tokyo.groupKey)
+    }
+
+    @Test
+    fun `the pre-r27 header equality stays intact - isWeek defaults to false`() {
+        // The defaulted parameter must keep every existing three-argument
+        // construction (and the pre-r27 tests' equality assertions)
+        // behavior-identical: a day/month header without the argument is
+        // NOT a week header.
+        val dayHeader = TimelineRow.Header("d20611", 20611L, isMonth = false)
+        assertFalse(dayHeader.isWeek)
+        assertEquals(
+            TimelineRow.Header("d20611", 20611L, isMonth = false, isWeek = false),
+            dayHeader,
+        )
+    }
+
+    // ------------------------------------------------------------------
+    // headerCellCounts (r27, the Moments round): the counted headers
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `headerCellCounts measures every header's following cells`() {
+        val day1 = LocalDate.of(2026, 3, 5)
+        val day2 = LocalDate.of(2026, 3, 6)
+        val rows = rows(
+            listOf(millisOf(day1), millisOf(day1), millisOf(day2)),
+            GroupBy.DAY,
+        )
+        assertEquals(
+            mapOf("d${day1.toEpochDay()}" to 2, "d${day2.toEpochDay()}" to 1),
+            headerCellCounts(rows),
+        )
+    }
+
+    @Test
+    fun `headerCellCounts covers WEEK headers too`() {
+        val rows = rows(
+            listOf(
+                millisOf(LocalDate.of(2026, 3, 8)), // Sunday, week 10
+                millisOf(LocalDate.of(2026, 3, 7)), // Saturday, week 10
+                millisOf(LocalDate.of(2026, 3, 2)), // Monday, week 10
+                millisOf(LocalDate.of(2026, 2, 25)), // week 9
+            ),
+            GroupBy.WEEK,
+        )
+        assertEquals(
+            mapOf("w2026-10" to 3, "w2026-9" to 1),
+            headerCellCounts(rows),
+        )
+    }
+
+    @Test
+    fun `headerCellCounts answers empty for empty and flat timelines`() {
+        assertEquals(emptyMap<String, Int>(), headerCellCounts(emptyList()))
+        val flat = rows(listOf(10L, 11L), GroupBy.NONE)
+        assertEquals(emptyMap<String, Int>(), headerCellCounts(flat))
+    }
+
+    @Test
+    fun `headerCellCounts answers zero for a header with no following cells`() {
+        // Impossible from buildTimelineRows (a header is emitted only on
+        // CHANGE, so a cell always follows), but the degenerate shape
+        // must answer 0 rather than being absent or throwing.
+        val rows = listOf(
+            TimelineRow.Header("d20611", 20611L, isMonth = false),
+            TimelineRow.Header("d20612", 20612L, isMonth = false),
+            TimelineRow.Cell(0),
+        )
+        assertEquals(mapOf("d20611" to 0, "d20612" to 1), headerCellCounts(rows))
+    }
+
+    @Test
+    fun `a cell before any header joins no count`() {
+        // The defensive tail: cells are attributed to the OPEN header
+        // only; a leading cell (impossible from buildTimelineRows) is
+        // dropped, never misattributed.
+        val rows = listOf(
+            TimelineRow.Cell(0),
+            TimelineRow.Header("d20611", 20611L, isMonth = false),
+            TimelineRow.Cell(1),
+        )
+        assertEquals(mapOf("d20611" to 1), headerCellCounts(rows))
     }
 }

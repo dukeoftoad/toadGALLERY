@@ -54,6 +54,9 @@ import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.filters.DerivedCollections
 import io.github.dukeoftoad.gallery.data.filters.PhotosFilterHandoff
+import io.github.dukeoftoad.gallery.data.places.PlaceMediaHandoff
+import io.github.dukeoftoad.gallery.data.places.PlacesContentState
+import io.github.dukeoftoad.gallery.data.places.PlacesRegionGrid
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.ErrorState
@@ -62,6 +65,7 @@ import io.github.dukeoftoad.gallery.ui.media.MediaPermissionState
 import io.github.dukeoftoad.gallery.ui.media.rememberMediaPermissionRequester
 import io.github.dukeoftoad.gallery.ui.people.PersonCard
 import io.github.dukeoftoad.gallery.ui.photos.collectionLabelRes
+import io.github.dukeoftoad.gallery.ui.places.PlaceRegionCard
 import kotlinx.coroutines.launch
 
 /**
@@ -125,10 +129,16 @@ fun AlbumsScreen(
     onOpenAlbum: (bucketId: Long) -> Unit,
     onOpenPeople: () -> Unit,
     onOpenPerson: (clusterId: String) -> Unit,
+    /** r27: the Places section's "See all" action into the places sub-screen. */
+    onOpenPlaces: () -> Unit,
+    /** r27: a region chip's tap --- that region's media grid. */
+    onOpenPlace: (regionKey: String) -> Unit,
     viewModel: AlbumsViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val peopleState by viewModel.people.collectAsState()
+    // r27: the Places section's state, refreshed beside the People read.
+    val placesState by viewModel.places.collectAsState()
 
     val requester = rememberMediaPermissionRequester(
         onResult = { granted ->
@@ -164,6 +174,9 @@ fun AlbumsScreen(
         // r25: the People section re-reads consent + clusters on every tab
         // (re-)entry --- the toggle in Settings lands here on the next visit.
         viewModel.refreshPeople()
+        // r27: the Places section re-reads consent + rows on the same
+        // cadence (the same refresh discipline, one entry effect).
+        viewModel.refreshPlaces()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -196,11 +209,14 @@ fun AlbumsScreen(
                     AlbumGrid(
                         albums = s.albums,
                         peopleState = peopleState,
+                        placesState = placesState,
                         onOpenAlbum = onOpenAlbum,
                         onOpenCollection = onOpenCollection,
                         onOpenPeople = onOpenPeople,
                         onOpenPerson = onOpenPerson,
                         onRetryPeople = viewModel::refreshPeople,
+                        onOpenPlaces = onOpenPlaces,
+                        onOpenPlace = onOpenPlace,
                     )
                 }
             }
@@ -218,11 +234,14 @@ fun AlbumsScreen(
 private fun AlbumGrid(
     albums: List<Album>,
     peopleState: PeopleContentState,
+    placesState: PlacesContentState,
     onOpenAlbum: (bucketId: Long) -> Unit,
     onOpenCollection: (DerivedCollections.DerivedCollection) -> Unit,
     onOpenPeople: () -> Unit,
     onOpenPerson: (clusterId: String) -> Unit,
     onRetryPeople: () -> Unit,
+    onOpenPlaces: () -> Unit,
+    onOpenPlace: (regionKey: String) -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -232,14 +251,24 @@ private fun AlbumGrid(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // The People section (r25) spans the grid's full width as its FIRST
-        // item, above the Collections section and the albums: the people
-        // row scrolls with everything else (one scroll surface).
+        // item, above the Places and Collections sections and the albums:
+        // the people row scrolls with everything else (one scroll surface).
         item(span = { GridItemSpan(maxLineSpan) }) {
             PeopleSection(
                 state = peopleState,
                 onOpenPeople = onOpenPeople,
                 onOpenPerson = onOpenPerson,
                 onRetryPeople = onRetryPeople,
+            )
+        }
+        // The Places section (r27): the People section's sibling, one
+        // full-span item below it --- the MI-style auto-album grouping
+        // reads People, Places, Collections as one stack.
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            PlacesSection(
+                state = placesState,
+                onOpenPlaces = onOpenPlaces,
+                onOpenPlace = onOpenPlace,
             )
         }
         // The Collections section (r17) spans the grid's full width, so it
@@ -268,6 +297,115 @@ private fun AlbumGrid(
 }
 
 /**
+ * The Places section (r27): the People section's sibling discipline ---
+ * ONE honest row over the SAME pure [PlacesContentPolicy] output the
+ * Places screen renders:
+ *  - Loading -> nothing at all (the People section's precedent);
+ *  - ConsentOff / Empty -> one honest card saying exactly why there is
+ *    no row of regions (the same consent copy that points at Settings);
+ *  - Ready -> the header + a horizontal `LazyRow` of region chips (the
+ *    SHARED [PlaceRegionCard] the Places screen renders) plus a
+ *    "See all" action into the `places` sub-screen. A region chip's tap
+ *    stashes the [PlaceMediaHandoff] request and opens that region's
+ *    detail (the person card's pattern).
+ */
+@Composable
+private fun PlacesSection(
+    state: PlacesContentState,
+    onOpenPlaces: () -> Unit,
+    onOpenPlace: (regionKey: String) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when (state) {
+            PlacesContentState.Loading -> Unit
+            PlacesContentState.ConsentOff -> PlacesInfoCard(
+                text = stringResource(R.string.albums_places_consent_off),
+            )
+            is PlacesContentState.Empty -> PlacesInfoCard(
+                text = stringResource(R.string.albums_places_empty),
+            )
+            is PlacesContentState.Ready -> {
+                // The region buckets: deterministic pure math over the
+                // Ready rows (the Places screen's derivation, reused).
+                val regions = remember(state.rows) {
+                    PlacesRegionGrid.bucket(state.rows)
+                }
+                if (regions.isEmpty()) {
+                    PlacesInfoCard(
+                        text = stringResource(R.string.albums_places_empty),
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.albums_places_header),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = onOpenPlaces,
+                            modifier = Modifier.testTag("albums_places_see_all"),
+                        ) {
+                            Text(stringResource(R.string.albums_places_see_all))
+                        }
+                    }
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .testTag("albums_places_row"),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Count-based items: the file already imports the
+                        // GRID items extension for the album cards below,
+                        // and the LazyList list-overload shares its name
+                        // (the same trick the People row above uses).
+                        items(regions.size) { index ->
+                            val region = regions[index]
+                            PlaceRegionCard(
+                                region = region,
+                                cover = state.rows.getOrNull(region.coverIndex),
+                                onClick = {
+                                    PlaceMediaHandoff.request(region.regionKey)
+                                    onOpenPlace(region.regionKey)
+                                },
+                                modifier = Modifier.width(140.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One honest Places-section card (r27): the [PeopleInfoCard] idiom ---
+ * the tonal rounded card carrying ONE line of truth about why there is
+ * no row of regions.
+ */
+@Composable
+private fun PlacesInfoCard(text: String) {
+    Surface(
+        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+    }
+}
+
+/**
  * The People section (r25, Workstream 6): ONE honest row above the
  * Collections section, decided by the SAME pure
  * [io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy] output
@@ -275,7 +413,9 @@ private fun AlbumGrid(
  *  - Loading -> nothing at all (the albums grid is the content; a
  *    transient sub-second section flash would be noise, not honesty);
  *  - ConsentOff / EngineMissing / NotIndexed / Ready-with-everyone-hidden
- *    -> one honest card saying exactly why there is no row of people;
+ *    -> one honest card saying exactly why there is no row of people
+ *      (the all-hidden card carries the r26 way back: an action into
+ *      the People screen's hidden section, where unhide lives);
  *  - Error -> the honest card with a retry action
  *    ([AlbumsViewModel.refreshPeople]);
  *  - Ready -> the header + a horizontal `LazyRow` of the SHARED
@@ -311,6 +451,11 @@ private fun PeopleSection(
                 if (state.visible.isEmpty()) {
                     PeopleInfoCard(
                         text = stringResource(R.string.albums_people_all_hidden),
+                        // r26: the way back is the People screen's hidden
+                        // section (unhide, no index reset) --- the card
+                        // points straight at it.
+                        actionLabel = stringResource(R.string.albums_people_see_all),
+                        onAction = onOpenPeople,
                     )
                 } else {
                     Row(

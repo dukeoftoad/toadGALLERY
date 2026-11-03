@@ -1,5 +1,6 @@
 //! toadGALLERY face-detection + face-index JNI bridge (r22 spike, r23
-//! indexing round).
+//! indexing round; r24 store maintenance, r25 People paths, r26 the
+//! semantic/CLIP half).
 //!
 //! Provenance: net-new toadGALLERY code, r22/r23 — this crate is *our*
 //! adapter, not vendored from upstream. It links the AGPL-3.0 vendored
@@ -28,6 +29,17 @@
 //!   manual cluster-management paths over the same open-store state
 //!   machine: the live cluster list (JSON), a cluster's file ids, the
 //!   merge-two-people upsert and the remove-photo-from-person delete.
+//! * [`nativeInitSemantic`] / [`nativeClipImageEmbeddingJpeg`] /
+//!   [`nativeClipTextEmbedding`] (r26) — the semantic (CLIP) session on
+//!   top of the same engine: register + warm up the pinned MobileCLIP-S2
+//!   pair and BPE vocab, then the 512-float image / text embeddings.
+//! * [`nativeStorePutClip`] / [`nativeStoreDeleteClipsForFiles`] /
+//!   [`nativeStoreClipIndexedFileIds`] / [`nativeStoreClipCount`] /
+//!   [`nativeStoreSearchClips`] / [`nativeStoreFillClipIndex`] (r26) —
+//!   the CLIP vector-index store functions over the same open-store
+//!   state machine: the upsert/delete pair, the resumability read, the
+//!   row count, the top-K vector search (JSON, vecdb order verbatim)
+//!   and the index fill (JSON report).
 //! * [`nativeRelease`] — tear the engine (and the store) down.
 //!
 //! Contract notes (see also `README.md`):
@@ -36,15 +48,17 @@
 //!   never unwinds across the JNI boundary and is reported to Kotlin as
 //!   `java.lang.IllegalStateException("panic: …")`.
 //! * Engine failures are surfaced as `java.lang.IllegalStateException` whose
-//!   message is the Rust error's `Display` string; the two caller-input
+//!   message is the Rust error's `Display` string; the three caller-input
 //!   failures (a wrong embedding dimension on `nativeStorePutFace`, a
-//!   source==target merge on `nativeStoreMergeFaceClusters`) are surfaced
-//!   as `java.lang.IllegalArgumentException`.
+//!   source==target merge on `nativeStoreMergeFaceClusters`, a wrong
+//!   embedding dimension on `nativeStorePutClip`) are surfaced as
+//!   `java.lang.IllegalArgumentException`.
 //! * The engine state lives in a process-global `OnceLock<Mutex<…>>` that is
-//!   held for the whole of `nativeInit`, the detection/embedding calls and
-//!   `nativeRelease`; the face-index store has its own process-global mutex
-//!   held across every store operation. Inference and store access are
-//!   therefore serialized across calling threads.
+//!   held for the whole of `nativeInit`, `nativeInitSemantic`, the
+//!   detection/embedding/semantic calls and `nativeRelease`; the face-index
+//!   store has its own process-global mutex held across every store
+//!   operation. Inference and store access are therefore serialized across
+//!   calling threads.
 //! * All Java object access goes through the `jni` crate's safe wrappers; no
 //!   raw JNI pointers are handled outside them.
 
@@ -57,7 +71,7 @@ use std::{
 use jni::{
     JNIEnv,
     objects::{JByteArray, JClass, JFloatArray, JLongArray, JString},
-    sys::{self, jboolean, jdouble, jfloatArray, jlong, jlongArray, jstring},
+    sys::{self, jboolean, jdouble, jfloatArray, jint, jlong, jlongArray, jstring},
 };
 
 mod engine;
@@ -681,6 +695,344 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
         } else {
             sys::JNI_FALSE
         })
+    })
+}
+
+// ---- r26: the semantic (CLIP) session + the CLIP vector-index store ----
+
+/// `MlEngineJni.nativeInitSemantic(modelsDir: String): Boolean` (r26).
+///
+/// Initializes the semantic (CLIP) half of an already-initialized engine
+/// against `modelsDir`: the three pinned files (CLIP image encoder, CLIP
+/// text encoder, BPE vocab) are validated (exact catalog file names and
+/// byte sizes) and the combined face + CLIP `ModelPaths` registered with
+/// ente-ml's global runtime, then a warm-up `analyze_image` call with
+/// `run_clip: true` builds + runs the CLIP image session, so init fails
+/// fast when the runtime cannot come up. Returns `true` on success.
+/// Idempotent: an already-semantic engine returns `true` without
+/// reloading. A failure leaves the engine in a consistent FACE-ONLY state
+/// (the runtime is re-registered with the previous face-only paths — see
+/// `engine::init_semantic`'s honest recovery note). Throws
+/// `java.lang.IllegalStateException` when no engine session is open or
+/// anything in the pipeline fails.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeInitSemantic<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    models_dir: JString<'local>,
+) -> jboolean {
+    call_or_throw(&mut env, sys::JNI_FALSE, |env| {
+        let models_dir: String = env
+            .get_string(&models_dir)
+            .map_err(|error| format!("read modelsDir argument: {error}"))?
+            .into();
+        engine::init_semantic(&models_dir)?;
+        Ok(sys::JNI_TRUE)
+    })
+}
+
+/// `MlEngineJni.nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray):
+/// FloatArray` (r26).
+///
+/// Decodes the JPEG bytes with `ente-image` and runs the ente-ml CLIP
+/// image pipeline (`analyze_image` with `run_clip`, no faces), returning
+/// the 512-float L2-normalized MobileCLIP-S2 embedding. A runtime
+/// embedding dimension other than 512 is validated at the Rust boundary
+/// and throws `java.lang.IllegalStateException` (as does an engine
+/// without its semantic half initialized or any pipeline failure).
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeClipImageEmbeddingJpeg<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    jpeg_bytes: JByteArray<'local>,
+) -> jfloatArray {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let jpeg_bytes = env
+            .convert_byte_array(&jpeg_bytes)
+            .map_err(|error| format!("read jpegBytes argument: {error}"))?;
+        let embedding = engine::clip_image_embedding_jpeg(jpeg_bytes)?;
+        let array = env
+            .new_float_array(embedding.len() as i32)
+            .map_err(|error| format!("allocate clip embedding result array: {error}"))?;
+        if !embedding.is_empty() {
+            env.set_float_array_region(&array, 0, &embedding)
+                .map_err(|error| format!("fill clip embedding result array: {error}"))?;
+        }
+        Ok(array.into_raw() as jfloatArray)
+    })
+}
+
+/// `MlEngineJni.nativeClipTextEmbedding(text: String): FloatArray` (r26).
+///
+/// Runs the ente-ml CLIP text encoder (upstream's `run_clip_text` with
+/// the pinned text model + BPE vocab paths the semantic session
+/// registered), returning the 512-float embedding. The dimension is
+/// validated at the Rust boundary (a drift off 512 throws
+/// `java.lang.IllegalStateException`, as does an engine without its
+/// semantic half initialized or any pipeline failure).
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeClipTextEmbedding<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    text: JString<'local>,
+) -> jfloatArray {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let text: String = env
+            .get_string(&text)
+            .map_err(|error| format!("read text argument: {error}"))?
+            .into();
+        let embedding = engine::clip_text_embedding(&text)?;
+        let array = env
+            .new_float_array(embedding.len() as i32)
+            .map_err(|error| format!("allocate clip text embedding result array: {error}"))?;
+        if !embedding.is_empty() {
+            env.set_float_array_region(&array, 0, &embedding)
+                .map_err(|error| format!("fill clip text embedding result array: {error}"))?;
+        }
+        Ok(array.into_raw() as jfloatArray)
+    })
+}
+
+/// `MlEngineJni.nativeStorePutClip(fileId: Long, embedding: FloatArray):
+/// Boolean` (r26).
+///
+/// Inserts one CLIP embedding row for `fileId` through the vendored
+/// upstream upsert path (`MlStore::put_clip`: the SQLite row AND the
+/// live vecdb key together; a re-insert replaces). Returns `true` on
+/// success. A wrong-dimension embedding throws
+/// `java.lang.IllegalArgumentException` BEFORE any store access (the
+/// exact `nativeStorePutFace` caller-input pattern); a closed store or
+/// DB failure throws `java.lang.IllegalStateException`.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStorePutClip<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    file_id: jlong,
+    embedding: JFloatArray<'local>,
+) -> jboolean {
+    let fail = |env: &mut JNIEnv<'local>, exception: &str, message: String| -> jboolean {
+        let _ = env.throw_new(exception, &message);
+        sys::JNI_FALSE
+    };
+    // The caller-input failure is the IllegalArgumentException leg of the
+    // contract (the putFace precedent); everything below stays
+    // IllegalStateException. The array is read through the safe
+    // region-copy JNI helpers (no raw element pointers), sized from the
+    // array's own length.
+    let length = match env.get_array_length(&embedding) {
+        Ok(length) => length as usize,
+        Err(error) => {
+            return fail(
+                &mut env,
+                ILLEGAL_ARGUMENT_EXCEPTION,
+                format!("read embedding argument: {error}"),
+            );
+        }
+    };
+    let mut values = vec![0.0_f32; length];
+    if let Err(error) = env.get_float_array_region(&embedding, 0, &mut values) {
+        return fail(
+            &mut env,
+            ILLEGAL_ARGUMENT_EXCEPTION,
+            format!("read embedding argument: {error}"),
+        );
+    }
+    if values.len() != store::CLIP_EMBEDDING_DIM {
+        return fail(
+            &mut env,
+            ILLEGAL_ARGUMENT_EXCEPTION,
+            format!(
+                "embedding must be {} floats; got {}",
+                store::CLIP_EMBEDDING_DIM,
+                values.len()
+            ),
+        );
+    }
+    match store::put_clip(file_id, &values) {
+        Ok(()) => sys::JNI_TRUE,
+        Err(message) => fail(&mut env, ILLEGAL_STATE_EXCEPTION, message),
+    }
+}
+
+/// `MlEngineJni.nativeStoreDeleteClipsForFiles(fileIds: LongArray):
+/// Boolean` (r26).
+///
+/// Deletes every CLIP row for `fileIds` through the vendored upstream
+/// delete path (`MlStore::delete_clip`: the SQLite rows AND the vecdb
+/// keys; an empty array is upstream's own no-op). This is the semantic
+/// twin of the r24 face invalidation delete — the per-file primitive
+/// behind revision-driven re-indexing and orphan cleanup. Returns true
+/// on success; failure throws `java.lang.IllegalStateException`.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreDeleteClipsForFiles<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    file_ids: JLongArray<'local>,
+) -> jboolean {
+    call_or_throw(&mut env, sys::JNI_FALSE, |env| {
+        let length =
+            env.get_array_length(&file_ids)
+                .map_err(|error| format!("read fileIds argument: {error}"))? as usize;
+        let mut values = vec![0_i64; length];
+        if length > 0 {
+            env.get_long_array_region(&file_ids, 0, &mut values)
+                .map_err(|error| format!("read fileIds argument: {error}"))?;
+        }
+        store::delete_clips_for_files(&values)?;
+        Ok(sys::JNI_TRUE)
+    })
+}
+
+/// `MlEngineJni.nativeStoreClipIndexedFileIds(): LongArray` (r26).
+///
+/// The file IDs that currently carry CLIP rows at the vendored pin's
+/// `CLIP_ML_VERSION`, via upstream's own
+/// `MlDb::clip_indexed_file_with_version` read (the adapter filters the
+/// version half and sorts the keys ascending). An empty array means no
+/// indexed files. Throws `java.lang.IllegalStateException` when the store
+/// is not open.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreClipIndexedFileIds<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jlongArray {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let file_ids = store::clip_indexed_file_ids()?;
+        let array = env
+            .new_long_array(file_ids.len() as i32)
+            .map_err(|error| format!("allocate clip indexed-file-id array: {error}"))?;
+        if !file_ids.is_empty() {
+            env.set_long_array_region(&array, 0, &file_ids)
+                .map_err(|error| format!("fill clip indexed-file-id array: {error}"))?;
+        }
+        Ok(array.into_raw() as jlongArray)
+    })
+}
+
+/// `MlEngineJni.nativeStoreClipCount(): Long` (r26).
+///
+/// Total CLIP rows in the store, via the vendored upstream count query
+/// (`MlDb::count_clip_rows`). Throws
+/// `java.lang.IllegalStateException` when the store is not open.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreClipCount<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jlong {
+    call_or_throw(&mut env, 0, |_| store::clip_count())
+}
+
+/// `MlEngineJni.nativeStoreSearchClips(queryEmbedding: FloatArray,
+/// limit: Int): String` (r26).
+///
+/// Runs the top-K vector search over the store's CLIP index (upstream's
+/// own `MlStore::search` with `Index::Clip`) and returns the JSON array
+/// `[{"file_id":123,"distance":0.42},…]` in the vecdb's own order
+/// (nearest first; preserved verbatim --- never re-sorted). A
+/// wrong-dimension query is rejected at the Rust boundary (an error
+/// naming the pinned dimension); a closed store or search failure throws
+/// `java.lang.IllegalStateException`.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreSearchClips<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    query_embedding: JFloatArray<'local>,
+    limit: jint,
+) -> jstring {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let length = env
+            .get_array_length(&query_embedding)
+            .map_err(|error| format!("read queryEmbedding argument: {error}"))?
+            as usize;
+        let mut values = vec![0.0_f32; length];
+        if length > 0 {
+            env.get_float_array_region(&query_embedding, 0, &mut values)
+                .map_err(|error| format!("read queryEmbedding argument: {error}"))?;
+        }
+        let hits = store::search_clips(&values, i64::from(limit))?;
+        let json = store::clip_matches_json(&hits);
+        let java_string = env
+            .new_string(&json)
+            .map_err(|error| format!("allocate clip matches string: {error}"))?;
+        Ok(java_string.into_raw())
+    })
+}
+
+/// `MlEngineJni.nativeStoreFillClipIndex(): String` (r26).
+///
+/// Fills the store's CLIP vector index from the SQLite rows (upstream's
+/// own non-forced `MlStore::fill_clip_index`) and returns the JSON report
+/// `{"outcome":"Completed"|"AlreadyFilled"|"Superseded",
+/// "rows":N,"indexed":M,"skipped":K,"resumed":true|false}` (the
+/// outcome strings are matched off the enum, never derived stringly).
+/// Throws `java.lang.IllegalStateException` when the store is not open or
+/// the fill fails.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreFillClipIndex<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jstring {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let report = store::fill_clip_index()?;
+        let json = store::fill_report_json(report);
+        let java_string = env
+            .new_string(&json)
+            .map_err(|error| format!("allocate clip fill report string: {error}"))?;
+        Ok(java_string.into_raw())
     })
 }
 

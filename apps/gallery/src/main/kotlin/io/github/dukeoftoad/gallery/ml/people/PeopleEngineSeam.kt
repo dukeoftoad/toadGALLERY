@@ -20,12 +20,17 @@ package io.github.dukeoftoad.gallery.ml.people
  * ## Cluster-id instability (pinned caveat)
  * [clusterId] is the store's own row identity for the CURRENT clustering
  * pass. It is NOT stable across re-clustering passes: a new pass assigns
- * fresh ids, so anything the app persists keyed by cluster id (the r25
- * people-state.json names and hidden sets) can go STALE after a recluster.
- * The state store's load path prunes entries whose ids no longer resolve
- * against the live clusters ([PeopleState.prunedTo]) --- the documented,
- * tested mitigation; losing a name after a recluster is the honest cost
- * of ids that were never promises.
+ * fresh random ids, so anything the app persists keyed by cluster id (the
+ * people-state.json names, hidden sets, merge intents and removal
+ * records) goes STALE after a recluster. The r26 follow-ups round added
+ * the edit-preserving overlay (`PeopleReclusterRemap`): user edits carry
+ * a membership FINGERPRINT (the cluster's photo file ids, which a pass
+ * cannot re-roll) and are re-keyed onto the new ids at the next
+ * reconciled read --- names, hidden flags, merges and remove-from-person
+ * corrections now SURVIVE reclusters instead of being pruned. Edits
+ * without a fingerprint (made before the r26 upgrade) still drop via the
+ * documented fallback ([PeopleState.prunedTo]) --- the honest cost of
+ * ids that were never promises.
  *
  * Faces/cluster data NEVER leaves the device (ADR-0010 on-device-only AI;
  * ADR-0020 models.ente.com delivery): the seam reads the app-private

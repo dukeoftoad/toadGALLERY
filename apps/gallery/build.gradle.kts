@@ -207,6 +207,77 @@ android {
         // OFF by default; face-derived data never leaves the device).
         // Per maintainer directive: NO new device builds until Phase 5
         // completes; this and subsequent rounds ride CI from main only.
+        // versionCode 30 (r26 round): the Magic Search round (Workstream
+        // 7) --- offline semantic search over an on-device CLIP index:
+        // the Search tab's new Content mode beside the untouched filename
+        // pipeline. The toad-ml-jni bridge extends from sixteen to
+        // twenty-five externals (nativeInitSemantic --- the CLIP half of
+        // an engine session as a third open/closed state --- the CLIP
+        // image/text encoders, and a CLIP store surface over the SAME
+        // ml-index.sqlite the faces live in: put with the 512-dim guard,
+        // delete-for-files, indexed-file-ids, count, top-K vecdb search,
+        // and the once-per-drain fillClipIndex reconciliation pass), the
+        // Kotlin semantic background queue as the r24 face queue's
+        // sibling (ClipIndexQueue + ClipIndexWorker over its own unique
+        // WorkManager chain, honest FACE-then-SEMANTIC session gates, the
+        // atomic clip-index-state.json bookkeeping in the same
+        // backup-excluded face-index directory), the ml/search domain
+        // (MagicSearchEngineSeam + adapter, the pure six-state
+        // MagicSearchContentPolicy, the 2--200-character query gate, the
+        // order-preserving ranking, the no-cache repository + the chunked
+        // 999-limit media query), the Compose surfaces (the Search by
+        // mode row, the MagicSearchViewModel with its honest gating
+        // cards, results on the shared grid in the vecdb's own order),
+        // and the Settings surfaces (the magicSearchEnabled consent row
+        // --- ADR-0010 opt-in, OFF by default; the SEMANTIC model
+        // download card, ~213 MB manifest-derived; the semantic queue
+        // card with start/cancel/reset). Queries never touch the network
+        // --- the only egress is the ADR-0020 model download; vault
+        // media can never become candidates. Per maintainer directive:
+        // NO new device builds until Phase 5 completes; this and
+        // subsequent rounds ride CI from main only.
+        // versionCode 31 (r26 round): the People follow-ups round
+        // (Workstream 6 closeout) --- the two r25 deferrals shipped:
+        // (1) EDIT-PRESERVING RECLUSTERING, the cluster-id remapping
+        // overlay: people-state.json grows three additive books inside
+        // schema version 1 (per-edited-cluster membership fingerprints
+        // captured at edit time over the SAME clusterFileIds JNI read,
+        // recorded merge intents, accumulated remove-from-person
+        // corrections), and the pure PeopleReclusterRemap planner maps
+        // fresh post-recluster ids back onto them by photo-membership
+        // overlap (deterministic best-match; merges re-fold the split,
+        // removals re-apply the re-derived), with the repository
+        // executing the plan's engine mutations over the EXISTING
+        // 16-external JNI surface --- zero Rust-side changes, the
+        // vendored crates stay byte-identical to the r23 pin; (2) the
+        // UNHIDE surface: PeopleScreen's hidden section (the pure
+        // PeopleContentPolicy.hiddenPersons mapping) with a per-person
+        // Unhide action --- the way back from a hide no longer costs
+        // the index-erasing r24 Reset. Face-derived data never leaves
+        // the device. Per maintainer directive: NO new device builds
+        // until Phase 5 completes; this and subsequent rounds ride CI
+        // from main only.
+        // versionCode 32 (r27 round): the MI organisational UX round ---
+        // five product surfaces over the existing catalogue, zero new
+        // permissions and zero engine changes: Places (the offline coarse
+        // region buckets over the Room GPS coordinates: the pure 12x6
+        // PlacesRegionGrid + band labels with ZERO reverse geocoding, the
+        // PlacesScreen / PlaceDetailScreen sub-pages, the Albums-tab
+        // Places section, the pure PlacesContentPolicy consent/empty/
+        // ready states over the r14 display gate), Moments (the WEEK
+        // grain of the grouped timeline over the pure MomentGrouper's
+        // ISO-week output, the counted headers via headerCellCounts, the
+        // FlowRow group-by setting), Stories (the StoriesShelf of recent
+        // 36h-gap time clusters the pure StorySets engine derives from
+        // the paging snapshot, playback through the existing viewer), the
+        // collage creator (the 2..9-photo template catalogue + render
+        // math in the pure CollageLayouts, the Compose preview and the
+        // Q+ MediaStore exporter through the file-ops naming/pending-row
+        // discipline), and the slideshow (the pure SlideshowTiming +
+        // ViewerCrossfade cores, the shell-scoped armed launch, the
+        // in-session interval choice). Per maintainer directive: NO new
+        // device builds until Phase 5 completes; this and subsequent
+        // rounds ride CI from main only.
         // versionCode 32 (r28 round): the Workstream 8 hardening round +
         // the Phase 5 exit gate --- tests and records only, plus the one
         // sanctioned production seam: (1) the egress proof suite

@@ -61,10 +61,10 @@ import java.util.Locale
  * ## The tap: reuse, not a fork
  * A story card hands its members to the shell's viewer hand-off with the
  * slideshow ARMED (the shell's `onOpenStory`) --- the story player IS
- * the existing full-screen viewer (`ui/viewer/*`) in its r27 slideshow
- * mode with the crossfade transitions; no viewer component is forked,
- * and playback order is the timeline's own (newest first), consistent
- * with every other viewer hand-off.
+ * the existing full-screen viewer (the `ui.viewer` package) in its r27
+ * slideshow mode with the crossfade transitions; no viewer component is
+ * forked, and playback order is the timeline's own (newest first),
+ * consistent with every other viewer hand-off.
  *
  * Privacy (ADR-0014): every cover decodes from a local content URI via
  * the app's offline Coil loader; the derivation is pure on-device math.

@@ -7,7 +7,11 @@
      apostrophes, and the privacy posture spelled out — the ADR-0010
      opt-in rule (off by default) and ADR-0020's on-device model
      delivery mean face clustering and people data never leave the
-     device. -->
+     device.
+     r26 note: the three strings below that pointed at the index-reset
+     way back from a hide (the all-hidden cards, the empty-grid body,
+     the hide dialog) were re-worded in place when the r26 unhide
+     surface made that copy untrue — keys unchanged, honesty kept. -->
 <resources>
 
     <!-- The Settings AI-section consent row (ADR-0010: opt-in, off by default). -->
@@ -19,7 +23,7 @@
     <string name="albums_people_consent_off">People albums are off — enable them in Settings.</string>
     <string name="albums_people_engine_missing">People albums need the AI engine, which is not part of this build.</string>
     <string name="albums_people_not_indexed">No people yet — they appear after the background face index runs (Settings → AI engine).</string>
-    <string name="albums_people_all_hidden">Every detected person is hidden. Reset the face index in Settings to start over.</string>
+    <string name="albums_people_all_hidden">Every detected person is hidden. Open People to unhide them.</string>
     <string name="albums_people_error">People could not be read.</string>
     <string name="albums_people_see_all">See all</string>
 
@@ -34,7 +38,7 @@
     <string name="people_state_not_indexed_title">No people yet</string>
     <string name="people_state_not_indexed_body">People appear here after the background face index runs. Start it from Settings → AI engine → Start background index.</string>
     <string name="people_state_empty_title">Everyone is hidden</string>
-    <string name="people_state_empty_body">Every detected person is currently hidden. Reset the face index in Settings to start over.</string>
+    <string name="people_state_empty_body">Every detected person is currently hidden. Unhide them in the section below — no reset needed.</string>
     <string name="people_state_error_title">Couldn\'t load people</string>
     <string name="people_corrupt_note">Saved people names could not be read — they were reset.</string>
 
@@ -59,9 +63,10 @@
     <string name="person_merge_title">Merge with…</string>
     <string name="person_merge_body">Every face of this person moves into the one you pick. This cannot be undone.</string>
 
-    <!-- The hide confirmation. -->
+    <!-- The hide confirmation (re-worded in r26: the way back is the
+         People screen's hidden section, not the index-erasing reset). -->
     <string name="person_hide_title">Hide this person?</string>
-    <string name="person_hide_body">They won\'t appear in People anymore. Reset the face index in Settings to start over — that erases the whole index, names included.</string>
+    <string name="person_hide_body">They won\'t appear in People anymore, but stay in the index with their name. Unhide them anytime from the People screen.</string>
     <string name="person_hide_confirm">Hide</string>
 
     <!-- Operation outcomes. -->

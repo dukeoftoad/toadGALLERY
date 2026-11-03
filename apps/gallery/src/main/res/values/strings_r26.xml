@@ -80,4 +80,21 @@
         <item quantity="one">%1$d photo matches</item>
         <item quantity="other">%1$d photos match</item>
     </plurals>
+<!-- r26 slice: the People follow-ups round (Workstream 6 closeout) —
+     the edit-preserving reclustering overlay (cluster-id remapping so
+     names, hidden flags, merges and remove-from-person corrections
+     survive the queue's recluster passes; all Kotlin-side over the
+     existing 16-external JNI surface) and the unhide surface (the
+     People screen's hidden section with a per-person Unhide action —
+     the way back that no longer costs an index reset). Same copy rules
+     as every round file: honest plain language, escaped apostrophes,
+     and the privacy posture spelled out — the ADR-0010 opt-in rule and
+     ADR-0020's on-device model delivery mean face clustering and
+     people data never leave the device. -->
+
+
+    <!-- The People screen's hidden section (the r26 unhide surface). -->
+    <string name="people_hidden_header">Hidden people</string>
+    <string name="people_hidden_body">Hidden people stay out of the grid above. Unhide to bring someone back — no reset, names intact.</string>
+    <string name="people_unhide">Unhide</string>
 </resources>

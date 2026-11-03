@@ -157,17 +157,36 @@ first, the Rust export re-checks).
   the branch PR (per the maintainer directive, no device builds until
   Phase 5 completes).
 
-## What r25 deliberately defers
+## What r25 deliberately defers — and how r26 resolved it
 
-- **Edit-preserving reclustering** — cluster ids are not stable across
-  the queue's recluster passes; names/hidden prune on load and manual
-  merges are advisory against the next pass. An overlay that remaps
-  user edits onto new cluster ids (upstream solves this with
-  server-synced cluster persons) is future work.
-- **Unhide** — hidden persons return via the r24 "Reset face index"
-  path; a hidden-list UI is future work.
-- **On-device dogfood validation** — the r23 engine APK (build 27)
-  remains the delivered device artifact; People surfaces ride CI until
-  the Phase 5 completion directive lifts.
+- **Edit-preserving reclustering — RESOLVED in r26** (the
+  `tg-r26-people-followups` round): cluster ids are re-rolled by every
+  re-clustering pass (upstream `new_cluster_id` is random per pass),
+  but PHOTO MEMBERSHIP is not — face rows key on MediaStore file ids
+  since the r23 put path. The r26 overlay records a membership
+  fingerprint per edited cluster (captured at edit time over the same
+  `nativeStoreClusterFileIds` read), the merge intents
+  (`PeopleMerge`) and the accumulated remove-from-person corrections
+  in three additive `people-state.json` books (schema version 1 kept —
+  an r25 file loads with the books empty), and the pure
+  `PeopleReclusterRemap` planner maps fresh post-recluster ids onto
+  the preserved state by overlap: names and hidden flags re-key,
+  merges the pass split re-fold through one engine merge per stray
+  (majority-descendant rule), removals the pass re-derived re-apply,
+  and the fingerprints refresh to the predicted post-mutation
+  memberships. All Kotlin-side over the existing 16-external JNI
+  surface — the vendored crates stay byte-identical to the r23 pin.
+- **Unhide — RESOLVED in r26**: the People screen carries a
+  hidden-persons section (the pure `PeopleContentPolicy.hiddenPersons`
+  mapping) with a per-person Unhide action — a pure hidden-set flip,
+  no queue reset, names intact. The hide dialog / empty-state / Albums
+  copy that pointed at the index-erasing r24 Reset was re-worded in
+  place.
+- **On-device dogfood validation** — still deferred (the human-only
+  follow-up): the r23 engine APK (build 27) remains the delivered
+  device artifact; People surfaces ride CI until the Phase 5
+  completion directive lifts. Notably for dogfooding: the overlay's
+  reconcile is observable on a real library (rename someone, let the
+  queue drain, watch the name survive).
 - **Places / Things / Magic Search** — the next workstreams (7+); the
   People surfaces are the template their rounds follow.

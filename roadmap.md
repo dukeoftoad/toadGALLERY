@@ -752,6 +752,33 @@ the ADR-0020 model download; vault media can never become candidates
 new); versionCode 30, no device build per the Phase-5-completion
 directive.
 
+#### Status — r26 round (versionCode 31): the People follow-ups round
+
+Workstream 6 closeout — the two r25 deferrals
+(`docs/phase-5/people-ui.md`) shipped together. **Edit-preserving
+reclustering**: every clustering pass re-rolls ALL cluster ids
+(upstream `new_cluster_id` is random per pass); the r26 overlay keys
+user edits to the one identity a pass cannot re-roll — PHOTO
+MEMBERSHIP (face rows key on MediaStore file ids). `people-state.json`
+grows three additive books inside schema version 1 (membership
+fingerprints captured at edit time, recorded `PeopleMerge` intents,
+accumulated remove-from-person corrections; an r25 file loads with
+them empty), the pure `PeopleReclusterRemap` planner maps fresh
+post-recluster ids onto the preserved state by deterministic overlap
+(most shared files; ties by bigger cluster then smaller id; name
+collisions by score then old id), re-folds merges the pass split
+(majority-descendant rule, one engine merge per folded stray),
+re-applies removals the pass re-derived (only the files that came
+back), and `PeopleRepository` executes the plan on every read AND
+every edit (mid-window edits re-keyed; a declined mutation aborts the
+save — self-healing, never corrupting). **The unhide UI**: the People
+screen's hidden section (the pure `PeopleContentPolicy.hiddenPersons`
+mapping) with a per-person Unhide action — a pure hidden-set flip, no
+queue reset, names intact; the r25 reset-path copy re-worded in place.
+100% Kotlin-side over the existing 16-external JNI surface — zero
+Rust changes, the vendored crates byte-identical to the r23 pin. 963
+JVM tests (+36); versionCode 30, no device build per the
+Phase-5-completion directive.
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

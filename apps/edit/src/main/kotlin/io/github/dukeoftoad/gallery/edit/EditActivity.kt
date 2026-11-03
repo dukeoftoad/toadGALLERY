@@ -520,10 +520,15 @@ class EditActivity : ComponentActivity() {
         } ?: return
         contentResolver.openFileDescriptor(outputUri, "rw")?.use { fd ->
             val target = androidx.exifinterface.media.ExifInterface(fd.fileDescriptor)
-            for (tag in sourceExif.tagNames) {
+            // androidx.exifinterface exposes NO public tag enumeration (the
+            // gallery's r15 EditableExifCodec established the explicit-list
+            // precedent), so the copy walks MetadataPolicyApplier's
+            // COPYABLE_TAGS and skips the tags the source does not carry.
+            for (tag in MetadataPolicyApplier.COPYABLE_TAGS) {
+                val value = sourceExif.getAttribute(tag) ?: continue
                 when (MetadataPolicyApplier.decide(policy, tag)) {
                     MetadataPolicyApplier.TagDecision.Copy ->
-                        target.setAttribute(tag, sourceExif.getAttribute(tag))
+                        target.setAttribute(tag, value)
                     MetadataPolicyApplier.TagDecision.Strip ->
                         target.setAttribute(tag, null)
                 }

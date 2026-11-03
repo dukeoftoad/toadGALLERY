@@ -40,6 +40,52 @@ object MetadataPolicyApplier {
     }
 
     /**
+     * The EXIF tags the saved-copy pass walks: androidx.exifinterface
+     * exposes NO public tag enumeration, so "preserve" is implemented as
+     * this explicit, documented surface (the same precedent the gallery's
+     * r15 EditableExifCodec set). The names are the EXIF 2.3 identifiers
+     * the library's TAG_* constants carry. Tags the source does not carry
+     * are skipped; GPS tags are included so STRIP_LOCATION can null them
+     * explicitly, and the purely structural tags the encoder recomputes
+     * (JPEG length, compression, thumbnail offsets) are deliberately
+     * absent --- the encoder owns those on the new copy.
+     */
+    val COPYABLE_TAGS: List<String> = listOf(
+        // IFD0 (TIFF) descriptive
+        "ImageDescription", "Make", "Model", "Orientation",
+        "XResolution", "YResolution", "ResolutionUnit", "Software",
+        "ModifyDate", "Artist", "Copyright",
+        // Exposure + capture settings (Exif IFD)
+        "ExposureTime", "FNumber", "ExposureProgram", "ISOSpeedRatings",
+        "SensitivityType", "RecommendedExposureIndex", "ExifVersion",
+        "DateTimeOriginal", "DateTimeDigitized", "OffsetTime",
+        "OffsetTimeOriginal", "OffsetTimeDigitized", "ComponentsConfiguration",
+        "ShutterSpeedValue", "ApertureValue", "BrightnessValue",
+        "ExposureBiasValue", "MaxApertureValue", "SubjectDistance",
+        "MeteringMode", "LightSource", "Flash", "FocalLength",
+        "SubSecTime", "SubSecTimeOriginal", "SubSecTimeDigitized",
+        "FlashpixVersion", "ColorSpace", "PixelXDimension", "PixelYDimension",
+        "InteroperabilityIndex", "FileSource", "SceneType", "CFAPattern",
+        "CustomRendered", "ExposureMode", "WhiteBalance",
+        "DigitalZoomRatio", "FocalLengthIn35mmFilm", "SceneCaptureType",
+        "GainControl", "Contrast", "Saturation", "Sharpness",
+        "DeviceSettingDescription", "SubjectDistanceRange", "ImageUniqueID",
+        "CameraOwnerName", "BodySerialNumber", "LensSpecification",
+        "LensMake", "LensModel", "LensSerialNumber", "UserComment",
+        // GPS (decided per policy --- the LOCATION_TAGS floor)
+        "GPSVersionID", "GPSLatitudeRef", "GPSLatitude", "GPSLongitudeRef",
+        "GPSLongitude", "GPSAltitudeRef", "GPSAltitude", "GPSTimestamp",
+        "GPSSatellites", "GPSStatus", "GPSMeasureMode", "GPSDOP",
+        "GPSSpeedRef", "GPSSpeed", "GPSTrackRef", "GPSTrack",
+        "GPSImgDirectionRef", "GPSImgDirection", "GPSMapDatum",
+        "GPSDestLatitudeRef", "GPSDestLatitude", "GPSDestLongitudeRef",
+        "GPSDestLongitude", "GPSDestBearingRef", "GPSDestBearing",
+        "GPSDestDistanceRef", "GPSDestDistance", "GPSProcessingMethod",
+        "GPSAreaInformation", "GPSDateStamp", "GPSDifferential",
+        "GPSHPositioningError",
+    )
+
+    /**
      * Whether the applied policy must be narrated back to the gallery as a
      * location removal (the honesty UI contract section 4.4 promises).
      */

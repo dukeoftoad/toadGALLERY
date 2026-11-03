@@ -228,9 +228,9 @@ fun straightenPixels(pixels: IntArray, width: Int, height: Int, angleDeg: Double
     val cosT = cos(rad)
     val sinT = sin(rad)
     val ac = abs(cosT)
-    val as = abs(sinT)
-    val outW = (width * ac + height * as).let { kotlin.math.ceil(it).toInt().coerceAtLeast(1) }
-    val outH = (width * as + height * ac).let { kotlin.math.ceil(it).toInt().coerceAtLeast(1) }
+    val absSin = abs(sinT)
+    val outW = (width * ac + height * absSin).let { kotlin.math.ceil(it).toInt().coerceAtLeast(1) }
+    val outH = (width * absSin + height * ac).let { kotlin.math.ceil(it).toInt().coerceAtLeast(1) }
     val cx = (width - 1) / 2.0
     val cy = (height - 1) / 2.0
     val ocx = (outW - 1) / 2.0

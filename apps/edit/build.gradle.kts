@@ -78,8 +78,9 @@ android {
         // for an EXACT identity; (4) the EditPipeline orchestrator with the
         // one documented stage order (preview and export agree by
         // construction); (5) EXPORT CONTROL: JPEG quality slider, PNG,
-        // HEIC (API 28+ with an honest JPEG fallback when the device
-        // encoder refuses), format-aware MediaStore naming; and (6) the
+        // WebP --- the honest encodable set (the platform Bitmap has no
+        // HEIC encoder; HEIC stays decode-only), format-aware MediaStore
+        // naming; and (6) the
         // editor surfaces for all of it (geometry row, straighten slider,
         // crop aspect presets, the ten-slider adjust section, the band
         // selector + per-band sliders, the export sheet). The pipeline

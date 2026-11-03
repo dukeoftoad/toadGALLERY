@@ -959,6 +959,19 @@ adjustment-suite expansion below (the remaining parameters, the
 perspective tool, the JSON sidecar recipe layer) builds on this round's
 session/export pipeline.
 
+**Status (r30):** The **Edit v1 core is built** on the r29 gate
+(`tg-p6-edit-v1-core`, stacked): the ADR-0011 `EditRecipe` + codec +
+atomic sidecar store (save-on-commit, restore-on-relaunch,
+clear-on-export), the geometry toolset (crop rect + aspect presets,
+flips, straighten on an expanded canvas, quad perspective), the full
+adjustment suite (composed LUT, pixel stages, 8-band HSL, vignette,
+unsharp), `EditPipeline` + `EditGeometryPlan` (preview/export agree by
+construction), and the honest export control (JPEG/PNG/WebP — NO HEIC:
+the platform Bitmap has no HEIC encoder). The remaining Phase 6 exit
+items: the per-export metadata-policy choice UI, the on-device
+large-file/low-storage/process-death matrix, and the physical
+round-trip hash-compare (checklist §19).
+
 **Purpose:** Ship the first version of the editor APK with the
 adjustment suite and the non-destructive pipeline that all later editor
 phases build on.

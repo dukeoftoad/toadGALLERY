@@ -54,10 +54,15 @@ object LutBuilder {
             var out = v * gain
             out += brightness * 2.55
             out = (out - 128.0) * contrastFactor + 128.0
+            // 127.5/100 is numerically EXACT (127.5 = 255/2 is representable)
+            // where s * 2.55 * 0.5 carries binary float dust (2.55 is not
+            // representable; 100 * 2.55 * 0.5 = 127.49999... rounds to 127,
+            // one off the documented +127.5 half-scale). Same scaling, exact
+            // at the slider extremes.
             val hlWeight = smoothstep(128.0, 255.0, out)
-            out += highlights * 2.55 * 0.5 * hlWeight
+            out += highlights * 127.5 / 100.0 * hlWeight
             val shWeight = 1.0 - smoothstep(0.0, 128.0, out)
-            out += shadows * 2.55 * 0.5 * shWeight
+            out += shadows * 127.5 / 100.0 * shWeight
             out.roundToInt().coerceIn(0, 255)
         }
     }

@@ -12,7 +12,7 @@
 | **Phase 2** | Product shell, visual foundation, privacy hardening, Compose toolchain, and CI | **Closed / Exited** (Turn 9/10, PRs #15, #16, #23, #46, #47) |
 | **Phase 3 (M4)** | Core media access, browsing, file ops, recycle bin, hidden vault (16/16 issues closed) | **Code-complete / 16 of 16 issues closed** (Reopened in Turn 21 for device validation; all 16 issues closed by PR #70) |
 | **Phase 4** | Aves-grade metadata layer & AI media-contract foundation (`r10`–`r20`) | **Complete** (Turn 35 PR #90 + Turn 38 PR #92) |
-| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **In Progress** (`r21`–`r25` merged on `main`; `r26`–`r29` queued) |
+| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **In Progress** (`r21`–`r27` merged on `main` --- the `r26` People follow-ups `23a1495` and Magic Search `84aab67` rounds plus the `r27` organisational UX round `27c5e71`; Workstream 8 hardening `r28` in review as PR `#100`; on-device dogfood pending) |
 | **Phase 6** | toadGALLERY Edit v1: core adjustments + non-destructive pipeline (gated by `#14`) | **Planned** (Issue `#14` open) |
 | **Phase 7** | toadGALLERY Edit v2: LUT filters, text, stickers, drawing, mosaic, frames | **Planned** |
 | **Phase 8** | toadGALLERY Edit v3: on-device AI editing (magic erase, sky replacement, bokeh, opt-in face retouch) | **Planned** |

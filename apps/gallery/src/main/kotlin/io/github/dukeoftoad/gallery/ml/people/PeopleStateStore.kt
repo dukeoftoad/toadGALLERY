@@ -255,7 +255,13 @@ val PeopleState.editedClusterIds: Set<String>
 fun PeopleState.canonicalized(): PeopleState {
     val edited = editedClusterIds
     val membershipsKept = memberships.filterKeys { it in edited }.filterValues { it.isNotEmpty() }
-    val removalsKept = removals.filterValues { it.isNotEmpty() }
+    // A removal record only survives when its person still has an edit
+    // book BEYOND the record itself (a name, a hidden flag, a surviving
+    // fingerprint, or a merge record): a removal alone is not a
+    // person-shaped thing worth carrying (pinned by the canonicalized test).
+    val removalsKept = removals
+        .filterValues { it.isNotEmpty() }
+        .filterKeys { it in names.keys || it in hidden || it in membershipsKept || merges.any { m -> m.targetClusterId == it } }
     val mergesKept = merges.filter { it.memberFileIds.isNotEmpty() }
     if (membershipsKept.size == memberships.size && removalsKept.size == removals.size &&
         mergesKept.size == merges.size

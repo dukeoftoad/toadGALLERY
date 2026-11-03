@@ -270,7 +270,7 @@ class PeopleStateStoreTest {
         assertEquals(PeopleState(names = mapOf("c2" to "Bob")), cleared)
 
         // Nothing keyed -> same instance:
-        assertTrue(cleared.withoutClusterEdits("c2") === cleared)
+        assertTrue(cleared.withoutClusterEdits("c3") === cleared)
     }
 
     @Test

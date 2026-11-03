@@ -80,6 +80,26 @@
          AndroidKeyStore key is non-exportable (a restored ciphertext would be
          permanently unopenable) and its state must not leave the device
          (ADR-0014). -->
+    <!-- r29 (Issue #14 gate; the Gallery <-> Edit contract, ADR-0002 /
+         ADR-0007): package VISIBILITY for the contract editor. On API 30+
+         the PackageManager only sees packages declared here; without this
+         element the editor resolution (EditorLaunch.kt) would always answer
+         "not installed" on modern devices. Two shapes mirror the two launch
+         paths: the contract action (the toadGALLERY Edit prototype) and the
+         plain third-party ACTION_EDIT fallback (mime-typed image, exactly
+         the fallback intent the code builds). Neither entry is a permission;
+         both are visibility declarations. -->
+    <queries>
+        <intent>
+            <action android:name="org.toadgallery.action.EDIT" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.EDIT" />
+            <data android:mimeType="image/*" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ToadGalleryApplication"
         android:allowBackup="true"

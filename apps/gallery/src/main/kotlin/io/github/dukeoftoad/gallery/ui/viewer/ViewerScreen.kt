@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -103,6 +104,7 @@ import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.RenameCheck
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
+import io.github.dukeoftoad.gallery.edit.contract.EditOutcome
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
@@ -262,6 +264,71 @@ fun ViewerScreen(
     ) { result ->
         fileOpsViewModel.onConsentResult(result.resultCode == Activity.RESULT_OK)
         fileOpsViewModel.exitSelection()
+    }
+
+    // ---- The Gallery <-> Edit contract launch (r29, Issue #14 gate) ----
+    // The editor resolves EXACTLY (contract app ID + negotiated version,
+    // never implicit resolution); the reply parses through the shared
+    // EditResultParser. Refresh needs NO rescan and NO extra wiring here:
+    // the saved copy is a MediaStore INSERT, which the existing
+    // ContentObserver-driven paging invalidation (issue #38 follow-up)
+    // picks up on return --- the contract's "Gallery refreshes via
+    // MediaStore change observation" property.
+    val editorLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        when (val outcome = parseEditResult(result.resultCode, result.data)) {
+            is EditOutcome.SavedCopy -> scope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.viewer_edit_saved),
+                )
+            }
+            is EditOutcome.Canceled -> Unit // nothing was modified anywhere
+            is EditOutcome.Error -> scope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(
+                        R.string.viewer_edit_error,
+                        outcome.errorMessage.ifEmpty { outcome.errorCode },
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
+     * Edit (r29): launches the toadGALLERY Edit prototype on the current
+     * IMAGE (videos are out of the v1 editor scope), through the contract:
+     * not installed -> honest message + the third-party chooser fallback;
+     * outdated -> refusal + update nudge; disabled -> explanatory message;
+     * ready -> the launch intent with the read-only URI grant.
+     */
+    fun editItem(item: MediaItem) {
+        if (item.isVideo) return
+        when (val resolution = resolveEditor(context)) {
+            is EditorResolution.Ready -> editorLauncher.launch(
+                buildEditorIntent(item.uri, resolution),
+            )
+            is EditorResolution.Disabled -> scope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.viewer_edit_disabled),
+                )
+            }
+            is EditorResolution.Outdated -> scope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.viewer_edit_outdated),
+                )
+            }
+            is EditorResolution.NotInstalled -> {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.viewer_edit_not_installed),
+                    )
+                }
+                // The contract's fallback: third-party editors, the user
+                // chooses. A device with no editor at all simply stays put.
+                launchFallbackEditor(context, item.uri)
+            }
+        }
     }
 
     // The delete whose outcome is still unresolved (the item's URI, not a
@@ -550,6 +617,8 @@ fun ViewerScreen(
                 onBack = onBack,
                 onInfo = { infoTarget = window.items[pagerState.currentPage] },
                 onShare = { shareItem(window.items[pagerState.currentPage]) },
+                canEdit = !window.items[pagerState.currentPage].isVideo,
+                onEdit = { editItem(window.items[pagerState.currentPage]) },
                 onToggleFavorite = {
                     requestToggleFavorite(window.items[pagerState.currentPage])
                 },
@@ -1171,6 +1240,8 @@ private fun ViewerTopBar(
     onBack: () -> Unit,
     onInfo: () -> Unit,
     onShare: () -> Unit,
+    canEdit: Boolean,
+    onEdit: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
@@ -1293,6 +1364,21 @@ private fun ViewerTopBar(
                     contentDescription = stringResource(R.string.cd_viewer_action_share),
                     tint = Color.White,
                 )
+            }
+            // The editor launch (r29): image pages only --- the v1 editor
+            // scope is stills, so the button is absent on video pages
+            // (honest scope, no inert affordance).
+            if (canEdit) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.testTag("viewer_action_edit"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Create,
+                        contentDescription = stringResource(R.string.cd_viewer_action_edit),
+                        tint = Color.White,
+                    )
+                }
             }
             if (canModify) {
                 // Issue #66: the favorite toggle. Filled heart while the

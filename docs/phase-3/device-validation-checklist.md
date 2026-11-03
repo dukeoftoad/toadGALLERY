@@ -466,3 +466,46 @@ verification plan with them.
       faster than the per-item cycle on large batches), per-item
       failures narrate alone, and a consent-blocked delete still
       offers the existing retry path for exactly the blocked items.
+
+---
+
+## 19. r29 pass — the Gallery ↔ Edit contract round trip (Issue #14 gate)
+
+**Build target:** the next gallery build (versionCode 33) PLUS the
+`:apps:edit` prototype APK (`io.github.dukeoftoad.gallery.edit(.debug)`,
+versionCode 1) — the gate is the first round that needs BOTH APKs
+installed from the same commit. Dogfooding sections 13–18 stays as
+written; this section is the contract round trip itself.
+
+- [ ] **Launch with the grant**: viewer → open an image → the Edit
+      (pencil-on-paper) op → toadGALLERY Edit opens showing the photo
+      (the read-only grant scoped to that one URI; no permission dialog
+      on Q+ for the gallery side).
+- [ ] **Modify honestly**: drag brightness/contrast (live preview;
+      release commits ONE undo step), rotate left, undo/redo walk the
+      committed history, back then re-enter shows a fresh session
+      (nothing was persisted mid-edit).
+- [ ] **Save copy**: Save copy → the editor closes with RESULT_OK → the
+      gallery's viewer/snackbar narrates the saved copy → the timeline
+      shows the new `-edit.jpg` WITHOUT any manual rescan (MediaStore
+      observation) → the original is byte-identical (hash compare before
+      and after the round trip).
+- [ ] **Metadata honesty**: with `preserve` (the v1 default) the copy
+      keeps the source's EXIF; the editor's always-visible policy line
+      never claims a strip that did not happen.
+- [ ] **Cancel**: mid-edit back → the gallery narrates nothing, no new
+      MediaStore entry appears, the original is untouched.
+- [ ] **Structured failure**: point the launch at an undecodable file
+      (e.g. a RAW renamed to .jpg via a debug intent) → RESULT_ERROR
+      with `ERROR_UNSUPPORTED`, the gallery narrates the failure, no
+      partial entry exists.
+- [ ] **Not-installed fallback**: uninstall the editor → the Edit op
+      narrates the honest message and offers the third-party chooser;
+      choosing a third-party editor still works (read-only grant rides
+      the chooser).
+- [ ] **Version refusal**: (debug path) lower the editor's meta-data to
+      0 in a local build → the gallery refuses the launch with the
+      outdated narration — never a launch.
+- [ ] **Zero egress during AI-free editing**: the editor runs with no
+      network capability at all (its merged manifest carries no INTERNET;
+      the editor privacy gate proves it at build time).

@@ -49,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -135,6 +136,15 @@ class EditActivity : ComponentActivity() {
      */
     internal val bundledLooks: Map<String, CubeLut> by lazy {
         BundledLuts.loadAll { path -> assets.open(path) }
+    }
+
+    /**
+     * The user-imported `.cube` store (r33 extension): SAF-picked looks
+     * copied verbatim into app-private storage, ids derived and
+     * collision-suffixed so they can never shadow the bundled set.
+     */
+    internal val importedLutStore: ImportedLutStore by lazy {
+        ImportedLutStore(File(filesDir, "imported-luts"))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -632,9 +642,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
     // The ONE live-drag draft (key -> value); committed on release.
     var draft by remember { mutableStateOf<Pair<String, Int>?>(null) }
-    // The parsed bundled looks (r33); empty until the IO load lands ---
-    // the chip row shows what parsed, the preview re-runs when it does.
+    // The parsed look registry (r33): the bundled set MERGED with the
+    // user-imported store (disjoint ids by construction). Empty until
+    // the IO load lands; the version counter re-runs it after an import
+    // or a removal.
     var looks by remember { mutableStateOf<Map<String, CubeLut>>(emptyMap()) }
+    var looksVersion by remember { mutableStateOf(0) }
+    var importError by remember { mutableStateOf<String?>(null) }
 
     val committed = uiState.recipe
 
@@ -686,7 +700,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         } else {
             previewBase = decoded
         }
-        looks = withContext(Dispatchers.IO) { activity.bundledLooks }
     }
 
     // Live preview: re-run the ordered pipeline (without the crop --- the
@@ -712,6 +725,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
+    // The merged look registry: bundled first, imported appended (the
+    // store's collision rule guarantees disjoint keys). Re-keyed on the
+    // version counter so an import/removal re-runs it.
+    LaunchedEffect(looksVersion) {
+        looks = withContext(Dispatchers.IO) {
+            activity.bundledLooks + activity.importedLutStore.loadAll()
+        }
+    }
+
     // Pre-Q: the legacy write grant is requested at save time only.
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -725,6 +747,52 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 EditContract.ERROR_PERMISSIONS,
                 "the storage write grant was declined",
             )
+        }
+    }
+
+    // The r33 import flow: SAF-pick a .cube, read it off-main, hand the
+    // BYTES to the store (parse-before-write); an import selects the new
+    // look at the current intensity, a rejection surfaces the reason.
+    val uiScope = rememberCoroutineScope()
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            uiScope.launch {
+                importError = null
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        val bytes = activity.contentResolver
+                            .openInputStream(uri)
+                            ?.use { it.readBytes() }
+                        if (bytes == null) {
+                            null
+                        } else {
+                            activity.importedLutStore.import(
+                                bytes,
+                                activity.sourceDisplayName(uri.toString()),
+                            )
+                        }
+                    } catch (_: IOException) {
+                        null
+                    }
+                }
+                when (result) {
+                    is ImportedLutStore.ImportResult.Imported -> {
+                        looksVersion++
+                        commit(
+                            committed.copy(
+                                lut = LutSelection(
+                                    lutId = result.lut.id,
+                                    intensity = committed.lut?.intensity ?: 100,
+                                ),
+                            ),
+                        )
+                    }
+                    is ImportedLutStore.ImportResult.Rejected -> importError = result.reason
+                    null -> importError = "the file could not be read"
+                }
+            }
         }
     }
 
@@ -1167,6 +1235,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 style = MaterialTheme.typography.labelLarge,
             )
             val selection = committed.lut
+            val bundledIds = remember { BundledLuts.ORDERED.map { it.id }.toSet() }
+            val importedIds = looks.keys.filter { it !in bundledIds }.sorted()
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 FilterChip(
                     selected = selection == null,
@@ -1197,6 +1267,42 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             modifier = Modifier.padding(end = 8.dp),
                         )
                     }
+                // The user-imported looks (r33 extension), id-sorted; the
+                // store's collision rule makes the subtraction exact.
+                importedIds.forEach { id ->
+                    val look = looks.getValue(id)
+                    FilterChip(
+                        selected = selection?.lutId == id,
+                        onClick = {
+                            commit(
+                                committed.copy(
+                                    lut = LutSelection(
+                                        lutId = id,
+                                        intensity = selection?.intensity ?: 100,
+                                    ),
+                                ),
+                            )
+                        },
+                        enabled = !exporting,
+                        label = { Text(look.title.ifBlank { id }) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                // The import action: SAF-pick a .cube (the zero-network
+                // editor reads local documents only).
+                AssistChip(
+                    onClick = { importLauncher.launch(arrayOf("*/*")) },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_filter_import)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            importError?.let { reason ->
+                Text(
+                    text = stringResource(R.string.editor_filter_import_failed, reason),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
             if (selection != null && looks.containsKey(selection.lutId)) {
                 // The intensity slider, live-dragged like every other
@@ -1228,6 +1334,27 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         stateDescription = intensityLabel
                     },
                 )
+                // An IMPORTED look can be removed (bundled looks are part
+                // of the app); removal clears the selection and reloads
+                // the registry. A sidecar still naming the removed look
+                // degrades to no-look by the tolerance contract.
+                if (selection.lutId !in bundledIds) {
+                    TextButton(
+                        onClick = {
+                            val removedId = selection.lutId
+                            uiScope.launch {
+                                withContext(Dispatchers.IO) {
+                                    activity.importedLutStore.delete(removedId)
+                                }
+                                looksVersion++
+                                commit(committed.copy(lut = null))
+                            }
+                        },
+                        enabled = !exporting,
+                    ) {
+                        Text(stringResource(R.string.editor_filter_remove))
+                    }
+                }
             }
 
             // ---- Per-channel HSL: band selector + three sliders ----

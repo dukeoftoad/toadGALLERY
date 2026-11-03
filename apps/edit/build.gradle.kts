@@ -110,8 +110,17 @@ android {
         // docs/phase-7/bundled-luts.md; 9 conformance tests with
         // hand-verified look probes), and the Filters chip row + intensity
         // slider following the r32 a11y conventions.
-        versionCode = 5
-        versionName = "0.4.0-edit-alpha"
+        // versionCode 6 (r33 window extension): the user-import .cube flow
+        // completing the Phase 7 task-1 bullet --- ImportedLutStore (the
+        // parse-before-write verbatim store with derived collision-free
+        // ids that can never shadow the bundled set; 10 JVM tests) + the
+        // SAF OpenDocument import chip, the merged registry chip row
+        // (bundled + imported, reloaded per import/removal), the honest
+        // rejection line, and the remove-look affordance for imported
+        // looks (a sidecar naming a removed look degrades to no-look by
+        // the tolerance contract).
+        versionCode = 6
+        versionName = "0.4.1-edit-alpha"
     }
 
     buildFeatures {

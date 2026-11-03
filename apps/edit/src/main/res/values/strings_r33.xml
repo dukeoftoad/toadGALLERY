@@ -13,4 +13,8 @@
     <string name="editor_filter_vivid_punch">Vivid Punch</string>
     <string name="editor_filter_intensity">Intensity: %1$d%%</string>
     <string name="editor_a11y_filter_intensity">Filter intensity</string>
+    <!-- The r33 extension: the user-import flow (SAF pick -> the imported store -> the merged chip row). -->
+    <string name="editor_filter_import">Import look…</string>
+    <string name="editor_filter_import_failed">Couldn\'t import: %1$s</string>
+    <string name="editor_filter_remove">Remove look</string>
 </resources>

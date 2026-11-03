@@ -8,6 +8,7 @@ import io.github.dukeoftoad.gallery.data.media.changes.MediaScanRow
 import io.github.dukeoftoad.gallery.data.filters.FilterMediaType
 import io.github.dukeoftoad.gallery.data.filters.TimelineFilter
 import io.github.dukeoftoad.gallery.data.filters.TimelineFilterFields
+import io.github.dukeoftoad.gallery.data.filters.matches
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

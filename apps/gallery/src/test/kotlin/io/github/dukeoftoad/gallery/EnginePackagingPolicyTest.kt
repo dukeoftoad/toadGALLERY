@@ -37,8 +37,8 @@ import java.io.File
  * Deliberately NOT pinned here: `.github/workflows/ci.yml` content
  * (shared with parallel rounds and expected to move; the engine-android
  * job's own `unzip` gate enforces the packaged libraries at build
- * time), and anything inside `engine/crates/**` (the ADR-0020 pin ---
- * byte-identical to upstream, never edited).
+ * time), and anything inside the vendored `engine` crates tree (the
+ * ADR-0020 pin --- byte-identical to upstream, never edited).
  */
 class EnginePackagingPolicyTest {
 

@@ -52,7 +52,51 @@ All notable changes to toadGALLERY are documented here. The format follows
   egress is the ADR-0020 model download; vault media can never become
   candidates (three-gate discipline). Rust suite 32 JNI tests (+12);
   JVM suite 982 tests (+55).
-
+- **Edit-preserving reclustering — the cluster-id remapping overlay**
+  (r26 round; the People follow-ups, Workstream 6 closeout): user
+  edits now SURVIVE the face index's re-clustering passes instead of
+  being pruned away. Every clustering pass (each draining
+  background-queue run, each threshold change, each model
+  re-provision) re-rolls ALL cluster ids (upstream `new_cluster_id` is
+  random per pass); the overlay keys edits to the one identity a pass
+  cannot re-roll — photo membership (face rows key on MediaStore file
+  ids, stable since the r23 put path). `people-state.json` grows three
+  additive books inside schema version 1 (an r25 file loads with them
+  empty — the upgrade loses nothing): per-edited-cluster membership
+  fingerprints (captured at edit time over the same
+  `nativeStoreClusterFileIds` read), recorded merge intents
+  (`PeopleMerge`: target + the post-merge membership) and accumulated
+  remove-from-person corrections. The pure `PeopleReclusterRemap`
+  planner maps fresh post-recluster ids onto the preserved state by
+  overlap — deterministic (most shared files; ties by bigger cluster,
+  then smaller id; name collisions by score then old id; a live id's
+  own name always wins), re-folds a merge the pass split back into one
+  cluster (majority-descendant rule), re-applies a removal the pass
+  re-derived (only the files that actually came back) and refreshes
+  the fingerprints to the predicted post-mutation memberships.
+  `PeopleRepository` runs the reconcile on every read AND every edit
+  (a mid-window edit on a stale UI id is re-keyed through the
+  composite mapping); a declined engine mutation aborts the save with
+  the old state intact — the next read replans (self-healing, never
+  corrupting). Edits without a fingerprint (made before the r26
+  upgrade) still drop via the r25 prune — the documented fallback, not
+  a silent loss. 100% Kotlin-side over the EXISTING 16-external JNI
+  surface: zero Rust changes, the vendored crates stay byte-identical
+  to the r23 pin.
+- **The unhide surface** (r26 round): the People screen gains a
+  hidden-persons section — the pure
+  `PeopleContentPolicy.hiddenPersons` mirror of the visible mapping —
+  with a per-person Unhide action (`PeopleRepository.unhide`: a pure
+  hidden-set flip; no queue reset, names and every other edit intact).
+  An unhide failure is an honest one-shot snackbar, never a silent
+  no-op. The r25 copy that named the index-erasing "Reset face index"
+  as the only way back from a hide (the Person-detail hide dialog, the
+  People screen's everyone-hidden body, the Albums tab's all-hidden
+  card) was re-worded in place — the Albums card now carries a "See
+  all" action straight into the hidden section. JVM suite 963 tests
+  (+36: the new `PeopleReclusterRemapTest`, the r26 sections of
+  `PeopleRepositoryTest`/`PeopleStateStoreTest`/
+  `PeopleContentPolicyTest`).
 - **The People auto-album** (r25 round; Workstream 6 of the Phase 5 plan,
   `docs/phase-5/people-ui.md`): the r23/r24 face index gains its product
   surface — an opt-in (ADR-0010, **off by default**) People grid. The

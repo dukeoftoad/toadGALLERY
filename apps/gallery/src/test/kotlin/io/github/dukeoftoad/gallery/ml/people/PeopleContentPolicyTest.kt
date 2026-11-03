@@ -169,4 +169,63 @@ class PeopleContentPolicyTest {
         )
         assertTrue(state is PeopleContentState.Ready)
     }
+
+    // ---- the r26 hidden half (the People screen's hidden section) ----
+
+    @Test
+    fun `hiddenPersons mirrors the visible mapping - hidden clusters with names, seam order preserved`() {
+        val clusters = listOf(
+            cluster("big", 12),
+            cluster("named", 9, coverFileId = null),
+            cluster("hidden1", 7),
+            cluster("tie-a", 3),
+            cluster("tie-b", 3),
+        )
+
+        val hidden = PeopleContentPolicy.hiddenPersons(
+            clusters = clusters,
+            hiddenIds = setOf("hidden1", "tie-a", "tie-b"),
+            names = mapOf("big" to "Alice", "named" to "Bob", "hidden1" to "Carol"),
+        )
+
+        // Only the hidden clusters, names applied, the seam's own
+        // face-count-descending order preserved verbatim:
+        assertEquals(
+            listOf(
+                VisiblePerson("hidden1", "Carol", 7, 1L),
+                VisiblePerson("tie-a", null, 3, 1L),
+                VisiblePerson("tie-b", null, 3, 1L),
+            ),
+            hidden,
+        )
+    }
+
+    @Test
+    fun `hiddenPersons skips stale hidden ids - and blank names render Unnamed`() {
+        val hidden = PeopleContentPolicy.hiddenPersons(
+            clusters = listOf(cluster("c1", 2)),
+            hiddenIds = setOf("c1", "stale-gone"),
+            names = mapOf("c1" to "   "),
+        )
+
+        assertEquals(listOf(VisiblePerson("c1", null, 2, 1L)), hidden)
+    }
+
+    @Test
+    fun `hiddenPersons is empty when nothing is hidden`() {
+        assertTrue(
+            PeopleContentPolicy.hiddenPersons(
+                clusters = listOf(cluster("c1", 2)),
+                hiddenIds = emptySet(),
+                names = mapOf("c1" to "Alice"),
+            ).isEmpty(),
+        )
+        assertTrue(
+            PeopleContentPolicy.hiddenPersons(
+                clusters = emptyList(),
+                hiddenIds = setOf("c1"),
+                names = emptyMap(),
+            ).isEmpty(),
+        )
+    }
 }

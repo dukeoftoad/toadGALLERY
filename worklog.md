@@ -543,6 +543,7 @@
 | **#96** | `r23` (Phase 5) | Vendor `ente-vecdb` + `ente-photos-ml` + 10-fn JNI face index/clustering + `IndexCoordinator` + 71 MB debug APK | `7293610` | Squash-merged; 526 Rust + 11 JNI + JVM tests; `versionCode 27` |
 | **#97** | `r24` (Phase 5) | `tg-r24-background-queue`: WorkManager face-index queue (Workstream 5) + store maintenance JNI pair + pure planner/processor/state core + r24 Settings card | `d610123` | Squash-merged; 885 JVM tests; `versionCode 28`; CI 3/3 green |
 | **#98** | `r25` (Phase 5) | `tg-r25-people-ui`: the People UI round (Workstream 6) — 16-external JNI store, `ml/people` domain + `people-state.json`, `PeopleScreen`/`PersonDetailScreen`, ADR-0010 consent row | `68f1b35` | Squash-merged; 927 JVM tests (+42) + 20 JNI-crate Rust tests (8 new); `versionCode 29`; CI 3/3 green (one lint fix-up commit: `@AnyRes` on `PersonDetailEvent.ShowSnackbar`) |
+| **#99** | CI (Phase 5 support) | `tg-engine-apk-build29`: isolated engine-apk test-build workflow --- verbatim `engine-android` job + APK identity check (`versionCode 29` / `.debug`) + r23-convention artifact staging + 14-day retention; triggers only on `tg-engine-apk-*` + dispatch | `0db54af` | Squash-merged; CI green (PR run 41567323905; engine-apk run 41557451868); 71.5 MB `arm64-v8a` debug APK verified (`libtoad_ml_jni` 19.5 MiB + `libonnxruntime` 32.6 MiB) |
 
 ## Architecture Decision Records (ADR) Registry
 

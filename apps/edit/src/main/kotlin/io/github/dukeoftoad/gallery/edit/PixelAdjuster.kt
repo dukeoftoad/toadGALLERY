@@ -67,6 +67,10 @@ object PixelAdjuster {
      * counter-clockwise turns of an [width] x [height] pixel grid, returned
      * as a new array plus the swapped output dimensions. Pure grid math ---
      * the activity maps Bitmap pixels through the identical helper.
+     *
+     * r30 review fix: the turn-1/turn-3 mappings were swapped versus the
+     * documented CCW semantics (caught in the r30 pipeline cross-check;
+     * the r29 editor tests had not yet run on CI when r29 landed).
      */
     fun rotateQuarterTurns(
         pixels: IntArray,
@@ -83,9 +87,9 @@ object PixelAdjuster {
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val (nx, ny) = when (turns) {
-                    1 -> Pair(height - 1 - y, x)          // 90° CCW
-                    2 -> Pair(width - 1 - x, height - 1 - y) // 180°
-                    else -> Pair(y, width - 1 - x)        // 270° CCW (90° CW)
+                    1 -> Pair(y, width - 1 - x)              // 90° CCW
+                    2 -> Pair(width - 1 - x, height - 1 - y)  // 180°
+                    else -> Pair(height - 1 - y, x)           // 270° CCW = 90° CW
                 }
                 out[ny * outWidth + nx] = pixels[y * width + x]
             }

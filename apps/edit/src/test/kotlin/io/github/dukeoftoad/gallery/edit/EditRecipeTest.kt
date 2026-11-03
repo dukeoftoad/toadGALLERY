@@ -1,175 +1,305 @@
 package io.github.dukeoftoad.gallery.edit
 
-import org.json.JSONObject
-import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
-import java.io.File
-import java.nio.file.Files
+import org.junit.rules.TemporaryFolder
 
-/**
- * The versioned JSON sidecar recipe (r30; ADR-0011): round-trips, tolerant
- * loads, corrupt-file rejection, and the atomic store. Runs on the JVM
- * against the REAL org.json (test classpath only --- the release APK ships
- * the platform org.json; the same classpath-only convention as the
- * gallery's r23 JSON tests).
- */
+/** The ADR-0011 sidecar: codec round-trips, tolerance, and the atomic store. */
 class EditRecipeTest {
 
-    private lateinit var dir: File
-    private lateinit var store: SidecarStore
+    @get:Rule
+    val tmp = TemporaryFolder()
 
-    @Before
-    fun setUp() {
-        dir = Files.createTempDirectory("sidecars").toFile()
-        store = SidecarStore(dir)
-    }
-
-    @After
-    fun tearDown() {
-        dir.deleteRecursively()
-    }
+    // ---- Codec ----
 
     @Test
-    fun `a full parameter set round-trips exactly`() {
-        val params = EditParameters(
-            brightness = 12, contrast = -30, exposure = 40, highlights = -50, shadows = 60,
-            saturation = 25, temperature = -10, tint = 15, vignette = -35, sharpness = 45,
-            hsl = HslBands(
-                red = HslBandAdjust(hue = 5, saturation = 10, luminance = -20),
-                blue = HslBandAdjust(hue = -12, saturation = 30),
+    fun `a fully-populated recipe round-trips through the codec`() {
+        val recipe = EditRecipe(
+            quarterTurns = 1,
+            horizontalFlip = true,
+            straightenDeg = -3.5,
+            crop = CropRect(0.1, 0.2, 0.9, 0.8),
+            perspective = PerspectiveQuad(4.0, -2.0, 0.0, 6.0, -3.0, 0.0, 0.0, -5.0),
+            exposure = 15,
+            brightness = -20,
+            contrast = 30,
+            highlights = -40,
+            shadows = 25,
+            saturation = -50,
+            temperature = 35,
+            tint = -10,
+            hslBands = HslBands(
+                red = HslBandAdjust(hue = 12, saturation = -30, luminance = 5),
+                blue = HslBandAdjust(hue = -8, saturation = 20, luminance = -15),
             ),
-            quarterTurns = 2, straightenDeg = 7.5, flipH = true, flipV = false,
-            crop = CropRect(0.1, 0.2, 0.8, 0.9),
-            perspective = PerspectiveQuad(3.0, -2.0, 1.0, 0.0, 0.0, 2.0, -1.0, 0.5),
+            vignette = 45,
+            sharpness = 60,
         )
-        val json = EditRecipe.toJson(params, "content://media/external/images/media/42")
-        val loaded = EditRecipe.fromJson(json)
-        assertEquals(params, loaded)
+        val parsed = EditRecipeCodec.fromJson(EditRecipeCodec.toJson(recipe))
+        val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
+        assertEquals(recipe.copy(schemaVersion = restored.schemaVersion), restored)
     }
 
     @Test
-    fun `the identity round-trips`() {
-        val json = EditRecipe.toJson(EditParameters(), null)
-        assertEquals(EditParameters(), EditRecipe.fromJson(json))
+    fun `the identity recipe round-trips to the identity`() {
+        val parsed = EditRecipeCodec.fromJson(EditRecipeCodec.toJson(EditRecipe()))
+        val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
+        assertEquals(EditRecipe(), restored)
+        assertTrue(restored.isIdentity)
     }
 
     @Test
-    fun `the source uri rides along`() {
-        val json = EditRecipe.toJson(EditParameters(brightness = 5), "content://media/external/images/media/7")
-        assertEquals("content://media/external/images/media/7", json.opt("source"))
-        val back = EditRecipe.fromJson(json)!!
-        // The source is recipe metadata, not a parameter: reloading keeps
-        // the parameters; the caller matches sidecars by URI separately.
-        assertEquals(5, back.brightness)
+    fun `unknown keys are ignored --- the additive-versioning rule`() {
+        val json = EditRecipeCodec.toJson(EditRecipe(brightness = 25))
+        val withExtras = json.replace("{\"schemaVersion\"", "{\"futureField\":123,\"schemaVersion\"")
+        val parsed = EditRecipeCodec.fromJson(withExtras)
+        val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
+        assertEquals(25, restored.brightness)
     }
 
     @Test
-    fun `a null crop serializes as json null and loads back as null`() {
-        val json = EditRecipe.toJson(EditParameters(), null)
-        assertEquals(JSONObject.NULL, json.getJSONObject("geometry").get("crop"))
-        assertNull(EditRecipe.fromJson(json)!!.crop)
+    fun `missing keys default to the identity`() {
+        val parsed = EditRecipeCodec.fromJson("{\"schemaVersion\":1}")
+        val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
+        assertTrue(restored.isIdentity)
     }
 
     @Test
-    fun `missing keys fall back to defaults (tolerant load)`() {
-        val minimal = JSONObject()
-            .put("recipe_version", 1)
-        assertEquals(EditParameters(), EditRecipe.fromJson(minimal))
+    fun `a schema version outside the window is a structured failure`() {
+        val tooNew = EditRecipeCodec.fromJson("{\"schemaVersion\":99}")
+        assertTrue(tooNew is EditRecipeCodec.ParseResult.Invalid)
+        val tooOld = EditRecipeCodec.fromJson("{\"schemaVersion\":0}")
+        assertTrue(tooOld is EditRecipeCodec.ParseResult.Invalid)
     }
 
     @Test
-    fun `an unknown recipe version rejects the file`() {
-        val future = JSONObject().put("recipe_version", 99)
-        assertNull(EditRecipe.fromJson(future))
+    fun `malformed json is a structured failure, never a crash`() {
+        val parsed = EditRecipeCodec.fromJson("{not json at all")
+        assertTrue(parsed is EditRecipeCodec.ParseResult.Invalid)
     }
 
     @Test
-    fun `an out-of-range value rejects the file (never a poisoned session)`() {
-        val hostile = EditRecipe.toJson(EditParameters(), null)
-        hostile.getJSONObject("adjust").put("brightness", 1000)
-        assertNull(EditRecipe.fromJson(hostile))
-        val hostile2 = EditRecipe.toJson(EditParameters(), null)
-        hostile2.getJSONObject("geometry").put("straighten_deg", 90.0)
-        assertNull(EditRecipe.fromJson(hostile2))
+    fun `out-of-range values are clamped into the recipe domain on parse`() {
+        val json = "{\"schemaVersion\":1,\"brightness\":5000,\"quarterTurns\":9}"
+        val parsed = EditRecipeCodec.fromJson(json)
+        val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
+        assertEquals(100, restored.brightness)
+        assertEquals(1, restored.quarterTurns) // 9 % 4 normalized
     }
 
     @Test
-    fun `structurally invalid json rejects the file`() {
-        // An empty object parses but fails the version check.
-        assertNull(EditRecipe.fromJson(JSONObject()))
-        // A non-object "adjust" value degrades to defaults (optJSONObject
-        // tolerance), NOT a rejection --- the documented load contract.
-        val bad = EditRecipe.toJson(EditParameters(), null)
-        bad.remove("adjust")
-        bad.put("adjust", "nope")
-        assertEquals(EditParameters(), EditRecipe.fromJson(bad))
-        // An "hsl" entry holding nonsense numbers rejects via validate().
-        val hostileHsl = EditRecipe.toJson(EditParameters(), null)
-        hostileHsl.getJSONObject("hsl").getJSONObject("red").put("hue", 999)
-        assertNull(EditRecipe.fromJson(hostileHsl))
-    }
-
-    // ---- The store ----
-
-    @Test
-    fun `the store saves, loads and round-trips a recipe`() {
-        val source = "content://media/external/images/media/99"
-        val params = EditParameters(brightness = 33, contrast = -11, quarterTurns = 1)
-        val ok = store.save(source, EditRecipe.toJson(params, source))
-        assertTrue(ok)
-        assertEquals(params, store.loadRecipe(source))
+    fun `the crop is normalized on parse`() {
+        val json = "{\"schemaVersion\":1,\"crop\":{\"left\":0.9,\"top\":0.8,\"right\":0.1,\"bottom\":0.2}}"
+        val parsed = EditRecipeCodec.fromJson(json)
+        val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
+        assertEquals(CropRect(0.1, 0.2, 0.9, 0.8), restored.crop)
     }
 
     @Test
-    fun `the store keys distinct sources to distinct files`() {
-        val a = "content://media/external/images/media/1"
-        val b = "content://media/external/images/media/2"
-        store.save(a, EditRecipe.toJson(EditParameters(brightness = 1), a))
-        store.save(b, EditRecipe.toJson(EditParameters(brightness = 2), b))
-        assertEquals(1, store.loadRecipe(a)!!.brightness)
-        assertEquals(2, store.loadRecipe(b)!!.brightness)
-        assertNotEquals(store.fileFor(a).name, store.fileFor(b).name)
+    fun `a recipe with an out-of-domain constructor value is rejected at construction`() {
+        try {
+            EditRecipe(quarterTurns = 4)
+            throw AssertionError("quarterTurns=4 must be rejected (normalize to 0 first)")
+        } catch (_: IllegalArgumentException) {
+            // expected
+        }
+    }
+
+    // ---- Store ----
+
+    @Test
+    fun `the store key is a stable sha-256 with no uri text in the filename`() {
+        val store = EditRecipeStore(tmp.newFolder())
+        val file = store.fileFor("content://media/external/images/media/42")
+        assertTrue(file.name.startsWith("recipe-"))
+        assertEquals("recipe-${EditRecipeStore.sha256("content://media/external/images/media/42")}.json", file.name)
+        assertFalse(file.name.contains("media"))
+        // Stable across instances.
+        assertEquals(file, EditRecipeStore(tmp.root).fileFor("content://media/external/images/media/42"))
     }
 
     @Test
-    fun `an absent sidecar loads as null`() {
-        assertNull(store.loadRecipe("content://media/external/images/media/404"))
+    fun `save then load round-trips`() {
+        val store = EditRecipeStore(tmp.newFolder())
+        val uri = "content://media/external/images/media/7"
+        val recipe = EditRecipe(brightness = 42, straightenDeg = 2.5)
+        store.save(uri, recipe)
+        assertEquals(recipe, store.load(uri))
     }
 
     @Test
-    fun `a corrupt sidecar loads as null, not a crash`() {
-        val source = "content://media/external/images/media/13"
-        store.save(source, EditRecipe.toJson(EditParameters(), source))
-        // Corrupt the file on disk.
-        store.fileFor(source).writeText("{ broken")
-        assertNull(store.load(source))
-        assertNull(store.loadRecipe(source))
+    fun `save overwrites atomically and leaves no tmp file`() {
+        val store = EditRecipeStore(tmp.newFolder())
+        val uri = "content://media/external/images/media/7"
+        store.save(uri, EditRecipe(brightness = 1))
+        store.save(uri, EditRecipe(brightness = 2))
+        assertEquals(2, store.load(uri)!!.brightness)
+        assertEquals(1, tmp.root.listFiles()!!.size) // exactly the one sidecar
     }
 
     @Test
-    fun `saving over an existing sidecar replaces it atomically`() {
-        val source = "content://media/external/images/media/21"
-        store.save(source, EditRecipe.toJson(EditParameters(brightness = 10), source))
-        assertTrue(store.save(source, EditRecipe.toJson(EditParameters(brightness = 20), source)))
-        assertEquals(20, store.loadRecipe(source)!!.brightness)
-        // No .tmp litter left behind.
-        val tmpFiles = dir.listFiles { f -> f.name.endsWith(".tmp") } ?: emptyArray()
-        assertTrue(tmpFiles.isEmpty())
+    fun `loading a missing sidecar answers null`() {
+        val store = EditRecipeStore(tmp.newFolder())
+        assertNull(store.load("content://media/external/images/media/999"))
     }
 
     @Test
-    fun `sha256 keys are stable and hex`() {
-        val hex = SidecarStore.sha256Hex("abc")
-        assertEquals(
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-            hex,
+    fun `a corrupt sidecar self-heals away to null`() {
+        val store = EditRecipeStore(tmp.newFolder())
+        val uri = "content://media/external/images/media/7"
+        store.fileFor(uri).writeText("{definitely not json")
+        assertNull(store.load(uri))
+        assertFalse("the corrupt file must be gone", store.fileFor(uri).exists())
+    }
+
+    @Test
+    fun `clear removes the sidecar`() {
+        val store = EditRecipeStore(tmp.newFolder())
+        val uri = "content://media/external/images/media/7"
+        store.save(uri, EditRecipe())
+        store.clear(uri)
+        assertNull(store.load(uri))
+    }
+
+    // ---- ExportFormat / ExportRequest ----
+
+    @Test
+    fun `export formats carry their wire names, mimes and min sdks`() {
+        assertEquals("image/jpeg", ExportFormat.JPEG.mimeType)
+        assertEquals("image/png", ExportFormat.PNG.mimeType)
+        assertEquals("image/heic", ExportFormat.HEIC.mimeType)
+        assertEquals(28, ExportFormat.HEIC.minSdk)
+        assertEquals(ExportFormat.JPEG, ExportFormat.fromWire("JPEG"))
+        assertNull(ExportFormat.fromWire("WEBP"))
+        assertNull(ExportFormat.fromWire(null))
+    }
+
+    @Test
+    fun `the heic fallback is jpeg`() {
+        assertEquals(ExportFormat.JPEG, ExportPlan.heicFallback())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `an export quality outside 1..100 is rejected`() {
+        ExportRequest(EditRecipe(), ExportFormat.JPEG, quality = 0, metadataPolicy = io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy.PRESERVE)
+    }
+}
+
+/** The pipeline: one documented stage order, exact identity, crop-after-geometry. */
+class EditPipelineTest {
+
+    private fun solid(width: Int, height: Int, argb: Int) = IntArray(width * height) { argb }
+
+    private fun argb(r: Int, g: Int, b: Int) =
+        (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+    private fun redOf(p: Int) = (p ushr 16) and 0xFF
+
+    @Test
+    fun `the identity recipe returns the input grid exactly`() {
+        val pixels = intArrayOf(0x11223344, 0x55667788)
+        val result = EditPipeline.apply(pixels, 2, 1, EditRecipe())
+        assertTrue(result.pixels.contentEquals(pixels))
+        assertEquals(2, result.width)
+        assertEquals(1, result.height)
+    }
+
+    @Test
+    fun `a quarter turn swaps the output dimensions`() {
+        val result = EditPipeline.apply(solid(4, 2, argb(10, 20, 30)), 4, 2, EditRecipe(quarterTurns = 1))
+        assertEquals(2, result.width)
+        assertEquals(4, result.height)
+    }
+
+    @Test
+    fun `a horizontal flip mirrors the row`() {
+        val pixels = intArrayOf(argb(255, 0, 0, 0), argb(0, 255, 0, 0), argb(0, 0, 255, 0))
+        val result = EditPipeline.apply(pixels, 3, 1, EditRecipe(horizontalFlip = true))
+        assertEquals(argb(0, 0, 255, 0), result.pixels[0])
+        assertEquals(argb(0, 255, 0, 0), result.pixels[1])
+        assertEquals(argb(255, 0, 0, 0), result.pixels[2])
+    }
+
+    @Test
+    fun `crop applies AFTER rotation --- the normalized rect rides the post-geometry frame`() {
+        // A 4x2 grid of two halves, rotated 90 -> 2x4, then a bottom-half
+        // crop (top 0.5) keeps only the rotated lower half.
+        val pixels = IntArray(4 * 2) { i ->
+            if (i < 4) argb(10, 0, 0, 0) else argb(200, 0, 0, 0)
+        }
+        val recipe = EditRecipe(quarterTurns = 1, crop = CropRect(0.0, 0.5, 1.0, 1.0))
+        val plan = EditGeometryPlan.plan(recipe, 4, 2)
+        assertEquals(2, plan.postGeometryWidth)
+        assertEquals(4, plan.postGeometryHeight)
+        val result = EditPipeline.apply(pixels, 4, 2, recipe)
+        assertEquals(plan.cropPixelRect.width, result.width)
+        assertEquals(plan.cropPixelRect.height, result.height)
+        assertEquals(2, result.width)
+        assertEquals(2, result.height)
+    }
+
+    @Test
+    fun `the tone stage raises brightness and the pipeline exposes the exact stage order`() {
+        val pixels = intArrayOf(argb(100, 100, 100))
+        val result = EditPipeline.apply(pixels, 1, 1, EditRecipe(brightness = 20))
+        assertTrue("brightness must raise the value", redOf(result.pixels[0]) > 100)
+        assertTrue(
+            "the documented order must name every stage",
+            EditPipeline.STAGE_ORDER.contains("crop -> tone LUT") &&
+                EditPipeline.STAGE_ORDER.contains("vignette -> sharpen"),
         )
-        assertEquals(hex, SidecarStore.sha256Hex("abc"))
-        assertTrue(hex.all { it in "0123456789abcdef" })
+    }
+
+    @Test
+    fun `the geometry plan matches the pipeline's post-geometry frame for straighten`() {
+        val recipe = EditRecipe(straightenDeg = 30.0)
+        val plan = EditGeometryPlan.plan(recipe, 100, 50)
+        val result = EditPipeline.apply(solid(100, 50, argb(1, 2, 3)), 100, 50, recipe)
+        assertEquals(plan.postGeometryWidth, result.width)
+        assertEquals(plan.postGeometryHeight, result.height)
+        // 30 degrees over a 100x50 frame: 100*cos30 + 50*sin30 = 86.6 + 25 = 111.6 -> 112
+        assertEquals(112, result.width)
+        // 100*sin30 + 50*cos30 = 50 + 43.3 = 93.3 -> 94
+        assertEquals(94, result.height)
+    }
+
+    @Test
+    fun `the geometry plan handles the odd-turn dimension swap`() {
+        val plan = EditGeometryPlan.plan(EditRecipe(quarterTurns = 1), 100, 50)
+        assertEquals(50, plan.postGeometryWidth)
+        assertEquals(100, plan.postGeometryHeight)
+    }
+
+    @Test
+    fun `vignette and sharpen apply to the CROPPED frame (display-space effects last)`() {
+        // A 2x1 crop from a 4x1 solid: the vignette must see a 2x1 frame ---
+        // pinned indirectly: the crop's output dims are the plan's, and the
+        // pipeline's output equals them (no vignette-induced resize).
+        val recipe = EditRecipe(
+            crop = CropRect(0.25, 0.0, 0.75, 1.0),
+            vignette = 50,
+            sharpness = 50,
+        )
+        val plan = EditGeometryPlan.plan(recipe, 4, 1)
+        val result = EditPipeline.apply(solid(4, 1, argb(120, 120, 120)), 4, 1, recipe)
+        assertEquals(plan.cropPixelRect.width, result.width)
+        assertEquals(2, result.width)
+        // A constant image stays constant under sharpen at any amount.
+        assertEquals(argb(120, 120, 120), result.pixels[1])
+    }
+
+    @Test
+    fun `an adjusted recipe is not the identity but its zero-state stages are skipped exactly`() {
+        val recipe = EditRecipe(saturation = -100)
+        assertFalse(recipe.isIdentity)
+        val pixels = intArrayOf(0xFF808080.toInt())
+        val result = EditPipeline.apply(pixels, 1, 1, recipe)
+        // Full desaturation of a grey pixel is the same grey.
+        assertEquals(0xFF808080.toInt(), result.pixels[0])
+        assertNotEquals(EditRecipe(), recipe)
     }
 }

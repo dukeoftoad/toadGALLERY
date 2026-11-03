@@ -1,7 +1,6 @@
 package io.github.dukeoftoad.gallery.edit
 
 import android.Manifest
-import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -29,11 +28,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +60,7 @@ import io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy
 import io.github.dukeoftoad.gallery.edit.contract.RawExtras
 import io.github.dukeoftoad.gallery.edit.contract.RequestValidation
 import java.io.IOException
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,46 +68,45 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * toadGALLERY Edit --- the contract launch activity (Issue #14 gate
- * prototype; spec `docs/architecture/editor-contract.md`).
+ * toadGALLERY Edit --- the contract launch activity (r29 gate; r30 wires
+ * the full v1 suite).
  *
- * Round trip proved end to end:
+ * Round trip, end to end:
  *  1. LAUNCH: the gallery sends the v1 contract extras with a read-only
- *     URI grant; this activity validates them through the SHARED
- *     [EditRequestValidator] (one truth, both sides), falling back to the
- *     ClipData item for the source URI per the spec.
- *  2. MODIFY: a real edit session --- live brightness + contrast LUT over
- *     the decoded preview pixels, left rotation, undo/redo over the
- *     committed parameter history ([EditSessionState], [EditSessionEngine]).
- *     Nothing is written anywhere during the session (contract 4.1/4.2).
- *  3. EXPORT (Save copy): full-resolution decode -> adjust -> compress
- *     JPEG q95 -> MediaStore INSERT of a NEW row (IS_PENDING on Q+, cleared
- *     after the bytes land; a failed write CANCELS the pending row so no
- *     partial entry survives) -> EXIF policy applied with
- *     androidx.exifinterface -> RESULT_OK with EXTRA_OUTPUT_URI and the
- *     applied policy echoed. The source URI is read-only by construction:
- *     it is never opened for write, never updated, never deleted.
- *  4. TERMINAL STATES: RESULT_OK / RESULT_CANCELED (back, with or without
- *     edits) / RESULT_ERROR with the structured codes --- the pre-compose
- *     validation failures answer before any UI exists.
+ *     URI grant; validation runs through the SHARED
+ *     [EditRequestValidator] (one truth, both sides), with the ClipData
+ *     item as the documented [sourceUriFromExtra] fallback.
+ *  2. SESSION (r30): the full v1 parameter set --- the ten adjustments,
+ *     the 8-band HSL model, and the geometry (quarter turns, straighten,
+ *     flips; crop + perspective ride the recipe/pipeline but their
+ *     interactive overlays are a later round) --- with live preview
+ *     through the ordered [EditPipeline] and undo/redo over the committed
+ *     history ([EditSessionState]). If a sidecar recipe exists for the
+ *     source (a previous export), the session OPENS with it: edits are
+ *     re-editable across sessions ([SidecarStore], ADR-0011).
+ *  3. EXPORT (Save copy): the format/quality dialog (JPEG/PNG/WebP; PNG
+ *     lossless) -> full-resolution decode -> [EditPipeline] -> compress ->
+ *     MediaStore INSERT of a NEW row (IS_PENDING on Q+; a failed write
+ *     CANCELS the pending row --- no partial entry survives) -> the EXIF
+ *     metadata policy -> RESULT_OK + the applied policy echoed -> the
+ *     recipe saved to the sidecar store. The source URI is read-only by
+ *     construction: never opened for write, never updated, never deleted.
+ *  4. TERMINAL STATES: RESULT_OK / RESULT_CANCELED / RESULT_ERROR with
+ *     the structured codes.
  *
  * Zero network: the module's build-time gate fails if INTERNET ever rides
  * into the merged manifest, and the activity opens no sockets itself.
- *
- * Threading note: the export pipeline runs in an activity-scoped coroutine
- * scope that OUTLIVES the composition --- a user closing the activity
- * mid-export does not strand a half-written row; the pipeline always
- * answers a terminal state or cancels its pending row, and the gallery
- * refreshes through MediaStore observation either way (the contract's
- * "no rescan" property).
  */
 class EditActivity : ComponentActivity() {
-
-    private val exportScope = CoroutineScope(Dispatchers.IO + Job())
 
     /** The validated request; non-null after onCreate validation passed. */
     internal lateinit var request: io.github.dukeoftoad.gallery.edit.contract.EditRequest
         private set
+
+    /** The sidecar store; created once. */
+    private lateinit var sidecars: SidecarStore
+
+    private val exportScope = CoroutineScope(Dispatchers.IO + Job())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -149,10 +150,16 @@ class EditActivity : ComponentActivity() {
             return
         }
 
+        // ---- The recipe sidecar: re-editable sessions (ADR-0011). A
+        // previous export's recipe seeds the session; a missing or corrupt
+        // sidecar is just a fresh session (never a crash). ----
+        sidecars = SidecarStore.inApp(this)
+        val initial = sidecars.loadRecipe(request.sourceUri) ?: EditParameters()
+
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
-                    EditorContent(activity = this@EditActivity)
+                    EditorContent(activity = this@EditActivity, initialParameters = initial)
                 }
             }
         }
@@ -197,8 +204,13 @@ class EditActivity : ComponentActivity() {
     }
 
     /** Kicks the export pipeline on the outliving scope. */
-    internal fun startExport(parameters: EditParameters, policy: MetadataPolicy) {
-        exportScope.launch { runExport(parameters, policy) }
+    internal fun startExport(
+        parameters: EditParameters,
+        policy: MetadataPolicy,
+        format: ExportPlan.ExportFormat,
+        quality: Int,
+    ) {
+        exportScope.launch { runExport(parameters, policy, format, quality) }
     }
 
     // ---- Decode helpers ----
@@ -260,13 +272,24 @@ class EditActivity : ComponentActivity() {
         null
     }
 
+    /** The source's mime type (for the follow-source export default). */
+    internal fun sourceMime(sourceUri: String): String? = try {
+        contentResolver.getType(Uri.parse(sourceUri))
+    } catch (_: RuntimeException) {
+        null
+    }
+
     /**
      * The export pipeline. IO dispatcher; on ANY failure the pending row is
      * cancelled (Q+) and RESULT_ERROR answers --- never a partial entry.
+     * On success the recipe is saved to the sidecar store (the re-editable
+     * promise) before RESULT_OK.
      */
     private suspend fun runExport(
         parameters: EditParameters,
         policy: MetadataPolicy,
+        format: ExportPlan.ExportFormat,
+        quality: Int,
     ): Unit = withContext(Dispatchers.IO) {
         val api29Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         val sourceUri = request.sourceUri
@@ -279,37 +302,48 @@ class EditActivity : ComponentActivity() {
                     "cannot decode the source at full resolution",
                 )
 
-            // 2. Adjust (LUT) + rotate.
+            // 2. The ordered pipeline (adjust + geometry).
             val width = source.width
             val height = source.height
             val pixels = IntArray(width * height)
             source.getPixels(pixels, 0, width, 0, 0, width, height)
-            val lut = PixelAdjuster.buildLut(parameters.brightness, parameters.contrast)
-            PixelAdjuster.applyTo(pixels, lut)
-            val rotated = PixelAdjuster.rotateQuarterTurns(pixels, width, height, parameters.quarterTurns)
-            val adjusted = Bitmap.createBitmap(rotated.width, rotated.height, Bitmap.Config.ARGB_8888)
-            adjusted.setPixels(rotated.pixels, 0, rotated.width, 0, 0, rotated.width, rotated.height)
+            val pipelined = EditPipeline.apply(pixels, width, height, parameters)
+            val adjusted = Bitmap.createBitmap(
+                pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888,
+            )
+            adjusted.setPixels(
+                pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height,
+            )
 
-            // 3. Insert the NEW MediaStore row (IS_PENDING on Q+).
-            val displayName = ExportPlan.displayNameFor(sourceDisplayName(sourceUri))
+            // 3. Insert the NEW MediaStore row (IS_PENDING on Q+), with the
+            // chosen format's mime and extension.
+            val displayName = ExportPlan.displayNameFor(sourceDisplayName(sourceUri), format)
             val collection = if (api29Plus) {
                 MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             } else {
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             }
-            val values = ContentValues().apply {
-                ExportPlan.insertValues(displayName, api29Plus).forEach { (key, value) ->
-                    put(key, value)
+            val values = ContentValuesShim()
+            for ((key, value) in ExportPlan.insertValuesForFormat(displayName, format, api29Plus)) {
+                when (value) {
+                    is String -> values.put(key, value)
+                    is Int -> values.put(key, value)
                 }
             }
-            val inserted = contentResolver.insert(collection, values)
+            val inserted = contentResolver.insert(collection, values.backing)
                 ?: throw ExportException(EditContract.ERROR_IO, "MediaStore refused the insert")
             outputUri = inserted
 
-            // 4. Compress the JPEG into the pending row.
+            // 4. Compress into the pending row with the chosen format+quality.
+            val compressFormat = when (format) {
+                ExportPlan.ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
+                ExportPlan.ExportFormat.PNG -> Bitmap.CompressFormat.PNG
+                ExportPlan.ExportFormat.WEBP -> Bitmap.CompressFormat.WEBP
+            }
+            val effectiveQuality = ExportPlan.qualityFor(format, quality)
             contentResolver.openOutputStream(inserted)?.use { out ->
-                if (!adjusted.compress(Bitmap.CompressFormat.JPEG, ExportPlan.JPEG_QUALITY, out)) {
-                    throw ExportException(EditContract.ERROR_IO, "JPEG compression failed")
+                if (!adjusted.compress(compressFormat, effectiveQuality, out)) {
+                    throw ExportException(EditContract.ERROR_IO, "compression failed")
                 }
                 out.flush()
             } ?: throw ExportException(EditContract.ERROR_IO, "cannot open the output stream")
@@ -317,13 +351,23 @@ class EditActivity : ComponentActivity() {
             // 5. Apply the EXIF metadata policy exactly (contract 4.4).
             applyMetadataPolicy(sourceUri, inserted, policy)
 
-            // 6. Finalize (clear IS_PENDING) and answer OK.
+            // 6. Finalize (clear IS_PENDING).
             if (api29Plus) {
-                val finalize = ContentValues().apply {
-                    ExportPlan.finalizeValues(api29Plus).forEach { (key, value) -> put(key, value) }
+                val finalize = ContentValuesShim()
+                for ((key, value) in ExportPlan.finalizeValues(api29Plus)) {
+                    when (value) {
+                        is String -> finalize.put(key, value)
+                        is Int -> finalize.put(key, value)
+                    }
                 }
-                contentResolver.update(inserted, finalize, null, null)
+                contentResolver.update(inserted, finalize.backing, null, null)
             }
+
+            // 7. Persist the recipe sidecar (the re-editable promise) BEFORE
+            // reporting success --- a failure here still answers OK (the
+            // export itself succeeded; the sidecar is best-effort).
+            sidecars.save(sourceUri, EditRecipe.toJson(parameters, sourceUri))
+
             withContext(Dispatchers.Main) {
                 finishWithSavedCopy(inserted, policy)
             }
@@ -361,8 +405,7 @@ class EditActivity : ComponentActivity() {
             try {
                 contentResolver.delete(outputUri, null, null)
             } catch (_: RuntimeException) {
-                // Best-effort: the pending row is app-owned; never mask the
-                // export's own error with a cleanup failure.
+                // Best-effort: never mask the export's own error.
             }
         }
     }
@@ -370,16 +413,15 @@ class EditActivity : ComponentActivity() {
     /**
      * Copies the source EXIF onto the saved copy per the policy: PRESERVE
      * copies every tag, STRIP_LOCATION nulls the GPS tags, STRIP_ALL writes
-     * nothing at all. Runs through androidx.exifinterface (ADR-0003), on a
-     * read-write file descriptor (API 24+; the minSdk is 26 so the path is
-     * always live).
+     * nothing at all. androidx.exifinterface on a read-write file
+     * descriptor (minSdk 26 >= 24, always live).
      */
     private fun applyMetadataPolicy(
         sourceUri: String,
         outputUri: Uri,
         policy: MetadataPolicy,
     ) {
-        if (policy == MetadataPolicy.STRIP_ALL) return // nothing rides onto the copy
+        if (policy == MetadataPolicy.STRIP_ALL) return
         val sourceExif = contentResolver.openInputStream(Uri.parse(sourceUri))?.use { input ->
             androidx.exifinterface.media.ExifInterface(input)
         } ?: return
@@ -399,6 +441,17 @@ class EditActivity : ComponentActivity() {
 
     /** The internal failure type carrying a structured contract error code. */
     private class ExportException(val errorCode: String, message: String) : RuntimeException(message)
+
+    /**
+     * The typed ContentValues builder: [ExportPlan] speaks Map<String, Any>
+     * (pure, JVM-testable); ContentValues has no Any overload --- this
+     * shim branches on the two value types the plan emits (String, Int).
+     */
+    private class ContentValuesShim {
+        val backing = android.content.ContentValues()
+        fun put(key: String, value: String) { backing.put(key, value) }
+        fun put(key: String, value: Int) { backing.put(key, value) }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -441,24 +494,26 @@ private class EditSessionEngine(initial: EditParameters) {
 }
 
 @Composable
-private fun EditorContent(activity: EditActivity) {
+private fun EditorContent(
+    activity: EditActivity,
+    initialParameters: EditParameters,
+) {
     val policy = activity.request.metadataPolicy
-    val engine = remember { EditSessionEngine(EditParameters()) }
+    val engine = remember { EditSessionEngine(initialParameters) }
 
     var uiState by remember { mutableStateOf(engine.initial) }
-    // Slider drafts: live preview while dragging; committed to the undo
-    // stack on release (onValueChangeFinished) --- one undo step per gesture.
-    var brightnessDraft by remember { mutableStateOf<Float?>(null) }
-    var contrastDraft by remember { mutableStateOf<Float?>(null) }
-
     val params = uiState.params
-    val effectiveBrightness = brightnessDraft?.toInt() ?: params.brightness
-    val effectiveContrast = contrastDraft?.toInt() ?: params.contrast
 
     var previewBase by remember { mutableStateOf<Bitmap?>(null) }
     var previewImage by remember { mutableStateOf<ImageBitmap?>(null) }
     var exporting by remember { mutableStateOf(false) }
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
+
+    // ---- The export dialog state (r30): format + quality. ----
+    var showExportDialog by remember { mutableStateOf(false) }
+    var resolvedExport by remember {
+        mutableStateOf<Pair<ExportPlan.ExportFormat, Int>?>(null)
+    }
 
     // First composition: decode the bounded preview; a decode failure is
     // the ERROR_UNSUPPORTED terminal state.
@@ -476,22 +531,21 @@ private fun EditorContent(activity: EditActivity) {
         }
     }
 
-    // Live adjustment: re-applies whenever the base preview, the committed
-    // parameters, or a drag draft changes.
-    LaunchedEffect(previewBase, params, effectiveBrightness, effectiveContrast) {
+    // Live preview through the ordered pipeline.
+    LaunchedEffect(previewBase, params) {
         val base = previewBase ?: return@LaunchedEffect
         previewImage = withContext(Dispatchers.Default) {
             val width = base.width
             val height = base.height
             val pixels = IntArray(width * height)
             base.getPixels(pixels, 0, width, 0, 0, width, height)
-            PixelAdjuster.applyTo(
-                pixels,
-                PixelAdjuster.buildLut(effectiveBrightness, effectiveContrast),
+            val pipelined = EditPipeline.apply(pixels, width, height, params)
+            val out = Bitmap.createBitmap(
+                pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888,
             )
-            val rotated = PixelAdjuster.rotateQuarterTurns(pixels, width, height, params.quarterTurns)
-            val out = Bitmap.createBitmap(rotated.width, rotated.height, Bitmap.Config.ARGB_8888)
-            out.setPixels(rotated.pixels, 0, rotated.width, 0, 0, rotated.width, rotated.height)
+            out.setPixels(
+                pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height,
+            )
             out.asImageBitmap()
         }
     }
@@ -512,14 +566,6 @@ private fun EditorContent(activity: EditActivity) {
         }
     }
 
-    // The exporting flag drives the pipeline through the activity's
-    // outliving scope.
-    LaunchedEffect(exporting) {
-        if (exporting) {
-            activity.startExport(params, policy)
-        }
-    }
-
     fun requestSave() {
         if (exporting) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
@@ -530,6 +576,16 @@ private fun EditorContent(activity: EditActivity) {
             permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         } else {
             exporting = true
+        }
+    }
+
+    // The exporting flag drives the pipeline through the activity's
+    // outliving scope.
+    LaunchedEffect(exporting) {
+        if (exporting) {
+            val (format, quality) = resolvedExport
+                ?: Pair(ExportPlan.ExportFormat.JPEG, ExportPlan.JPEG_QUALITY)
+            activity.startExport(params, policy, format, quality)
         }
     }
 
@@ -577,7 +633,7 @@ private fun EditorContent(activity: EditActivity) {
                 )
             } else {
                 Button(
-                    onClick = { requestSave() },
+                    onClick = { showExportDialog = true },
                     modifier = Modifier.padding(end = 4.dp),
                 ) {
                     Text(stringResource(R.string.editor_save_copy))
@@ -605,7 +661,9 @@ private fun EditorContent(activity: EditActivity) {
             }
         }
 
-        // ---- Controls ----
+        // ---- Controls (the v1 suite exposed in r30; crop/straighten/
+        // perspective/HSL overlays are the next round --- their math and
+        // recipe persistence are live in the pipeline already). ----
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -613,44 +671,74 @@ private fun EditorContent(activity: EditActivity) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = stringResource(R.string.editor_brightness, effectiveBrightness),
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Slider(
-                value = effectiveBrightness.toFloat(),
-                onValueChange = { value -> brightnessDraft = value },
-                onValueChangeFinished = {
-                    brightnessDraft?.let { draft ->
-                        uiState = engine.commit(params.copy(brightness = draft.toInt()))
-                    }
-                    brightnessDraft = null
-                },
-                valueRange = PixelAdjuster.MIN.toFloat()..PixelAdjuster.MAX.toFloat(),
+            AdjustSlider(
+                labelRes = R.string.editor_brightness,
+                value = params.brightness,
                 enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(brightness = v)) },
             )
-            Text(
-                text = stringResource(R.string.editor_contrast, effectiveContrast),
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Slider(
-                value = effectiveContrast.toFloat(),
-                onValueChange = { value -> contrastDraft = value },
-                onValueChangeFinished = {
-                    contrastDraft?.let { draft ->
-                        uiState = engine.commit(params.copy(contrast = draft.toInt()))
-                    }
-                    contrastDraft = null
-                },
-                valueRange = PixelAdjuster.MIN.toFloat()..PixelAdjuster.MAX.toFloat(),
+            AdjustSlider(
+                labelRes = R.string.editor_contrast,
+                value = params.contrast,
                 enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(contrast = v)) },
             )
+            AdjustSlider(
+                labelRes = R.string.editor_exposure,
+                value = params.exposure,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(exposure = v)) },
+            )
+            AdjustSlider(
+                labelRes = R.string.editor_highlights,
+                value = params.highlights,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(highlights = v)) },
+            )
+            AdjustSlider(
+                labelRes = R.string.editor_shadows,
+                value = params.shadows,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(shadows = v)) },
+            )
+            AdjustSlider(
+                labelRes = R.string.editor_saturation,
+                value = params.saturation,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(saturation = v)) },
+            )
+            AdjustSlider(
+                labelRes = R.string.editor_temperature,
+                value = params.temperature,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(temperature = v)) },
+            )
+            AdjustSlider(
+                labelRes = R.string.editor_tint,
+                value = params.tint,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(tint = v)) },
+            )
+            AdjustSlider(
+                labelRes = R.string.editor_vignette,
+                value = params.vignette,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(vignette = v)) },
+            )
+            AdjustSlider(
+                labelRes = R.string.editor_sharpness,
+                value = params.sharpness,
+                enabled = !exporting,
+                onCommit = { v -> uiState = engine.commit(params.copy(sharpness = v)) },
+            )
+
+            // ---- Geometry row: rotate / flip H / flip V ----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = {
-                        uiState = engine.commit(params.copy(quarterTurns = params.quarterTurns + 1))
+                        uiState = engine.commit(
+                            params.copy(quarterTurns = (params.quarterTurns + 1) % 4),
+                        )
                     },
                     enabled = !exporting,
                 ) {
@@ -660,15 +748,155 @@ private fun EditorContent(activity: EditActivity) {
                         tint = Color.White,
                     )
                 }
+                TextButton(
+                    onClick = { uiState = engine.commit(params.copy(flipH = !params.flipH)) },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(if (params.flipH) R.string.editor_flip_h_on else R.string.editor_flip_h))
+                }
+                TextButton(
+                    onClick = { uiState = engine.commit(params.copy(flipV = !params.flipV)) },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(if (params.flipV) R.string.editor_flip_v_on else R.string.editor_flip_v))
+                }
                 Text(
                     text = stringResource(R.string.editor_policy_line, policyLabel(policy)),
                     color = Color.White.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Start,
+                    textAlign = TextAlign.End,
                     modifier = Modifier.weight(1f),
                 )
             }
         }
+    }
+
+    // ---- The export dialog (r30): format + quality, then save. ----
+    if (showExportDialog) {
+        ExportDialog(
+            sourceMime = activity.sourceMime(activity.request.sourceUri),
+            onConfirm = { format, quality ->
+                resolvedExport = format to quality
+                showExportDialog = false
+                requestSave()
+            },
+            onDismiss = { showExportDialog = false },
+        )
+    }
+}
+
+/** One labelled adjustment slider: drafts live, commits on release (one undo step per gesture). */
+@Composable
+private fun AdjustSlider(
+    labelRes: Int,
+    value: Int,
+    enabled: Boolean,
+    onCommit: (Int) -> Unit,
+) {
+    var draft by remember { mutableStateOf<Float?>(null) }
+    val shown = draft?.toInt() ?: value
+    Column {
+        Text(
+            text = stringResource(labelRes, shown),
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Slider(
+            value = shown.toFloat(),
+            onValueChange = { v -> draft = v },
+            onValueChangeFinished = {
+                draft?.let { d -> onCommit(d.toInt()) }
+                draft = null
+            },
+            valueRange = -100f..100f,
+            enabled = enabled,
+        )
+    }
+}
+
+/** The export format+quality dialog. */
+@Composable
+private fun ExportDialog(
+    sourceMime: String?,
+    onConfirm: (ExportPlan.ExportFormat, Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val defaultFormat = remember(sourceMime) { ExportPlan.defaultFormatFor(sourceMime) }
+    // null = follow source; otherwise the explicit pick.
+    var picked by remember { mutableStateOf<ExportPlan.ExportFormat?>(null) }
+    var quality by remember { mutableStateOf(95f) }
+    val effectiveFormat = picked ?: defaultFormat
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.editor_export_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.editor_export_format), style = MaterialTheme.typography.labelLarge)
+                FormatOption(
+                    label = stringResource(R.string.editor_export_follow_source, defaultFormat.name),
+                    selected = picked == null,
+                    onSelect = { picked = null },
+                )
+                for (format in ExportPlan.ExportFormat.entries) {
+                    FormatOption(
+                        label = format.name,
+                        selected = picked == format,
+                        onSelect = { picked = format },
+                    )
+                }
+                Text(
+                    stringResource(R.string.editor_export_heic_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (effectiveFormat != ExportPlan.ExportFormat.PNG) {
+                    Text(
+                        stringResource(R.string.editor_export_quality, quality.roundToInt()),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Slider(
+                        value = quality,
+                        onValueChange = { q -> quality = q },
+                        valueRange = 50f..100f,
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.editor_export_png_lossless),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(effectiveFormat, quality.roundToInt()) },
+            ) {
+                Text(stringResource(R.string.editor_save_copy))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.editor_export_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun FormatOption(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(start = 8.dp),
+        )
     }
 }
 

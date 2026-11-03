@@ -779,6 +779,37 @@ queue reset, names intact; the r25 reset-path copy re-worded in place.
 Rust changes, the vendored crates byte-identical to the r23 pin. 963
 JVM tests (+36); versionCode 30, no device build per the
 Phase-5-completion directive.
+#### Status — r27 round (versionCode 32): the MI organisational UX round
+
+Workstream 6 / the roadmap Phase 5 organisational-UX scope, shipped as
+five product surfaces over the existing catalogue (zero new permissions,
+zero engine changes, zero reverse geocoding — every feature a pure
+JVM-tested core plus a thin Android seam, ADR-0016):
+
+- **Places** — the pure `PlacesRegionGrid` 12x6 coarse bucketing over the
+  Room GPS coordinates (band edges land in the pole-side band; the exact
+  antimeridian is ONE band from both directions), `PlacesRegionLabels`
+  coordinate-band labels, the pure `PlacesContentPolicy` r14 consent
+  gate, the `PlaceMediaHandoff` one-shot hand-off, the
+  `PlacesScreen`/`PlaceDetailScreen` sub-pages and the Albums-tab
+  Places section;
+- **Moments** — the `GroupBy.WEEK` grain: the pure `MomentGrouper`'s
+  ISO-week output as a thin projection in `buildTimelineRows` (the
+  DAY/MONTH streaming untouched, DAY equivalence pinned), counted
+  headers, the FlowRow group-by chips;
+- **Stories** — the pure `StorySets` 36h-gap clusters on the Photos tab,
+  playback through the existing viewer with the slideshow armed;
+- **The collage creator** — the pure `CollageLayouts` (2..9 photos,
+  exact tiling, `slotPixels`/`centerCropSource` shared by preview and
+  exporter) + the Compose preview and the Q+ MediaStore exporter on the
+  file-ops naming discipline;
+- **The slideshow** — the pure `SlideshowTiming`/`ViewerCrossfade` cores,
+  the shell-scoped armed launch, the in-session interval menu.
+
+84 new JVM tests; `versionCode 32`; the Phase 5 release freeze stands
+(no tags, no Releases — the r28 exit gate is the only lift).
+
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

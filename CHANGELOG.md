@@ -4,12 +4,62 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.2-alpha] — unreleased on main (versionCode 30; per maintainer
+## [0.4.2-alpha] — unreleased on main (versionCode 32; per maintainer
   directive no new device builds until Phase 5 completes)
 
 ### Added
 
-- **Magic Search** (r26 round; Workstream 7 of the Phase 5 plan,
+- **The MI organisational UX surfaces** (r27 round: Places, Moments,
+  Stories, the collage creator, the slideshow): five product surfaces
+  over the existing Room catalogue — zero new permissions, zero engine
+  changes, zero reverse geocoding, every feature a pure JVM-tested core
+  plus a thin Android seam. **Places**: offline coarse region bucketing
+  over the catalogue's persisted GPS coordinates — the pure
+  `PlacesRegionGrid` (12x6, one cell per 30°, closed-form deterministic
+  bands with pole-side band edges, first-appearance newest-first region
+  order, antimeridian-normalized means, the exact ±180 meridian ONE band
+  from both directions) with `PlacesRegionLabels` coordinate-band labels
+  (ISO-6709-style pure math; no place name is ever invented, fetched or
+  guessed), the pure `PlacesContentPolicy` (the r14 consent display gate
+  decides FIRST — consent off shows the consent state even over
+  persisted rows — then the honest empty-with-footnote, then Ready), the
+  `PlaceMediaHandoff` one-shot tap hand-off (nav argument as the durable
+  fallback), the `PlacesScreen` region grid and `PlaceDetailScreen`
+  media grid (viewer hand-offs the map-sheet way), and the Albums-tab
+  Places section. Vault/trash exclusion is inherited: the surfaces read
+  the catalogue's live-rows `geotaggedRows` projection only. **Moments**:
+  the `GroupBy.WEEK` grain of the grouped timeline — the pure
+  `MomentGrouper` (ISO-8601 weeks, Monday-anchored, week-based-year keys
+  so a 2 January can be week 53 of the year before) with
+  `buildTimelineRows`' WEEK branch as a thin projection (the DAY/MONTH
+  streaming implementations untouched; DAY equivalence pinned by tests),
+  counted headers via `headerCellCounts`, and the FlowRow group-by chips.
+  **Stories**: the `StoriesShelf` on the Photos tab — recent time
+  clusters the pure `StorySets` engine derives from the SAME paging
+  snapshot the grid renders (36h gap rule, min 3 members, cap 8
+  most-recent, zero persistence); playback IS the existing viewer with
+  the slideshow armed. **The collage creator**: the pure `CollageLayouts`
+  (17 grid-variant templates for 2..9 photos, exact tiling pinned
+  test-by-template; `slotPixels`' single rounding rule and
+  `centerCropSource`'s center-crop math shared by the Compose preview
+  and the exporter, so what the preview shows is what the export saves),
+  the `CollageScreen` template picker, and the Q+ MediaStore exporter
+  riding the file-ops naming/pending-row discipline ("Collage.jpg",
+  "Collage (2).jpg", …; a failed export deletes its pending row).
+  **The slideshow**: the pure `SlideshowTiming` (3/5/10-second catalog,
+  nearest-snap with ties to the shorter option, wrap-around advance) and
+  `ViewerCrossfade` cores, the shell-scoped armed launch (Stories shelf,
+  the Photos header action, the album detail action), the viewer's
+  start/stop toggle plus the in-session interval menu, and crossfade
+  page alphas while a run is active; leaving the viewer always stops the
+  run. 84 new JVM tests (963 → 1047 on the rebased base): the
+  `MomentGrouperTest` / `StorySetsTest` / `CollageLayoutsTest` /
+  `PlacesRegionLabelsTest` / `PlacesContentPolicyTest` /
+  `PlaceMediaHandoffTest` / `SlideshowTimingTest` files, the WEEK-grain +
+  `headerCellCounts` sections of `TimelineRowsTest`, and the WEEK cases
+  of `PlacesRegionGridTest` / `AppearanceTest`.
+
+- **Magic Search**- **Magic Search** (r26 round; Workstream 7 of the Phase 5 plan,
   `docs/phase-5/magic-search.md`): offline semantic search over an
   on-device CLIP index — the Search tab's new **Content** mode. The JNI
   bridge extends from sixteen to twenty-five externals (`nativeInitSemantic`

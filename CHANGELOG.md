@@ -77,6 +77,30 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[toadGALLERY Edit] The Edit v1 core** (r30 round, the Phase 6
+  continuation on the r29 gate): the non-destructive pipeline's full v1
+  state. **The ADR-0011 recipe**: one `EditRecipe` data class carries the
+  whole session (geometry + tone + colour + grade + detail,
+  range-validated), serialized by an additive-versioned codec (unknown
+  keys ignored, out-of-range clamped, malformed JSON a structured failure)
+  into an app-private, SHA-256-keyed, atomic-write sidecar store — saved
+  on every committed change, restored on relaunch, cleared on export.
+  **The pure stages** (all JVM-tested, zero states exact): the geometry
+  toolset (normalized crop rect + aspect presets, flips, straighten on an
+  expanded canvas with bilinear sampling and transparent fill, the quad
+  perspective correction), the composed LUT (exposure, brightness,
+  contrast, smoothstep-masked highlights/shadows), the full-pixel stage
+  (saturation, temperature, tint), eight-band per-channel HSL
+  (cosine-hat weights, achromatic pixels never drift), radial vignette,
+  and a 3×3 unsharp mask. **`EditPipeline`** runs them in one documented
+  order (preview and export agree by construction) with
+  `EditGeometryPlan` sharing the pre-crop frame math. **Honest export
+  control**: JPEG (quality slider), PNG (lossless), WebP — the encodable
+  set; the platform Bitmap has NO HEIC encoder, so HEIC is never offered
+  (decode-only sources save in the user's chosen format). The r29 rotate
+  quarter-turn mapping swap (turn-1/turn-3) is fixed. The editor app
+  versions independently: `versionCode 2`, `0.2.0-edit-alpha`.
+
 - **The Gallery ↔ Edit contract gate** (r29 round, the Phase 6 entry gate
   — Issue #14 closed): the versioned editor integration contract
   (ADR-0002 / ADR-0007) became code in three pieces. **(1)**

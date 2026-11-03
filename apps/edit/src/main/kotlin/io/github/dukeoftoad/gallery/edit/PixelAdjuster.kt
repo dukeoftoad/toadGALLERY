@@ -83,9 +83,9 @@ object PixelAdjuster {
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val (nx, ny) = when (turns) {
-                    1 -> Pair(height - 1 - y, x)          // 90° CCW
-                    2 -> Pair(width - 1 - x, height - 1 - y) // 180°
-                    else -> Pair(y, width - 1 - x)        // 270° CCW (90° CW)
+                    1 -> Pair(y, width - 1 - x)              // 90° CCW
+                    2 -> Pair(width - 1 - x, height - 1 - y)  // 180°
+                    else -> Pair(height - 1 - y, x)           // 270° CCW = 90° CW
                 }
                 out[ny * outWidth + nx] = pixels[y * width + x]
             }

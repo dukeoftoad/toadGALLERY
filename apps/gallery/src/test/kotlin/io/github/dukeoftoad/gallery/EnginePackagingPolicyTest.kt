@@ -69,7 +69,7 @@ class EnginePackagingPolicyTest {
     fun `engine native libraries ship only behind the withEngine property`() {
         val buildScript = moduleFile("build.gradle.kts").readText()
         val gate = buildScript.indexOf("providers.gradleProperty(\"withEngine\").isPresent")
-        val srcDir = buildScript.indexOf("rust-jniLibs")
+        val srcDir = buildScript.indexOf("dir("rust-jniLibs")")
         assertTrue(
             "The withEngine property gate must stay in the build script --- without it every " +
                 "build would require a Rust toolchain (ADR-0020's opt-in packaging).",
@@ -96,7 +96,7 @@ class EnginePackagingPolicyTest {
     fun `the offline model pack ships only behind the withBundledModels property`() {
         val buildScript = moduleFile("build.gradle.kts").readText()
         val gate = buildScript.indexOf("providers.gradleProperty(\"withBundledModels\").isPresent")
-        val srcDir = buildScript.indexOf("bundled-models")
+        val srcDir = buildScript.indexOf("dir("bundled-models")")
         assertTrue(
             "The withBundledModels property gate must stay in the build script (r28, ADR-0020 " +
                 "offline pack).",

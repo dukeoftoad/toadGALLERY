@@ -109,9 +109,12 @@ class VaultExclusionReadGateTest {
         // exactly that wrapper --- no identity-shaped overload exists.
         // (The JVM signature carries the suspend Continuation as the
         // LAST parameter; the media parameter is first.)
+        // JVM bridge/synthetic duplicates collapse: the assertion is about
+        // the OVERLOAD SHAPES the boundary exposes, not reflection artifacts.
         val openOverloads = MediaAccess::class.java.methods
-            .filter { it.name == "open" }
+            .filter { it.name == "open" && !it.isSynthetic }
             .map { it.parameterTypes.first().simpleName }
+            .distinct()
         assertEquals(
             "MediaAccess must expose exactly ONE open() overload, taking EligiblePublicMedia --- " +
                 "a second overload (raw identity / Uri / string) would be a hole in the vault gate.",

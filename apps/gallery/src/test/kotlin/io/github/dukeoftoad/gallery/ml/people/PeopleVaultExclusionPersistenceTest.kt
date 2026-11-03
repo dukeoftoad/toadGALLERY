@@ -279,7 +279,7 @@ class PeopleVaultExclusionPersistenceTest {
         listOf("cloud-backup", "device-transfer").forEach { scope ->
             assertTrue(
                 "data_extraction_rules.xml must exclude the face-index directory under <$scope>.",
-                Regex("""<$scope>\s*<exclude\s+domain\s*=\s*"file"\s+path\s*=\s*"face-index"\s*/>""")
+                Regex("""<$scope>(?s:.)*?<exclude\s+domain\s*=\s*"file"\s+path\s*=\s*"face-index"\s*/>""")
                     .containsMatchIn(rules),
             )
         }

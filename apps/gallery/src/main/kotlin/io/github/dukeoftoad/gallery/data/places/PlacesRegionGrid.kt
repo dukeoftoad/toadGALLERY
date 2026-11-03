@@ -180,7 +180,11 @@ object PlacesRegionGrid {
     fun longitudeBand(longitude: Double, columns: Int = COLUMNS): Int {
         val lon = EquirectangularProjection.normalizeLongitude(longitude)
         if (lon.isNaN() || lon <= -180.0) return 0
-        if (lon >= 180.0) return columns - 1
+        // +180 IS -180 after the wrap (normalizeLongitude keeps in-range
+        // values as-is, so the canonical banding happens HERE): the exact
+        // antimeridian lands in ONE band from both directions.
+        if (lon == 180.0) return 0
+        if (lon > 180.0) return columns - 1
         val band = ((lon + 180.0) / (360.0 / columns)).toInt()
         return band.coerceIn(0, columns - 1)
     }

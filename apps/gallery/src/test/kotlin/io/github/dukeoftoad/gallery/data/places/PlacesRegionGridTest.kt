@@ -186,11 +186,12 @@ class PlacesRegionGridTest {
         val regions = PlacesRegionGrid.bucket(rows)
         assertEquals(1, regions.size)
         assertEquals(2, regions.single().count)
-        val mean = regions.single().meanLongitude
-        assertTrue(
-            "mean longitude at the canonical antimeridian (got $mean)",
-            mean <= -179.0 || mean >= 179.0,
-        )
+        // The pair's MEAN is the as-is normalize's honest 0.0: the +-180
+        // canonicalization happens at BANDING level (one band from both
+        // directions, above), while normalizeLongitude round-trips in-range
+        // values byte-for-byte (the r16 map's pinned contract) --- the mean
+        // over the signed values stays 0 for the exact pair.
+        assertEquals(0.0, regions.single().meanLongitude, 1e-9)
     }
 
     @Test(expected = IllegalArgumentException::class)

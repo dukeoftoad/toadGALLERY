@@ -186,8 +186,15 @@ class PeopleVaultExclusionPersistenceTest {
         )
         assertEquals(setOf("c3"), snapshot.hidden) // live-but-hidden stays (hide is a choice, not deletion)
         assertEquals(
-            "the pruned state must be persisted back (dead ids never accumulate)",
-            listOf(PeopleState(names = mapOf("c1" to "Alice"), hidden = setOf("c3"))),
+            "the pruned state must be persisted back (dead ids never accumulate) " +
+                "--- post-r26 the plan also refreshes the surviving edits' membership fingerprints",
+            listOf(
+                PeopleState(
+                    names = mapOf("c1" to "Alice"),
+                    hidden = setOf("c3"),
+                    memberships = mapOf("c1" to setOf(1L), "c3" to setOf(7L)),
+                ),
+            ),
             store.saves,
         )
     }
@@ -199,6 +206,9 @@ class PeopleVaultExclusionPersistenceTest {
      * surface needs them; destroying face data on hide would make it
      * unimplementable). The exclusion from the visible set happens in
      * the policy mapping, pre-persistence of any derived display state.
+     * Post-r26 the persisted state also carries the hidden id's
+     * membership fingerprint (the overlay's survival anchor) --- the
+     * engine's cluster rows STILL stay untouched.
      */
     @Test
     fun `hide withholds a person from every surface without touching the store`() = runBlocking {
@@ -211,8 +221,12 @@ class PeopleVaultExclusionPersistenceTest {
 
         repo.hide("c2")
 
-        // Persisted: the hidden membership only...
-        assertEquals(listOf(PeopleState(hidden = setOf("c2"))), store.saves)
+        // Persisted: the hidden membership only (plus the r26 fingerprint
+        // that lets a hidden flag survive a recluster id re-roll)...
+        assertEquals(
+            listOf(PeopleState(hidden = setOf("c2"), memberships = mapOf("c2" to setOf(2L)))),
+            store.saves,
+        )
         // ...and the engine was never asked to mutate anything:
         assertTrue("hide must not mutate the face store", engine.mutations.isEmpty())
 

@@ -233,16 +233,20 @@ class GeometryTest {
 
     @Test
     fun `a displaced corner lands exactly on the corresponding output corner`() {
-        // 3x2 grid; pull the TL corner to (1, 0): output (0, 0) then
-        // samples the source at exactly (1, 0) -> pixel 2.
-        val grid = intArrayOf(10, 20, 30, 40, 50, 60)
+        // 8x2 grid (the clamp allows offsets up to w/4 = 2); pull the TL
+        // corner to (1, 0): output (0, 0) then samples the source at
+        // exactly (1, 0) -> pixel 20.
+        val grid = intArrayOf(
+            10, 20, 30, 40, 50, 60, 70, 80,
+            90, 100, 110, 120, 130, 140, 150, 160,
+        )
         val quad = PerspectiveQuad(tlX = 1.0, tlY = 0.0, trX = 0.0, trY = 0.0, brX = 0.0, brY = 0.0, blX = 0.0, blY = 0.0)
-        val result = perspectiveWarp(grid, 3, 2, quad)
+        val result = perspectiveWarp(grid, 8, 2, quad)
         assertEquals(20, result.pixels[0])
-        // TR corner (0 displacement): output (2, 0) = source (2, 0) = 30.
-        assertEquals(30, result.pixels[2])
-        // BR corner: output (2, 1) = source (2, 1) = 60.
-        assertEquals(60, result.pixels[result.width + 2])
+        // TR corner (0 displacement): output (7, 0) = source (7, 0) = 80.
+        assertEquals(80, result.pixels[7])
+        // BR corner: output (7, 1) = source (7, 1) = 160.
+        assertEquals(160, result.pixels[result.width + 7])
     }
 
     @Test

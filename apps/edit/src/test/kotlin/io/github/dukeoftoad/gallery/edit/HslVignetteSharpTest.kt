@@ -100,7 +100,7 @@ class HslVignetteSharpTest {
         applyHslBands(pixels, HslBands(red = HslBandAdjust(saturation = -100)))
         val (h0, s0, _) = RgbHsl.toHsl(redOf(pixels[0]), greenOf(pixels[0]), blueOf(pixels[0]))
         assertEquals(0.0, s0, 0.02) // red fully desaturated
-        assertEquals(255, redOf(pixels[1])) // green pixel untouched in red channel terms
+        assertEquals(255, greenOf(pixels[1])) // the green pixel is untouched by the red band
         val (_, s1, _) = RgbHsl.toHsl(redOf(pixels[1]), greenOf(pixels[1]), blueOf(pixels[1]))
         assertEquals(1.0, s1, 0.01)
     }

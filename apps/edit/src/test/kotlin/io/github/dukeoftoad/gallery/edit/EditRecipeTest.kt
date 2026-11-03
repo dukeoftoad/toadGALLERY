@@ -165,8 +165,8 @@ class EditRecipeTest {
         assertTrue(file.name.startsWith("recipe-"))
         assertEquals("recipe-${EditRecipeStore.sha256("content://media/external/images/media/42")}.json", file.name)
         assertFalse(file.name.contains("media"))
-        // Stable across instances.
-        assertEquals(file, EditRecipeStore(tmp.root).fileFor("content://media/external/images/media/42"))
+        // Stable across instances (the SAME directory, a fresh store object).
+        assertEquals(file, EditRecipeStore(file.parentFile).fileFor("content://media/external/images/media/42"))
     }
 
     @Test
@@ -335,8 +335,15 @@ class EditPipelineTest {
         val result = EditPipeline.apply(solid(4, 1, argb(120, 120, 120)), 4, 1, recipe)
         assertEquals(plan.cropPixelRect.width, result.width)
         assertEquals(2, result.width)
-        // A constant image stays constant under sharpen at any amount.
-        assertEquals(argb(120, 120, 120), result.pixels[1])
+        // A constant image stays constant under sharpen at any amount ---
+        // verified WITHOUT the vignette (the vignette deliberately darkens
+        // this 2x1 frame's edge pixels; the width asserts above carry the
+        // display-space-crop contract).
+        val sharpenOnly = EditPipeline.apply(
+            solid(4, 1, argb(120, 120, 120)), 4, 1, recipe.copy(vignette = 0),
+        )
+        assertEquals(2, sharpenOnly.width)
+        assertEquals(argb(120, 120, 120), sharpenOnly.pixels[1])
     }
 
     @Test

@@ -57,9 +57,10 @@ class AdjustmentsTest {
         val lut = LutBuilder.build(brightness = 0, contrast = 0, exposure = 0, highlights = 0, shadows = 100)
         // Pure black lifted by the full half-scale: +127.5 -> 128.
         assertEquals(128, lut[0])
-        // Bright values untouched: weight = 1 - smoothstep(0,128,255) = 0.
+        // Bright values untouched: weight = 1 - smoothstep(0,128,v) = 0
+        // for every v >= 128, so bright values pass through EXACTLY.
         assertEquals(255, lut[255])
-        assertEquals(255, lut[200])
+        assertEquals(200, lut[200])
     }
 
     @Test

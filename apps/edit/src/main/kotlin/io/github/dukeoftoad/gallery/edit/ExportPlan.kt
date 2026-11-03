@@ -15,7 +15,7 @@ import io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy
  *    MediaStore entry survives (spec test matrix);
  *  - the display name derives from the source name, the extension follows
  *    the chosen export format;
- *  - quality applies to the lossy formats (JPEG, HEIC where honored);
+ *  - quality applies to the lossy formats (JPEG, WebP);
  *    PNG is lossless and ignores it.
  */
 object ExportPlan {
@@ -23,7 +23,7 @@ object ExportPlan {
     /** The export sub-directory under Pictures (API 29+ RELATIVE_PATH). */
     const val RELATIVE_DIR: String = "Pictures/toadGALLERY Edit"
 
-    /** The r29 default (still the UI default): JPEG at quality 95. */
+    /** The v1 default (the r29 default carried forward): JPEG at quality 95. */
     val DEFAULT_FORMAT: ExportFormat = ExportFormat.JPEG
     const val DEFAULT_QUALITY: Int = 95
 
@@ -92,11 +92,4 @@ object ExportPlan {
      * only on success, and the echoed metadata policy is the applied one.
      */
     fun resultPolicy(policy: MetadataPolicy): String = policy.wireName
-
-    /**
-     * The honest fallback when a HEIC encode is refused (no device
-     * encoder): fall back to JPEG at the same quality --- the export
-     * succeeds with the closest supported format rather than failing.
-     */
-    fun heicFallback(): ExportFormat = ExportFormat.JPEG
 }

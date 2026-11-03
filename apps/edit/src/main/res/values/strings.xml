@@ -57,7 +57,6 @@
     <!-- Export sheet -->
     <string name="editor_quality">Quality: %1$d</string>
     <string name="editor_png_lossless">PNG is lossless — no quality control applies.</string>
-    <string name="editor_format_unavailable">%1$s (not supported on this Android version)</string>
 
     <!-- The always-visible metadata honesty line (contract 4.4). -->
     <string name="editor_policy_line">%1$s · saves a copy</string>

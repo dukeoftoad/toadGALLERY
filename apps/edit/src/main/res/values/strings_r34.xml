@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r34 (Phase 7 v2): the .cube import experience. The import action, the
+     inline outcome line and the user-look remove affordance follow the
+     established FilterChip/AssistChip + semantics conventions (r32/r33).
+     No new permissions: the SAF document picker needs none. -->
+<resources>
+    <string name="editor_filter_import">Import .cube</string>
+    <string name="editor_a11y_import_look">Import a .cube look file</string>
+    <string name="editor_filter_imported">Imported %1$s</string>
+    <string name="editor_filter_import_rejected">Couldn\'t import the look: %1$s</string>
+    <string name="editor_filter_import_unreadable">the picked file could not be read</string>
+    <string name="editor_filter_remove">Remove look</string>
+    <string name="editor_filter_removed">Removed %1$s; edits that used it now use no look</string>
+</resources>

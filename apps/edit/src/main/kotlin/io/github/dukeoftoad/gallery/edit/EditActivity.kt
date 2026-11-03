@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AssistChip
@@ -46,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,7 +62,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -135,6 +139,29 @@ class EditActivity : ComponentActivity() {
      */
     internal val bundledLooks: Map<String, CubeLut> by lazy {
         BundledLuts.loadAll { path -> assets.open(path) }
+    }
+
+    /** The user-imported `.cube` looks (r34): app-private, store-managed. */
+    internal val importedLuts: ImportedLutStore by lazy {
+        ImportedLutStore(File(filesDir, "imported-luts"))
+    }
+
+    /**
+     * The ONE merged look map the session resolves against (r34): the
+     * bundled set + the parsed user imports, published by
+     * [loadSessionLooks] and read by BOTH the preview (the composition's
+     * `looks` state holds this same reference) and every export (directly
+     * --- what the user previews is byte-identical to what exports). One
+     * parse per refresh; a refresh replaces the whole map, never mutates
+     * the published one.
+     */
+    @Volatile
+    internal var sessionLooks: Map<String, CubeLut> = emptyMap()
+        private set
+
+    /** Reloads the merged registry (bundled + imports) and publishes it. */
+    internal fun loadSessionLooks(): Map<String, CubeLut> = synchronized(this) {
+        LookRegistry.merge(bundledLooks, importedLuts.loadAll()).also { sessionLooks = it }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -372,7 +399,7 @@ class EditActivity : ComponentActivity() {
             val height = source.height
             val pixels = IntArray(width * height)
             source.getPixels(pixels, 0, width, 0, 0, width, height)
-            val look = export.recipe.lut?.let { bundledLooks[it.lutId] }
+            val look = export.recipe.lut?.let { sessionLooks[it.lutId] ?: bundledLooks[it.lutId] }
             val pipelined = EditPipeline.apply(pixels, width, height, export.recipe, look)
             val adjusted = Bitmap.createBitmap(
                 pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888,
@@ -627,11 +654,20 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
     // The ONE live-drag draft (key -> value); committed on release.
     var draft by remember { mutableStateOf<Pair<String, Int>?>(null) }
-    // The parsed bundled looks (r33); empty until the IO load lands ---
-    // the chip row shows what parsed, the preview re-runs when it does.
+    // The parsed looks (r33 bundled + r34 user imports merged); empty until
+    // the IO load lands --- the chip row shows what parsed, the preview
+    // re-runs when it does.
     var looks by remember { mutableStateOf<Map<String, CubeLut>>(emptyMap()) }
+    // The user-imported looks (r34), id-sorted; the chip row's user section.
+    var importedLooks by remember {
+        mutableStateOf<List<ImportedLutStore.ImportedLut>>(emptyList())
+    }
+    // The last import/remove outcome (r34), shown inline under the Filters
+    // row until the next action replaces it; announced politely.
+    var lookAction by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
 
     val committed = uiState.recipe
+    val lookScope = rememberCoroutineScope()
 
     /** The recipe the preview renders: the committed one with any live draft applied. */
     fun effectiveRecipe(): EditRecipe {
@@ -666,6 +702,69 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
+    // The SAF document picker (r34): ACTION_OPEN_DOCUMENT needs NO
+    // permission and NO manifest entry; the picked bytes go through the
+    // store's parse-BEFORE-write import (a rejected import leaves the
+    // store byte-identical).
+    val importLookLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        lookScope.launch {
+            val read = withContext(Dispatchers.IO) {
+                val bytes = try {
+                    activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } catch (_: IOException) {
+                    null
+                } catch (_: SecurityException) {
+                    null
+                }
+                if (bytes == null) {
+                    LookImportOutcome.Rejected(
+                        activity.getString(R.string.editor_filter_import_unreadable),
+                    )
+                } else {
+                    when (val result =
+                        activity.importedLuts.import(bytes, activity.sourceDisplayName(uri.toString()))
+                    ) {
+                        is ImportedLutStore.ImportResult.Imported ->
+                            LookImportOutcome.Imported(result.lut.id, result.lut.title)
+                        is ImportedLutStore.ImportResult.Rejected ->
+                            LookImportOutcome.Rejected(result.reason)
+                    }
+                }
+            }
+            when (read) {
+                is LookImportOutcome.Imported -> {
+                    // Audition the fresh import immediately, keeping the
+                    // current intensity (the r33 auditioning continuity rule).
+                    val selection = committed.lut
+                    commit(
+                        committed.copy(
+                            lut = LutSelection(
+                                lutId = read.id,
+                                intensity = selection?.intensity ?: 100,
+                            ),
+                        ),
+                    )
+                    lookAction = Pair(
+                        true,
+                        activity.getString(R.string.editor_filter_imported, read.title),
+                    )
+                }
+                is LookImportOutcome.Rejected -> lookAction = Pair(
+                    false,
+                    activity.getString(R.string.editor_filter_import_rejected, read.reason),
+                )
+            }
+            // Refresh the ONE merged registry: the chip row and every later
+            // export resolve against the same freshly published map.
+            looks = withContext(Dispatchers.IO) { activity.loadSessionLooks() }
+            importedLooks = withContext(Dispatchers.IO) { activity.importedLuts.list() }
+        }
+    }
+
+
     // First composition: decode the bounded preview + parse the bundled
     // looks (both off the main thread; the looks feed the chip row and
     // the preview's filter stage --- the export shares the same cache).
@@ -681,7 +780,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         } else {
             previewBase = decoded
         }
-        looks = withContext(Dispatchers.IO) { activity.bundledLooks }
+        // r34: the merged registry (bundled + user imports), one parse per
+        // refresh, published to the session map the export also reads.
+        looks = withContext(Dispatchers.IO) { activity.loadSessionLooks() }
+        importedLooks = withContext(Dispatchers.IO) { activity.importedLuts.list() }
     }
 
     // Live preview: re-run the ordered pipeline (without the crop --- the
@@ -1192,6 +1294,55 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             modifier = Modifier.padding(end = 8.dp),
                         )
                     }
+                // r34: the USER-imported looks (id-sorted by the store), each
+                // chip labelled with its parsed TITLE --- the file's own
+                // authorship, not a resource. A user id can never shadow a
+                // bundled id (the store collision-suffixes; LookRegistry
+                // refuses shadows defensively), so the two sections are
+                // disjoint by construction.
+                importedLooks.forEach { imported ->
+                    FilterChip(
+                        selected = selection?.lutId == imported.id,
+                        onClick = {
+                            commit(
+                                committed.copy(
+                                    lut = LutSelection(
+                                        lutId = imported.id,
+                                        intensity = selection?.intensity ?: 100,
+                                    ),
+                                ),
+                            )
+                        },
+                        enabled = !exporting,
+                        label = { Text(imported.title) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                // r34: the import action (SAF). No permission, no manifest
+                // entry; a rejected import leaves the store byte-identical.
+                AssistChip(
+                    onClick = { importLookLauncher.launch(arrayOf("*/*")) },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_filter_import)) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription =
+                                stringResource(R.string.editor_a11y_import_look),
+                        )
+                    },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            // r34: the import/remove outcome, inline (no snackbar scaffold in
+            // this surface); announced politely for the a11y stack.
+            lookAction?.let { (ok, message) ->
+                Text(
+                    text = message,
+                    color = if (ok) Color.White else MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
             }
             if (selection != null && looks.containsKey(selection.lutId)) {
                 // The intensity slider, live-dragged like every other
@@ -1223,6 +1374,45 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         stateDescription = intensityLabel
                     },
                 )
+                if (importedLooks.any { it.id == selection.lutId }) {
+                    // r34: a USER look can be removed. The store deletes the
+                    // stored bytes; the recipe keeps the id verbatim and the
+                    // pipeline degrades to no-look (the r33 tolerance
+                    // contract) --- sidecars are the user's data, never
+                    // rewritten by a deletion.
+                    TextButton(
+                        onClick = {
+                            lookScope.launch {
+                                val removedTitle = withContext(Dispatchers.IO) {
+                                    val title = importedLooks
+                                        .firstOrNull { it.id == selection.lutId }?.title
+                                        ?: selection.lutId
+                                    if (activity.importedLuts.delete(selection.lutId)) title else null
+                                }
+                                if (removedTitle != null) {
+                                    if (committed.lut?.lutId == selection.lutId) {
+                                        commit(committed.copy(lut = null))
+                                    }
+                                    lookAction = Pair(
+                                        true,
+                                        activity.getString(
+                                            R.string.editor_filter_removed,
+                                            removedTitle,
+                                        ),
+                                    )
+                                }
+                                // Refresh the registry either way: a failed
+                                // delete re-reads the store honestly.
+                                looks = withContext(Dispatchers.IO) { activity.loadSessionLooks() }
+                                importedLooks =
+                                    withContext(Dispatchers.IO) { activity.importedLuts.list() }
+                            }
+                        },
+                        enabled = !exporting,
+                    ) {
+                        Text(stringResource(R.string.editor_filter_remove))
+                    }
+                }
             }
 
             // ---- Per-channel HSL: band selector + three sliders ----
@@ -1377,6 +1567,12 @@ private fun lookNameRes(id: String): Int = when (id) {
     "matte-fade" -> R.string.editor_filter_matte_fade
     "vivid-punch" -> R.string.editor_filter_vivid_punch
     else -> R.string.editor_filter_none
+}
+
+/** The SAF look import's outcome (r34): the fresh import or the rejection reason. */
+private sealed interface LookImportOutcome {
+    data class Imported(val id: String, val title: String) : LookImportOutcome
+    data class Rejected(val reason: String) : LookImportOutcome
 }
 
 @Composable

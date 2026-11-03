@@ -110,8 +110,25 @@ android {
         // docs/phase-7/bundled-luts.md; 9 conformance tests with
         // hand-verified look probes), and the Filters chip row + intensity
         // slider following the r32 a11y conventions.
-        versionCode = 5
-        versionName = "0.4.0-edit-alpha"
+        // versionCode 6 (r34 round): the .cube import experience --- the
+        // roadmap's Phase 7 task-1 bullet completed: the user imports a
+        // .cube look through the SAF document picker (parse-BEFORE-write
+        // via the r33-extension ImportedLutStore: a rejected import leaves
+        // the store byte-identical; ids are derived, collision-suffixed
+        // against BOTH the bundled registry and the existing imports so an
+        // import can never shadow a bundled look), the ONE merged look
+        // registry (pure LookRegistry.merge --- bundled first, imports
+        // id-sorted; the defensive bundled-precedence pin) feeds the
+        // preview chip row AND the export pipeline through the same
+        // session map (what the user previews is byte-identical to what
+        // exports), the imported-look chips carry their parsed titles, a
+        // selected user look can be removed (the sidecar keeps the id and
+        // degrades to no-look per the r33 tolerance contract), and the
+        // import outcome is reported inline (imported title / the
+        // rejection reason). No new permissions (SAF needs none); the
+        // zero-network posture is unchanged.
+        versionCode = 6
+        versionName = "0.5.0-edit-alpha"
     }
 
     buildFeatures {

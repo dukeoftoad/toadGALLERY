@@ -42,7 +42,7 @@ class EditManifestConformanceTest {
         val activities = doc.getElementsByTagName("activity")
         var found = false
         for (i in 0 until activities.length) {
-            val activity = activities.item(i)
+            val activity = activities.item(i) as org.w3c.dom.Element
             val name = activity.attributes.getNamedItem("android:name").nodeValue
             if (name == ".EditActivity" || name.endsWith(".EditActivity")) {
                 found = true

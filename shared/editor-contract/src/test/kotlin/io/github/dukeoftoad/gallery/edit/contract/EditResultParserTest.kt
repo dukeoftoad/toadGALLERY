@@ -1,7 +1,9 @@
 package io.github.dukeoftoad.gallery.edit.contract
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Result parsing (spec section 3): all three terminal states, no exception paths. */
@@ -122,5 +124,41 @@ class EditResultParserTest {
         assertEquals(-1, EditContract.RESULT_OK)
         assertEquals(0, EditContract.RESULT_CANCELED)
         assertEquals(2, EditContract.RESULT_ERROR)
+    }
+
+    // ---- The r31 honesty-UI triggers over the applied-policy echo ----
+
+    @Test
+    fun `a preserve echo triggers neither honesty narration`() {
+        val saved = EditResultParser.parse(ok) as EditOutcome.SavedCopy
+        assertFalse(saved.removesLocation)
+        assertFalse(saved.stripsAllMetadata)
+    }
+
+    @Test
+    fun `a strip-location echo triggers the location narration only`() {
+        val saved = EditResultParser.parse(
+            ok.copy(metadataPolicyApplied = "strip_location"),
+        ) as EditOutcome.SavedCopy
+        assertTrue(saved.removesLocation)
+        assertFalse(saved.stripsAllMetadata)
+    }
+
+    @Test
+    fun `a strip-all echo triggers both narrations (location is subsumed)`() {
+        val saved = EditResultParser.parse(
+            ok.copy(metadataPolicyApplied = "strip_all"),
+        ) as EditOutcome.SavedCopy
+        assertTrue(saved.removesLocation)
+        assertTrue(saved.stripsAllMetadata)
+    }
+
+    @Test
+    fun `a pre-r29 editor's missing echo makes no claim`() {
+        val saved = EditResultParser.parse(
+            ok.copy(metadataPolicyApplied = null),
+        ) as EditOutcome.SavedCopy
+        assertFalse(saved.removesLocation)
+        assertFalse(saved.stripsAllMetadata)
     }
 }

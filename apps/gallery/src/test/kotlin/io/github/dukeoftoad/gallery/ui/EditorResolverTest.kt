@@ -1,9 +1,11 @@
 package io.github.dukeoftoad.gallery.ui
 
+import io.github.dukeoftoad.gallery.edit.contract.EditorIdentity
 import io.github.dukeoftoad.gallery.ui.viewer.EditorCandidate
 import io.github.dukeoftoad.gallery.ui.viewer.EditorResolution
 import io.github.dukeoftoad.gallery.ui.viewer.EditorResolver
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -100,7 +102,7 @@ class EditorResolverTest {
 
     @Test
     fun `the accepted package name list mirrors the identity rule`() {
-        val accepted = io.github.dukeoftoad.gallery.edit.contract.EditorIdentity.acceptedPackageNames()
+        val accepted = EditorIdentity.acceptedPackageNames()
         assertEquals(
             listOf(
                 "io.github.dukeoftoad.gallery.edit",
@@ -109,7 +111,7 @@ class EditorResolverTest {
             accepted,
         )
         for (name in accepted) {
-            assertEquals(name, io.github.dukeoftoad.gallery.edit.contract.EditorIdentity.matches(name))
+            assertTrue("'$name' must match", EditorIdentity.matches(name))
         }
     }
 }

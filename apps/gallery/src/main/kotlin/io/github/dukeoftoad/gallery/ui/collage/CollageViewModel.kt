@@ -1,5 +1,7 @@
 package io.github.dukeoftoad.gallery.ui.collage
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import android.app.Application
 import android.graphics.Bitmap
 import android.net.Uri
@@ -104,6 +106,7 @@ class CollageViewModel(app: Application) : AndroidViewModel(app) {
      * `exportFailed` flag plus a snackbar --- and never leave a
      * half-written pending row behind.
      */
+    @RequiresApi(Build.VERSION_CODES.Q)
     fun export() {
         val ready = _state.value as? CollageUiState.Ready ?: return
         if (ready.exporting) return

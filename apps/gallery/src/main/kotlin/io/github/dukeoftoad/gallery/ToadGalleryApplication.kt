@@ -26,6 +26,8 @@ import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityG
 import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
 import io.github.dukeoftoad.gallery.data.media.location.ItemLocationWriter
 import io.github.dukeoftoad.gallery.data.media.location.LocationReadGate
+import io.github.dukeoftoad.gallery.ml.engine.BundledFirstModelDownloader
+import io.github.dukeoftoad.gallery.ml.engine.BundledModelAssets
 import io.github.dukeoftoad.gallery.ml.engine.HttpModelDownloader
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 
@@ -133,18 +135,31 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
     /**
      * The process-wide model provisioner (r22, ADR-0020):
      * verify-then-stage-then-commit delivery of the pinned FACE/SEMANTIC
-     * assets into `filesDir/models`, over the REAL HTTP transport
-     * ([HttpModelDownloader] --- the single allowlisted host; the INTERNET
-     * permission exists for exactly this fetch, see the manifest). Lazy
-     * like [mediaCatalogue]: constructing it allocates nothing, opens no
-     * files and touches no network --- the first reader is the Settings
-     * dogfood section's download/self-test action. One instance per
-     * process so the receipt file is never concurrently rewritten.
+     * assets into `filesDir/models`, over the ADR-0020 transport stack:
+     * BUNDLED model-pack bytes first (r28: builds assembled with
+     * `-PwithBundledModels` ship `assets/models/` and a device
+     * provisioned from them never opens a socket), then the REAL HTTP
+     * transport ([HttpModelDownloader] --- the single allowlisted host;
+     * the INTERNET permission exists for exactly this fetch, see the
+     * manifest). Lazy like [mediaCatalogue]: constructing it allocates
+     * nothing, opens no files and touches no network --- the first
+     * reader is the Settings dogfood section's download/self-test
+     * action. One instance per process so the receipt file is never
+     * concurrently rewritten.
      */
     val modelProvisioner: ModelProvisioner by lazy {
         ModelProvisioner(
             storeDir = File(filesDir, "models"),
-            downloader = HttpModelDownloader(),
+            downloader = BundledFirstModelDownloader(
+                bundled = BundledModelAssets { fileName ->
+                    // A normal build ships no assets/models/ directory:
+                    // the lookup throws and degrades to null (the network
+                    // path). Android-adjacent wiring only; the bundled-first
+                    // logic is JVM-tested in BundledModelSourceTest.
+                    runCatching { assets.open("models/$fileName") }.getOrNull()
+                },
+                network = HttpModelDownloader(),
+            ),
         )
     }
 

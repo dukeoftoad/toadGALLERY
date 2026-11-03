@@ -1,0 +1,230 @@
+name: Model-pack APK (offline-provisioned test build)
+
+# toadGALLERY --- the ADR-0020 OFFLINE MODEL-PACK build (r28, Workstream 8).
+#
+# ADR-0020's delivery decision has two halves: "follow Ente's model ---
+# after install, the app downloads the models itself, on demand --- while
+# CI retains the ability to ship an offline pack." This workflow is that
+# second half: it stages the pinned FACE model pack (sizes + SHA-256
+# transcribed from ModelManifest.kt, itself transcribed from the vendored
+# ente-ml assets.rs at the pin) into the build directory, assembles the
+# engine-enabled debug APK with -PwithBundledModels so the bytes ride in
+# assets/models/, and uploads the artifact. A device provisioned from
+# this build never opens a socket: BundledFirstModelDownloader serves the
+# bundled bytes and the verify-then-stage-then-commit provisioner runs
+# IDENTICALLY (a tampered pack fails the SHA-256 gate and installs
+# nothing --- the offline path adds no trust).
+#
+# Why a separate file (not a ci.yml edit): ci.yml is the canonical CI
+# (ADR-0013) and parallel rounds may touch it; this workflow is
+# branch-scoped and purely additive, exactly the engine-apk.yml pattern.
+# It replicates that workflow's engine build steps (same pins, same cache
+# keys) plus the model staging, the asset-presence gate and the artifact
+# upload. NOT a release: no tag is cut, no GitHub Release is created ---
+# debug key only; release.yml stays the only signing path (ADR-0018).
+#
+# Scope: the FACE capability pack only (~37.6 MiB, APK ~109 MB). The
+# SEMANTIC (CLIP) assets belong to the Magic Search workstream and stay
+# runtime-downloaded until that round lands its own pack decision.
+#
+# Triggers: pushes to tg-modelpack-* branches and manual dispatch.
+
+on:
+  push:
+    branches: [ 'tg-modelpack-*' ]
+  workflow_dispatch:
+
+concurrency:
+  group: modelpack-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  modelpack-apk:
+    name: Offline model-pack engine APK (arm64-v8a) + artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust (stable, minimal)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      # Same cache keys as ci.yml's engine-android job / engine-apk.yml:
+      # caches saved on the default branch are restorable from this
+      # branch, so main's green CI state is reused (warm build).
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: cargo-android-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: cargo-android-${{ runner.os }}-
+
+      # Cache the cargo-ndk BINARY alone so `cargo install` is skipped
+      # entirely on hit (the command -v guard below makes the install a
+      # no-op, so no ~/.cargo/.crates* metadata needs caching).
+      - name: Cache cargo-ndk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-ndk
+          key: cargo-ndk-${{ runner.os }}-3.5.4
+
+      - name: Install cargo-ndk (pinned)
+        run: command -v cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --version 3.5.4 --locked
+
+      # Same NDK resolution as ci.yml's engine-android job: pick the
+      # newest preinstalled NDK and export it (engine/scripts
+      # /build-android.sh also discovers it itself; resolving here
+      # documents the choice in the log).
+      - name: Resolve the preinstalled Android NDK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          NDK_HOME="$(ls -d "$SDK_ROOT"/ndk/* 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$NDK_HOME" ]; then
+            echo "No preinstalled NDK under $SDK_ROOT/ndk --- the build script's sdkmanager fallback will install one."
+          else
+            echo "Using preinstalled NDK: $NDK_HOME"
+            echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # Same SDK package pins as ci.yml (platform 36, build-tools 36).
+      - name: Install Android SDK packages (platform 36, build-tools 36)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SDK_MGR="$(command -v sdkmanager)"
+          else
+            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
+          fi
+          echo "Using sdkmanager: $SDK_MGR"
+          yes | "$SDK_MGR" --licenses > /dev/null || true
+          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
+          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # THE model-pack step: fetch the pinned FACE assets from the single
+      # allowlisted host and verify size + SHA-256 against the pin BEFORE
+      # anything packages them (the same discipline the in-app downloader
+      # + provisioner apply; here it keeps a tampered/moved upstream
+      # asset from ever riding into an APK). Staged into the build-dir
+      # assets srcDir that -PwithBundledModels wires (never src/main).
+      - name: Stage the pinned FACE model pack (offline provisioning)
+        run: |
+          set -euo pipefail
+          DEST="apps/gallery/build/bundled-models/models"
+          mkdir -p "$DEST"
+          fetch_model() {
+            local name="$1" size="$2" sha="$3"
+            echo "fetching $name ($size bytes) from models.ente.com"
+            curl -fSL --retry 3 --max-time 900 -o "$DEST/$name" "https://models.ente.com/$name"
+            local got_size got_sha
+            got_size="$(wc -c < "$DEST/$name" | tr -d ' ')"
+            got_sha="$(sha256sum "$DEST/$name" | cut -d' ' -f1)"
+            [ "$got_size" = "$size" ] || { echo "::error::$name: size $got_size != pinned $size"; exit 1; }
+            [ "$got_sha" = "$sha" ]  || { echo "::error::$name: sha256 $got_sha != pinned $sha"; exit 1; }
+            echo "  verified: $name ($got_size bytes, $got_sha)"
+          }
+          # Sizes + SHA-256 transcribed from apps/gallery/src/main/kotlin
+          # /io/github/dukeoftoad/gallery/ml/engine/ModelManifest.kt
+          # (FACE_DETECTION + FACE_EMBEDDING; the r22 round verified the
+          # live host serves both 200-direct with exactly these lengths).
+          fetch_model "yolov5s_face_640_640_static_b1.onnx" \
+            "32355091" \
+            "e047647409403d52696035ecd445792173e50d7fbdcccac97b958a585db9aa3d"
+          fetch_model "mobilefacenet_portable_static_b1.onnx" \
+            "5278803" \
+            "0763fc33f54e138476194da95e87e133b3e976075a6b1d3e1b2caedb251b1a36"
+          ls -la "$DEST"
+          sha256sum "$DEST"/*
+
+      # -PwithEngine registers the buildRustEngine Exec task (preBuild
+      # dependency runs engine/scripts/build-android.sh: cargo-ndk builds
+      # libtoad_ml_jni.so + stages the sha256-pinned libonnxruntime.so
+      # for arm64-v8a); -PwithBundledModels adds the staged models as an
+      # assets srcDir. Both gates stay build-time properties: the default
+      # build is byte-for-byte the ordinary one.
+      - name: Engine + model-pack debug assemble (arm64-v8a)
+        run: ./gradlew :apps:gallery:assembleDebug -PwithEngine -PwithBundledModels --no-daemon --stacktrace
+
+      # Gate 1 (from engine-apk.yml): the APK must carry BOTH native
+      # libraries (a silently broken jniLibs wiring would otherwise pass
+      # the assemble step).
+      - name: Verify the native libraries are packaged
+        run: |
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          echo "APK: $APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
+
+      # Gate 2 (this workflow's own): the APK must carry BOTH staged
+      # model assets under assets/models/ --- a silently broken assets
+      # srcDir wiring would otherwise pass the assemble step, and the
+      # build would ship as "offline-provisioned" while provisioning
+      # from the network after all.
+      - name: Verify the model pack is packaged under assets
+        run: |
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          unzip -l "$APK" | grep "assets/models/yolov5s_face_640_640_static_b1.onnx"
+          unzip -l "$APK" | grep "assets/models/mobilefacenet_portable_static_b1.onnx"
+
+      # Gate 3: the APK's identity --- the .debug variant, versionCode at
+      # least the r28 baseline (32). Tolerant on future bumps on purpose:
+      # branches cut from a later main carry a later code by design.
+      - name: Verify APK identity (package + versionCode >= 32)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
+          [ -n "$AAPT2" ] || { echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; }
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
+          echo "badging: $BADGE"
+          echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.debug'" \
+            || { echo "::error::unexpected application id (expected the .debug variant)"; exit 1; }
+          VC="$(echo "$BADGE" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
+          echo "versionCode: $VC"
+          [ -n "$VC" ] && [ "$VC" -ge 32 ] \
+            || { echo "::error::unexpected versionCode '$VC' (expected >= 32, the r28 model-pack baseline)"; exit 1; }
+
+      # Stage under the r23-convention name and upload as a workflow
+      # artifact. NOT a release: no tag, no GitHub Release; debug key
+      # only, exactly like the r23/r25 device artifacts.
+      - name: Stage the APK (r23-convention name)
+        run: |
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          mkdir -p modelpack-staging
+          cp "$APK" "modelpack-staging/toadGALLERY-0.4.2-alpha-r28-modelpack-engine-debug.apk"
+          ls -la modelpack-staging/
+          sha256sum modelpack-staging/*.apk
+
+      - name: Upload model-pack APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: toadGALLERY-0.4.2-alpha-r28-modelpack-engine-debug
+          path: modelpack-staging/toadGALLERY-0.4.2-alpha-r28-modelpack-engine-debug.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

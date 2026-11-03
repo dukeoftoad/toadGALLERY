@@ -710,6 +710,57 @@ recluster pass (an edit-preserving overlay is future work). 927 JVM
 tests (+42) + 526 vendored Rust tests + 20 JNI tests (8 new);
 versionCode 29, no device build per the Phase-5-completion directive.
 
+#### Status — r28 round (versionCode 32): the Workstream 8 hardening round + the Phase 5 exit gate
+
+The last Phase 5 workstream (`docs/phase-5/hardening.md`): tests and
+records are the product. **The egress proof** — `EgressSolePathTest`
+pins the negative space around the ADR-0020 grant across every surface
+that could open a network path (the only quoted URL literal in
+production Kotlin is the About screen's `ACTION_VIEW` repository link;
+`java.net` confined to the one transport; no client libraries, no raw
+sockets, no cleartext/network-security-config escape hatch; the
+INTERNET allowlist pinned to exactly the one entry; the Gradle
+merged-manifest gates pinned with their anchors), and
+`HttpModelDownloaderRedirectTest` drives the full 301–308 fail-closed
+matrix with never-follow single-request proofs. **The three-gate vault
+exclusion** — one focused suite per Phase 4 audit gate: enqueue
+(`FaceIndexQueueVaultExclusionTest`: the vault-move model end-to-end
+over the real reference catalogue, including the orphan-delete purge of
+a previously-indexed photo's face rows before any inference),
+pre-byte-read (`VaultExclusionReadGateTest`: the eligibility type gate,
+the permission-gate refusal, the gate-before-handle ordering, the
+refuse-whole cap), pre-persistence
+(`PeopleVaultExclusionPersistenceTest`: the all-vault cluster, the
+stale-name prune, hide-as-display-gate, plus the face-index
+directory's backup/transfer exclusion pins). **The 10k/50k benchmarks**
+— `LibraryScaleBenchmarkTest` over seeded synthetic libraries
+(timeline + folder windows, the Paging 3 walk, the reconciler diff with
+realistic churn, the filter projection) with generous-but-meaningful
+budgets; measured CI numbers recorded in the hardening doc. **The
+low-memory/ABI matrix** — documented (§4) and pinned
+(`EnginePackagingPolicyTest`: the withEngine/withBundledModels gates,
+the default-ABI discipline, the pinned NDK + sha256-verified ORT AAR,
+the 16 KB page-size link flags for all three Android targets, the SDK
+envelope). **The ADR-0020 offline model pack** — the retained second
+half of the delivery decision: `BundledModelAssets` +
+`BundledFirstModelDownloader` (bundled-first, the shared name guard,
+the provisioner's unchanged verify-then-commit discipline), the
+`-PwithBundledModels` build-dir assets gate, and the branch-scoped
+additive `modelpack-apk.yml` workflow (pinned FACE pack staged +
+verified at build time, gated APK, 14-day artifact; no tags, no
+Releases). 53 new JVM tests (927 → **980**); versionCode 32, no device
+build needed (tests + records; the modelpack artifact is producible on
+a `tg-modelpack-*` branch whenever wanted).
+
+**Phase 5 exit gate:** all Workstream 8 items green and merged —
+**Phase 5 release freeze lifted; the next release may proceed.** The
+honest state: **code-complete, on-device dogfood pending** (the
+maintainer checklist items in `tasks.md` remain open, explicitly NOT
+claimed by the lift), and the parallel `r26` (People follow-ups),
+`r27` (organisational UX) and Magic Search rounds land under their own
+records — the lift claims Workstream 8's scope only. versionName stays
+`0.4.2-alpha`; the next release tags the whole line (codes 27–32).
+
 #### Status — r19 round (versionCode 23): the code-improvement round
 
 The maintainer-directed whole-codebase audit (2026-11-02): three

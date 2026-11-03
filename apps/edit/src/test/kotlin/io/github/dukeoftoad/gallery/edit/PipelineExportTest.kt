@@ -48,9 +48,11 @@ class PipelineExportTest {
 
     @Test
     fun `straighten matches the standalone op`() {
+        // 30 degrees: within the straighten contract (the +/-45 fine
+        // adjustment; 90-degree turns belong to quarterTurns).
         val grid = intArrayOf(1, 2, 3, 4, 5, 6)
-        val pipelined = EditPipeline.apply(grid, 3, 2, EditRecipe(straightenDeg = 90.0))
-        val standalone = straightenPixels(grid, 3, 2, 90.0)
+        val pipelined = EditPipeline.apply(grid.copyOf(), 3, 2, EditRecipe(straightenDeg = 30.0))
+        val standalone = straightenPixels(grid, 3, 2, 30.0)
         assertTrue(pipelined.pixels.contentEquals(standalone.pixels))
         assertEquals(standalone.width, pipelined.width)
     }
@@ -74,8 +76,10 @@ class PipelineExportTest {
     fun `a tone-only recipe matches the composed lut path`() {
         val base = intArrayOf(0xFF0A64C8.toInt(), 0xFF808080.toInt(), 0xFFFA053C.toInt())
         val recipe = EditRecipe(brightness = 50)
-        val pipelined = EditPipeline.apply(base, 3, 1, recipe)
+        // The pipeline mutates its input in place --- the expected array is
+        // snapshotted BEFORE the call, then driven by the standalone path.
         val expected = base.copyOf()
+        val pipelined = EditPipeline.apply(base, 3, 1, recipe)
         PixelAdjuster.applyTo(expected, LutBuilder.build(brightness = 50, contrast = 0, exposure = 0, highlights = 0, shadows = 0))
         assertTrue(pipelined.pixels.contentEquals(expected))
     }
@@ -83,8 +87,9 @@ class PipelineExportTest {
     @Test
     fun `a saturation-only recipe matches the standalone pixel stage`() {
         val base = intArrayOf(0xFFC86432.toInt())
-        val pipelined = EditPipeline.apply(base, 1, 1, EditRecipe(saturation = 100))
+        // Same in-place discipline: snapshot before the pipeline runs.
         val expected = base.copyOf()
+        val pipelined = EditPipeline.apply(base, 1, 1, EditRecipe(saturation = 100))
         PixelOps.applySaturation(expected, 100)
         assertTrue(pipelined.pixels.contentEquals(expected))
     }

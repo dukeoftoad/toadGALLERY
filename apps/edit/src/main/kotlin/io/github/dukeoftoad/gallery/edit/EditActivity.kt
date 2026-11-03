@@ -1058,15 +1058,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                     previewBase?.height ?: 1,
                                 )
                                 val fitted = aspect.fit(plan.cropPixelRect, plan.postGeometryWidth, plan.postGeometryHeight)
-                                val w = plan.postGeometryWidth.toDouble()
-                                val h = plan.postGeometryHeight.toDouble()
+                                // r32: the pixel-rect -> normalized conversion
+                                // is the tested pure inverse (CropRect.fromPixelRect),
+                                // not an inline division that could drift.
                                 commit(
                                     committed.copy(
-                                        crop = CropRect(
-                                            left = fitted.x0 / w,
-                                            top = fitted.y0 / h,
-                                            right = fitted.x1 / w,
-                                            bottom = fitted.y1 / h,
+                                        crop = CropRect.fromPixelRect(
+                                            fitted,
+                                            plan.postGeometryWidth,
+                                            plan.postGeometryHeight,
                                         ),
                                     ),
                                 )

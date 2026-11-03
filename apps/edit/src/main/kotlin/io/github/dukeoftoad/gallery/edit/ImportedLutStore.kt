@@ -67,7 +67,10 @@ class ImportedLutStore(private val dir: File) {
             is CubeLutParser.Result.Invalid ->
                 return ImportResult.Rejected(result.reason)
         }
-        val baseId = slugId(parsed.title.ifBlank { suggestedName ?: "" })
+        // The suggestedName's STEM (the extension is the picker's artifact,
+        // not the look's name): "Beach 2026.cube" slugs to "beach-2026".
+        val stem = suggestedName?.substringBeforeLast('.', missingDelimiterValue = suggestedName) ?: ""
+        val baseId = slugId(parsed.title.ifBlank { stem })
         val id = collisionFreeId(baseId)
         val fileName = "$id.cube"
         val target = File(dir, fileName)

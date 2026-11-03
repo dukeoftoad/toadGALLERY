@@ -300,7 +300,15 @@ class PrivacyPolicyTest {
         // the names/hidden bookkeeping in the SAME app-private directory,
         // `FaceIndexStateFile`'s discipline; the deliberate documented-set
         // addition this test prescribes for a new dotted NON-host literal).
-        val nonHostLiterals = setOf("install.properties", "index-state.json", "people-state.json")
+        // clip-index-state.json: the r26 semantic queue's state file
+        // (Workstream 7 --- the Magic Search queue's own bookkeeping in
+        // the SAME directory, the identical deliberate addition).
+        val nonHostLiterals = setOf(
+            "install.properties",
+            "index-state.json",
+            "people-state.json",
+            "clip-index-state.json",
+        )
         val found = mlDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .flatMap { file -> hostLike.findAll(file.readText()).map { m -> m.value.removeSurrounding("\"") } }

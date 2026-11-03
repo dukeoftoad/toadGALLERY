@@ -12,7 +12,7 @@
 | **Phase 2** | Product shell, visual foundation, privacy hardening, Compose toolchain, and CI | **Closed / Exited** (Turn 9/10, PRs #15, #16, #23, #46, #47) |
 | **Phase 3 (M4)** | Core media access, browsing, file ops, recycle bin, hidden vault (16/16 issues closed) | **Code-complete / 16 of 16 issues closed** (Reopened in Turn 21 for device validation; all 16 issues closed by PR #70) |
 | **Phase 4** | Aves-grade metadata layer & AI media-contract foundation (`r10`–`r20`) | **Complete** (Turn 35 PR #90 + Turn 38 PR #92) |
-| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **In Progress** (`r21`–`r24` merged on `main`; `r25`–`r29` queued) |
+| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **In Progress** (`r21`–`r25` merged on `main`; `r26`–`r29` queued) |
 | **Phase 6** | toadGALLERY Edit v1: core adjustments + non-destructive pipeline (gated by `#14`) | **Planned** (Issue `#14` open) |
 | **Phase 7** | toadGALLERY Edit v2: LUT filters, text, stickers, drawing, mosaic, frames | **Planned** |
 | **Phase 8** | toadGALLERY Edit v3: on-device AI editing (magic erase, sky replacement, bokeh, opt-in face retouch) | **Planned** |
@@ -141,21 +141,30 @@
   * [x] Build the Kotlin `ml/people` domain: `PeopleEngineSeam` (+ availability), the atomic `people-state.json` names/hidden store in the face-index directory (corrupt-recovers, prunes stale ids), the pure six-state `PeopleContentPolicy`, the no-cache `PeopleRepository`, `PeopleEngineAdapter` and the chunked 999-limit `PeopleMediaQuery`; 927 JVM tests total (+42).
   * [x] Build the Compose surfaces: `PeopleScreen` grid, `PersonDetailScreen` (rename / merge-with / remove-from-person / hide, viewer hand-offs the Album-detail way), the Albums-tab People section with honest off/engine-missing/not-indexed cards, and the Settings `peopleAlbumEnabled` consent row (ADR-0010 opt-in, OFF by default).
   * [x] Author `docs/phase-5/people-ui.md` + the `PrivacyPolicyTest` non-host-literal addition (`people-state.json`); `versionCode 29`, no device build per the Phase-5-completion directive.
+* [x] **Round `r26` (Build 30) — The Magic Search Round (Workstream 7)**:
+  * [x] Extend `toad-ml-jni` from 16 to 25 JNI functions (Agent A's engine half): `nativeInitSemantic` (the CLIP half of an engine session, a third open/closed state), the CLIP encoders (`nativeClipImageEmbeddingJpeg` / `nativeClipTextEmbedding`) and the CLIP store surface over the SAME `ml-index.sqlite` (put with the 512-dim guard on both sides of the bridge, delete-for-files, indexed-file-ids, count, top-K vecdb search preserving the store's own order, the once-per-drain `fillClipIndex` reconciliation report); 32 JNI-crate Rust tests (12 new).
+  * [x] Build the semantic background queue as the r24 face queue's sibling: `ClipIndexQueue` (same three truths, same `MediaRevision.diff` mapping — delete-first kept even though `putClip` upserts; ONE whole-photo embedding per photo; whole-photo cancellation with `NonCancellable` persistence; fill exactly once at drain; the atomic `clip-index-state.json` in the backup-excluded face-index directory) + `ClipIndexWorker` (its own unique WorkManager chain, honest FACE-then-SEMANTIC session gates, self-re-enqueue, bounded retries).
+  * [x] Build the Kotlin `ml/search` domain: `MagicSearchEngineSeam` (+ the `PeopleEngineAdapter`-pattern adapter extended with `initSemantic`), the pure six-state `MagicSearchContentPolicy`, the 2–200-character query gate, the order-preserving/dedupe/limit ranking, the no-cache `MagicSearchRepository` and the chunked 999-limit `MagicSearchMediaQuery`; 982 JVM tests total (+55).
+  * [x] Build the Compose surfaces: the Search tab's "Search by" mode row (Name untouched vs Content), the debounced sibling `MagicSearchViewModel` with the policy's honest gating cards (consent / engine-missing / models ~213 MB / not-indexed, each with its own recovery affordance), results on the shared grid in the vecdb's own relevance order; plus the Settings `magicSearchEnabled` consent row (ADR-0010 opt-in, OFF by default), the SEMANTIC model download card and the semantic queue card (start/cancel/reset with the honest reset scope).
+  * [x] Author `docs/phase-5/magic-search.md` + the `PrivacyPolicyTest` non-host-literal addition (`clip-index-state.json`; no backup-rule change needed — the state file rides the r24 face-index exclusion); `versionCode 30`, no device build per the Phase-5-completion directive.
 
-## 3. Remaining / Queued Tasks & Next Steps (Post-`r25`)
+## 3. Remaining / Queued Tasks & Next Steps (Post-`r26`)
 
-### Immediate Device Validation & Phase 5 AI Workstreams (`r26`–`r29`)
-* [ ] **On-Device Dogfood Validation (engine APK at build 29; build 27 APK already delivered as `toadGALLERY-0.4.2-alpha-r23-engine-debug.apk`)**:
+### Immediate Device Validation & Phase 5 AI Workstreams (`r27`–`r29`)
+* [ ] **On-Device Dogfood Validation (engine APK at build 30; build 27 APK already delivered as `toadGALLERY-0.4.2-alpha-r23-engine-debug.apk`)**:
   * [ ] Install an engine-enabled build on the Xiaomi test device (`2201116PI`, Android 36).
   * [ ] Open `Settings → AI engine (r22 dogfood)` and download the FACE model pack (~36 MiB from `models.ente.com`).
   * [ ] Open `Settings → Start background index (r24 dogfood)`, let the queue drain the library, verify live progress + the drain outcome line, exercise Cancel (resume) and Reset, and evaluate the clustering threshold through the r24 tuning control on a real library.
   * [ ] Dogfood the r25 People surfaces on-device: enable `Settings → People albums`, browse the People grid + person details, rename/merge/remove-from-person/hide, and verify the honest off/engine-missing/not-indexed states.
+  * [ ] Dogfood the r26 Magic Search surfaces on-device: enable `Settings → Magic search`, download the SEMANTIC pack (~213 MB), start the semantic index, then search the Content mode with natural-language queries and verify the honest consent/engine/models/not-indexed states.
   * [ ] Run pending device validation checklist sections (`docs/phase-3/device-validation-checklist.md` §§13–18, including Room v4→v6 over-install migrations and pre-Q fallback check).
 * [ ] **People UI Follow-ups (deferred from r25, documented in `docs/phase-5/people-ui.md`)**:
   * [ ] Edit-preserving reclustering (cluster-id remapping overlay so names/hidden/merges survive the queue's recluster passes).
   * [ ] Unhide UI for hidden persons (r25 way back is the r24 Reset face index).
-* [ ] **Magic Search / Things (Workstream 7)**:
-  * [ ] Wire MobileCLIP image embedding indexing (`mobileclip_s2_image_opset18_opt.onnx`), BPE tokenizer (`bpe_simple_vocab_16e6.txt.gz`), and text encoder (`mobileclip_s2_text_opset18_opt.onnx`) over `ente-vecdb` for offline semantic search in the Search tab.
+* [ ] **Magic Search Follow-ups (deferred from r26, documented in `docs/phase-5/magic-search.md`)**:
+  * [x] MobileCLIP image embedding indexing (`mobileclip_s2_image_gelu_opset20.onnx`), BPE tokenizer (`bpe_simple_vocab_16e6.txt`), text encoder (`mobileclip_s2_text_opset18_quant.onnx`) and offline semantic search in the Search tab — DONE in r26 over `ente-vecdb` (the r26 JNI surface + queue + domain + UI above).
+  * [ ] Semantic-only engine sessions (drop the FACE-model requirement the r26 session carries).
+  * [ ] Things dynamic collections + smart-filter integration (named semantic clusters over the SAME CLIP index, image-side queries).
 * [ ] **MI-Style Organisational UX (Roadmap Phase 5 / Reconciled Phase 6)**:
   * [ ] Places (offline coarse region bucketing over Room v4 GPS coordinates, zero reverse-geocoding network calls), Moments timeline, Stories, collage creator, and slideshow.
 * [ ] **Phase 5 Hardening & Exit Gate (Workstream 8)**:

@@ -4,7 +4,9 @@
 //! (`ente_ml::indexing`): it owns no ONNX sessions of its own and follows the
 //! init/inference flow of ente-ml's own integration tests
 //! (`ente-ml/tests/support/ml_indexing.rs`) — `init_ml_runtime` /
-//! `analyze_image` / `release_ml_runtime`.
+//! `analyze_image` / `release_ml_runtime`. r26 adds the semantic (CLIP)
+//! half over the same flow: `run_clip` in `analyze_image` and upstream's
+//! standalone `run_clip_text`.
 
 use std::{
     fs,
@@ -16,8 +18,8 @@ use ente_image::image_compression::{EncodedImageFormat, encode_rgb};
 use ente_ml::{
     ModelPaths,
     indexing::{
-        AnalyzeImageRequest, AnalyzeImageResult, ImageSource, analyze_image, init_ml_runtime,
-        release_ml_runtime,
+        AnalyzeImageRequest, AnalyzeImageResult, ImageSource, RunClipTextRequest, analyze_image,
+        init_ml_runtime, release_ml_runtime, run_clip_text,
     },
 };
 
@@ -37,8 +39,34 @@ pub(crate) const FACE_DETECTOR_SIZE_BYTES: u64 = 32_355_091;
 pub(crate) const FACE_EMBEDDER_FILE_NAME: &str = "mobilefacenet_portable_static_b1.onnx";
 pub(crate) const FACE_EMBEDDER_SIZE_BYTES: u64 = 5_278_803;
 
+/// Pinned CLIP image-encoder model, same catalog
+/// (`ModelAssetSpec::ClipImage`): the MobileCLIP-S2 GELU image tower whose
+/// 512-float L2-normalized output is the r26 image embedding. The largest
+/// asset in the catalog (~137 MiB).
+pub(crate) const CLIP_IMAGE_FILE_NAME: &str = "mobileclip_s2_image_gelu_opset20.onnx";
+pub(crate) const CLIP_IMAGE_SIZE_BYTES: u64 = 143_057_352;
+
+/// Pinned CLIP text-encoder model, same catalog
+/// (`ModelAssetSpec::ClipText`, first file): the quantized MobileCLIP-S2
+/// text tower behind the r26 text embedding (the query side of Magic
+/// Search).
+pub(crate) const CLIP_TEXT_FILE_NAME: &str = "mobileclip_s2_text_opset18_quant.onnx";
+pub(crate) const CLIP_TEXT_SIZE_BYTES: u64 = 67_144_712;
+
+/// Pinned CLIP BPE vocabulary, same catalog (`ModelAssetSpec::ClipText`,
+/// second file): the tokenizer the text encoder consumes. Upstream's
+/// `ModelPaths` has no vocab slot — `RunClipTextRequest` carries the vocab
+/// path explicitly — so [`init_semantic`] validates it here and the engine
+/// state remembers it.
+pub(crate) const CLIP_VOCAB_FILE_NAME: &str = "bpe_simple_vocab_16e6.txt";
+pub(crate) const CLIP_VOCAB_SIZE_BYTES: u64 = 3_194_984;
+
 /// Short model labels used by the engine info line.
 const FACE_MODELS_LABEL: &str = "yolov5s-face,mobilefacenet";
+
+/// Short model labels used by the engine info line once the semantic half
+/// is installed (r26): the face pair plus the MobileCLIP-S2 pair.
+const SEMANTIC_MODELS_LABEL: &str = "yolov5s-face,mobilefacenet,mobileclip-s2";
 
 /// The `ort` crate version pinned by the workspace (`=2.0.0-rc.15`) — the
 /// Rust bindings that dlopen ONNX Runtime. Reported for diagnostics; see
@@ -62,9 +90,18 @@ const FILE_ID: i64 = 0;
 /// Message used when detection or release runs before a successful init.
 const NOT_INITIALIZED: &str = "engine is not initialized; call nativeInit(modelsDir) first";
 
+/// Message used when a semantic call runs before a successful
+/// [`init_semantic`].
+const SEMANTIC_NOT_INITIALIZED: &str =
+    "semantic models are not initialized; call nativeInitSemantic(modelsDir) first";
+
 /// The face-embedding dimension on the r23 wire: upstream MobileFaceNet
 /// output (the vendored clustering's `CLUSTER_CENTROID_DIMENSIONS`).
 pub(crate) const FACE_EMBEDDING_DIM: usize = 192;
+
+/// The CLIP embedding dimension on the r26 wire: upstream MobileCLIP-S2
+/// output (the vendored store's `CLIP_EMBEDDING_DIMENSIONS`).
+pub(crate) const CLIP_EMBEDDING_DIM: usize = 512;
 
 /// The r23 embeddings wire stride: 5 box floats + [`FACE_EMBEDDING_DIM`].
 pub(crate) const EMBEDDING_STRIDE: usize = 5 + FACE_EMBEDDING_DIM;
@@ -76,9 +113,18 @@ const WARMUP_HEIGHT: u32 = 8;
 const WARMUP_GRAY_LEVEL: u8 = 128;
 const WARMUP_JPEG_QUALITY: u8 = 75;
 
-/// The initialized engine. Once installed, immutable for its lifetime.
+/// The initialized engine. Once installed, the face half is immutable for
+/// its lifetime; the r26 semantic upgrade ([`init_semantic`]) mutates the
+/// state in place — the combined `ModelPaths`, the vocab path, the
+/// semantic-ready flag and the info line — always under the engine lock.
 struct EngineState {
     model_paths: ModelPaths,
+    /// The validated BPE vocab path (r26): set by [`init_semantic`], absent
+    /// in a face-only engine. Upstream's `ModelPaths` has no vocab slot
+    /// (`RunClipTextRequest` carries the vocab path explicitly), so the
+    /// semantic half remembers it here.
+    clip_vocab_path: Option<String>,
+    semantic_ready: bool,
     info: String,
 }
 
@@ -145,8 +191,82 @@ pub(crate) fn init(models_dir: &str) -> Result<(), String> {
 
     *engine = Some(EngineState {
         model_paths,
-        info: format_engine_info(),
+        clip_vocab_path: None,
+        semantic_ready: false,
+        info: format_engine_info(false),
     });
+    Ok(())
+}
+
+/// Initializes the semantic (CLIP) half of an already-initialized engine
+/// against `models_dir` (r26).
+///
+/// Requires an installed engine session ([`init`]) — the semantic half
+/// registers ON TOP of the face models; without one this is the
+/// [`NOT_INITIALIZED`] error. Idempotent: an already-semantic engine
+/// succeeds without reloading anything. The three pinned files (CLIP image
+/// encoder, CLIP text encoder, BPE vocab) must exist with their exact
+/// catalog byte sizes; the combined face + CLIP `ModelPaths` is then
+/// registered with ente-ml's global runtime (replacing the face-only
+/// registration — the face sessions survive it, same paths) and a warm-up
+/// `analyze_image` call with `run_clip: true` builds + runs the CLIP image
+/// session over the same inert JPEG the face warm-up uses, so init fails
+/// fast when the runtime cannot come up.
+///
+/// Failure recovery, honestly: a failed warm-up tears the whole runtime
+/// down (`release_ml_runtime`) and re-registers the previous face-only
+/// paths, leaving the engine in a consistent FACE-ONLY state — semantic
+/// calls keep failing with [`SEMANTIC_NOT_INITIALIZED`] and the face
+/// sessions rebuild lazily on the next face call (the same lazy rebuild any
+/// `release` + `init` cycle goes through). The `EngineState` itself is
+/// untouched on that leg, so `semantic_ready` stays `false` and the info
+/// line stays the face-only one. A validation failure (missing or
+/// wrong-size model file) fires BEFORE any re-registration and leaves the
+/// runtime entirely untouched.
+pub(crate) fn init_semantic(models_dir: &str) -> Result<(), String> {
+    let mut engine = lock();
+    let Some(state) = engine.as_mut() else {
+        return Err(NOT_INITIALIZED.to_string());
+    };
+    if state.semantic_ready {
+        return Ok(());
+    }
+    let previous_paths = state.model_paths.clone();
+
+    let models_dir = Path::new(models_dir);
+    let clip_image_path =
+        validate_model_file(models_dir, CLIP_IMAGE_FILE_NAME, CLIP_IMAGE_SIZE_BYTES)?;
+    let clip_text_path =
+        validate_model_file(models_dir, CLIP_TEXT_FILE_NAME, CLIP_TEXT_SIZE_BYTES)?;
+    let vocab_path = validate_model_file(models_dir, CLIP_VOCAB_FILE_NAME, CLIP_VOCAB_SIZE_BYTES)?;
+
+    let combined = ModelPaths {
+        clip_image: clip_image_path.to_string_lossy().into_owned(),
+        clip_text: clip_text_path.to_string_lossy().into_owned(),
+        ..previous_paths.clone()
+    };
+
+    // Re-registers the runtime with the combined face + CLIP paths. The
+    // face sessions survive the re-registration (same paths); the CLIP
+    // image session is configured here and loads below.
+    init_ml_runtime(combined.clone());
+
+    // Warm-up: forces the CLIP image session to build + run over an
+    // inert image (ente-ml's CLIP preprocessing rescales it to the
+    // encoder's input size), so a broken semantic runtime fails HERE
+    // instead of on the first real embedding. On failure the recovery
+    // above restores the face-only runtime.
+    let warmup_jpeg = warmup_jpeg().map_err(|error| format!("encode warm-up image: {error}"))?;
+    if let Err(error) = analyze_image(semantic_warmup_request(&combined, warmup_jpeg)) {
+        release_ml_runtime();
+        init_ml_runtime(previous_paths);
+        return Err(format!("semantic warm-up failed: {error}"));
+    }
+
+    state.model_paths = combined;
+    state.clip_vocab_path = Some(vocab_path.to_string_lossy().into_owned());
+    state.semantic_ready = true;
+    state.info = format_engine_info(true);
     Ok(())
 }
 
@@ -157,6 +277,11 @@ pub(crate) fn engine_info() -> Option<String> {
 
 /// Releases the engine. Returns `true` when an engine existed and was freed,
 /// `false` when none did; the engine always ends up uninitialized.
+///
+/// The whole `EngineState` is taken, so the r26 semantic half resets with
+/// it: after a release, semantic calls fail with [`NOT_INITIALIZED`] (the
+/// engine check dominates — there is no engine left to be semantic) until
+/// a fresh `init` + `init_semantic`.
 pub(crate) fn release() -> bool {
     let mut engine = lock();
     if engine.take().is_none() {
@@ -271,8 +396,102 @@ pub(crate) fn embeddings_to_source_pixel_buffer(
     Ok(buffer)
 }
 
-fn format_engine_info() -> String {
-    format!("ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={FACE_MODELS_LABEL}")
+/// Runs the CLIP image encoder over JPEG bytes (r26). Returns the
+/// 512-float L2-normalized MobileCLIP-S2 embedding produced by
+/// [`clip_image_embedding_from_result`].
+///
+/// Requires an installed engine WITH its semantic half ([`init_semantic`]);
+/// otherwise the call is the [`NOT_INITIALIZED`] /
+/// [`SEMANTIC_NOT_INITIALIZED`] error. The request runs the clip pipeline
+/// only (`run_faces: false`), exactly like the semantic warm-up.
+pub(crate) fn clip_image_embedding_jpeg(jpeg_bytes: Vec<u8>) -> Result<Vec<f32>, String> {
+    let engine = lock();
+    let state = engine.as_ref().ok_or_else(|| NOT_INITIALIZED.to_string())?;
+    if !state.semantic_ready {
+        return Err(SEMANTIC_NOT_INITIALIZED.to_string());
+    }
+    let result = analyze_image(AnalyzeImageRequest {
+        file_id: FILE_ID,
+        source: ImageSource::Bytes(jpeg_bytes),
+        run_faces: false,
+        run_clip: true,
+        run_pets: false,
+        generate_face_crops: false,
+        model_paths: state.model_paths.clone(),
+    })
+    .map_err(|error| format!("clip image embedding failed: {error}"))?;
+    clip_image_embedding_from_result(&result)
+}
+
+/// Runs the CLIP text encoder over `text` (r26): upstream's own
+/// `run_clip_text` with the pinned text-model + BPE-vocab paths the
+/// semantic half registered, returning the 512-float embedding
+/// (dimension-validated at the boundary by [`validate_clip_embedding`]).
+///
+/// Same guards as [`clip_image_embedding_jpeg`]: an installed engine with
+/// its semantic half, or the [`NOT_INITIALIZED`] /
+/// [`SEMANTIC_NOT_INITIALIZED`] error.
+pub(crate) fn clip_text_embedding(text: &str) -> Result<Vec<f32>, String> {
+    let engine = lock();
+    let state = engine.as_ref().ok_or_else(|| NOT_INITIALIZED.to_string())?;
+    if !state.semantic_ready {
+        return Err(SEMANTIC_NOT_INITIALIZED.to_string());
+    }
+    let vocab_path = state
+        .clip_vocab_path
+        .clone()
+        .ok_or_else(|| SEMANTIC_NOT_INITIALIZED.to_string())?;
+    let result = run_clip_text(RunClipTextRequest {
+        text: text.to_string(),
+        model_path: state.model_paths.clip_text.clone(),
+        vocab_path,
+    })
+    .map_err(|error| format!("clip text embedding failed: {error}"))?;
+    validate_clip_embedding(&result.embedding)?;
+    Ok(result.embedding)
+}
+
+/// Maps an ente-ml analysis result to the r26 CLIP wire: the
+/// L2-normalized 512-float image embedding, verbatim.
+///
+/// The dimension is validated HERE, at the Rust boundary, mirroring
+/// [`embeddings_to_source_pixel_buffer`]'s face check: a runtime model
+/// whose output dim differs from [`CLIP_EMBEDDING_DIM`] is a broken engine
+/// contract and surfaces as an error (Kotlin throws
+/// `IllegalStateException`), never as a silently truncated vector. A
+/// missing `clip` half — `clip: None` after a `run_clip: true` request —
+/// is the same broken-contract shape.
+pub(crate) fn clip_image_embedding_from_result(
+    result: &AnalyzeImageResult,
+) -> Result<Vec<f32>, String> {
+    let Some(clip) = result.clip.as_ref() else {
+        return Err("clip embedding is missing from the analysis result".to_string());
+    };
+    validate_clip_embedding(&clip.embedding)?;
+    Ok(clip.embedding.clone())
+}
+
+/// The r26 boundary check, shared by the image and text paths: a CLIP
+/// embedding whose dimension drifted off [`CLIP_EMBEDDING_DIM`] is a
+/// broken engine contract (the same discipline the face-embedding check
+/// in [`embeddings_to_source_pixel_buffer`] applies).
+fn validate_clip_embedding(embedding: &[f32]) -> Result<(), String> {
+    if embedding.len() != CLIP_EMBEDDING_DIM {
+        return Err(format!(
+            "clip embedding has unexpected dimension: expected {CLIP_EMBEDDING_DIM}, found {}",
+            embedding.len()
+        ));
+    }
+    Ok(())
+}
+
+fn format_engine_info(semantic: bool) -> String {
+    let models = if semantic {
+        SEMANTIC_MODELS_LABEL
+    } else {
+        FACE_MODELS_LABEL
+    };
+    format!("ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={models}")
 }
 
 fn warmup_request(model_paths: &ModelPaths, warmup_jpeg: Vec<u8>) -> AnalyzeImageRequest {
@@ -281,6 +500,21 @@ fn warmup_request(model_paths: &ModelPaths, warmup_jpeg: Vec<u8>) -> AnalyzeImag
         source: ImageSource::Bytes(warmup_jpeg),
         run_faces: true,
         run_clip: false,
+        run_pets: false,
+        generate_face_crops: false,
+        model_paths: model_paths.clone(),
+    }
+}
+
+/// The r26 semantic warm-up request: the CLIP image pipeline ONLY
+/// (`run_clip: true`, `run_faces: false`), so the warm-up builds + runs
+/// the CLIP image session without touching the face path.
+fn semantic_warmup_request(model_paths: &ModelPaths, warmup_jpeg: Vec<u8>) -> AnalyzeImageRequest {
+    AnalyzeImageRequest {
+        file_id: FILE_ID,
+        source: ImageSource::Bytes(warmup_jpeg),
+        run_faces: false,
+        run_clip: true,
         run_pets: false,
         generate_face_crops: false,
         model_paths: model_paths.clone(),
@@ -335,7 +569,7 @@ fn validate_model_file(
 mod tests {
     use super::*;
     use ente_image::decode::decode_image_from_bytes;
-    use ente_ml::types::{AlignmentResult, Dimensions, FaceDetection, FaceResult};
+    use ente_ml::types::{AlignmentResult, ClipResult, Dimensions, FaceDetection, FaceResult};
 
     fn face_result(score: f32, box_xyxy: [f32; 4]) -> FaceResult {
         FaceResult {
@@ -435,15 +669,25 @@ mod tests {
 
     #[test]
     fn engine_info_is_a_single_line_naming_the_pinned_stack() {
-        let info = format_engine_info();
+        let face_only = format_engine_info(false);
 
         assert_eq!(
-            info,
+            face_only,
             format!(
                 "ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={FACE_MODELS_LABEL}"
             )
         );
-        assert!(!info.contains('\n'));
+        assert!(!face_only.contains('\n'));
+
+        // The r26 semantic line keeps the same shape, one segment swapped:
+        let semantic = format_engine_info(true);
+        assert_eq!(
+            semantic,
+            format!(
+                "ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={SEMANTIC_MODELS_LABEL}"
+            )
+        );
+        assert!(!semantic.contains('\n'));
     }
 
     #[test]
@@ -469,5 +713,85 @@ mod tests {
         std::fs::write(dir.path().join("pinned.onnx"), b"1234").expect("write exact file");
         let path = validate_model_file(dir.path(), "pinned.onnx", 4).expect("exact-size file");
         assert_eq!(path, dir.path().join("pinned.onnx"));
+    }
+
+    // ---- r26: the semantic (CLIP) half ----
+
+    #[test]
+    fn clip_image_embedding_maps_the_512_float_vector_verbatim() {
+        let mut result = analysis(None, 8, 8);
+        result.clip = Some(ClipResult {
+            embedding: vec![0.25; CLIP_EMBEDDING_DIM],
+        });
+
+        let embedding =
+            clip_image_embedding_from_result(&result).expect("a 512-dim clip embedding maps");
+        assert_eq!(embedding, vec![0.25; CLIP_EMBEDDING_DIM]);
+    }
+
+    #[test]
+    fn a_wrong_runtime_clip_dimension_is_an_error_naming_512() {
+        let mut short = analysis(None, 8, 8);
+        short.clip = Some(ClipResult {
+            embedding: vec![0.5; CLIP_EMBEDDING_DIM - 1],
+        });
+        let error = clip_image_embedding_from_result(&short)
+            .expect_err("a non-512 clip embedding is a broken engine contract");
+        assert!(error.contains("512"));
+
+        let mut over = analysis(None, 8, 8);
+        over.clip = Some(ClipResult {
+            embedding: vec![0.5; CLIP_EMBEDDING_DIM + 1],
+        });
+        assert!(clip_image_embedding_from_result(&over).is_err());
+
+        // The text path shares the same boundary check:
+        assert!(validate_clip_embedding(&[0.5; CLIP_EMBEDDING_DIM]).is_ok());
+        let error = validate_clip_embedding(&[0.5; 192]).expect_err("the face dim is not clip's");
+        assert!(error.contains("512"));
+    }
+
+    #[test]
+    fn a_missing_clip_result_is_a_broken_engine_contract() {
+        // clip: None after a run_clip: true request --- upstream never
+        // produces this, so the boundary treats it as an error:
+        let error = clip_image_embedding_from_result(&analysis(None, 8, 8))
+            .expect_err("a missing clip half is a broken engine contract");
+        assert!(error.contains("missing"));
+    }
+
+    #[test]
+    fn semantic_warmup_request_only_runs_the_clip_pipeline() {
+        let request = semantic_warmup_request(&ModelPaths::default(), Vec::new());
+
+        assert!(!request.run_faces);
+        assert!(request.run_clip);
+        assert!(!request.run_pets);
+        assert!(!request.generate_face_crops);
+        assert!(matches!(request.source, ImageSource::Bytes(_)));
+    }
+
+    #[test]
+    fn the_r26_clip_model_pins_match_the_catalog_names_and_sizes() {
+        // The pins the Kotlin `ModelManifest` mirrors (SEMANTIC
+        // capability), straight from the vendored catalog:
+        assert_eq!(
+            CLIP_IMAGE_FILE_NAME,
+            "mobileclip_s2_image_gelu_opset20.onnx"
+        );
+        assert_eq!(CLIP_IMAGE_SIZE_BYTES, 143_057_352);
+        assert_eq!(CLIP_TEXT_FILE_NAME, "mobileclip_s2_text_opset18_quant.onnx");
+        assert_eq!(CLIP_TEXT_SIZE_BYTES, 67_144_712);
+        assert_eq!(CLIP_VOCAB_FILE_NAME, "bpe_simple_vocab_16e6.txt");
+        assert_eq!(CLIP_VOCAB_SIZE_BYTES, 3_194_984);
+
+        // And the generic validator still guards the new pins (the cheap
+        // wrong-size rejection leg, exercised with a small fixture ---
+        // the exact-size legs would need the real multi-MiB assets):
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(dir.path().join(CLIP_VOCAB_FILE_NAME), b"1234").expect("write short vocab");
+        assert!(
+            validate_model_file(dir.path(), CLIP_VOCAB_FILE_NAME, CLIP_VOCAB_SIZE_BYTES).is_err()
+        );
     }
 }

@@ -4,10 +4,54 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.2-alpha] — unreleased on main (versionCode 29; per maintainer
+## [0.4.2-alpha] — unreleased on main (versionCode 30; per maintainer
   directive no new device builds until Phase 5 completes)
 
 ### Added
+
+- **Magic Search** (r26 round; Workstream 7 of the Phase 5 plan,
+  `docs/phase-5/magic-search.md`): offline semantic search over an
+  on-device CLIP index — the Search tab's new **Content** mode. The JNI
+  bridge extends from sixteen to twenty-five externals (`nativeInitSemantic`
+  — the CLIP half of an engine session as a third open/closed state —
+  the CLIP image/text encoders, and a CLIP store surface over the SAME
+  `ml-index.sqlite` the faces live in: put (512-dim guard on both sides
+  of the bridge), delete-for-files, indexed-file-ids, count, top-K
+  vecdb search in the vecdb's own order, and the once-per-drain
+  `fillClipIndex` reconciliation pass with its own report — 12 new JNI
+  Rust tests). Kotlin side, the semantic background queue as the r24
+  face queue's SIBLING: `ClipIndexQueue` (the same three truths, the
+  same `MediaRevision.diff` mapping — with the honest caveat that the
+  delete-first pass is kept even though `putClip` upserts, so the two
+  queues share one diff→action table; ONE whole-photo embedding per
+  photo; whole-photo cancellation with `NonCancellable` persistence;
+  fill exactly once at drain) and `ClipIndexWorker` (its own unique
+  WorkManager chain, FACE-then-SEMANTIC session gates in the honest
+  order, self-re-enqueue, bounded retries, honest permanent failures).
+  The `ml/search` domain: `MagicSearchEngineSeam` (+ the
+  `PeopleEngineAdapter`-pattern production adapter extended with
+  `initSemantic`), the pure six-state `MagicSearchContentPolicy`
+  (Error dominates; consent before capability; EngineMissing is the
+  build shape; ModelsNotProvisioned covers EITHER pack — the r26
+  session is face-based, honestly; NotIndexed distinct from Ready),
+  the pure query gate (2–200 trimmed characters; over-long queries are
+  refused, never truncated), the pure order-preserving/dedupe/limit
+  ranking (no distance surfaced in v1), the no-cache repository with
+  typed honest outcomes, and the chunked 999-limit MediaStore query.
+  The UI: the "Search by" mode row (Name untouched vs Content), the
+  debounced sibling `MagicSearchViewModel` whose policy gates render as
+  honest cards (consent → Settings toggle with affordance; engine →
+  build shape; models → download pointer naming the manifest-derived
+  ~213 MB; not indexed → queue pointer), results on the SAME shared
+  grid with the same viewer hand-off. Settings: the `magicSearchEnabled`
+  consent row (default FALSE, ADR-0010), the SEMANTIC model download
+  card (per-asset presence, Download/Delete) and the semantic queue
+  card (start/cancel/reset — reset erases the queue's own
+  `clip-index-state.json`; the stored index rides the r24 Reset face
+  index, stated honestly). Queries never touch the network; the only
+  egress is the ADR-0020 model download; vault media can never become
+  candidates (three-gate discipline). Rust suite 32 JNI tests (+12);
+  JVM suite 982 tests (+55).
 
 - **The People auto-album** (r25 round; Workstream 6 of the Phase 5 plan,
   `docs/phase-5/people-ui.md`): the r23/r24 face index gains its product

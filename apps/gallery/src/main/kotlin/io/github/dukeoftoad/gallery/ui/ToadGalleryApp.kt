@@ -354,9 +354,24 @@ fun ToadGalleryApp() {
                     // results grid honors the photos-per-row / GRID layout
                     // setting (the Photos-tab wiring); the screen's own
                     // permission state rides the SAME shared machinery.
+                    // r26 (Workstream 7): the Content mode's consent /
+                    // models / not-indexed cards route to the Settings tab
+                    // with the same single-top-level-stack discipline the
+                    // People and Map consent copies wired first.
                     SearchScreen(
                         onOpenViewer = openViewer,
                         settingsViewModel = settingsViewModel,
+                        onOpenSettings = {
+                            navController.navigate(Destinations.SETTINGS) {
+                                // Same single-top-level-stack discipline as a
+                                // bottom-bar tap (see NavigationBarItem).
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
                     )
                 }
                 composable(Destinations.MAP) {

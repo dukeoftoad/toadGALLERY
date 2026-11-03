@@ -19,6 +19,17 @@ import kotlinx.coroutines.flow.asStateFlow
 const val KEY_PEOPLE_ALBUM_ENABLED = "peopleAlbumEnabled"
 
 /**
+ * The r26 Magic Search consent key (Workstream 7): persisted in the
+ * house `toad_settings` preferences, default FALSE --- ADR-0010's
+ * opt-in rule (AI features are off until the user turns them on), the
+ * exact `peopleAlbumEnabled` shape one round later. Lives at FILE
+ * scope for the same reason: the Search tab's Content-mode ViewModel
+ * reads the same key at query time; a single public definition keeps
+ * it from drifting between readers.
+ */
+const val KEY_MAGIC_SEARCH_ENABLED = "magicSearchEnabled"
+
+/**
  * State holder for the Settings tab (issue #27; appearance preferences since
  * the roadmap Phase 3 appearance slice).
  *
@@ -41,6 +52,11 @@ const val KEY_PEOPLE_ALBUM_ENABLED = "peopleAlbumEnabled"
  *    shared scope), so this flow's write-through matters for the Settings
  *    row's own render; cross-screen propagation rides each surface's
  *    entry refresh.
+ *  - the "Magic search" consent (r26, Workstream 7) under
+ *    [KEY_MAGIC_SEARCH_ENABLED], default FALSE --- the same opt-in rule
+ *    and the same write-through shape, one round later. The Search
+ *    tab's Content-mode ViewModel reads the preference at query time
+ *    (its own refresh), so the same cross-screen story holds.
  *
  * Plain prefs remain the right-sized store: a handful of scalars, read
  * synchronously once at ViewModel creation (tiny file, no first-frame
@@ -67,6 +83,15 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Whether the People feature is consented on (r25; default false). */
     val peopleAlbumsEnabled: StateFlow<Boolean> = _peopleAlbumsEnabled.asStateFlow()
+
+    // r26 (Workstream 7): the Magic Search consent, default FALSE per
+    // ADR-0010 --- the same write-through shape as the picker toggle and
+    // the People row.
+    private val _magicSearchEnabled =
+        MutableStateFlow(prefs.getBoolean(KEY_MAGIC_SEARCH_ENABLED, false))
+
+    /** Whether Magic Search is consented on (r26; default false). */
+    val magicSearchEnabled: StateFlow<Boolean> = _magicSearchEnabled.asStateFlow()
 
     private val _appearance = MutableStateFlow(
         Appearance(
@@ -96,6 +121,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         if (enabled == _peopleAlbumsEnabled.value) return
         _peopleAlbumsEnabled.value = enabled
         prefs.edit().putBoolean(KEY_PEOPLE_ALBUM_ENABLED, enabled).apply()
+    }
+
+    /** Sets the Magic Search consent (r26) and persists it write-through. */
+    fun setMagicSearchEnabled(enabled: Boolean) {
+        if (enabled == _magicSearchEnabled.value) return
+        _magicSearchEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_MAGIC_SEARCH_ENABLED, enabled).apply()
     }
 
     fun setLayout(layout: LayoutStyle) {

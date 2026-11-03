@@ -45,6 +45,19 @@ import org.json.JSONObject
  * primitive). Honest caveat, not an overpromise: manual edits persist
  * only until the next [clusterFaces] pass recomputes assignments from
  * the embeddings --- they are not sticky.
+ *
+ * r26 adds the semantic (Magic Search) layer over the same two state
+ * machines: [initSemantic] / [semanticState] (a THIRD open/closed state
+ * --- the CLIP half of an already-initialized engine, tracked like
+ * [initialize]'s error so [semanticState] stays honest, reset by
+ * [release] with the engine), the CLIP encoders ([clipImageEmbedding] /
+ * [clipTextEmbedding] --- 512-float vectors; the engine's own
+ * IllegalStateException propagates unchanged, including its "call
+ * nativeInitSemantic first" message), and the CLIP vector-index store
+ * functions over the SAME face-index store ([putClip] /
+ * [deleteClipsForFiles] / [clipIndexedFileIds] / [clipCount] /
+ * [searchClips] / [fillClipIndex]): clip rows live in the same
+ * `ml-index.sqlite`, so the r23 open-store gate governs them too.
  */
 class MlEngine(private val bridge: Bridge = JniBridge) {
 
@@ -98,6 +111,12 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      */
     data class FaceCluster(val clusterId: String, val faceCount: Int, val coverFileId: Long?)
 
+    /** One CLIP vector-search match (r26): the matched file and its vector distance (vecdb order, never re-sorted). */
+    data class ClipMatch(val fileId: Long, val distance: Float)
+
+    /** The `nativeStoreFillClipIndex` report (r26). outcome is one of "Completed" / "AlreadyFilled" / "Superseded". */
+    data class ClipFillReport(val outcome: String, val rows: Int, val indexed: Int, val skipped: Int, val resumed: Boolean)
+
     /** The coarse session state every UI surfaces. */
     sealed class State {
         /**
@@ -114,6 +133,29 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
 
         /** The last [initialize] failed; [message] says why (no session). */
         data class Error(val message: String) : State()
+    }
+
+    /**
+     * The semantic (CLIP) half's coarse state (r26), tracked like [State]
+     * so callers surface it directly. [LibraryMissing] dominates;
+     * [Uninitialized] covers both "the engine session itself is missing
+     * (initialize first)" and "released".
+     */
+    sealed class SemanticState {
+        /**
+         * `libtoad_ml_jni.so` is not in this build (built only with the
+         * engine property); no semantic operation can run.
+         */
+        object LibraryMissing : SemanticState()
+
+        /** Engine session not initialized (`initialize` first) or released. */
+        object Uninitialized : SemanticState()
+
+        /** [initSemantic] succeeded; CLIP embeddings can run. */
+        object Ready : SemanticState()
+
+        /** The last [initSemantic] failed; [message] says why (no semantic half). */
+        data class Error(val message: String) : SemanticState()
     }
 
     /**
@@ -147,6 +189,17 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         fun nativeStoreClusterFileIds(clusterId: String): LongArray
         fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean
         fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean
+
+        // ---- r26 ----
+        fun nativeInitSemantic(modelsDir: String): Boolean
+        fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray
+        fun nativeClipTextEmbedding(text: String): FloatArray
+        fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean
+        fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean
+        fun nativeStoreClipIndexedFileIds(): LongArray
+        fun nativeStoreClipCount(): Long
+        fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String
+        fun nativeStoreFillClipIndex(): String
     }
 
     private object JniBridge : Bridge {
@@ -190,12 +243,42 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
 
         override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean =
             MlEngineJni.nativeStoreRemoveFacesFromCluster(clusterId, fileIds)
+
+        // ---- r26 ----
+        override fun nativeInitSemantic(modelsDir: String): Boolean =
+            MlEngineJni.nativeInitSemantic(modelsDir)
+
+        override fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray =
+            MlEngineJni.nativeClipImageEmbeddingJpeg(jpegBytes)
+
+        override fun nativeClipTextEmbedding(text: String): FloatArray =
+            MlEngineJni.nativeClipTextEmbedding(text)
+
+        override fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean =
+            MlEngineJni.nativeStorePutClip(fileId, embedding)
+
+        override fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean =
+            MlEngineJni.nativeStoreDeleteClipsForFiles(fileIds)
+
+        override fun nativeStoreClipIndexedFileIds(): LongArray =
+            MlEngineJni.nativeStoreClipIndexedFileIds()
+
+        override fun nativeStoreClipCount(): Long = MlEngineJni.nativeStoreClipCount()
+
+        override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
+            MlEngineJni.nativeStoreSearchClips(queryEmbedding, limit)
+
+        override fun nativeStoreFillClipIndex(): String = MlEngineJni.nativeStoreFillClipIndex()
     }
 
     private var sessionOpen = false
     private var initError: String? = null
     /** The r23 face-index store's open state (separate from the session). */
     private var faceIndexOpen = false
+    /** The r26 semantic half's ready state (requires the engine session). */
+    private var semanticReady = false
+    /** The last [initSemantic] failure, tracked like [initError]. */
+    private var semanticError: String? = null
 
     /** Instance-side guard for the r23 store state machine. */
     private fun requireFaceIndexOpen() {
@@ -282,6 +365,10 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         // nativeRelease closes the face-index store too (the r23 contract);
         // the facade state follows without a second native call.
         faceIndexOpen = false
+        // It also tears the whole engine --- the semantic half with it (the
+        // r26 contract); same discipline, no second native call.
+        semanticReady = false
+        semanticError = null
         return freed
     }
 
@@ -467,6 +554,165 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         return bridge.nativeStoreRemoveFacesFromCluster(clusterId, fileIds)
     }
 
+    // ---- r26: the semantic (Magic Search) layer ----
+
+    /**
+     * Opens the semantic (CLIP) half of an ALREADY-initialized engine
+     * session over [modelsDir] (r26). Returns the new [SemanticState]:
+     * [SemanticState.Ready] on a true [Bridge.nativeInitSemantic],
+     * [SemanticState.Error] on a false one (the flag stays false),
+     * [SemanticState.LibraryMissing] when the build carries no library
+     * (no native call). Requires nothing about the face-index store; an
+     * IllegalStateException from the native layer (e.g. no engine
+     * session --- initialize first) propagates unchanged.
+     */
+    @Synchronized
+    fun initSemantic(modelsDir: String): SemanticState {
+        if (!bridge.available) return SemanticState.LibraryMissing
+        return if (bridge.nativeInitSemantic(modelsDir)) {
+            semanticReady = true
+            semanticError = null
+            SemanticState.Ready
+        } else {
+            semanticReady = false
+            semanticError = "nativeInitSemantic failed for $modelsDir"
+            SemanticState.Error(semanticError!!)
+        }
+    }
+
+    /**
+     * The current [SemanticState] (r26); [SemanticState.LibraryMissing]
+     * dominates when set, then a remembered [initSemantic] error, then
+     * ready, then uninitialized (no engine session, or released).
+     */
+    @Synchronized
+    fun semanticState(): SemanticState = when {
+        !bridge.available -> SemanticState.LibraryMissing
+        semanticError != null -> SemanticState.Error(semanticError!!)
+        semanticReady -> SemanticState.Ready
+        else -> SemanticState.Uninitialized
+    }
+
+    /**
+     * The 512-float L2-normalized CLIP image embedding for one JPEG's
+     * bytes (r26). Throws IllegalStateException with the Rust message
+     * when the engine (or its semantic half) is uninitialized or the
+     * call fails, and IllegalStateException (not UnsatisfiedLinkError)
+     * on a library-less build.
+     */
+    @Synchronized
+    fun clipImageEmbedding(jpegBytes: ByteArray): FloatArray {
+        if (!bridge.available) {
+            throw IllegalStateException("engine library not in this build (build with the engine flag)")
+        }
+        return bridge.nativeClipImageEmbeddingJpeg(jpegBytes)
+    }
+
+    /**
+     * The 512-float CLIP text embedding for [text] (r26) --- the query
+     * side of Magic Search. Throws IllegalStateException with the Rust
+     * message when the engine (or its semantic half) is uninitialized or
+     * the call fails, and IllegalStateException (not
+     * UnsatisfiedLinkError) on a library-less build.
+     */
+    @Synchronized
+    fun clipTextEmbedding(text: String): FloatArray {
+        if (!bridge.available) {
+            throw IllegalStateException("engine library not in this build (build with the engine flag)")
+        }
+        return bridge.nativeClipTextEmbedding(text)
+    }
+
+    /**
+     * Upserts one CLIP embedding row for [fileId] (r26), returning the
+     * native boolean (true on success). Clip rows live in the SAME
+     * `ml-index.sqlite` as the face rows, so the r23 open-store gate
+     * governs this too. Throws IllegalArgumentException when [embedding]
+     * is not [CLIP_EMBEDDING_DIM] floats (checked HERE, before any
+     * native call --- the putFace discipline, mirrored Rust-side as
+     * defense in depth) and IllegalStateException when the store is not
+     * open or the native upsert fails.
+     */
+    @Synchronized
+    fun putClip(fileId: Long, embedding: FloatArray): Boolean {
+        requireFaceIndexOpen()
+        require(embedding.size == CLIP_EMBEDDING_DIM) {
+            "embedding must be $CLIP_EMBEDDING_DIM floats; got ${embedding.size}"
+        }
+        return bridge.nativeStorePutClip(fileId, embedding)
+    }
+
+    /**
+     * Deletes every CLIP row for [fileIds] (r26) --- the semantic twin of
+     * the r24 face invalidation delete. An empty array is a no-op
+     * returning true. Throws IllegalStateException when the store is not
+     * open (or the build is library-less) or the native call fails.
+     */
+    @Synchronized
+    fun deleteClipsForFiles(fileIds: LongArray): Boolean {
+        requireFaceIndexOpen()
+        return bridge.nativeStoreDeleteClipsForFiles(fileIds)
+    }
+
+    /**
+     * The file IDs that currently carry CLIP rows at the vendored pin's
+     * model version (r26), sorted ascending --- the Magic-Search
+     * resumability read. An empty list means no indexed files (including
+     * "every row is older than the current model version"). Throws
+     * IllegalStateException when the store is not open (or the build is
+     * library-less).
+     */
+    @Synchronized
+    fun clipIndexedFileIds(): List<Long> {
+        requireFaceIndexOpen()
+        return bridge.nativeStoreClipIndexedFileIds().toList()
+    }
+
+    /**
+     * Total CLIP rows in the store (r26). Throws IllegalStateException
+     * when the store is not open (or the build is library-less).
+     */
+    @Synchronized
+    fun clipCount(): Long {
+        requireFaceIndexOpen()
+        return bridge.nativeStoreClipCount()
+    }
+
+    /**
+     * Runs the top-K vector search over the CLIP index (r26) and parses
+     * the JSON into [ClipMatch] rows in the vecdb's own order (nearest
+     * first; preserved verbatim --- the parse never re-sorts). Throws
+     * IllegalArgumentException when [queryEmbedding] is not
+     * [CLIP_EMBEDDING_DIM] floats or [limit] is not positive (both
+     * checked HERE, before any native call) and IllegalStateException
+     * when the store is not open (or the build is library-less), the
+     * native call fails, or the JSON shape is not the pinned
+     * `[{"file_id":…,"distance":…}]` array.
+     */
+    @Synchronized
+    fun searchClips(queryEmbedding: FloatArray, limit: Int): List<ClipMatch> {
+        requireFaceIndexOpen()
+        require(queryEmbedding.size == CLIP_EMBEDDING_DIM) {
+            "query embedding must be $CLIP_EMBEDDING_DIM floats; got ${queryEmbedding.size}"
+        }
+        require(limit > 0) { "limit must be positive; got $limit" }
+        return parseClipMatches(bridge.nativeStoreSearchClips(queryEmbedding, limit))
+    }
+
+    /**
+     * Fills the CLIP vector index from the SQLite rows (r26) and parses
+     * the JSON into [ClipFillReport]; `outcome` is validated to be one of
+     * the three pinned strings. Throws IllegalStateException when the
+     * store is not open (or the build is library-less), the native call
+     * fails, or the JSON shape is not the pinned
+     * `{"outcome":…,"rows":…,"indexed":…,"skipped":…,"resumed":…}`.
+     */
+    @Synchronized
+    fun fillClipIndex(): ClipFillReport {
+        requireFaceIndexOpen()
+        return parseClipFillReport(bridge.nativeStoreFillClipIndex())
+    }
+
     internal companion object {
         /**
          * The r23 face-embedding dimension (upstream MobileFaceNet output;
@@ -478,11 +724,20 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         internal const val EMBEDDING_STRIDE = FACE_EMBEDDING_DIM + 5
 
         /**
+         * The r26 CLIP-embedding dimension (upstream MobileCLIP-S2 output;
+         * `CLIP_EMBEDDING_DIMENSIONS` in the vendored store).
+         */
+        internal const val CLIP_EMBEDDING_DIM = 512
+
+        /**
          * The facade-side message for store operations run before
          * [openFaceIndex] (the r23 state machine's failure shape).
          */
         private const val FACE_INDEX_NOT_OPEN =
             "face index store is not open; call openFaceIndex(dir) first"
+
+        /** The pinned `nativeStoreFillClipIndex` outcome strings (r26). */
+        private val CLIP_FILL_OUTCOMES = setOf("Completed", "AlreadyFilled", "Superseded")
 
         /**
          * Maps the JNI contract's flat `N * 5` output into boxes; a length
@@ -566,6 +821,60 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
                 clusters
             } catch (e: Exception) {
                 throw IllegalStateException("malformed face clusters JSON: ${e.message}")
+            }
+        }
+
+        /**
+         * Parses the r26 `nativeStoreSearchClips` JSON array into
+         * [ClipMatch] rows, preserving the vecdb's own order verbatim.
+         * Shapes other than the pinned `[{"file_id":N,"distance":F}]` ---
+         * a non-array envelope, a missing field, a wrong field type, an
+         * unparsable file id --- fail as IllegalStateException (the
+         * facade's own failure shape), exactly like [parseFaceClusters].
+         */
+        internal fun parseClipMatches(json: String): List<ClipMatch> {
+            return try {
+                val array = JSONArray(json)
+                val matches = ArrayList<ClipMatch>(array.length())
+                for (i in 0 until array.length()) {
+                    val entry = array.getJSONObject(i)
+                    matches.add(
+                        ClipMatch(
+                            fileId = entry.getLong("file_id"),
+                            distance = entry.getDouble("distance").toFloat(),
+                        )
+                    )
+                }
+                matches
+            } catch (e: Exception) {
+                throw IllegalStateException("malformed clip matches JSON: ${e.message}")
+            }
+        }
+
+        /**
+         * Parses the r26 `nativeStoreFillClipIndex` JSON object into
+         * [ClipFillReport]. Shapes other than the pinned
+         * `{"outcome":"…","rows":N,"indexed":M,"skipped":K,"resumed":bool}` ---
+         * a non-object envelope, a missing field, a wrong type, or an
+         * outcome string outside the three pinned ones --- fail as
+         * IllegalStateException (the facade's own failure shape).
+         */
+        internal fun parseClipFillReport(json: String): ClipFillReport {
+            return try {
+                val obj = JSONObject(json)
+                val outcome = obj.getString("outcome")
+                check(outcome in CLIP_FILL_OUTCOMES) {
+                    "clip fill outcome \"$outcome\" is not one of $CLIP_FILL_OUTCOMES"
+                }
+                ClipFillReport(
+                    outcome = outcome,
+                    rows = obj.getInt("rows"),
+                    indexed = obj.getInt("indexed"),
+                    skipped = obj.getInt("skipped"),
+                    resumed = obj.getBoolean("resumed"),
+                )
+            } catch (e: Exception) {
+                throw IllegalStateException("malformed clip fill report JSON: ${e.message}")
             }
         }
     }

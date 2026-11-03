@@ -58,7 +58,9 @@ class PeopleReclusterRemapTest {
         assertFalse(PeopleReclusterRemap.needsReconcile(state, setOf("c1", "c2")))
         assertFalse(PeopleReclusterRemap.needsReconcile(PeopleState.EMPTY, emptySet()))
         assertTrue(PeopleReclusterRemap.needsReconcile(state, setOf("c1")))
-        assertTrue(PeopleReclusterRemap.needsReconcile(state, setOf("c1", "c2", "c3")))
+        // Extra live ids an edit never keyed to are irrelevant: with every
+        // edited id resolving again the answer is back to false.
+        assertFalse(PeopleReclusterRemap.needsReconcile(state, setOf("c1", "c2", "c3")))
     }
 
     // ---- the survival paths ----
@@ -169,7 +171,8 @@ class PeopleReclusterRemapTest {
 
         assertEquals(1, plan.removals.size)
         assertEquals("q", plan.removals[0].first)
-        assertEquals(longArrayOf(50L), plan.removals[0].second)
+        // LongArray content compare (assertEquals on arrays is identity).
+        assertTrue(plan.removals[0].second.contentEquals(longArrayOf(50L)))
         // The record survives for the NEXT recluster, re-keyed:
         assertEquals(mapOf("q" to setOf(50L)), plan.state.removals)
         // ... and the fingerprint is the predicted post-removal set:

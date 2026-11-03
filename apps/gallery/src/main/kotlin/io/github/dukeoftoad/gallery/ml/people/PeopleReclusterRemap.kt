@@ -307,7 +307,11 @@ object PeopleReclusterRemap {
         recorded: Set<Long>,
         liveMemberships: Map<String, Set<Long>>,
     ): Comparator<FaceCluster> =
-        compareByDescending<FaceCluster> { overlap(liveMemberships[it.clusterId], recorded) }
-            .thenByDescending { it.faceCount }
+        // ASCENDING tiers so that maxWith picks the documented winner
+        // (a DESCENDING order makes maxWith pick the WORST match): the
+        // most shared files, then the bigger cluster, then the smaller id
+        // (thenByDescending on the id --- the SMALLER id ranks greater).
+        compareBy<FaceCluster> { overlap(liveMemberships[it.clusterId], recorded) }
+            .thenBy { it.faceCount }
             .thenByDescending { it.clusterId }
 }

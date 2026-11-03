@@ -173,8 +173,8 @@ jobs:
           APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
           EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
           VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/gallery/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
-          LAST_ROUND="$(grep -oE 'versionCode [0-9]+ . r[0-9]+ round' apps/gallery/build.gradle.kts | tail -1)"
-          RNN="$(printf '%s' "$LAST_ROUND" | grep -oE 'r[0-9]+')"
+          LAST_ROUND="$(grep -oE 'versionCode [0-9]+ .r[0-9]+ round' apps/gallery/build.gradle.kts | tail -1 || true)"
+          RNN="$(printf '%s' "$LAST_ROUND" | grep -oE 'r[0-9]+' || true)"
           ROUND_VC="$(printf '%s' "$LAST_ROUND" | grep -oE '[0-9]+' | head -1)"
           [ -n "$VERSION_NAME" ] || { echo '::error::could not derive versionName'; exit 1; }
           [ -n "$RNN" ] || { echo '::error::could not derive the rNN tag from the last round comment'; exit 1; }

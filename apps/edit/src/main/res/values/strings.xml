@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- r29/r30: the toadGALLERY Edit user-facing strings. Same copy rules as
      the gallery: honest plain language, no dark patterns, no network
-     promises. The editor never narrates success itself --- it answers the
+     promises. The editor never narrates success itself (it answers the
      contract result and the GALLERY narrates (the saved copy appears
      through MediaStore observation). -->
 <resources>

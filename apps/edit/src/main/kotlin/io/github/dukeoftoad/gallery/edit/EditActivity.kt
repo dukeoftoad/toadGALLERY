@@ -299,7 +299,11 @@ class EditActivity : ComponentActivity() {
             }
             val values = ContentValues().apply {
                 ExportPlan.insertValues(displayName, api29Plus).forEach { (key, value) ->
-                    put(key, value)
+                    when (value) {
+                        is String -> put(key, value)
+                        is Int -> put(key, value)
+                        else -> {}
+                    }
                 }
             }
             val inserted = contentResolver.insert(collection, values)
@@ -320,7 +324,13 @@ class EditActivity : ComponentActivity() {
             // 6. Finalize (clear IS_PENDING) and answer OK.
             if (api29Plus) {
                 val finalize = ContentValues().apply {
-                    ExportPlan.finalizeValues(api29Plus).forEach { (key, value) -> put(key, value) }
+                    ExportPlan.finalizeValues(api29Plus).forEach { (key, value) ->
+                        when (value) {
+                            is String -> put(key, value)
+                            is Int -> put(key, value)
+                            else -> {}
+                        }
+                    }
                 }
                 contentResolver.update(inserted, finalize, null, null)
             }
@@ -385,10 +395,15 @@ class EditActivity : ComponentActivity() {
         } ?: return
         contentResolver.openFileDescriptor(outputUri, "rw")?.use { fd ->
             val target = androidx.exifinterface.media.ExifInterface(fd.fileDescriptor)
-            for (tag in sourceExif.tagNames) {
+            // androidx.exifinterface exposes NO public tag enumeration (the
+            // gallery's r15 EditableExifCodec established the explicit-list
+            // precedent), so the copy walks MetadataPolicyApplier's
+            // COPYABLE_TAGS and skips the tags the source does not carry.
+            for (tag in MetadataPolicyApplier.COPYABLE_TAGS) {
+                val value = sourceExif.getAttribute(tag) ?: continue
                 when (MetadataPolicyApplier.decide(policy, tag)) {
                     MetadataPolicyApplier.TagDecision.Copy ->
-                        target.setAttribute(tag, sourceExif.getAttribute(tag))
+                        target.setAttribute(tag, value)
                     MetadataPolicyApplier.TagDecision.Strip ->
                         target.setAttribute(tag, null)
                 }

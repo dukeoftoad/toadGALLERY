@@ -68,7 +68,7 @@ class EditRecipeTest {
     }
 
     @Test
-    fun `lut intensity coerces into 0..100 and a blank id means no look`() {
+    fun `lut intensity coerces into the 0-to-100 range and a blank id means no look`() {
         val coerced = EditRecipeCodec.fromJson(
             "{\"schemaVersion\":1,\"lut\":{\"lutId\":\"x\",\"intensity\":400}}",
         )

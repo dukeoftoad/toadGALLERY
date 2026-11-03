@@ -1,0 +1,176 @@
+name: Engine APK (test build)
+
+# toadGALLERY --- isolated engine-enabled TEST APK build (2026-11-03 session).
+#
+# Maintainer directive (2026-11-03, isolated-work session): build the
+# build-29 engine-enabled DEBUG APK for on-device dogfood validation (the
+# pending Phase 5 r24/r25 dogfood items in tasks.md + the device-validation
+# checklist sections) on a dedicated branch that touches NO source, NO
+# docs, and NO shared workflow --- zero file overlap with the parallel
+# Magic Search round, so no merge conflicts are possible. The branch is a
+# byte-identical copy of main (r25, versionCode 29): ente AI/ML engine,
+# EXIF metadata layer, timelines, search, People UI, background queue.
+#
+# Why a separate file (not a ci.yml edit): ci.yml is the canonical CI
+# (ADR-0013) and the parallel round is expected to touch it; this workflow
+# is branch-scoped and purely additive. It replicates ci.yml's
+# engine-android job VERBATIM (same pins, same cache keys, same
+# native-library gate) plus exactly two additions: the APK identity check
+# and the artifact upload. ci.yml's engine-android job on main keeps its
+# zero-upload directive --- this is a TEST-BRANCH pipeline, not a release:
+# no tag is cut, no GitHub Release is created (the Phase 5 release freeze
+# stands), debug key only (same shape as the r23 device artifact).
+#
+# Triggers: pushes to tg-engine-apk-* branches and manual dispatch.
+
+on:
+  push:
+    branches: [ 'tg-engine-apk-*' ]
+  workflow_dispatch:
+
+concurrency:
+  group: engine-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine-apk:
+    name: Engine-enabled debug APK (arm64-v8a) + artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust (stable, minimal)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      # Same cache keys as ci.yml's engine-android job. Caches saved on the
+      # default branch are restorable from this branch, so the Rust + Gradle
+      # state from main's green CI is reused (warm build).
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: cargo-android-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: cargo-android-${{ runner.os }}-
+
+      # Cache the cargo-ndk BINARY alone so `cargo install` is skipped
+      # entirely on hit (the command -v guard below makes the install a
+      # no-op, so no ~/.cargo/.crates* metadata needs caching).
+      - name: Cache cargo-ndk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-ndk
+          key: cargo-ndk-${{ runner.os }}-3.5.4
+
+      - name: Install cargo-ndk (pinned)
+        run: command -v cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --version 3.5.4 --locked
+
+      # Same NDK resolution as ci.yml's engine-android job: pick the newest
+      # preinstalled NDK and export it (engine/scripts/build-android.sh also
+      # discovers it itself; resolving here documents the choice in the log).
+      - name: Resolve the preinstalled Android NDK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          NDK_HOME="$(ls -d "$SDK_ROOT"/ndk/* 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$NDK_HOME" ]; then
+            echo "No preinstalled NDK under $SDK_ROOT/ndk --- the build script's sdkmanager fallback will install one."
+          else
+            echo "Using preinstalled NDK: $NDK_HOME"
+            echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # Same SDK package pins as ci.yml (platform 36, build-tools 36).
+      - name: Install Android SDK packages (platform 36, build-tools 36)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SDK_MGR="$(command -v sdkmanager)"
+          else
+            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
+          fi
+          echo "Using sdkmanager: $SDK_MGR"
+          yes | "$SDK_MGR" --licenses > /dev/null || true
+          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
+          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # Verbatim from ci.yml's engine-android job: -PwithEngine registers
+      # the buildRustEngine Exec task; its preBuild dependency runs
+      # engine/scripts/build-android.sh (idempotent): cargo-ndk builds
+      # libtoad_ml_jni.so + stages the sha256-pinned libonnxruntime.so
+      # (ORT 1.31.0 official AAR) for arm64-v8a into
+      # apps/gallery/build/rust-jniLibs/, which the jniLibs srcDir packages.
+      - name: Engine-enabled debug assemble (arm64-v8a)
+        run: ./gradlew :apps:gallery:assembleDebug -PwithEngine --no-daemon --stacktrace
+
+      # Verbatim gate from ci.yml's engine-android job: the engine-enabled
+      # APK must actually carry BOTH native libraries (a silently broken
+      # jniLibs wiring would otherwise pass the assemble step).
+      - name: Verify the native libraries are packaged
+        run: |
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          echo "APK: $APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
+
+      # Test-build addition 1: pin the APK's identity in the log and fail
+      # the build on any mismatch, so a wrong variant or version can never
+      # be delivered as the build-29 dogfood artifact.
+      - name: Verify APK identity (package + versionCode 29)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort | tail -1)"
+          [ -n "$AAPT2" ] || { echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; }
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
+          echo "badging: $BADGE"
+          echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.debug'" \
+            || { echo "::error::unexpected application id (expected the .debug variant)"; exit 1; }
+          echo "$BADGE" | grep -q "versionCode='29'" \
+            || { echo "::error::unexpected versionCode (expected 29)"; exit 1; }
+
+      # Test-build addition 2: stage under the r23-convention name and
+      # upload as a workflow artifact. NOT a release: no tag is cut and the
+      # Phase 5 release freeze stands; debug key only, exactly like the r23
+      # device artifact (toadGALLERY-0.4.2-alpha-r23-engine-debug.apk).
+      - name: Stage the APK (r23-convention name)
+        run: |
+          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          mkdir -p engine-apk-staging
+          cp "$APK" "engine-apk-staging/toadGALLERY-0.4.2-alpha-r25-engine-debug.apk"
+          ls -la engine-apk-staging/
+          sha256sum engine-apk-staging/*.apk
+
+      - name: Upload engine APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: toadGALLERY-0.4.2-alpha-r25-engine-debug
+          path: engine-apk-staging/toadGALLERY-0.4.2-alpha-r25-engine-debug.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

@@ -39,6 +39,10 @@ class TimelineRowsTest {
     private fun secOf(date: LocalDate): Long = date.atStartOfDay(ZoneOffset.UTC).toEpochSecond()
 
     /** UTC midnight of [date], as an epoch MILLI (the effective-instant unit). */
+    /** The r27 WEEK tests' convenience: a calendar date as three ints. */
+    private fun millisOf(year: Int, month: Int, day: Int): Long =
+        millisOf(java.time.LocalDate.of(year, month, day))
+
     private fun millisOf(date: LocalDate): Long = secOf(date) * 1000
 
     /** Groups [items] (nulls = not-yet-loaded paging placeholders). */

@@ -278,6 +278,32 @@ android {
         // in-session interval choice). Per maintainer directive: NO new
         // device builds until Phase 5 completes; this and subsequent
         // rounds ride CI from main only.
+        // versionCode 32 (r28 round): the Workstream 8 hardening round +
+        // the Phase 5 exit gate --- tests and records only, plus the one
+        // sanctioned production seam: (1) the egress proof suite
+        // (EgressSolePathTest: whole-repo URL/java.net/library/socket
+        // scans, the allowlist's exact one-entry pin, the Gradle INTERNET
+        // gate wiring, no-cleartext/no-network-config) +
+        // HttpModelDownloaderRedirectTest (the full 301/302/303/307/308
+        // fail-closed matrix, never-follow proofs); (2) the three-gate
+        // vault exclusion suites (enqueue: FaceIndexQueueVaultExclusionTest
+        // incl. the orphan-delete purge; pre-byte-read:
+        // VaultExclusionReadGateTest over the eligibility/permission/cap
+        // boundary; pre-persistence: PeopleVaultExclusionPersistenceTest
+        // incl. the face-index backup/transfer exclusion pins); (3) the
+        // 10k/50k library benchmarks (LibraryScaleBenchmarkTest: timeline
+        // + folder windows, the Paging 3 walk, the reconciler diff, the
+        // filter projection, budgets documented in
+        // docs/phase-5/hardening.md); (4) the low-memory/ABI matrix
+        // verification (docs/phase-5/hardening.md + EnginePackagingPolicy
+        // pins); (5) the ADR-0020 offline model pack:
+        // BundledModelAssets/BundledFirstModelDownloader (bundled-first
+        // provisioning with identical verify-then-commit discipline) +
+        // the -PwithBundledModels assets srcDir + the branch-scoped
+        // modelpack-apk.yml workflow. versionName stays 0.4.2-alpha: the
+        // Phase 5 release-freeze lift is a records update; the next
+        // release tags the whole 0.4.2-alpha line (codes 27-32; 30 and 31
+        // are the parallel r26/r27 sibling rounds, cut from the same 29).
         versionCode = 32
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
@@ -401,6 +427,38 @@ if (withEngine) {
     // preBuild is registered by AGP after this script evaluates, so anchor
     // the dependency the same way the privacy gate anchors on assemble.
     tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(buildRustEngine) }
+}
+
+// --- Optional offline model-pack assets (r28, ADR-0020 offline pack) ---------
+// The OTHER half of ADR-0020's delivery decision ("CI retains the
+// ability to ship an offline pack"): a build assembled with
+// -PwithBundledModels packages the pinned model bytes into the APK's
+// assets/models/ directory, and the app's BundledFirstModelDownloader
+// (ml/engine/BundledModelSource.kt) provisions from the bundle before
+// ever consulting the network --- a device provisioned from such a
+// build never opens a socket. Without the property NOTHING here exists
+// and the build is byte-for-byte the ordinary one (models download on
+// demand, the r22 ADR-0020 default).
+//
+// Like the engine jniLibs srcDir above, the assets live in the BUILD
+// directory --- never src/main --- so the source tree stays clean: the
+// modelpack-apk.yml workflow stages the sha256-verified FACE pack
+// (sizes + hashes pinned in ModelManifest.kt) into
+// apps/gallery/build/bundled-models/models/ before assembling. No
+// Gradle task downloads anything: the staging is CI's job, keeping the
+// build itself network-free.
+val withBundledModels = providers.gradleProperty("withBundledModels").isPresent
+if (withBundledModels) {
+    android {
+        sourceSets {
+            // Same AGP 9 plain-File resolution as the engine jniLibs
+            // srcDir above (the directory is created by the workflow
+            // before this srcDir is ever read).
+            getByName("main").assets.srcDir(
+                layout.buildDirectory.dir("bundled-models").get().asFile
+            )
+        }
+    }
 }
 
 /**

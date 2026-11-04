@@ -67,7 +67,7 @@ class TextLayersTest {
     @Test
     fun `sizePxFor is percent of the min edge`() {
         assertEquals(200f, TextLayout.sizePxFor(20, 1000f), 0f)
-        assertEquals(200f, TextLayout.sizePxFor(20, 500f), 0f) // portrait: min edge 500
+        assertEquals(100f, TextLayout.sizePxFor(20, 500f), 0f) // portrait: min edge 500 -> 20% of 500
         assertEquals(600f, TextLayout.sizePxFor(150, 400f), 0f)
         assertEquals(0f, TextLayout.sizePxFor(0, 1000f), 0f)
         assertEquals(300f, TextLayout.sizePxFor(300, 100f), 0f)

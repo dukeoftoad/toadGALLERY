@@ -54,7 +54,9 @@ class TextLayersRecipeTest {
         val restored = valid("{\"schemaVersion\":1,\"brightness\":10}")
         assertNull(restored.textLayers)
         assertTrue(restored.isTextIdentity)
-        assertTrue(restored.isIdentity) // everything else identity too
+        // brightness 10 rides through untouched --- the recipe is NOT
+        // identity (only its TEXT half is); the absent key corrupts nothing.
+        assertFalse(restored.isIdentity)
     }
 
     @Test

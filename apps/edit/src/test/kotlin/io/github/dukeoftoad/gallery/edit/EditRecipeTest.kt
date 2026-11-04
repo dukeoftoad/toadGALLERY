@@ -39,10 +39,56 @@ class EditRecipeTest {
             ),
             vignette = 45,
             sharpness = 60,
+            lut = LutSelection(lutId = "warm-film", intensity = 70),
         )
         val parsed = EditRecipeCodec.fromJson(EditRecipeCodec.toJson(recipe))
         val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
         assertEquals(recipe.copy(schemaVersion = restored.schemaVersion), restored)
+    }
+
+    // ---- Codec: the r33 LUT selection ----
+
+    @Test
+    fun `a pre-r33 sidecar loads with no lut selection`() {
+        // No `lut` key at all: every r30-r32 sidecar in the wild.
+        val parsed = EditRecipeCodec.fromJson("{\"schemaVersion\":1,\"brightness\":10}")
+        val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
+        assertNull(restored.lut)
+        assertEquals(10, restored.brightness)
+    }
+
+    @Test
+    fun `an unresolvable lut id survives the round-trip verbatim`() {
+        // The recipe is the user's data: an id this build cannot resolve
+        // (a newer bundle, a hand-edited sidecar) still round-trips.
+        val recipe = EditRecipe(lut = LutSelection(lutId = "a-look-from-the-future", intensity = 33))
+        val restored = (EditRecipeCodec.fromJson(EditRecipeCodec.toJson(recipe))
+            as EditRecipeCodec.ParseResult.Valid).recipe
+        assertEquals(LutSelection("a-look-from-the-future", 33), restored.lut)
+    }
+
+    @Test
+    fun `lut intensity coerces into the 0-to-100 range and a blank id means no look`() {
+        val coerced = EditRecipeCodec.fromJson(
+            "{\"schemaVersion\":1,\"lut\":{\"lutId\":\"x\",\"intensity\":400}}",
+        )
+        val restored = (coerced as EditRecipeCodec.ParseResult.Valid).recipe
+        assertEquals(100, restored.lut?.intensity)
+
+        val blank = EditRecipeCodec.fromJson("{\"schemaVersion\":1,\"lut\":{\"lutId\":\"  \"}}")
+        assertTrue((blank as EditRecipeCodec.ParseResult.Valid).recipe.lut == null)
+    }
+
+    @Test
+    fun `a dialed-out look is a filter identity but keeps the selection`() {
+        val dialedOut = EditRecipe(lut = LutSelection(lutId = "silver-mono", intensity = 0))
+        assertTrue(dialedOut.isIdentity)
+        assertTrue(dialedOut.isFilterIdentity)
+        assertEquals("silver-mono", dialedOut.lut?.lutId)
+
+        val dialedIn = EditRecipe(lut = LutSelection(lutId = "silver-mono", intensity = 1))
+        assertFalse(dialedIn.isIdentity)
+        assertFalse(dialedIn.isFilterIdentity)
     }
 
     @Test

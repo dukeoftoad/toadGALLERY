@@ -1,9 +1,9 @@
 package io.github.dukeoftoad.gallery.edit
 
 /**
- * The edit pipeline (r30, Phase 6 v1): applies a whole [EditRecipe] to a
- * pixel grid in ONE documented stage order, so preview and export agree
- * byte-for-byte by construction:
+ * The edit pipeline (r30, Phase 6 v1; the r33 filter stage): applies a
+ * whole [EditRecipe] to a pixel grid in ONE documented stage order, so
+ * preview and export agree byte-for-byte by construction:
  *
  *  1. flips (horizontal, then vertical)
  *  2. straighten (expanded canvas, transparent fill)
@@ -15,24 +15,42 @@ package io.github.dukeoftoad.gallery.edit
  *  7. saturation
  *  8. temperature / tint
  *  9. per-channel HSL bands
- * 10. vignette
- * 11. sharpen (unsharp mask)
+ * 10. LUT filter (the `.cube` look at its intensity; r33)
+ * 11. vignette
+ * 12. sharpen (unsharp mask)
  *
- * The identity recipe returns the input grid EXACTLY (no stage runs), so a
- * saved copy of an untouched session is a pure re-encode --- and the
- * crop-presets UI can trust the geometry plan below for its overlay math.
+ * The look stage sits AFTER the colour grade (the look grades the
+ * graded pixels, like a film stock over a developed negative) and
+ * BEFORE the spatial effects (vignette and sharpen are position
+ * masks; a colour-only look must not shift what they see).
+ *
+ * The identity recipe returns the input grid EXACTLY (no stage runs),
+ * so a saved copy of an untouched session is a pure re-encode --- and
+ * the crop-presets UI can trust the geometry plan below for its
+ * overlay math. A look at intensity 0 is dialed out: same fast path.
  */
 object EditPipeline {
 
     const val STAGE_ORDER: String =
         "flip -> straighten -> perspective -> quarterTurns -> crop -> " +
-            "tone LUT -> saturation -> temperature/tint -> HSL bands -> vignette -> sharpen"
+            "tone LUT -> saturation -> temperature/tint -> HSL bands -> " +
+            "LUT filter -> vignette -> sharpen"
 
+    /**
+     * Applies [recipe] to the grid. [filter] is the caller-RESOLVED
+     * `.cube` look for `recipe.lut` (the pipeline is pure --- it never
+     * touches assets); the stage runs only when the selection, the
+     * resolved look and the id PAIR UP (`filter.id == lutId`) and the
+     * intensity is above zero. Anything else --- no selection, an
+     * unresolvable id, a mismatched pairing --- degrades to no-look,
+     * never to a crash (the r33 tolerance contract).
+     */
     fun apply(
         pixels: IntArray,
         width: Int,
         height: Int,
         recipe: EditRecipe,
+        filter: CubeLut? = null,
     ): GeometryResult {
         if (recipe.isIdentity) return GeometryResult(pixels, width, height)
 
@@ -78,6 +96,14 @@ object EditPipeline {
         PixelOps.applySaturation(current, recipe.saturation)
         PixelOps.applyTemperatureTint(current, recipe.temperature, recipe.tint)
         applyHslBands(current, recipe.hslBands)
+
+        // ---- Filter (r33: the look over the graded pixels) ----
+        val selection = recipe.lut
+        if (selection != null && selection.intensity > 0 &&
+            filter != null && filter.id == selection.lutId
+        ) {
+            filter.applyTo(current, selection.intensity / 100.0)
+        }
 
         // ---- Grade + detail (display-space: after the crop) ----
         applyVignette(current, w, h, recipe.vignette)

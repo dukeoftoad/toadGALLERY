@@ -170,4 +170,66 @@ class PipelineExportTest {
         assertEquals("photo-edit.webp", ExportPlan.displayNameFor("photo.heic", ExportFormat.WEBP))
         assertEquals("image-edit.jpg", ExportPlan.displayNameFor(null, ExportFormat.JPEG))
     }
+
+    // ---- EditPipeline: the r33 LUT filter stage ----
+
+    /** A size-2 all-red look: any input maps to (1, 0, 0). */
+    private fun redLook(id: String): CubeLut =
+        when (val parsed = CubeLutParser.parse("LUT_3D_SIZE 2\n" + (0 until 8).joinToString("\n") { "1 0 0" }, id)) {
+            is CubeLutParser.Result.Valid -> parsed.lut
+            is CubeLutParser.Result.Invalid -> throw AssertionError(parsed.reason)
+        }
+
+    @Test
+    fun `a paired look applies over the graded pixels`() {
+        // 2x1 grey grid; the look is id-matched at full intensity.
+        val grey = 0xFF808080.toInt()
+        val grid = intArrayOf(grey, grey)
+        val recipe = EditRecipe(lut = LutSelection(lutId = "test-red", intensity = 100))
+        val result = EditPipeline.apply(grid, 2, 1, recipe, filter = redLook("test-red"))
+        assertEquals(0xFFFF0000.toInt(), result.pixels[0])
+        assertEquals(0xFFFF0000.toInt(), result.pixels[1])
+    }
+
+    @Test
+    fun `a mismatched or missing look degrades to no-look, never a crash`() {
+        val grey = 0xFF808080.toInt()
+        val base = intArrayOf(grey, grey)
+        val recipe = EditRecipe(lut = LutSelection(lutId = "test-red", intensity = 100))
+
+        // The id does not pair up with the resolved look.
+        val mismatched = EditPipeline.apply(base.copyOf(), 2, 1, recipe, filter = redLook("a-different-id"))
+        assertTrue(mismatched.pixels.contentEquals(base))
+
+        // No look resolved at all (the call-site default).
+        val unresolved = EditPipeline.apply(base.copyOf(), 2, 1, recipe)
+        assertTrue(unresolved.pixels.contentEquals(base))
+    }
+
+    @Test
+    fun `a dialed-out look takes the identity fast path`() {
+        // Intensity 0 with everything else identity: the exact-input
+        // fast path --- the same array instance comes back.
+        val grid = intArrayOf(0xFF112233.toInt(), 0xFF445566.toInt())
+        val recipe = EditRecipe(lut = LutSelection(lutId = "test-red", intensity = 0))
+        val result = EditPipeline.apply(grid, 2, 1, recipe, filter = redLook("test-red"))
+        assertTrue(result.pixels.contentEquals(grid))
+    }
+
+    @Test
+    fun `the look applies after the HSL stage and before vignette`() {
+        // Stage-order pin (the documented 12-stage order): the look
+        // grades the GRADED pixels. A half-intensity look over a pure
+        // green input through a look whose table is all-red: the colour
+        // stages leave (0,255,0) untouched (all zero), so the result is
+        // the straight half-lerp (128, 128, 0) --- proving the look ran
+        // at its own stage with the pre-look colour as its input.
+        val green = 0xFF00FF00.toInt()
+        val grid = intArrayOf(green)
+        val recipe = EditRecipe(lut = LutSelection(lutId = "test-red", intensity = 50))
+        val result = EditPipeline.apply(grid, 1, 1, recipe, filter = redLook("test-red"))
+        assertEquals(128, (result.pixels[0] shr 16) and 0xFF)
+        assertEquals(128, (result.pixels[0] shr 8) and 0xFF)
+        assertEquals(0, result.pixels[0] and 0xFF)
+    }
 }

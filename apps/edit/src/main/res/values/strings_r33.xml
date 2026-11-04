@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r33 (Phase 7 v2): the bundled LUT filter surface. The look names are
+     the five project-authored .cube looks (docs/phase-7/bundled-luts.md);
+     the None chip and the intensity slider follow the established
+     FilterChip/Slider + semantics conventions (r32). -->
+<resources>
+    <string name="editor_section_filters">Filters</string>
+    <string name="editor_filter_none">None</string>
+    <string name="editor_filter_warm_film">Warm Film</string>
+    <string name="editor_filter_cool_chrome">Cool Chrome</string>
+    <string name="editor_filter_silver_mono">Silver Mono</string>
+    <string name="editor_filter_matte_fade">Matte Fade</string>
+    <string name="editor_filter_vivid_punch">Vivid Punch</string>
+    <string name="editor_filter_intensity">Intensity: %1$d%%</string>
+    <string name="editor_a11y_filter_intensity">Filter intensity</string>
+    <!-- The r33 extension: the user-import flow (SAF pick -> the imported store -> the merged chip row). -->
+    <string name="editor_filter_import">Import look…</string>
+    <string name="editor_filter_import_failed">Couldn\'t import: %1$s</string>
+    <string name="editor_filter_remove">Remove look</string>
+</resources>

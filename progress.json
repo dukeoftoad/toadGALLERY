@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-04T07:17:39.205Z",
-  "updatedBy": "dashboard PATCH /api/progress",
+  "updatedAt": "2026-11-04T11:51:47.000Z",
+  "updatedBy": "git: the r34 merge-window docs pass (Run #12)",
   "statusFactors": {
     "done": 1,
     "in-progress": 0.5,
@@ -66,7 +66,7 @@
         "label": "Phase 7 — toadGALLERY Edit v2 (filters, text, stickers, drawing, mosaic, frames)",
         "weight": 12,
         "status": "in-progress",
-        "evidence": "task 1/5 merged: r33 LUT .cube + import as 314bd9c (PR #107); text tool contract at docs/phase-7/text-tool.md"
+        "evidence": "tasks 1-2/5 merged: r33 LUT .cube + import (PR #107, 314bd9c) + r34 text tool --- OFL fonts, TextLayers, the shared compositor, the editor surface (PR #109, 6bb17a4; CI 41822887363 green)"
       },
       {
         "id": "p8",

@@ -660,6 +660,7 @@
 | **#106** | `r31` (Phase 6) | `tg-p6-edit-v1-exit` (stacked on `tg-p6-edit-v1-core`): the Edit v1 exit round — the per-export metadata-policy CHOICE (the launch request's policy as the PRIVACY FLOOR per contract §4.4: the sheet may strip more, never less; pure `ExportPolicyChoice` + the sheet's chip selector + the honesty line tracking the pending choice + the recipe/sidecar independence pin) + the export preflight (the 48 MP decode guard, the generous byte model + 1.5×-headroom storage check over `StorageManager`, the documented process-death policy) + the applied-policy honesty narration (additive `SavedCopy.removesLocation`/`stripsAllMetadata` contract triggers; the gallery narrates WHAT was stripped) + the device checklist §20 robustness matrix; also fixes the invalid interior `---` in the strings.xml comments (a latent break for the edit app's first CI compile) | `938effa` | Squash-merged; CI green (the billing-recovery re-run 41752844238 on `c9340d5` + dispatch 41779955612 on the union head `9336412`); editor `versionCode 3` (`0.3.0-edit-alpha`); 25 new JVM tests (9 policy + 12 preflight + 4 contract); Phase 6 CODE-SIDE COMPLETE at this tip — the exit rides the §19/§20 device rows + the merge chain |
 | — | `r32` (Phase 6) | RIDES PR **#106** (same branch `tg-p6-edit-v1-exit`, no separate PR — the window-end job's "push whatever the tip is" clause covers it): the Phase 6 hardening pass — the accessibility sweep over the whole editor surface (13 sliders with name + live-value semantics, "BAND: CONTROL" HSL announcements, the flip toggles as proper FilterChips with 48dp targets and selected-state announcements), the straighten live-drag fix (thumb + preview follow the drag; no more wasted per-tick renders), and the tested pure `CropRect.fromPixelRect` inverse replacing the preset UI's inline division | rides #106 | Commits `32a6e6a`/`2bd8ee6`/`dce74c4` + the docs commit; editor `versionCode 4` (`0.3.1-edit-alpha`); 5 new JVM tests (GeometryTest 19 → 24); recorded against the #106 merge sha `938effa` |
 | **#107** | `r33` (Phase 7) | `tg-p7-lut-engine` (stacked on `tg-p6-edit-v1-exit`): the Phase 7 opener — the LUT `.cube` filter system COMPLETE with the user-import flow: the pure parser + trilinear sampler + intensity blend, the recipe's additive `LutSelection` with the unresolvable-id tolerance contract, pipeline stage 10 between the HSL bands and the spatial effects, the five project-authored bundled looks (deterministic committed generator; license record `docs/phase-7/bundled-luts.md`), the Filters chip row + intensity slider over the ONE shared look cache (preview ≡ export), and the extension — `ImportedLutStore` (parse-before-write, verbatim bytes, collision-suffixed ids that can never shadow the bundled set) + the SAF import chip + the merged registry + the remove-look affordance | `314bd9c` | **Squash-merged; CI green** (dispatch 41781166155 on the rebased head `ceb731b`); editor `versionCode 6` (`0.4.1-edit-alpha`); **51 new JVM tests** (edit module 158 → 209); the branch carries the external r29 manifest XML-comment CI fix (`a0a0b41`) + this session's window-end fast-forward (wave 8 cherry-picked back as `063e1e3` after the interleaving reset, + the docs recovery); the rebase onto post-#106 main landed 16 commits with the five code waves byte-identical to the pre-rebase tip |
+| **#109** | `r34` (Phase 7) | `tg-p7-text-tool`: the text tool round — the OFL licensing gate (four verbatim-bundled SIL OFL 1.1 faces, 1,260,724 bytes, `OFL.txt` beside each TTF, sha256-pinned, four §5 provenance rows + `docs/phase-7/bundled-fonts.md`), the additive `TextLayers` recipe (absent-key clean, unresolvable-fontId-degrades), the pure `TextLayout` + the ONE shared `TextCompositor` after the whole pixel pipeline (preview ≡ export, offset identity test-pinned), the editor surface (add/layer chips, per-commit drafts, font chips, sliders, eight named swatches with radio semantics, drag-to-position, remove; editor `versionCode 7`), the string recount 74 → 94; F-1 rides (the in-app Compose progress screen over the build-time `progress.json` mirror, gallery `versionCode 34`) + F-2 rides (the `toad-setup` composite action across all six workflows) | `6bb17a4` | **Squash-merged; CI green** (merge-gate run 41822887363 on head `699fd03` after the seven-iteration first-execution window: 41816563434 the F-1 mirror's Provider-in-SourceSet config failure → 41817387618 the three ProgressSnapshotTest locator paths → 41818233484 the editor's nine first-compile errors → 41819615881 the semantics-lambda shadowing → 41820303404 the dotted backticked test name → 41821587083 the two wrong assertions → green); **PR #108 closed** by the merge keyword; the edit module at **241 JVM tests** (+32, the r34 families' first execution; the delivery record's "22" corrected in roadmap v2.6) |
 
 ## Architecture Decision Records (ADR) Registry
 
@@ -870,3 +871,90 @@
 * **CI cost**: zero runs triggered by this window (the branch was never
   pushed; no dispatches). The merge-gate dispatch + the automatic main
   run are the NEXT window's first actions.
+
+### Run #12 — 2026-11-04 (latest) — the r34 merge window (credentials provided, F-12 executed)
+
+* **The directive**: a fresh maintainer PAT, with the instruction "don't
+  make mistakes" — execute F-12: push → PR (the description carries
+  `Closes #108`) → merge-gate CI → merge → the post-merge docs pass.
+* **Credential handling**: the PAT stored 0600 in /tmp only — never in
+  any file, reflog, or command echo (masked in all push output); used
+  via one-shot push URLs and API headers; verified before first use
+  (identity dukeoftoad, scopes repo + `workflow` — required, the branch
+  carries workflow changes —, 4988 rate-limit headroom); wiped at window
+  close.
+* **The merge sequence**: branch pushed (`b55dde4`, six commits,
+  byte-exact against the local HEAD via ls-remote) → **PR #109** opened
+  (base post-#107 main `7fba75c`, no rebase needed) → the merge-gate
+  pull_request runs → **squash-merged as `6bb17a4`**
+  (mergeable_state clean) → **PR #108 auto-closed** by the description
+  keyword (state=closed, merged=false — redundant with #107's import
+  flow, as sanctioned).
+* **The seven-iteration CI story** — the r34 code's FIRST executions
+  (no SDK exists in the authoring sandbox; every fix commit cites its
+  run):
+  1. **41816563434** (`b55dde4`, <25 s, both assemble jobs): the F-1
+     `copyProgressJson` assets srcDir passed a Provider into the AGP 9
+     SourceSet API — resolved eagerly to a plain File, the exact
+     engine-jniLibs/model-pack convention the line's own comment already
+     claimed (`47c4b90`).
+  2. **41817387618** (`47c4b90`): configuration passed; both engine jobs
+     + both APK assembles green; 1181 gallery tests with 3 dead at the
+     shared `ProgressSnapshotTest` locator — the repo-root fallback
+     miscounted the ascent (Gradle unit tests run from the MODULE: two
+     levels up, not three — the BundledFontsTest convention this same
+     run proved) (`e0054c2`). NOTE: the editor build/test steps sit
+     AFTER the gallery tests in ci.yml's build job, so they were
+     skipped; the edit-debug-apk upload (`if-no-files-found: warn`)
+     silently uploaded nothing — the editor code remained uncompiled.
+  3. **41818233484** (`e0054c2`): the editor's first-ever compile — nine
+     errors in EditActivity: `toggleable` is not on this foundation
+     build's API surface (K2 reports it Unresolved; the repo's compiled
+     convention is `clickable`, so the swatch uses
+     `clickable(enabled, role = Role.RadioButton, onClick)` +
+     `selected` in the semantics block — the same a11y contract), the
+     drag-gesture math crossing Float/Double at the crop-rect boundary
+     (`coerceIn(0f, 1f).toDouble()` for the fraction pair; `toFloat()`
+     on the layer-center products before `Offset`), and
+     `TextLayer.newId` takes the existing IDS
+     (`existing.map { it.id }`) (`c4c3587`).
+  4. **41819615881** (`c4c3587`): one error — the swatch semantics
+     lambda's receiver shadows the `selected` parameter, so
+     `selected = selected` reads as self-assignment of a val; a distinct
+     local + `this.selected` (`bc84af7`).
+  5. **41820303404** (`bc84af7`): the TEST sources' first compile — one
+     backticked name carried dots ("SIL OFL 1.1"; dex rejects them); the
+     version stays in the assertion, the name spells the license out
+     (`e3d4584`).
+  6. **41821587083** (`e3d4584`): the editor tests' first EXECUTION —
+     241 tests, 2 wrong assertions: `sizePxFor(20, 500)` is 20% of the
+     500 px min-edge = 100f (not the 200f copy-pasted from the line
+     above), and the pre-r34-sidecar fixture deliberately carries
+     brightness 10, so `isIdentity` is false by construction —
+     `assertFalse` is the honest claim (`699fd03`).
+  7. **41822887363** (`699fd03`): **GREEN** — all three jobs (engine
+     host gates; engine Android ABI + the engine-enabled assemble;
+     build + lint + test: 1181 gallery + 241 editor JVM tests + the
+     contract suite).
+* **The recount correction**: the delivery record's "22 new JVM tests"
+  was a never-executed estimate; the r34 families are **32**
+  (TextLayersTest 14 + TextLayersRecipeTest 12 + BundledFontsTest 6),
+  the edit module at **241** (r33's 209 + 32). Corrected in roadmap
+  v2.6 + the Phase 7 status + CHANGELOG's unreleased section.
+* **The post-merge docs pass** (this commit): `progress.json` p7 →
+  tasks 1-2/5 merged with both shas (the file records MERGED truth by
+  design; percent unchanged at 73 — p7 stays in-progress with 3 tasks
+  left), roadmap v2.6 + both Phase 7 status paragraphs, tasks.md
+  milestone cell, README row 7, CHANGELOG count fix, follow-up F-12
+  closure + the F-3 mechanism note + the F-5 observation, the PR-table
+  row #109, this Run #12. The merge-triggered main run 41824106912 was
+  superseded by this push under the ci-main concurrency group
+  (cancel-in-progress; the merge tree is identical to `699fd03`'s,
+  already validated green by 41822887363); this push's own main run is
+  the final state's validation.
+* **CI cost**: 8 runs total (7 merge-gate iterations + the superseded
+  merge-triggered run) + this docs-push run — all pull_request/push
+  events, ZERO dispatches (the two dispatch-only APK workflows remain
+  untouched, per the standing discipline). One transient push rejection
+  (GitHub "Internal Server Error", request E1CC:9957C) cleared on the
+  first backoff retry.

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r36 (Phase 7 v2): the freehand drawing surface. The brush controls
+     and the per-layer re-edit controls share these strings (the duality
+     in drawing-tool.md decision 6); the swatch names ride the r34
+     palette strings. Sliders follow the r32 semantics conventions. -->
+<resources>
+    <string name="editor_section_drawing">Drawing</string>
+    <string name="editor_draw_mode">Draw mode</string>
+    <string name="editor_draw_layer">Stroke %1$d</string>
+    <string name="editor_draw_width">Width: %1$d%%</string>
+    <string name="editor_a11y_draw_width">Stroke width</string>
+    <string name="editor_draw_opacity">Opacity: %1$d%%</string>
+    <string name="editor_a11y_draw_opacity">Stroke opacity</string>
+    <string name="editor_draw_smoothing">Smoothing: %1$d%%</string>
+    <string name="editor_a11y_draw_smoothing">Stroke smoothing</string>
+    <string name="editor_draw_remove">Remove stroke</string>
+</resources>

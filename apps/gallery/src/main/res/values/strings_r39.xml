@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r39 (the ente-port exit round): the Things dynamic collections +
+     the semantic-only-session surfaces. 31 strings. -->
+<resources>
+    <!-- Settings: the Things consent row (the peopleAlbumEnabled shape). -->
+    <string name="settings_things_albums">Things collections</string>
+    <string name="settings_things_albums_body">Off by default. Named collections (\"Dogs\", \"Sunsets\") built on-device from the semantic photo index — the same index Magic Search uses. No photo or query ever leaves the device.</string>
+
+    <!-- The Albums tab\'s Things section (the People/Places sibling). -->
+    <string name="albums_things_header">Things</string>
+    <string name="albums_things_consent_off">Things collections are off — enable them in Settings.</string>
+    <string name="albums_things_engine_missing">Things collections need the AI engine, which is not part of this build.</string>
+    <string name="albums_things_models_missing">Things collections need the semantic models — download them in Settings (AI engine).</string>
+    <string name="albums_things_not_indexed">Nothing to search yet — Things appears after the semantic index runs (Settings → AI engine).</string>
+    <string name="albums_things_error">Things collections could not be read.</string>
+    <string name="albums_things_none">No collections yet — create one and it fills itself from your photos.</string>
+    <string name="albums_things_create">New collection</string>
+    <string name="cd_things_remove">Remove collection</string>
+
+    <!-- The create dialog. -->
+    <string name="things_create_dialog_title">New Things collection</string>
+    <string name="things_create_dialog_body">Name what you want to collect. Members are found on-device by photo content; the collection updates as your library changes.</string>
+    <string name="things_name_label">Name</string>
+    <string name="things_query_label">Search text (optional)</string>
+    <string name="things_create_dialog_confirm">Create</string>
+    <string name="things_action_confirm">OK</string>
+
+    <!-- The collection detail screen. -->
+    <string name="things_detail_fallback_title">Collection</string>
+    <string name="cd_things_overflow">More options</string>
+    <string name="things_detail_menu_rename">Rename</string>
+    <string name="things_detail_menu_requery">Edit search text</string>
+    <string name="things_detail_menu_delete">Delete collection</string>
+    <string name="things_detail_error_title">This collection could not be read.</string>
+    <string name="things_detail_empty_title">Nothing matches yet</string>
+    <string name="things_detail_empty_body">No photos fall within this collection\'s match distance right now. Editing the search text can widen what it finds.</string>
+    <string name="things_rename_dialog_title">Rename collection</string>
+    <string name="things_requery_dialog_title">Edit search text</string>
+    <string name="things_requery_dialog_body">The text this collection searches photos by. Leave it empty to search by the collection\'s own name.</string>
+    <string name="things_delete_dialog_title">Delete this collection?</string>
+    <string name="things_delete_dialog_body">\"%1$s\" will be removed. Your photos are not touched.</string>
+    <string name="things_delete_dialog_confirm">Delete</string>
+</resources>

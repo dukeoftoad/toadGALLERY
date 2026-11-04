@@ -941,8 +941,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // settings, so the preview shows the stroke exactly as its commit
         // will render it. The draft layer rides ABOVE the committed
         // strokes (list order, top last) --- the live-paint position.
-        val pd = paintDraft
-        if (pd != null && pd.isNotEmpty()) {
+        // (Distinct local name: `pd` is already the r34 posDraft binding
+        // in this same scope --- the 41839665527 lesson.)
+        val paintPts = paintDraft
+        if (paintPts != null && paintPts.isNotEmpty()) {
             effective = effective.copy(
                 drawLayers = DrawLayers(
                     (effective.drawLayers?.layers ?: emptyList()) + DrawLayer(
@@ -951,7 +953,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         widthPct = brushWidth,
                         opacity = brushOpacity,
                         smoothingPct = brushSmoothing,
-                        points = pd,
+                        points = paintPts,
                     ),
                 ),
             )

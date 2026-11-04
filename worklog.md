@@ -782,3 +782,91 @@
 * **Built**: `progress.json` (project 73% / ente port 95%, weights validated); the sandbox live dashboard (two independent bars, socket.io push + 4 s polling fallback, admin controls, sticky footer, responsive — mobile grid blowout found by browser verification and fixed with `minmax(0,1fr)` tracks); `progress-service` (file-watch → broadcast, measured 1 ms push / 1985 ms fallback — both under the 5 s SLA; independence proven: an ente-only PATCH never moved the project bar); `.github/workflows/apk-build-engine.yml` + `.github/workflows/editor-apk-build.yml` (actionlint 1.7.12 PASS on both; dispatch-only; not dispatched).
 * **The final phase**: `tasks.md` milestone table collapsed (the stale duplicate Phase 5/6 rows — F-7 closed) + the Phase 5 label corrected to the merged truth; `roadmap.md` v2.4 changelog entry; README "Debug APK test builds" section; `CHANGELOG.md` bullets; `docs/ci-workflows.md` created (triggers/inputs/secrets by name); `follow-up.md` final entries (F-1..F-9); this Run #10 entry. Flaw review: 0 blockers, 2 non-blockers fixed, nits logged (F-5/F-6 carry).
 * **CI cost**: zero runs triggered by this window's work; the single push below is the one automatic main CI; the two new workflows stay undispatched.
+
+
+### Run #11 — 2026-11-04 (later) — the r34 text-tool round + the F-1/F-2 window (branch `tg-p7-text-tool`)
+
+* **The directive**: the follow-up from Run #10's window --- "Focus on app
+  development. Phase 7 text tool (r34 per docs/phase-7/text-tool.md --- OFL
+  licensing gate FIRST). First 3 actions: (1) run the OFL gate; (2)
+  implement the additive TextLayers recipe + compositing; (3) close PR
+  #108 (redundant with #107) and the ~90-string recount debt. Remaining
+  work: F-1 in-app Compose progress screen; F-2 composite-action
+  extraction; ente-port dogfood device rows (human-only)."
+* **Gate 1 --- the OFL licensing gate (the round's blocker, done first)**:
+  four SIL OFL 1.1 faces bundled VERBATIM from `google/fonts` @ `2fe1e8c`,
+  each family's own `OFL.txt` committed beside its TTF: fira-sans
+  (FiraSans-Regular.ttf, 457 KB), playfair-display (variable, default
+  instance = Regular 400, 301 KB), caveat (variable, default 400, 404 KB),
+  space-mono (SpaceMono-Regular.ttf, 99 KB) --- 1,260,724 bytes total,
+  inside the round's ~1.2 MB budget. **The documented slot swap**: the
+  prep doc's Noto Sans default-sans candidate failed its OWN rules twice
+  (the only unmodified full form in google/fonts is the 2,049,096-byte
+  `wdth,wght` variable --- over the whole budget alone; the CSS API
+  serves ~28 KB latin subsets, and subsetting is forbidden) → Fira Sans
+  fills the humanist-sans slot; the "(Regular + Bold)" second weight
+  dropped everywhere (no weight axis in the v1 layer model;
+  `Paint.setFakeBoldText` covers future emphasis). Every license
+  verified FROM THE DOWNLOADED ARTIFACTS (fontTools transcript: family
+  names, glyph counts 2,708/1,103/1,034/765, axes, SIL OFL 1.1 headers,
+  copyright-holder identification --- Fira's license names Mozilla +
+  Telefónica and declares no Reserved Font Name). Evidence:
+  `docs/phase-7/bundled-fonts.md` + four §5 provenance-ledger rows
+  (sha256-pinned).
+* **Gate 2 --- the TextLayers implementation**: the pure model +
+  `TextLayout` + `BundledFonts` registry (the BundledLuts pattern), the
+  additive recipe + tolerant codec (a pre-r34 sidecar loads clean; an
+  unresolvable fontId round-trips verbatim and degrades to the default
+  face; blank-id entries are the one skip), the ONE `TextCompositor`
+  (the compositing pass AFTER the whole pixel pipeline; the preview
+  draws the same specs over the CROP REGION and the export over the full
+  output --- preview ≡ export by construction, test-pinned as the offset
+  identity), the full editor surface (Add chip → layer chips → the text
+  field + font chips + size/opacity/rotation sliders with the r32
+  semantics conventions + eight named swatches + remove + the
+  drag-to-position gesture: 48 dp grab radius, live posDraft, one commit
+  on release, keyed only on the selection so preview re-renders never
+  cancel a gesture), per-commit undo/redo granularity (drafts swept on
+  IME Done / target switch / add / remove / undo / redo / export), the
+  shared lazy Typeface cache. 22 new JVM tests. Editor `versionCode 7`
+  (`0.4.2-edit-alpha`).
+* **Gate 3 --- the debt**: the string recount settled (74 → 94: 46+16+12+20,
+  recorded in the text-tool delivery record; the ~90 estimate's delta =
+  the eight named swatches minus the four registry-resident font
+  proper-nouns), and PR #108's closure rides the round's merge commit
+  (`Closes #108`; no API credentials in this window --- F-3 records it).
+* **F-1 --- the in-app progress screen**: `ProgressSnapshot` (pure
+  org.json; NO new dependencies --- the kotlinx.serialization sketch
+  dropped), `copyProgressJson` (the committed repo-root progress.json →
+  APK assets; mergeAssets depends on the copy), the Settings →
+  Development progress screen (two INDEPENDENT bars, phase lists,
+  per-scope source lines, the build-time-snapshot honesty note; the app
+  never fetches progress). 7 JVM tests. Gallery `versionCode 34`.
+* **F-2 --- the toad-setup composite action**: `.github/actions/toad-setup`
+  (rust ''/'host'/'android' × android 'true'/'false'; STRING inputs --- the
+  universally compatible composite convention, after actionlint 1.7.12
+  correctly rejected typed inputs) adopted by ALL SIX workflows with
+  identical pins/cache keys; −218 lines net; actionlint PASS.
+* **The bounded Flaw Review (this window's surfaces: the text tool, the
+  F-1 screen, the F-2 composite)**: **BLOCKERS: none found** --- with the
+  standing caveat that this sandbox has no Android SDK, so the
+  executor-level verification IS the merge-gate CI run (the r29+
+  discipline); the JVM-test batteries, actionlint, pyyaml, the fontTools
+  verification and the balance/lint checks all pass locally.
+  **NON-BLOCKERS fixed in-window**: the strings.xml XML-comment `--`
+  illegality (caught by the XML parse check), the two test compile bugs
+  (`Long in IntRange`; a String into a `vararg JSONObject`), the a11y
+  contentDescription that would have replaced the scope label with its
+  test tag, the composite typed-input rejection. **NITS RECORDED**: F-11
+  (the position drag is not TalkBack-reachable --- a later round owns the
+  gesture-a11y family), F-12 (authored-pending-merge state: push → PR
+  with `Closes #108` in the description → the merge-gate dispatch →
+  merge; progress.json untouched until merge).
+* **Docs wave**: roadmap v2.5 + the Phase 7 status (task 1 MERGED, task 2
+  AUTHORED), tasks.md's text-tool bullet, the CHANGELOG entries + the F-6
+  double-heading merge, README row 7, the ci-workflows toad-setup note,
+  follow-up.md's F-1/F-2/F-3/F-4/F-6 closures + F-11/F-12, the
+  text-tool.md delivery record, this Run #11 entry.
+* **CI cost**: zero runs triggered by this window (the branch was never
+  pushed; no dispatches). The merge-gate dispatch + the automatic main
+  run are the NEXT window's first actions.

@@ -170,6 +170,7 @@ fun SettingsScreen(
     vaultViewModel: VaultViewModel,
     onOpenVault: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenProgress: () -> Unit,
 ) {
     val usePhotoPicker by settingsViewModel.usePhotoPicker.collectAsState()
     val appearance by settingsViewModel.appearance.collectAsState()
@@ -1131,6 +1132,32 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 12.dp),
             )
             ClipIndexWorkState.Idle -> Unit
+        }
+
+        // ---- Progress (F-1: the build-time progress.json mirror) ----
+        // Placed ABOVE About (it changes with the roadmap; About is the
+        // stable identity page). The same row shape as the About entry.
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.settings_progress_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .clickable(onClick = onOpenProgress)
+                .testTag("settings_progress_entry")
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_progress_entry),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
         }
 
         // ---- About (appearance slice) ----

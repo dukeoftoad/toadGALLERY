@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r34 (Phase 7 v2): the text-tool surface. The four bundled font names
+     (Fira Sans, Playfair Display, Caveat, Space Mono) are proper nouns and
+     ride the BundledFonts registry, not resources; the swatch names are
+     the a11y contentDescriptions (TalkBack announces each control, per
+     the round contract). Sliders follow the r32 semantics conventions. -->
+<resources>
+    <string name="editor_section_text">Text</string>
+    <string name="editor_text_add">Add text</string>
+    <!-- The layer chip for a layer whose text is still blank. -->
+    <string name="editor_text_layer">Layer %1$d</string>
+    <string name="editor_text_field_hint">Type text…</string>
+    <string name="editor_a11y_text_content">Text content</string>
+    <string name="editor_text_size">Size: %1$d%%</string>
+    <string name="editor_a11y_text_size">Text size</string>
+    <string name="editor_text_opacity">Opacity: %1$d%%</string>
+    <string name="editor_a11y_text_opacity">Text opacity</string>
+    <string name="editor_text_rotation">Rotation: %1$d°</string>
+    <string name="editor_a11y_text_rotation">Text rotation</string>
+    <string name="editor_text_remove">Remove layer</string>
+    <!-- The color swatches (a11y names; the palette is pinned in the UI code). -->
+    <string name="editor_color_white">White</string>
+    <string name="editor_color_black">Black</string>
+    <string name="editor_color_red">Red</string>
+    <string name="editor_color_orange">Orange</string>
+    <string name="editor_color_yellow">Yellow</string>
+    <string name="editor_color_green">Green</string>
+    <string name="editor_color_cyan">Cyan</string>
+    <string name="editor_color_blue">Blue</string>
+</resources>

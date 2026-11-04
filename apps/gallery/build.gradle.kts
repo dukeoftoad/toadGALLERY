@@ -337,8 +337,20 @@ android {
         // workstream) as LinearProgressIndicators + phase lists + the
         // honest build-time-snapshot note + per-scope source-of-truth
         // lines. No new permissions; no network; no engine changes.
-        versionCode = 34
-        versionName = "0.4.2-alpha"
+        // versionCode 35 (r39, the ente-port exit round): the two Phase 5
+        // code-side follow-ups close --- the SEMANTIC-ONLY engine session
+        // (the r26 round's FACE-model requirement dropped: the JNI bridge
+        // installs the CLIP half from scratch, `initialize` upgrades a
+        // semantic-only session with the face half, and the semantic
+        // queue/Search/Things run on the SEMANTIC pack alone) + the
+        // THINGS dynamic collections (the named semantic collections over
+        // the SAME CLIP index: things-state.json in the face-index
+        // directory, the Albums tab's Things section, the collection
+        // detail screen, the thingsAlbumEnabled consent row, and the
+        // distance-cut searchClipsWithin over upstream's own vecdb
+        // max_distance). No new permissions; no new dependencies.
+        versionCode = 35
+        versionName = "0.4.3-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 

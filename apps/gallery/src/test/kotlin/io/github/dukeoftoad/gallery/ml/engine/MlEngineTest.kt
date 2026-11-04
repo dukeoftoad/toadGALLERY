@@ -102,6 +102,13 @@ class MlEngineTest {
         var lastSearchQuery: FloatArray? = null
         var lastSearchLimit: Int? = null
 
+        // ---- r39 ----
+        var storeSearchClipsWithinResult: String = "[]"
+        var storeSearchClipsWithinCalls = 0
+        var lastWithinQuery: FloatArray? = null
+        var lastWithinMaxDistance: Float? = null
+        var lastWithinLimit: Int? = null
+
         override fun nativeInit(modelsDir: String): Boolean {
             initCalls++
             lastInitArg = modelsDir
@@ -240,6 +247,19 @@ class MlEngineTest {
             return storeSearchClipsResult
         }
 
+        // ---- r39 ----
+        override fun nativeStoreSearchClipsWithin(
+            queryEmbedding: FloatArray,
+            maxDistance: Float,
+            limit: Int,
+        ): String {
+            storeSearchClipsWithinCalls++
+            lastWithinQuery = queryEmbedding
+            lastWithinMaxDistance = maxDistance
+            lastWithinLimit = limit
+            return storeSearchClipsWithinResult
+        }
+
         override fun nativeStoreFillClipIndex(): String {
             storeFillClipCalls++
             return storeFillClipResult
@@ -373,6 +393,11 @@ class MlEngineTest {
                 throw UnsupportedOperationException("unused in this test")
             override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
                 throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreSearchClipsWithin(
+                queryEmbedding: FloatArray,
+                maxDistance: Float,
+                limit: Int,
+            ): String = throw UnsupportedOperationException("unused in this test")
             override fun nativeStoreFillClipIndex(): String =
                 throw UnsupportedOperationException("unused in this test")
         }
@@ -938,6 +963,11 @@ class MlEngineTest {
                 throw UnsupportedOperationException("unused in this test")
             override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
                 throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreSearchClipsWithin(
+                queryEmbedding: FloatArray,
+                maxDistance: Float,
+                limit: Int,
+            ): String = throw UnsupportedOperationException("unused in this test")
             override fun nativeStoreFillClipIndex(): String =
                 throw UnsupportedOperationException("unused in this test")
         }
@@ -1120,6 +1150,98 @@ class MlEngineTest {
         // The empty array is the honest "no matches":
         bridge.storeSearchClipsResult = "[]"
         assertEquals(emptyList<MlEngine.ClipMatch>(), engine.searchClips(query, 2))
+    }
+
+    // ---- r39: the distance-cut search + the symmetric session halves ----
+
+    @Test
+    fun `searchClipsWithin guards dimension, distance and limit before any native call`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        for (badDim in intArrayOf(0, 511, 513)) {
+            try {
+                engine.searchClipsWithin(FloatArray(badDim), 0.7f, 1)
+                fail("$badDim floats must be rejected")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message!!.contains("512"))
+            }
+        }
+        for (badDistance in floatArrayOf(-0.1f, Float.NaN, Float.POSITIVE_INFINITY)) {
+            try {
+                engine.searchClipsWithin(FloatArray(MlEngine.CLIP_EMBEDDING_DIM), badDistance, 1)
+                fail("$badDistance must be rejected as a max distance")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message!!.contains("max distance"))
+            }
+        }
+        for (badLimit in intArrayOf(0, -1)) {
+            try {
+                engine.searchClipsWithin(FloatArray(MlEngine.CLIP_EMBEDDING_DIM), 0.7f, badLimit)
+                fail("$badLimit must be rejected as a limit")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message!!.contains("positive"))
+            }
+        }
+        assertEquals("the guards fire facade-side", 0, bridge.storeSearchClipsWithinCalls)
+    }
+
+    @Test
+    fun `searchClipsWithin delegates the cut to the bridge and parses the same JSON shape`() {
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+        engine.openFaceIndex("/data/face-index")
+
+        bridge.storeSearchClipsWithinResult =
+            "[{\"file_id\":11,\"distance\":0.30},{\"file_id\":22,\"distance\":0.69}]"
+        val query = FloatArray(MlEngine.CLIP_EMBEDDING_DIM) { 0.25f }
+        val matches = engine.searchClipsWithin(query, 0.7f, 50)
+
+        assertEquals(
+            listOf(MlEngine.ClipMatch(11L, 0.30f), MlEngine.ClipMatch(22L, 0.69f)),
+            matches,
+        )
+        assertTrue(bridge.lastWithinQuery!!.contentEquals(query))
+        assertEquals(0.7f, bridge.lastWithinMaxDistance!!)
+        assertEquals(50, bridge.lastWithinLimit)
+        assertEquals(1, bridge.storeSearchClipsWithinCalls)
+    }
+
+    @Test
+    fun `initSemantic without initialize opens a semantic-only session - the two state machines stay independent`() {
+        // The r39 contract: the native layer installs the CLIP half from
+        // scratch; the facade neither requires nor fakes a FACE session.
+        // The two state machines report their own halves honestly.
+        val bridge = FakeBridge()
+        val engine = MlEngine(bridge)
+
+        // Before anything: both halves uninitialized, the honest pair.
+        assertEquals(MlEngine.State.Uninitialized, engine.state())
+        assertEquals(MlEngine.SemanticState.Uninitialized, engine.semanticState())
+
+        // The semantic half ALONE (no initialize call):
+        bridge.initSemanticResult = true
+        assertEquals(MlEngine.SemanticState.Ready, engine.initSemantic("/data/models"))
+        assertEquals(MlEngine.SemanticState.Ready, engine.semanticState())
+        // ...while the FACE half stays honestly uninitialized (no fake
+        // Ready, no Error --- the two truths are independent):
+        assertEquals(MlEngine.State.Uninitialized, engine.state())
+        assertEquals(0, bridge.initCalls)
+        assertEquals(1, bridge.initSemanticCalls)
+
+        // initialize UPGRADES the semantic-only session with the face
+        // half (the native layer's symmetric upgrade; the facade maps it
+        // the same way it always did):
+        bridge.initResult = true
+        assertEquals(MlEngine.State.Ready, engine.initialize("/data/models"))
+        assertEquals(MlEngine.State.Ready, engine.state())
+        assertEquals(MlEngine.SemanticState.Ready, engine.semanticState())
+
+        // Release tears BOTH halves (the r26 contract, unchanged):
+        engine.release()
+        assertEquals(MlEngine.State.Uninitialized, engine.state())
+        assertEquals(MlEngine.SemanticState.Uninitialized, engine.semanticState())
     }
 
     @Test
@@ -1363,6 +1485,11 @@ class MlEngineTest {
                 throw UnsupportedOperationException("unused in this test")
             override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
                 throw UnsupportedOperationException("unused in this test")
+            override fun nativeStoreSearchClipsWithin(
+                queryEmbedding: FloatArray,
+                maxDistance: Float,
+                limit: Int,
+            ): String = throw UnsupportedOperationException("unused in this test")
             override fun nativeStoreFillClipIndex(): String =
                 throw UnsupportedOperationException("unused in this test")
         }

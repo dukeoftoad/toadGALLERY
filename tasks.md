@@ -12,9 +12,7 @@
 | **Phase 2** | Product shell, visual foundation, privacy hardening, Compose toolchain, and CI | **Closed / Exited** (Turn 9/10, PRs #15, #16, #23, #46, #47) |
 | **Phase 3 (M4)** | Core media access, browsing, file ops, recycle bin, hidden vault (16/16 issues closed) | **Code-complete / 16 of 16 issues closed** (Reopened in Turn 21 for device validation; all 16 issues closed by PR #70) |
 | **Phase 4** | Aves-grade metadata layer & AI media-contract foundation (`r10`–`r20`) | **Complete** (Turn 35 PR #90 + Turn 38 PR #92) |
-| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **Code-complete / exit gate landed** (`r21`–`r27` + the `r28` Workstream-8 hardening round merged on `main` --- **release freeze lifted**; the `r26` People follow-ups `23a1495`, `r26` Magic Search `84aab67` and `r27` organisational UX `27c5e71` rounds merged; on-device dogfood pending, below) |
-| **Phase 6** | toadGALLERY Edit v1: core adjustments + non-destructive pipeline (gated by `#14`) | **Planned** (Issue `#14` open) |
-| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **In Progress** (`r21`–`r27` merged on `main` --- the `r26` People follow-ups `23a1495` and Magic Search `84aab67` rounds plus the `r27` organisational UX round `27c5e71`; Workstream 8 hardening `r28` in review as PR `#100`; on-device dogfood pending) |
+| **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **Code-complete / exit gate landed** (`r21`–`r28` merged on `main` --- the `r26` People follow-ups `23a1495`, Magic Search `84aab67`, the `r27` organisational UX `27c5e71` and the `r28` hardening round all merged; **release freeze lifted**; on-device dogfood pending, below) |
 | **Phase 6** | toadGALLERY Edit v1: core adjustments + non-destructive pipeline (gated by `#14`) | **Code complete (r29–r32 merged: #104/#105/#106 at `938effa`; editor v1 exit)** |
 | **Phase 7** | toadGALLERY Edit v2: LUT filters, text, stickers, drawing, mosaic, frames | **Task 1 complete (r33 LUT + import merged as #107 at `314bd9c`)** |
 | **Phase 8** | toadGALLERY Edit v3: on-device AI editing (magic erase, sky replacement, bokeh, opt-in face retouch) | **Planned** |
@@ -187,3 +185,16 @@
   * [ ] **The text tool (OFL fonts) — NEXT, design contract written**: `docs/phase-7/text-tool.md` (the r34 prep slice): the OFL gate (four verbatim-bundled candidates + per-font `OFL.txt` + ledger rows) FIRST, the additive `TextLayers` recipe (absent-key-clean, unresolvable-fontId-degrades), output-space last-stage compositing, snapshot-stack undo/redo, r32/r33 a11y conventions, the test debt, and §23 device rows.
   * [ ] Stickers, freehand drawing, mosaic/blur regions, frames — each a round; undo/redo extended across the new layer types.
 * [ ] **Phase 8–11**: `Edit v3` (on-device AI magic erase, sky replacement, bokeh, opt-in face retouch), Phase 9 lightweight video editor, Phase 10 performance/accessibility hardening, and Phase 11 v1.0 release readiness.
+
+---
+
+## Workplan checkpoint — progress tracking + debug-APK CI workflows (docs/workplan.md, 2026-11-04 window)
+
+* [x] **P1 — Planning artifacts + progress source of truth**: `docs/workplan.md` (ente-port definition derived from repo docs — no assumption needed; per-phase evidence assessment; docs-health table), `progress.json` (project 73%, ente port 95%; weights validated = 100 per scope), `follow-up.md` created (F-1..F-8).
+* [x] **P2 — Progress transport** (sandbox): progress-service (socket.io :3003, parent-dir file-watch + content-compare dedupe) + `/api/progress` GET (no-store) / PATCH (validated, atomic tmp+rename).
+* [x] **P3 — The two progress bars** (sandbox dashboard): project bar (own `project` scope) + ente bar (own `entePort` scope), socket push + 4 s polling fallback, admin controls; mobile grid blowout fixed (`minmax(0,1fr)`).
+* [x] **P4 — The two new APK workflows**: `apk-build-engine.yml` ("APK build with engine") + `editor-apk-build.yml` ("Editor APK build — include all"); dispatch-only; actionlint 1.7.12 PASS + static review; NOT dispatched.
+* [x] **P5 — Verification pass**: browser-verified (push 1–82 ms; fallback 1985 ms; independence proven; sticky footer + mobile 375 px clean) + actionlint/pyyaml PASS.
+* [x] **P6 — Documentation + Flaw Review**: F-7 closed (stale Phase 5/6 rows collapsed, Phase 5 label corrected); roadmap v2.4 entry; README debug-APK section; CHANGELOG bullets; `docs/ci-workflows.md`; follow-up F-1..F-9; worklog Run #10. Flaw verdict: 0 blockers, 2 non-blockers fixed, nits logged (F-5/F-6).
+* [x] **P7 — Single push + one CI poll (≤20 min)**: one batched push of `main`; one CI poll. (Outcome recorded in worklog Run #10.)
+* **Blockers**: none. (Push/poll deferred to P7 by protocol; the window's one push activates the new workflows.)

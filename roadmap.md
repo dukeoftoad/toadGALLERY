@@ -1022,6 +1022,45 @@ items: the per-export metadata-policy choice UI, the on-device
 large-file/low-storage/process-death matrix, and the physical
 round-trip hash-compare (checklist §19).
 
+**Status (r31): PHASE 6 IS CODE-SIDE COMPLETE.** The two code-side exit
+items are built (`tg-p6-edit-v1-exit`, stacked on the r30 branch): the
+**per-export metadata-policy choice** — the launch request's policy is
+the privacy FLOOR (contract §4.4 "respected exactly": the export sheet
+may strip more for one copy, never less; pure `ExportPolicyChoice`,
+floor-blocked sheet chips, the honesty line tracking the pending
+choice, the recipe/sidecar independence pinned by test) — and the
+**export preflight** (the 48 MP large-file decode guard refusing before
+any work, the generous byte model + 1.5×-headroom storage check over
+`StorageManager` — advisory, `ERROR_IO` keeps the frozen v1 contract
+surface — and the documented process-death policy: Q+ pending rows are
+invisible and MediaStore-reclaimed with the sidecar restoring the
+session, pre-Q leaves the user-removable partial row). The **applied
+policy is now narrated** (contract §5's honesty UI): additive
+`SavedCopy.removesLocation` / `stripsAllMetadata` triggers in
+`:shared:editor-contract` choose the gallery's saved-copy snackbar
+("location removed" / "metadata stripped" / plain), with a pre-r29
+editor's missing echo making no claim. The physical half of the exit —
+the §20 export robustness matrix (policy×GPS verification, the 48 MP
+guard, the low-storage preflight, process death on Q+ and pre-Q) plus
+the §19 round trip — is checklist-ready and **human-only**; the
+CI-gated merge chain (#104 → #105 → #106) closes the rounds. Editor at
+`versionCode 3` (`0.3.0-edit-alpha`).
+
+**Status (r32): hardened.** The maintainer's follow-up window ran a
+contained hardening round on the same `tg-p6-edit-v1-exit` branch (riding
+PR #106, ledger row #107): the **accessibility sweep** over the whole
+editor surface — every slider (the 10 adjustments, straighten, export
+quality, the three HSL band controls) announces its name + live value via
+`semantics`, the HSL rows speak "BAND: CONTROL", and the flip toggles are
+proper FilterChips with 48dp targets — the **straighten live-drag fix**
+(the thumb and preview follow the drag; the old path burned a per-tick
+re-render for an unchanged preview), and the tested pure
+`CropRect.fromPixelRect` inverse replacing the crop-preset UI's inline
+division. 5 new JVM tests (GeometryTest 19 → 24); editor `versionCode 4`
+(`0.3.1-edit-alpha`); the on-device TalkBack pass rides checklist §21.
+Phase 6 remains code-side complete; the exit still rides the §19/§20/§21
+device rows + the merge chain.
+
 **Purpose:** Ship the first version of the editor APK with the
 adjustment suite and the non-destructive pipeline that all later editor
 phases build on.

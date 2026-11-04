@@ -77,6 +77,50 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[toadGALLERY Edit] The accessibility + hardening pass** (r32 round,
+  riding the r31 exit branch `tg-p6-edit-v1-exit`): every editor slider —
+  the 10 adjustment sliders, straighten, export quality and the three HSL
+  band controls — now announces its NAME and live VALUE to TalkBack
+  (semantics `contentDescription` + `stateDescription`; the HSL rows
+  speak "BAND: CONTROL" so the selected band is always spoken); the flip
+  toggles are proper FilterChips (48dp touch targets, state highlights,
+  selected/not-selected announcements) instead of a text label
+  overflowing an IconButton and a sub-48dp clickable text; the straighten
+  slider follows the drag live (thumb + preview, like every other
+  slider, dropping a wasted per-tick re-render) and displays fractional
+  sidecar values exactly; and the crop presets commit through the new
+  tested pure inverse `CropRect.fromPixelRect` (5 JVM tests). Editor
+  `versionCode 4` (`0.3.1-edit-alpha`).
+- **[toadGALLERY Edit] The Edit v1 exit** (r31 round, the Phase 6
+  code-side completion on the r30 core): the **per-export
+  metadata-policy choice** — the launch request's policy is the privacy
+  floor (contract §4.4 "respected exactly"): the export sheet gains a
+  "Metadata for this copy" chip selector that may strip MORE for one
+  saved copy (an explicit user opt-in) but can never strip LESS than
+  the gallery requested, with the floor-blocked options disabled and
+  captioned; the choice never rides the recipe/sidecar (pinned by
+  test); the always-visible honesty line tracks the pending choice.
+  **The export preflight**: a 48 MP large-file decode guard that
+  refuses `ERROR_UNSUPPORTED` before any work (the pipeline holds the
+  pixels twice), a generous per-format/quality byte model against
+  `StorageManager` allocatable bytes with a 1.5× headroom (advisory;
+  the failure rides `ERROR_IO` so the frozen v1 contract error-code
+  set stays untouched), and the documented process-death policy (Q+
+  pending rows are invisible and MediaStore-reclaimed, the sidecar
+  restores the session; pre-Q may leave a user-removable partial row).
+  **The applied-policy honesty narration** (gallery side): additive
+  `SavedCopy.removesLocation` / `stripsAllMetadata` triggers in
+  `:shared:editor-contract` choose the saved-copy snackbar — "location
+  removed" / "metadata stripped" / plain — so the result echo the
+  editor already sends is finally shown (contract §5), a pre-r29
+  editor's missing echo making no claim. **Also fixed**: invalid
+  interior `---` inside the editor's `strings.xml` comments (strict
+  XML forbids `--` in comments — a latent break for the edit app's
+  first CI compile). 25 new JVM tests (9 policy + 12 preflight + 4
+  contract); the editor versions independently: `versionCode 3`,
+  `0.3.0-edit-alpha`. The physical exit half (§19 round trip + the new
+  §20 export robustness matrix) is checklist-ready, human-only.
+
 - **[toadGALLERY Edit] The Edit v1 core** (r30 round, the Phase 6
   continuation on the r29 gate): the non-destructive pipeline's full v1
   state. **The ADR-0011 recipe**: one `EditRecipe` data class carries the

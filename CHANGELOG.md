@@ -12,6 +12,41 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[toadGALLERY Edit] The sticker tool — eight project-authored
+  in-code vector shapes, the additive StickerLayers recipe, the shared
+  compositing pass below text** (r35 round, Phase 7 layer type 2 of 5,
+  branch `tg-p7-stickers`): sticker layers over the photo — per-layer
+  sticker id, size (percent of the canvas min-edge), opacity, rotation,
+  position (the r34 drag gesture). The bundled set is AUTHORED CODE, not
+  image assets: eight shapes (Heart, Star, Smiley, Speech bubble,
+  Lightning, Flower, Location pin, Crown) as integer-coordinate op
+  lists in a 0..100 design box, fills only (`BundledStickers`; the
+  authorship record `docs/phase-7/bundled-stickers.md`; no §5 ledger
+  row because no file was copied from anywhere — the spot-coordinate
+  tests pin the authored trigonometry). The recipe's `StickerLayers` is
+  additive like the family contract: a pre-r35 sidecar loads clean
+  (proven with one carrying r34 text layers), an unresolvable
+  `stickerId` round-trips verbatim and renders NOTHING — there is no
+  default sticker to degrade to; a blank stickerId is a skip alongside a
+  blank id. Stickers composite in OUTPUT space, BELOW the text pass
+  (scene objects under captions), through the ONE shared
+  `StickerCompositor` the preview and the export both call (vectors from
+  the op list scaled into the size box; imported bitmaps FIT inside it
+  preserving aspect). `ImportedStickerStore`: the SAF PNG/WebP import
+  with magic-before-write, verbatim bytes under the magic's extension, a
+  2 MB cap, derived collision-suffixed ids that can never shadow the
+  bundled set; the directory listing is the index. The UI: the registry
+  chip row as ADD actions, layer chips, the r32/r34 a11y conventions,
+  remove, drag-to-position, and ONE selected layer at a time across the
+  families (selecting a sticker clears the text selection and vice
+  versa; the draft-sweep set extended across the families). 46 new JVM
+  tests across StickerLayersTest, StickerLayersRecipeTest,
+  BundledStickersTest, ImportedStickerStoreTest (executed green pre-push
+  by the new local kotlinc harness — the first round in the campaign
+  with tests run before CI); the module string count 94 → 104; editor
+  `versionCode 8` (`0.4.3-edit-alpha`). The on-device pass rides
+  checklist §24; the delivery record is `docs/phase-7/stickers.md`.
+
 - **[toadGALLERY Edit] The text tool — OFL fonts, the additive TextLayers
   recipe, the shared compositing pass** (r34 round, Phase 7 layer type 1
   of 5, branch `tg-p7-text-tool`): styled text layers over the photo —

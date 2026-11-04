@@ -20,7 +20,7 @@ class ProgressSnapshotTest {
     private fun committedProgressJson(): File {
         val candidates = listOf(
             File("progress.json"), // working dir = the repo root
-            File("../../../progress.json"), // working dir = apps/gallery
+            File("../../progress.json"), // working dir = the module (Gradle unit tests)
         )
         return candidates.firstOrNull { it.isFile }
             ?: error("progress.json not found; tried ${candidates.map { it.path }}")

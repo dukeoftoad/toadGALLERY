@@ -65,8 +65,14 @@ pub(crate) const CLIP_VOCAB_SIZE_BYTES: u64 = 3_194_984;
 const FACE_MODELS_LABEL: &str = "yolov5s-face,mobilefacenet";
 
 /// Short model labels used by the engine info line once the semantic half
-/// is installed (r26): the face pair plus the MobileCLIP-S2 pair.
+/// is installed on a face session (r26): the face pair plus the
+/// MobileCLIP-S2 pair.
 const SEMANTIC_MODELS_LABEL: &str = "yolov5s-face,mobilefacenet,mobileclip-s2";
+
+/// Short model labels for a SEMANTIC-ONLY session (r39): the MobileCLIP-S2
+/// pair alone, the honest shape of an engine whose face halves were never
+/// installed (see [`init_semantic`]).
+const SEMANTIC_ONLY_MODELS_LABEL: &str = "mobileclip-s2";
 
 /// The `ort` crate version pinned by the workspace (`=2.0.0-rc.15`) — the
 /// Rust bindings that dlopen ONNX Runtime. Reported for diagnostics; see
@@ -95,6 +101,15 @@ const NOT_INITIALIZED: &str = "engine is not initialized; call nativeInit(models
 const SEMANTIC_NOT_INITIALIZED: &str =
     "semantic models are not initialized; call nativeInitSemantic(modelsDir) first";
 
+/// Message used when a FACE call runs on a semantic-only session (r39):
+/// the engine exists, its semantic half may even be ready, but the face
+/// models were never installed. The dedicated message beats upstream's
+/// generic missing-path error at the boundary, so the caller learns the
+/// recovery (install/init the face half) instead of a broken-contract
+/// shape that is actually the session's honest shape.
+const FACE_MODELS_NOT_INSTALLED: &str =
+    "face models are not installed in this engine session; call nativeInit(modelsDir) first";
+
 /// The face-embedding dimension on the r23 wire: upstream MobileFaceNet
 /// output (the vendored clustering's `CLUSTER_CENTROID_DIMENSIONS`).
 pub(crate) const FACE_EMBEDDING_DIM: usize = 192;
@@ -113,8 +128,11 @@ const WARMUP_HEIGHT: u32 = 8;
 const WARMUP_GRAY_LEVEL: u8 = 128;
 const WARMUP_JPEG_QUALITY: u8 = 75;
 
-/// The initialized engine. Once installed, the face half is immutable for
-/// its lifetime; the r26 semantic upgrade ([`init_semantic`]) mutates the
+/// The initialized engine. Once installed, either half may arrive first
+/// and the other upgrades it in place (r39's symmetric sessions): the r26
+/// order (`init` then `init_semantic`) still works, and so does the r39
+/// order (`init_semantic` first — a SEMANTIC-ONLY session whose face paths
+/// are blank — then `init` adding the face half). Both upgrades mutate the
 /// state in place — the combined `ModelPaths`, the vocab path, the
 /// semantic-ready flag and the info line — always under the engine lock.
 struct EngineState {
@@ -126,6 +144,17 @@ struct EngineState {
     clip_vocab_path: Option<String>,
     semantic_ready: bool,
     info: String,
+}
+
+impl EngineState {
+    /// Whether the FACE half is installed: the vendored runtime configures
+    /// a model slot iff its path is non-blank, so the detector path IS the
+    /// truth (a semantic-only session carries blank face paths by
+    /// construction; a face session always carries a non-blank one —
+    /// [`init`] validates the file before installing it).
+    fn faces_ready(&self) -> bool {
+        !self.model_paths.face_detection.trim().is_empty()
+    }
 }
 
 fn engine_cell() -> &'static Mutex<Option<EngineState>> {
@@ -142,18 +171,30 @@ fn lock() -> MutexGuard<'static, Option<EngineState>> {
     engine_cell().lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Initializes the engine against `models_dir`.
+/// Initializes the FACE half of the engine against `models_dir`.
 ///
-/// Both pinned model files must exist with their exact catalog byte sizes.
-/// Both are registered with ente-ml's global runtime via `init_ml_runtime`;
-/// a warm-up `analyze_image` call then forces the dynamic ONNX Runtime load
-/// and builds + runs the detector session, so init fails fast (and leaves no
-/// engine installed) when the runtime cannot come up. Idempotent: an
-/// already-initialized engine succeeds without reloading anything.
+/// Both pinned face model files must exist with their exact catalog byte
+/// sizes. Both are registered with ente-ml's global runtime via
+/// `init_ml_runtime`; a warm-up `analyze_image` call then forces the dynamic
+/// ONNX Runtime load and builds + runs the detector session, so init fails
+/// fast (and leaves no engine installed) when the runtime cannot come up.
+///
+/// Idempotent per half (r39): an engine whose face half is already
+/// installed succeeds without reloading anything. A SEMANTIC-ONLY session
+/// (installed by [`init_semantic`], r39) is UPGRADED in place — the mirror
+/// image of the r26 `init_semantic` upgrade: the face files are validated,
+/// the COMBINED face + CLIP paths are re-registered (the semantic sessions
+/// survive it, same paths), and the face warm-up runs; on warm-up failure
+/// the runtime is released and the PREVIOUS semantic-only paths
+/// re-registered, leaving the state untouched (face calls keep failing with
+/// [`FACE_MODELS_NOT_INSTALLED`], semantic calls keep working) — the exact
+/// recovery discipline the r26 upgrade pins, with the halves swapped.
 pub(crate) fn init(models_dir: &str) -> Result<(), String> {
     let mut engine = lock();
-    if engine.is_some() {
-        return Ok(());
+    if let Some(state) = engine.as_ref() {
+        if state.faces_ready() {
+            return Ok(());
+        }
     }
 
     let models_dir = Path::new(models_dir);
@@ -168,14 +209,24 @@ pub(crate) fn init(models_dir: &str) -> Result<(), String> {
         FACE_EMBEDDER_SIZE_BYTES,
     )?;
 
+    // The r39 upgrade case (semantic-only session present): the combined
+    // paths keep the CLIP halves the state already carries. In the fresh
+    // case the previous paths are the all-blank default, so the combined
+    // paths are the face-only ones — one code path, both truths.
+    let previous_paths = engine
+        .as_ref()
+        .map(|state| state.model_paths.clone())
+        .unwrap_or_default();
     let model_paths = ModelPaths {
         face_detection: detector_path.to_string_lossy().into_owned(),
         face_embedding: embedder_path.to_string_lossy().into_owned(),
-        ..ModelPaths::default()
+        ..previous_paths.clone()
     };
 
-    // Registers both face models with ente-ml's process-global runtime. The
-    // ONNX sessions themselves load lazily on first use.
+    // Registers the face models with ente-ml's process-global runtime (and,
+    // in the r39 upgrade case, re-registers the CLIP halves with them — the
+    // same paths, so the already-built sessions survive). The ONNX sessions
+    // themselves load lazily on first use.
     init_ml_runtime(model_paths.clone());
 
     // Warm-up: forces the dynamic ONNX Runtime load (see README.md for the
@@ -186,52 +237,86 @@ pub(crate) fn init(models_dir: &str) -> Result<(), String> {
     let warmup_jpeg = warmup_jpeg().map_err(|error| format!("encode warm-up image: {error}"))?;
     if let Err(error) = analyze_image(warmup_request(&model_paths, warmup_jpeg)) {
         release_ml_runtime();
+        // Only an upgrade has a previous registration to restore; the fresh
+        // case leaves the runtime entirely unregistered (the pre-r39
+        // behavior — nothing was installed before this call).
+        if engine.is_some() {
+            init_ml_runtime(previous_paths);
+        }
         return Err(format!("engine warm-up failed: {error}"));
     }
 
-    *engine = Some(EngineState {
-        model_paths,
-        clip_vocab_path: None,
-        semantic_ready: false,
-        info: format_engine_info(false),
-    });
+    // The tail is split on `engine.is_some()` BEFORE any mutable borrow:
+    // the upgrade path mutates in place under one short-lived borrow, the
+    // fresh path installs a whole new state with NO borrow outstanding
+    // (a `match engine.as_mut()` with a `*engine = …` in the None arm is
+    // the classic double-borrow error --- the scrutinee's borrow outlives
+    // the arm).
+    if engine.is_some() {
+        // The r39 upgrade: the face halves join the state's paths; the
+        // semantic half's flags (vocab path, semantic_ready) are untouched,
+        // and the info line names both halves.
+        if let Some(state) = engine.as_mut() {
+            state.model_paths = model_paths;
+            state.info = format_engine_info(true, state.semantic_ready);
+        }
+    } else {
+        *engine = Some(EngineState {
+            model_paths,
+            clip_vocab_path: None,
+            semantic_ready: false,
+            info: format_engine_info(true, false),
+        });
+    }
     Ok(())
 }
 
-/// Initializes the semantic (CLIP) half of an already-initialized engine
-/// against `models_dir` (r26).
+/// Initializes the semantic (CLIP) half against `models_dir` — on an
+/// already-initialized engine (r26) or FROM SCRATCH as a SEMANTIC-ONLY
+/// session (r39, the round that drops the FACE-model requirement).
 ///
-/// Requires an installed engine session ([`init`]) — the semantic half
-/// registers ON TOP of the face models; without one this is the
-/// [`NOT_INITIALIZED`] error. Idempotent: an already-semantic engine
-/// succeeds without reloading anything. The three pinned files (CLIP image
-/// encoder, CLIP text encoder, BPE vocab) must exist with their exact
-/// catalog byte sizes; the combined face + CLIP `ModelPaths` is then
-/// registered with ente-ml's global runtime (replacing the face-only
-/// registration — the face sessions survive it, same paths) and a warm-up
-/// `analyze_image` call with `run_clip: true` builds + runs the CLIP image
-/// session over the same inert JPEG the face warm-up uses, so init fails
-/// fast when the runtime cannot come up.
+/// Idempotent per half: an engine whose semantic half is ready succeeds
+/// without reloading anything. The three pinned files (CLIP image encoder,
+/// CLIP text encoder, BPE vocab) must exist with their exact catalog byte
+/// sizes. Then:
 ///
-/// Failure recovery, honestly: a failed warm-up tears the whole runtime
-/// down (`release_ml_runtime`) and re-registers the previous face-only
-/// paths, leaving the engine in a consistent FACE-ONLY state — semantic
-/// calls keep failing with [`SEMANTIC_NOT_INITIALIZED`] and the face
-/// sessions rebuild lazily on the next face call (the same lazy rebuild any
-/// `release` + `init` cycle goes through). The `EngineState` itself is
-/// untouched on that leg, so `semantic_ready` stays `false` and the info
-/// line stays the face-only one. A validation failure (missing or
-/// wrong-size model file) fires BEFORE any re-registration and leaves the
-/// runtime entirely untouched.
+/// - **On a face-only engine (the r26 shape):** the combined face + CLIP
+///   `ModelPaths` is registered with ente-ml's global runtime (replacing
+///   the face-only registration — the face sessions survive it, same
+///   paths) and a warm-up `analyze_image` call with `run_clip: true`
+///   builds + runs the CLIP image session over the same inert JPEG the
+///   face warm-up uses. Failure recovery, honestly: a failed warm-up
+///   tears the whole runtime down (`release_ml_runtime`) and re-registers
+///   the previous face-only paths, leaving the engine in a consistent
+///   FACE-ONLY state — semantic calls keep failing with
+///   [`SEMANTIC_NOT_INITIALIZED`] and the face sessions rebuild lazily on
+///   the next face call. The `EngineState` itself is untouched on that
+///   leg, so `semantic_ready` stays `false` and the info line stays the
+///   face-only one.
+/// - **With NO engine installed (the r39 shape):** a SEMANTIC-ONLY
+///   `ModelPaths` (the three CLIP paths filled, the face paths blank —
+///   the vendored runtime configures exactly the slots whose paths are
+///   non-empty, so this is a first-class upstream session shape) is
+///   registered and the same CLIP warm-up runs. A failed warm-up releases
+///   the runtime and leaves NO engine installed — there was no previous
+///   state to restore. Face calls on the installed session fail with the
+///   dedicated [`FACE_MODELS_NOT_INSTALLED`] message until an `init`
+///   upgrades the session with the face half.
+///
+/// A validation failure (missing or wrong-size model file) fires BEFORE
+/// any registration and leaves the runtime entirely untouched, in both
+/// shapes.
 pub(crate) fn init_semantic(models_dir: &str) -> Result<(), String> {
     let mut engine = lock();
-    let Some(state) = engine.as_mut() else {
-        return Err(NOT_INITIALIZED.to_string());
-    };
-    if state.semantic_ready {
-        return Ok(());
+    if let Some(state) = engine.as_ref() {
+        if state.semantic_ready {
+            return Ok(());
+        }
     }
-    let previous_paths = state.model_paths.clone();
+    let previous_paths = engine
+        .as_ref()
+        .map(|state| state.model_paths.clone())
+        .unwrap_or_default();
 
     let models_dir = Path::new(models_dir);
     let clip_image_path =
@@ -240,33 +325,58 @@ pub(crate) fn init_semantic(models_dir: &str) -> Result<(), String> {
         validate_model_file(models_dir, CLIP_TEXT_FILE_NAME, CLIP_TEXT_SIZE_BYTES)?;
     let vocab_path = validate_model_file(models_dir, CLIP_VOCAB_FILE_NAME, CLIP_VOCAB_SIZE_BYTES)?;
 
+    // The combined paths keep whatever face halves the state already
+    // carries: the r26 upgrade fills CLIP over the face paths, the r39
+    // fresh case fills CLIP over the all-blank default (a semantic-only
+    // session) — one code path, both truths.
     let combined = ModelPaths {
         clip_image: clip_image_path.to_string_lossy().into_owned(),
         clip_text: clip_text_path.to_string_lossy().into_owned(),
         ..previous_paths.clone()
     };
 
-    // Re-registers the runtime with the combined face + CLIP paths. The
-    // face sessions survive the re-registration (same paths); the CLIP
-    // image session is configured here and loads below.
+    // Registers the runtime with the combined paths. Existing sessions
+    // survive the re-registration (same paths); the CLIP image session is
+    // configured here and loads below.
     init_ml_runtime(combined.clone());
 
     // Warm-up: forces the CLIP image session to build + run over an
     // inert image (ente-ml's CLIP preprocessing rescales it to the
     // encoder's input size), so a broken semantic runtime fails HERE
     // instead of on the first real embedding. On failure the recovery
-    // above restores the face-only runtime.
+    // above restores the previous registration (face-only paths, or none
+    // at all in the r39 fresh case).
     let warmup_jpeg = warmup_jpeg().map_err(|error| format!("encode warm-up image: {error}"))?;
     if let Err(error) = analyze_image(semantic_warmup_request(&combined, warmup_jpeg)) {
         release_ml_runtime();
-        init_ml_runtime(previous_paths);
+        if engine.is_some() {
+            init_ml_runtime(previous_paths);
+        }
         return Err(format!("semantic warm-up failed: {error}"));
     }
 
-    state.model_paths = combined;
-    state.clip_vocab_path = Some(vocab_path.to_string_lossy().into_owned());
-    state.semantic_ready = true;
-    state.info = format_engine_info(true);
+    // The tail is split on `engine.is_some()` BEFORE any mutable borrow
+    // (the `init` tail's discipline: the upgrade mutates in place under
+    // one short-lived borrow; the fresh install has no borrow outstanding).
+    if engine.is_some() {
+        // The r26 upgrade: the CLIP halves join the face paths; the vocab
+        // path is remembered and the info line names both halves.
+        if let Some(state) = engine.as_mut() {
+            state.model_paths = combined;
+            state.clip_vocab_path = Some(vocab_path.to_string_lossy().into_owned());
+            state.semantic_ready = true;
+            state.info = format_engine_info(state.faces_ready(), true);
+        }
+    } else {
+        // The r39 fresh case: the SEMANTIC-ONLY session (blank face
+        // paths by construction — `previous_paths` was the default).
+        *engine = Some(EngineState {
+            model_paths: combined,
+            clip_vocab_path: Some(vocab_path.to_string_lossy().into_owned()),
+            semantic_ready: true,
+            info: format_engine_info(false, true),
+        });
+    }
     Ok(())
 }
 
@@ -281,7 +391,7 @@ pub(crate) fn engine_info() -> Option<String> {
 /// The whole `EngineState` is taken, so the r26 semantic half resets with
 /// it: after a release, semantic calls fail with [`NOT_INITIALIZED`] (the
 /// engine check dominates — there is no engine left to be semantic) until
-/// a fresh `init` + `init_semantic`.
+/// a fresh `init` and/or `init_semantic` (either order, r39).
 pub(crate) fn release() -> bool {
     let mut engine = lock();
     if engine.take().is_none() {
@@ -294,9 +404,16 @@ pub(crate) fn release() -> bool {
 /// Runs face detection over JPEG bytes. Returns the flat
 /// `[x1, y1, x2, y2, score, …]` buffer produced by
 /// [`detections_to_source_pixel_buffer`].
+///
+/// Requires the FACE half (r39): on a semantic-only session this is the
+/// [`FACE_MODELS_NOT_INSTALLED`] error, checked at the boundary before
+/// any request is built.
 pub(crate) fn detect_faces_jpeg(jpeg_bytes: Vec<u8>) -> Result<Vec<f32>, String> {
     let engine = lock();
     let state = engine.as_ref().ok_or_else(|| NOT_INITIALIZED.to_string())?;
+    if !state.faces_ready() {
+        return Err(FACE_MODELS_NOT_INSTALLED.to_string());
+    }
     let result = analyze_image(AnalyzeImageRequest {
         file_id: FILE_ID,
         source: ImageSource::Bytes(jpeg_bytes),
@@ -342,9 +459,16 @@ pub(crate) fn detections_to_source_pixel_buffer(result: &AnalyzeImageResult) -> 
 /// Runs face detection + embedding over JPEG bytes. Returns the flat
 /// `[x1, y1, x2, y2, score, e0..e191, …]` buffer produced by
 /// [`embeddings_to_source_pixel_buffer`].
+///
+/// Requires the FACE half (r39): on a semantic-only session this is the
+/// [`FACE_MODELS_NOT_INSTALLED`] error, checked at the boundary before
+/// any request is built.
 pub(crate) fn detect_face_embeddings_jpeg(jpeg_bytes: Vec<u8>) -> Result<Vec<f32>, String> {
     let engine = lock();
     let state = engine.as_ref().ok_or_else(|| NOT_INITIALIZED.to_string())?;
+    if !state.faces_ready() {
+        return Err(FACE_MODELS_NOT_INSTALLED.to_string());
+    }
     let result = analyze_image(AnalyzeImageRequest {
         file_id: FILE_ID,
         source: ImageSource::Bytes(jpeg_bytes),
@@ -485,11 +609,16 @@ fn validate_clip_embedding(embedding: &[f32]) -> Result<(), String> {
     Ok(())
 }
 
-fn format_engine_info(semantic: bool) -> String {
-    let models = if semantic {
-        SEMANTIC_MODELS_LABEL
-    } else {
-        FACE_MODELS_LABEL
+fn format_engine_info(faces: bool, semantic: bool) -> String {
+    let models = match (faces, semantic) {
+        (true, true) => SEMANTIC_MODELS_LABEL,
+        (true, false) => FACE_MODELS_LABEL,
+        // The r39 semantic-only session: the CLIP pair alone.
+        (false, true) => SEMANTIC_ONLY_MODELS_LABEL,
+        // Unreachable from the state machine (an EngineState always carries
+        // at least one installed half) and never requested by callers; the
+        // blank-arm answer keeps the function total instead of panicking.
+        (false, false) => "",
     };
     format!("ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={models}")
 }
@@ -669,7 +798,7 @@ mod tests {
 
     #[test]
     fn engine_info_is_a_single_line_naming_the_pinned_stack() {
-        let face_only = format_engine_info(false);
+        let face_only = format_engine_info(true, false);
 
         assert_eq!(
             face_only,
@@ -679,15 +808,83 @@ mod tests {
         );
         assert!(!face_only.contains('\n'));
 
-        // The r26 semantic line keeps the same shape, one segment swapped:
-        let semantic = format_engine_info(true);
+        // The r26 combined line keeps the same shape, one segment swapped:
+        let combined = format_engine_info(true, true);
         assert_eq!(
-            semantic,
+            combined,
             format!(
                 "ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={SEMANTIC_MODELS_LABEL}"
             )
         );
-        assert!(!semantic.contains('\n'));
+        assert!(!combined.contains('\n'));
+
+        // The r39 semantic-only line names the CLIP pair alone:
+        let semantic_only = format_engine_info(false, true);
+        assert_eq!(
+            semantic_only,
+            format!(
+                "ort={ORT_BINDINGS_VERSION} providers={PROVIDERS_LABEL} models={SEMANTIC_ONLY_MODELS_LABEL}"
+            )
+        );
+        assert!(!semantic_only.contains('\n'));
+    }
+
+    // ---- r39: the symmetric session halves ----
+
+    /// A semantic-only session shape: the CLIP paths filled, the face paths
+    /// blank (exactly what [`init_semantic`] installs from scratch).
+    fn semantic_only_state() -> EngineState {
+        EngineState {
+            model_paths: ModelPaths {
+                clip_image: "/models/mobileclip_s2_image.onnx".to_string(),
+                clip_text: "/models/mobileclip_s2_text.onnx".to_string(),
+                ..ModelPaths::default()
+            },
+            clip_vocab_path: Some("/models/bpe_simple_vocab.txt".to_string()),
+            semantic_ready: true,
+            info: format_engine_info(false, true),
+        }
+    }
+
+    #[test]
+    fn a_semantic_only_session_has_no_face_half_and_the_dedicated_error_names_it() {
+        let state = semantic_only_state();
+
+        // The session-shape truth: the face paths are blank, so the face
+        // half is not installed and the boundary guard fires with the
+        // dedicated message (never upstream's generic missing-path error).
+        assert!(!state.faces_ready());
+        assert!(state.semantic_ready);
+        assert!(FACE_MODELS_NOT_INSTALLED.contains("nativeInit"));
+
+        // A face-only session (the pre-r39 shape) is the mirror image:
+        let face_state = EngineState {
+            model_paths: ModelPaths {
+                face_detection: "/models/yolov5s_face.onnx".to_string(),
+                face_embedding: "/models/mobilefacenet.onnx".to_string(),
+                ..ModelPaths::default()
+            },
+            clip_vocab_path: None,
+            semantic_ready: false,
+            info: format_engine_info(true, false),
+        };
+        assert!(face_state.faces_ready());
+        assert!(!face_state.semantic_ready);
+    }
+
+    #[test]
+    fn a_blank_detector_path_is_the_face_half_absent_and_whitespace_only_counts_as_blank() {
+        // The vendored runtime's own blank test is `trim().is_empty()`, so
+        // the faces_ready derivation mirrors it exactly (a path of spaces
+        // configures nothing, the same as an empty string).
+        let mut state = semantic_only_state();
+        assert!(!state.faces_ready());
+
+        state.model_paths.face_detection = "   ".to_string();
+        assert!(!state.faces_ready());
+
+        state.model_paths.face_detection = "/models/yolov5s_face.onnx".to_string();
+        assert!(state.faces_ready());
     }
 
     #[test]

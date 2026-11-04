@@ -303,11 +303,15 @@ class PrivacyPolicyTest {
         // clip-index-state.json: the r26 semantic queue's state file
         // (Workstream 7 --- the Magic Search queue's own bookkeeping in
         // the SAME directory, the identical deliberate addition).
+        // things-state.json: the r39 Things collections' state file
+        // (the ente-port exit round --- the named collections in the
+        // SAME directory, the identical deliberate addition).
         val nonHostLiterals = setOf(
             "install.properties",
             "index-state.json",
             "people-state.json",
             "clip-index-state.json",
+            "things-state.json",
         )
         val found = mlDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }

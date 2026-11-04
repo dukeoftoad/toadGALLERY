@@ -13,6 +13,42 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
+### v2.12 (2026-11-04, latest) --- the r39 ente-port exit round + the
+  Phase 8/9 restructure
+
+- **Phase 5, the ente port, is code-side COMPLETE** (r39, branch
+  `tg-r39-ente-exit`, per the maintainer directive "complete Phase 5 ---
+  the ente port"): the two named Magic Search follow-ups close --- (a)
+  **semantic-only engine sessions** (the r26 round's documented
+  FACE-model requirement dropped: `nativeInitSemantic` installs a
+  SEMANTIC-ONLY session from scratch over the vendored runtime's own
+  blank-path configuration shape, `nativeInit` upgrades such a session
+  with the face half in place, face calls on a semantic-only session
+  fail with a dedicated message, and the engine info line names all
+  three session shapes; the Kotlin half: the adapter split into its own
+  file opening `initSemantic -> openFaceIndex` with NO `initialize`,
+  the semantic queue's gates dropping the FACE capability step, and
+  `MagicSearchContentPolicy` renamed `SemanticContentPolicy` with the
+  FACE input dropped --- ONE truth shared by Magic Search and Things);
+  (b) **Things dynamic collections** (named semantic collections over
+  the SAME CLIP index: the `nativeStoreSearchClipsWithin` distance-cut
+  search over upstream's own `SearchParams { limit, max_distance }`,
+  `things-state.json` in the face-index directory, the pure
+  membership planner at the round-pinned 0.70 cosine cut, the Albums
+  tab's Things section, the `things/{collectionId}` detail screen, and
+  the `thingsAlbumEnabled` consent row). What remains open in Phase 5
+  is HUMAN-ONLY by the standing directive: the on-device dogfood rows
+  and the §13–§18 device checklist.
+- **Phases 8 & 9 SKIPPED, scope folded into Phase 10** (maintainer
+  directive, 2026-11-04): the Edit v3 on-device AI features (magic
+  erase, sky replacement, bokeh, opt-in face retouch) and the
+  lightweight video editor move INTO Phase 10 as explicitly-deferred
+  sub-scopes; Phase 10 becomes "hardening + the deferred Edit v3 AI
+  editing + the lightweight video editor (absorbing Phases 8–9)".
+  `progress.json` follows at merge time (p8 + p9 fold into p10, weight
+  12, the project percent unchanged at 79 --- the folded rows were
+  pending and stay pending).
+
 ### v2.11 (2026-11-04, latest) --- the Phase 7 campaign close-out: r38
   MERGED, p7 done, the remaining-work line closed
 
@@ -1168,6 +1204,18 @@ resume: build 23 ships r13–r19.
 **Purpose:** Make large libraries easy to explore with Mi Gallery-grade
 organisational affordances, all on-device.
 
+**Status (r39): the ente-port code side is COMPLETE.** All the code
+items this roadmap and `tasks.md` name for Phase 5 are merged: the
+Ente-derived engine workstream (r21–r28: vendored crates at the
+`423b2d8` pin, the JNI bridge, the model provisioner with
+`models.ente.com` as the sole allowlisted host, the face
+indexing/clustering pipeline, Magic Search, the offline model-pack
+channel, the hardening round) plus the r39 ente-port exit round (the
+semantic-only engine session and the Things dynamic collections ---
+`docs/phase-5/ente-exit.md`). What remains open is HUMAN-ONLY by the
+standing directive: the on-device dogfood validation (tasks.md §3) and
+the device-checklist §13–§18 rows.
+
 #### Tasks
 
 - **Moments timeline:** group the main Photos view by date with a
@@ -1478,6 +1526,11 @@ filters, text, stickers, drawing, mosaic, frames.
 
 ### Phase 8 --- toadGALLERY Edit v3: on-device AI features
 
+**Status: SKIPPED (2026-11-04 maintainer directive)** --- the whole
+scope below is folded into Phase 10 as the explicitly-deferred "Edit
+v3 on-device AI editing" sub-scope; this section stays for the record
+(the task text is unchanged under Phase 10).
+
 **Purpose:** Deliver the Mi Gallery wow-factor (magic erase, sky
 replacement, bokeh, beauty) with the strict on-device-only policy
 governed by ADR-0010.
@@ -1519,6 +1572,11 @@ governed by ADR-0010.
 
 ### Phase 9 --- Lightweight video editor
 
+**Status: SKIPPED (2026-11-04 maintainer directive)** --- the whole
+scope below is folded into Phase 10 as the explicitly-deferred
+"lightweight video editor" sub-scope; this section stays for the
+record (the task text is unchanged under Phase 10).
+
 **Purpose:** Add Mi Gallery-grade lightweight video editing: trim,
 mute, slow-mo, frame extraction, GIF/WebP export. Not a multi-track
 NLE. Bounded by ADR-0012.
@@ -1558,9 +1616,35 @@ NLE. Bounded by ADR-0012.
 - Performance on long / 4K / HDR clips is documented and within an
   agreed budget.
 
-### Phase 10 --- Performance, compatibility, accessibility, and reliability hardening
+### Phase 10 --- Hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9)
 
-**Purpose:** Validate real-world behavior before release.
+**Status:** Planned. Since the 2026-11-04 maintainer directive this
+phase ALSO carries the SKIPPED Phases 8 and 9 scopes as its two
+explicitly-deferred sub-scopes (below), so the post-Phase-7 work is
+ONE phase: harden first (the original tasks), then the deferred AI
+editing and video editor sub-scopes in that order.
+
+**Purpose:** Validate real-world behavior before release --- and, since
+the 2026-11-04 directive folded Phases 8–9 here, deliver the deferred
+Edit v3 on-device AI features and the lightweight video editor inside
+the same hardening-first phase.
+
+#### Deferred sub-scope A (folded from Phase 8): Edit v3 on-device AI editing
+
+The full Phase 8 task text applies verbatim (magic erase, sky
+replacement, bokeh, opt-in face retouch; ADR-0010's on-device-only
+policy; non-destructive layers in the Phase 6 pipeline; the privacy
+suite extended to assert zero outbound connections during any AI
+feature). Served by the engine workstream's model-provisioning
+discipline (ADR-0020).
+
+#### Deferred sub-scope B (folded from Phase 9): the lightweight video editor
+
+The full Phase 9 task text applies verbatim (trim, mute, slow-mo,
+frame extraction, GIF/WebP export; ADR-0012's minimal-dependency
+rule).
+
+#### Tasks (the original Phase 10 hardening scope)
 
 #### Tasks
 

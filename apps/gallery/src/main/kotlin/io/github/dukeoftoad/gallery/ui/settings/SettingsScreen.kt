@@ -665,6 +665,42 @@ fun SettingsScreen(
             modifier = Modifier.padding(top = 8.dp),
         )
 
+        // ---- Things collections consent (r39, the ente-port exit round;
+        // ADR-0010) ----
+        // The opt-in gate for the Albums tab's Things section: the SAME
+        // row shape as the two rows above (default OFF, one Switch,
+        // on-device copy, write-through under the `thingsAlbumEnabled`
+        // key). Things rides the SAME semantic models and the SAME
+        // semantic index as Magic Search --- no new download card, no
+        // new queue; the body copy says so.
+        val thingsAlbumsEnabled by settingsViewModel.thingsAlbumsEnabled.collectAsState()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_things_albums),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = thingsAlbumsEnabled,
+                onCheckedChange = { settingsViewModel.setThingsAlbumsEnabled(it) },
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .testTag("settings_toggle_things_albums"),
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_things_albums_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+
         val aiViewModel: AiEngineViewModel = viewModel()
         val aiState by aiViewModel.state.collectAsState()
         LaunchedEffect(Unit) { aiViewModel.refresh() }

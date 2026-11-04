@@ -1,6 +1,7 @@
 //! toadGALLERY face-detection + face-index JNI bridge (r22 spike, r23
 //! indexing round; r24 store maintenance, r25 People paths, r26 the
-//! semantic/CLIP half).
+//! semantic/CLIP half, r39 the symmetric sessions + the distance-cut
+//! search).
 //!
 //! Provenance: net-new toadGALLERY code, r22/r23 — this crate is *our*
 //! adapter, not vendored from upstream. It links the AGPL-3.0 vendored
@@ -9,8 +10,11 @@
 //! for Kotlin's `io.github.dukeoftoad.gallery.ml.engine.MlEngineJni`:
 //!
 //! * [`nativeInit`] — validate and register the pinned face models in a
-//!   models directory, then warm up ONNX Runtime.
-//! * [`nativeEngineInfo`] — one-line human-readable engine description.
+//!   models directory, then warm up ONNX Runtime. Since r39 the session
+//!   halves are SYMMETRIC: this also UPGRADES a semantic-only session
+//!   (installed first by [`nativeInitSemantic`]) with the face half.
+//! * [`nativeEngineInfo`] — one-line human-readable engine description
+//!   naming the session's shape (face-only / semantic-only / both, r39).
 //! * [`nativeDetectFacesJpeg`] — face boxes + scores for a JPEG byte
 //!   payload, mapped to source-image pixel coordinates.
 //! * [`nativeDetectFaceEmbeddingsJpeg`] (r23) — the same detection plus
@@ -40,6 +44,11 @@
 //!   state machine: the upsert/delete pair, the resumability read, the
 //!   row count, the top-K vector search (JSON, vecdb order verbatim)
 //!   and the index fill (JSON report).
+//! * [`nativeStoreSearchClipsWithin`] (r39) — the DISTANCE-CUT vector
+//!   search (upstream's own `SearchParams { limit, max_distance }`,
+//!   finally plumbed through): the Things/membership half over the same
+//!   CLIP index, and the mechanism the r26 threshold-tuning follow-up
+//!   named.
 //! * [`nativeRelease`] — tear the engine (and the store) down.
 //!
 //! Contract notes (see also `README.md`):
@@ -71,7 +80,7 @@ use std::{
 use jni::{
     JNIEnv,
     objects::{JByteArray, JClass, JFloatArray, JLongArray, JString},
-    sys::{self, jboolean, jdouble, jfloatArray, jint, jlong, jlongArray, jstring},
+    sys::{self, jboolean, jdouble, jfloat, jfloatArray, jint, jlong, jlongArray, jstring},
 };
 
 mod engine;
@@ -998,6 +1007,55 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
                 .map_err(|error| format!("read queryEmbedding argument: {error}"))?;
         }
         let hits = store::search_clips(&values, i64::from(limit))?;
+        let json = store::clip_matches_json(&hits);
+        let java_string = env
+            .new_string(&json)
+            .map_err(|error| format!("allocate clip matches string: {error}"))?;
+        Ok(java_string.into_raw())
+    })
+}
+
+/// `MlEngineJni.nativeStoreSearchClipsWithin(queryEmbedding: FloatArray,
+/// maxDistance: Float, limit: Int): String` (r39).
+///
+/// Runs the DISTANCE-CUT vector search over the store's CLIP index
+/// (upstream's own `SearchParams { limit, max_distance }` plumbed through
+/// the bridge) and returns the same JSON array shape as
+/// `nativeStoreSearchClips` — `[{"file_id":123,"distance":0.42},…]` in
+/// the vecdb's own order (nearest first; preserved verbatim) — but only
+/// the matches at cosine distance `<= maxDistance`. A wrong query
+/// dimension or a non-finite/negative `maxDistance` throws
+/// `java.lang.IllegalStateException` (the native-side defense-in-depth
+/// guard, the `nativeStoreSearchClips` contract --- the Kotlin facade's
+/// own `require` checks give the caller-input failures their
+/// `IllegalArgumentException` shape before the bridge is ever reached);
+/// a closed store or a search failure throws the same, exactly like the
+/// plain search.
+#[expect(
+    unsafe_code,
+    reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_nativeStoreSearchClipsWithin<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    query_embedding: JFloatArray<'local>,
+    max_distance: jfloat,
+    limit: jint,
+) -> jstring {
+    call_or_throw(&mut env, ptr::null_mut(), |env| {
+        let length = env
+            .get_array_length(&query_embedding)
+            .map_err(|error| format!("read queryEmbedding argument: {error}"))?
+            as usize;
+        let mut values = vec![0.0_f32; length];
+        if length > 0 {
+            env.get_float_array_region(&query_embedding, 0, &mut values)
+                .map_err(|error| format!("read queryEmbedding argument: {error}"))?;
+        }
+        let hits = store::search_clips_within(&values, max_distance, i64::from(limit))?;
         let json = store::clip_matches_json(&hits);
         let java_string = env
             .new_string(&json)

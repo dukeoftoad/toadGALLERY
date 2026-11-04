@@ -145,15 +145,15 @@ unsigned.
 | **0** | Align scope, establish baselines | **Exited** — [sign-off](docs/phase-0/sign-off.md) |
 | **1** | Source audit, integration design, contract prototype | **Delivered** — audits, matrix, ADRs, diagrams, license report; reframed as reference-only under ADR-0008 |
 | **2** | Product shell, visual foundation, privacy hardening, Compose toolchain, CI | **Exited** — Compose-native shell 0.2.x ([compose-migration.md](docs/architecture/compose-migration.md)); CI as merge gate (ADR-0013); privacy gates + test suites enforced ([ADR-0014](docs/integration-decisions.md), [privacy-gate.md](docs/phase-2/privacy-gate.md)) |
-| 3 | Core media access, browsing, file ops, recycle bin, hidden vault | **In progress** — photo timeline merged ([#26](https://github.com/dukeoftoad/toadGALLERY/pull/26)); albums + detail view ([#29](https://github.com/dukeoftoad/toadGALLERY/issues/29)); incremental Paging 3 timeline ([#28](https://github.com/dukeoftoad/toadGALLERY/issues/28)) |
-| 4 | Aves-grade metadata layer (`androidx.exifinterface` + own IPTC/XMP wrappers) | planned |
-| 5 | MI-style organisational UX (Moments, Stories, opt-in auto-albums, semantic search, collage, slideshow) | planned |
-| 6 | toadGALLERY Edit v1: core adjustments + non-destructive pipeline | contract spec ready ([v1](docs/architecture/editor-contract.md)) |
-| 7 | toadGALLERY Edit v2: filters and annotations | in progress (r33 LUT filters + import merged as #107; r34 text tool merged as #109) |
-| 8 | toadGALLERY Edit v3: on-device AI features (magic erase, sky replace, bokeh, opt-in face retouch) | planned (ADR-0010) |
-| 9 | Lightweight video editor (trim, mute, slow-mo, frame extract, GIF/WebP) | planned (ADR-0012) |
-| 10 | Performance, compatibility, accessibility, reliability hardening | planned |
-| 11 | Release readiness (F-Droid metadata, FOSS review, signing, v1.0 cut) | planned |
+| 3 | Core media access, browsing, file ops, recycle bin, hidden vault | **Done** — 16/16 issues closed by PR #70 |
+| 4 | Aves-grade metadata layer (`androidx.exifinterface` + own IPTC/XMP wrappers) | **Done** — r10–r20 merged (#78–#92) |
+| 5 | MI-style organisational UX + the Ente-derived on-device AI port (People, Places, Things, Magic Search) | **Code-side complete** — r21–r28 + the r39 ente-port exit round; on-device dogfood rows human-only |
+| 6 | toadGALLERY Edit v1: core adjustments + non-destructive pipeline | **Done** — r29–r32 merged (#104–#106) |
+| 7 | toadGALLERY Edit v2: filters and annotations | **Done** — r33–r38 merged (#107, #109–#113); the §22–§27 device rows human-only |
+| 8 | toadGALLERY Edit v3: on-device AI features (magic erase, sky replace, bokeh, opt-in face retouch) | **Skipped (2026-11-04 directive) — folded into Phase 10** |
+| 9 | Lightweight video editor (trim, mute, slow-mo, frame extract, GIF/WebP) | **Skipped (2026-11-04 directive) — folded into Phase 10** |
+| 10 | Hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9) | planned |
+| 11 | Release readiness (F-Droid metadata, FOSS review, signing, v1.0 cut) | release.yml live (ADR-0018); the rest planned |
 
 Progress is tracked in the repository **milestones** (one per phase) and **issues**.
 

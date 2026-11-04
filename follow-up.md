@@ -211,3 +211,29 @@ the campaign's closing)
 - **The campaign summary** is the worklog's Run #13; the counts are
   executed numbers (131 new JVM tests; the edit module 241 -> 374; the
   strings 94 -> 129; the versionCodes 7 -> 11).
+
+## 2026-11-04 (latest) — the r39 ente-port exit round (the Phase 5
+completion, branch `tg-r39-ente-exit`)
+
+- **The directive**: "complete Phase 5 — the ente port" (corrected from
+  "task 5"; the user's numbering), plus the roadmap restructure:
+  Phases 8 & 9 skipped and folded into Phase 10. The ente-port dogfood
+  device rows remain human-only (the standing directive).
+- **F-21 (new, open)** — the Things membership cut is round-pinned at
+  cosine distance 0.70 (similarity >= 0.30), honestly arbitrary (the
+  MagicSearchQuery 200-char-cap convention); per-library tuning rides
+  a later window if the on-device dogfood asks for it. The planner
+  takes its cut as a parameter, so tuning is a caller change, never a
+  semantics change.
+- **F-22 (new, open)** — the Albums-tab Things section renders every
+  collection chip in one LazyRow (no "See all" browse screen); when
+  collections grow past a row's worth, the browse screen is a UI-round
+  follow-up. The create dialog and chips are not yet TalkBack-audited
+  to the r32 editor standard --- the §13 device rows' family.
+- **Note** — the r26 named follow-ups "semantic-only engine sessions"
+  and "Things dynamic collections" are CLOSED (the r39 round); the
+  "score display" and "scan-hook wiring" follow-ups stay open
+  (`docs/phase-5/magic-search.md`'s r39 closure note).
+- **Note** — `progress.json` deliberately NOT updated for r39 (the
+  F-12 convention: it records MERGED truth; the p5 evidence + the
+  p8/p9/p10 consolidation update at merge time).

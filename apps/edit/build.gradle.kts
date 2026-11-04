@@ -119,8 +119,28 @@ android {
         // rejection line, and the remove-look affordance for imported
         // looks (a sidecar naming a removed look degrades to no-look by
         // the tolerance contract).
-        versionCode = 6
-        versionName = "0.4.1-edit-alpha"
+        // versionCode 7 (r34 round): the text tool --- the OFL licensing
+        // gate FIRST (four verbatim-bundled SIL OFL 1.1 faces from
+        // google/fonts @ 2fe1e8c, each OFL.txt beside its TTF, sha256
+        // ledger rows + docs/phase-7/bundled-fonts.md; the prep doc's
+        // Noto Sans candidate swapped for Fira Sans --- Noto's only
+        // unmodified full form is a 2.0 MB variable, and the CSS API
+        // serves latin subsets); the additive TextLayers recipe (absent
+        // key = clean pre-r34 sidecar; unresolvable fontId round-trips
+        // verbatim and degrades to the default face at render; the
+        // tolerant-read codec); the pure TextLayout (anchor fractions x
+        // output canvas -> pixel specs, draw order = list order,
+        // color-alpha x opacity); the shared TextCompositor (the
+        // compositing pass AFTER the whole pixel pipeline --- preview and
+        // export through one code path); the Text UI (Add chip, layer
+        // chips, text field with per-commit draft granularity, font chip
+        // row, size/opacity/rotation sliders with the r32 a11y
+        // conventions, named color swatches, remove; drag-to-position on
+        // the preview, live-drafted, one commit on release); undo/redo and
+        // the sidecar promise extended to text by construction. JVM tests:
+        // TextLayersTest, TextLayersRecipeTest, BundledFontsTest.
+        versionCode = 7
+        versionName = "0.4.2-edit-alpha"
     }
 
     buildFeatures {

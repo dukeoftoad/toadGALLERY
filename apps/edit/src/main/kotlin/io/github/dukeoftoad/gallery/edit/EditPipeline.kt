@@ -19,6 +19,12 @@ package io.github.dukeoftoad.gallery.edit
  * 11. vignette
  * 12. sharpen (unsharp mask)
  *
+ * The r34 TEXT pass is NOT stage 13 of this pixel pipeline: it is a
+ * COMPOSITING pass that runs after `apply` returns, over the OUTPUT
+ * canvas (see `TextCompositor` --- geometry/adjustments/LUT/vignette/
+ * sharpen all render first, then the text layers draw last, above
+ * everything, through the same shared code path the preview uses).
+ *
  * The look stage sits AFTER the colour grade (the look grades the
  * graded pixels, like a film stock over a developed negative) and
  * BEFORE the spatial effects (vignette and sharpen are position

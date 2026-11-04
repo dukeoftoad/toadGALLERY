@@ -42,6 +42,11 @@ data class EditRecipe(
     val sharpness: Int = 0,
     // ---- Filter (r33, Phase 7 v2: the .cube look layer) ----
     val lut: LutSelection? = null,
+    // ---- Text (r34, Phase 7 v2: the OFL-font layer system) ----
+    // Absent = a pre-r34 sidecar / a clean session; empty normalises to
+    // absent. Unresolvable fontIds round-trip verbatim (the tolerance
+    // contract; see TextLayers.kt).
+    val textLayers: TextLayers? = null,
 ) {
 
     val isGeometryIdentity: Boolean
@@ -58,8 +63,12 @@ data class EditRecipe(
     val isFilterIdentity: Boolean
         get() = lut == null || lut.isIdentity
 
+    /** No text layers --- nothing for the compositing pass to draw. */
+    val isTextIdentity: Boolean
+        get() = textLayers == null || textLayers.isIdentity
+
     val isIdentity: Boolean
-        get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity
+        get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity && isTextIdentity
 
     init {
         require(quarterTurns in 0..3) { "quarterTurns must be in 0..3" }
@@ -163,6 +172,26 @@ object EditRecipeCodec {
                     .put("intensity", it.intensity),
             )
         }
+        // r34: the key is written ONLY for a non-empty layer list, so a
+        // pre-r34 sidecar and a clean session round-trip byte-clean.
+        recipe.textLayers?.takeIf { it.layers.isNotEmpty() }?.let { tl ->
+            val arr = org.json.JSONArray()
+            for (layer in tl.layers) {
+                arr.put(
+                    org.json.JSONObject()
+                        .put("id", layer.id)
+                        .put("text", layer.text)
+                        .put("fontId", layer.fontId)
+                        .put("sizePct", layer.sizePct)
+                        .put("color", "%08X".format(layer.colorArgb))
+                        .put("opacity", layer.opacity)
+                        .put("rotationDeg", layer.rotationDeg)
+                        .put("centerX", layer.centerX)
+                        .put("centerY", layer.centerY),
+                )
+            }
+            root.put("textLayers", arr)
+        }
         return root.toString()
     }
 
@@ -222,6 +251,7 @@ object EditRecipeCodec {
             vignette = root.optInt("vignette", 0).coerceIn(-100, 100),
             sharpness = root.optInt("sharpness", 0).coerceIn(-100, 100),
             lut = readLut(root.optJSONObject("lut")),
+            textLayers = readTextLayers(root.optJSONArray("textLayers")),
         )
         ParseResult.Valid(recipe)
     } catch (e: org.json.JSONException) {
@@ -251,6 +281,51 @@ object EditRecipeCodec {
         if (id.isEmpty()) return null
         return LutSelection(lutId = id, intensity = lut.optInt("intensity", 100).coerceIn(0, 100))
     }
+
+    /**
+     * The optional `textLayers` array (r34): absent or empty means NO text
+     * (a pre-r34 sidecar loads clean). Tolerance rules, mirroring the LUT
+     * contract: an entry that is not an object, or whose id is blank, is
+     * SKIPPED (a layer without identity cannot be re-targeted by the UI,
+     * the drag or undo/redo); a blank fontId means "no face chosen" and
+     * reads as the registry default; an UNKNOWN non-blank fontId is KEPT
+     * verbatim --- the recipe is the user's data, resolution is the
+     * renderer's problem ([BundledFonts.effectiveId]). Numerics coerce
+     * like every other slider; a malformed color reads as the default
+     * color; text truncates at the model cap (the tolerant-read
+     * convention --- a hand-edited sidecar never loses its whole session).
+     */
+    private fun readTextLayers(arr: org.json.JSONArray?): TextLayers? {
+        if (arr == null) return null
+        val layers = ArrayList<TextLayer>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "").trim()
+            if (id.isEmpty()) continue
+            val fontId = o.optString("fontId", "").trim()
+                .ifEmpty { BundledFonts.DEFAULT_ID }
+                .take(TextLayer.MAX_ID_LENGTH)
+            layers.add(
+                TextLayer(
+                    id = id.take(TextLayer.MAX_ID_LENGTH),
+                    text = o.optString("text", "").take(TextLayer.MAX_TEXT_LENGTH),
+                    fontId = fontId,
+                    sizePct = o.optInt("sizePct", TextLayer.DEFAULT_SIZE_PCT).coerceIn(0, 300),
+                    colorArgb = readColorArgb(o.optString("color", "")),
+                    opacity = o.optInt("opacity", 100).coerceIn(0, 100),
+                    rotationDeg = o.optInt("rotationDeg", 0).coerceIn(-180, 180),
+                    centerX = o.optDouble("centerX", 0.5).coerceIn(0.0, 1.0),
+                    centerY = o.optDouble("centerY", 0.5).coerceIn(0.0, 1.0),
+                ),
+            )
+        }
+        return if (layers.isEmpty()) null else TextLayers(layers)
+    }
+
+    /** The wire form is 8 uppercase hex digits (AARRGGBB); anything else reads as the default color. */
+    private fun readColorArgb(s: String): Long =
+        if (s.length == 8 && s.all { it in "0123456789abcdefABCDEF" }) s.toLong(16)
+        else TextLayer.DEFAULT_COLOR
 
     private fun bandJson(band: HslBandAdjust): org.json.JSONObject =
         org.json.JSONObject()

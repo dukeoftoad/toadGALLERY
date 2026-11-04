@@ -53,6 +53,11 @@ data class EditRecipe(
     // NOTHING at render time (the tolerance contract; see
     // StickerLayers.kt) --- there is no default sticker to degrade to.
     val stickerLayers: StickerLayers? = null,
+    // ---- Drawing (r36, Phase 7 v2: the freehand stroke system) ----
+    // Absent = a pre-r36 sidecar / a clean session; empty normalises to
+    // absent. One gesture = one layer = one undo snapshot; the points
+    // are the user's data, thinned at commit (see DrawLayers.kt).
+    val drawLayers: DrawLayers? = null,
 ) {
 
     val isGeometryIdentity: Boolean
@@ -77,9 +82,13 @@ data class EditRecipe(
     val isStickerIdentity: Boolean
         get() = stickerLayers == null || stickerLayers.isIdentity
 
+    /** No strokes --- nothing for the compositing pass to draw. */
+    val isDrawIdentity: Boolean
+        get() = drawLayers == null || drawLayers.isIdentity
+
     val isIdentity: Boolean
         get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity &&
-            isTextIdentity && isStickerIdentity
+            isTextIdentity && isStickerIdentity && isDrawIdentity
 
     init {
         require(quarterTurns in 0..3) { "quarterTurns must be in 0..3" }
@@ -221,6 +230,27 @@ object EditRecipeCodec {
             }
             root.put("stickerLayers", arr)
         }
+        // r36: the same rule for strokes; points ride as 2-element
+        // arrays of the output-canvas fractions.
+        recipe.drawLayers?.takeIf { it.layers.isNotEmpty() }?.let { dl ->
+            val arr = org.json.JSONArray()
+            for (layer in dl.layers) {
+                val pts = org.json.JSONArray()
+                for (p in layer.points) {
+                    pts.put(org.json.JSONArray().put(p.x).put(p.y))
+                }
+                arr.put(
+                    org.json.JSONObject()
+                        .put("id", layer.id)
+                        .put("color", "%08X".format(layer.colorArgb))
+                        .put("widthPct", layer.widthPct)
+                        .put("opacity", layer.opacity)
+                        .put("smoothingPct", layer.smoothingPct)
+                        .put("points", pts),
+                )
+            }
+            root.put("drawLayers", arr)
+        }
         return root.toString()
     }
 
@@ -282,6 +312,7 @@ object EditRecipeCodec {
             lut = readLut(root.optJSONObject("lut")),
             textLayers = readTextLayers(root.optJSONArray("textLayers")),
             stickerLayers = readStickerLayers(root.optJSONArray("stickerLayers")),
+            drawLayers = readDrawLayers(root.optJSONArray("drawLayers")),
         )
         ParseResult.Valid(recipe)
     } catch (e: org.json.JSONException) {
@@ -388,6 +419,52 @@ object EditRecipeCodec {
             )
         }
         return if (layers.isEmpty()) null else StickerLayers(layers)
+    }
+
+    /**
+     * The optional `drawLayers` array (r36): absent or empty means NO
+     * strokes (a pre-r36 sidecar loads clean). The tolerance set is
+     * smaller than the sticker family's --- a stroke is its own data,
+     * so there is no foreign id to resolve: an entry that is not an
+     * object, or whose id is blank, is SKIPPED (the family rule); a
+     * points entry that is not a 2-element numeric array is dropped
+     * from the list; a layer whose points all fail (or whose count
+     * would be zero) is skipped --- a stroke without a point cannot
+     * render; the surviving points clamp to 0..1 and the count caps at
+     * the model cap (the tolerant-read convention; a hand-edited
+     * sidecar never loses its whole session).
+     */
+    private fun readDrawLayers(arr: org.json.JSONArray?): DrawLayers? {
+        if (arr == null) return null
+        val layers = ArrayList<DrawLayer>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "").trim()
+            if (id.isEmpty()) continue
+            val ptsArr = o.optJSONArray("points") ?: continue
+            val pts = ArrayList<DrawLayer.Point>(ptsArr.length())
+            for (j in 0 until ptsArr.length()) {
+                val pair = ptsArr.optJSONArray(j) ?: continue
+                if (pair.length() != 2) continue
+                val x = pair.optDouble(0, Double.NaN)
+                val y = pair.optDouble(1, Double.NaN)
+                if (x.isNaN() || y.isNaN()) continue
+                pts.add(DrawLayer.Point(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0)))
+                if (pts.size >= DrawLayer.MAX_POINTS) break
+            }
+            if (pts.isEmpty()) continue
+            layers.add(
+                DrawLayer(
+                    id = id.take(DrawLayer.MAX_ID_LENGTH),
+                    colorArgb = readColorArgb(o.optString("color", "")),
+                    widthPct = o.optInt("widthPct", DrawLayer.DEFAULT_WIDTH_PCT).coerceIn(1, 100),
+                    opacity = o.optInt("opacity", 100).coerceIn(0, 100),
+                    smoothingPct = o.optInt("smoothingPct", DrawLayer.DEFAULT_SMOOTHING_PCT).coerceIn(0, 100),
+                    points = pts,
+                ),
+            )
+        }
+        return if (layers.isEmpty()) null else DrawLayers(layers)
     }
 
     /** The wire form is 8 uppercase hex digits (AARRGGBB); anything else reads as the default color. */

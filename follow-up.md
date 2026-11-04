@@ -155,3 +155,16 @@ fix recorded in `docs/workplan.md` §3).
 - **Note** — the r34 text-tool bullet moved to MERGED truth in
   `tasks.md`/roadmap v2.7 (PR #109 `6bb17a4`); `progress.json` stays
   untouched until the r35 merge per the F-12 convention.
+
+## 2026-11-04 (latest) — the r36 drawing-tool round (authored on `tg-p7-drawing`)
+
+- **F-15 (new, open)** — per-point stroke editing and stroke
+  repositioning are deliberately out of scope in v1 (the points ARE the
+  position; editing them is a vertex-editor family of its own). A later
+  round owes the family decision: drag-a-vertex, or delete-and-repaint.
+- **F-16 (new, open, rides F-11/F-14)** — the paint gesture inherits the
+  gesture-a11y gap (the position-drag family); the §25 device rows
+  eyeball painting under TalkBack in the meantime.
+- **Note** — the r35 bullet moved to MERGED truth in tasks.md/roadmap
+  v2.8 (PR #110 `980ccea`); `progress.json` stays untouched until the
+  r36 merge per the F-12 convention.

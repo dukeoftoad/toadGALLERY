@@ -12,6 +12,35 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[toadGALLERY Edit] The freehand drawing tool — stroke-per-layer, the
+  additive DrawLayers recipe, the shared compositing pass between
+  stickers and text** (r36 round, Phase 7 layer type 3 of 5, branch
+  `tg-p7-drawing`): freehand strokes over the photo — one gesture = one
+  layer = one undo snapshot, per-layer colour (the r34 swatch palette),
+  width (1..100, percent of the output-canvas min-edge), opacity, and
+  smoothing (`round(pct/25)` → 0..4 Chaikin corner-cutting passes at
+  place time, endpoints preserved — exactly test-pinned; a tap paints a
+  dot of the brush width). Points are fractions of the output canvas,
+  thinned at commit to the 512-point cap by uniform stride (first/last
+  always kept, deterministic). The recipe's `DrawLayers` is additive
+  like the family contract: a pre-r36 sidecar loads clean — proven with
+  one carrying r34 text AND r35 stickers, the round-three stacking
+  proof; malformed point entries are dropped, survivors clamp, a layer
+  whose points all fail is skipped. Strokes composite in OUTPUT space,
+  BETWEEN the sticker pass and the text pass (annotation over the scene
+  objects, captions above the annotation), through the ONE shared
+  `DrawCompositor` the preview and the export both call. The UI: the
+  Draw-mode chip, stroke layer chips, the brush controls under the
+  exclusive duality (paint mode tunes the NEXT stroke; a selected layer
+  re-binds the same controls), the paint gesture on the preview, and
+  the ONE `sweepPendingDrafts()` helper across the families (12 call
+  sites retrofitted). 27 new JVM tests (the edit module at 314; the
+  local harness ran 305 pure green pre-push, catching two
+  TEST-expectation slips and one parenthesised backticked JVM name);
+  the module string count 104 → 114; editor `versionCode 9`
+  (`0.4.4-edit-alpha`). The on-device pass rides checklist §25; the
+  delivery record is `docs/phase-7/drawing-tool.md`.
+
 - **[toadGALLERY Edit] The sticker tool — eight project-authored
   in-code vector shapes, the additive StickerLayers recipe, the shared
   compositing pass below text** (r35 round, Phase 7 layer type 2 of 5,

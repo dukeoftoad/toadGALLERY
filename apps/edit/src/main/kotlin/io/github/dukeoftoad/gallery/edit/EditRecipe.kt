@@ -58,6 +58,11 @@ data class EditRecipe(
     // absent. One gesture = one layer = one undo snapshot; the points
     // are the user's data, thinned at commit (see DrawLayers.kt).
     val drawLayers: DrawLayers? = null,
+    // ---- Regions (r37, Phase 7 v2: the mosaic/blur pixel stage) ----
+    // Absent = a pre-r37 sidecar / a clean session; empty normalises to
+    // absent. The regions run as the pipeline's FINAL pixel stage, after
+    // sharpen (see RegionLayers.kt).
+    val mosaicRegions: RegionLayers? = null,
 ) {
 
     val isGeometryIdentity: Boolean
@@ -86,9 +91,13 @@ data class EditRecipe(
     val isDrawIdentity: Boolean
         get() = drawLayers == null || drawLayers.isIdentity
 
+    /** No regions --- nothing for the pixel stage to censor. */
+    val isRegionIdentity: Boolean
+        get() = mosaicRegions == null || mosaicRegions.isIdentity
+
     val isIdentity: Boolean
         get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity &&
-            isTextIdentity && isStickerIdentity && isDrawIdentity
+            isTextIdentity && isStickerIdentity && isDrawIdentity && isRegionIdentity
 
     init {
         require(quarterTurns in 0..3) { "quarterTurns must be in 0..3" }
@@ -251,6 +260,24 @@ object EditRecipeCodec {
             }
             root.put("drawLayers", arr)
         }
+        // r37: the same rule for regions; the kind rides its wire name.
+        recipe.mosaicRegions?.takeIf { it.layers.isNotEmpty() }?.let { rl ->
+            val arr = org.json.JSONArray()
+            for (layer in rl.layers) {
+                val pts = org.json.JSONArray()
+                for (p in layer.points) {
+                    pts.put(org.json.JSONArray().put(p.x).put(p.y))
+                }
+                arr.put(
+                    org.json.JSONObject()
+                        .put("id", layer.id)
+                        .put("kind", layer.kind.wireName)
+                        .put("strengthPct", layer.strengthPct)
+                        .put("points", pts),
+                )
+            }
+            root.put("mosaicRegions", arr)
+        }
         return root.toString()
     }
 
@@ -313,6 +340,7 @@ object EditRecipeCodec {
             textLayers = readTextLayers(root.optJSONArray("textLayers")),
             stickerLayers = readStickerLayers(root.optJSONArray("stickerLayers")),
             drawLayers = readDrawLayers(root.optJSONArray("drawLayers")),
+            mosaicRegions = readRegions(root.optJSONArray("mosaicRegions")),
         )
         ParseResult.Valid(recipe)
     } catch (e: org.json.JSONException) {
@@ -465,6 +493,51 @@ object EditRecipeCodec {
             )
         }
         return if (layers.isEmpty()) null else DrawLayers(layers)
+    }
+
+    /**
+     * The optional `mosaicRegions` array (r37): absent or empty means NO
+     * regions (a pre-r37 sidecar loads clean). The tolerance set is the
+     * stroke family's plus the kind: an entry whose `kind` is not a
+     * known wire name is corrupt data --- the layer is SKIPPED, never a
+     * crash; a blank id is the family skip; a layer whose points all
+     * fail or that carries none is skipped (a region needs an area);
+     * surviving points clamp to 0..1 and the count caps at the model cap.
+     */
+    private fun readRegions(arr: org.json.JSONArray?): RegionLayers? {
+        if (arr == null) return null
+        val layers = ArrayList<RegionLayer>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "").trim()
+            if (id.isEmpty()) continue
+            val kind = when (o.optString("kind", "")) {
+                RegionKind.MOSAIC.wireName -> RegionKind.MOSAIC
+                RegionKind.LINEAR_BLUR.wireName -> RegionKind.LINEAR_BLUR
+                else -> continue // an unknown kind is corrupt data: the skip
+            }
+            val ptsArr = o.optJSONArray("points") ?: continue
+            val pts = ArrayList<RegionLayer.Point>(ptsArr.length())
+            for (j in 0 until ptsArr.length()) {
+                val pair = ptsArr.optJSONArray(j) ?: continue
+                if (pair.length() != 2) continue
+                val x = pair.optDouble(0, Double.NaN)
+                val y = pair.optDouble(1, Double.NaN)
+                if (x.isNaN() || y.isNaN()) continue
+                pts.add(RegionLayer.Point(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0)))
+                if (pts.size >= RegionLayer.MAX_POINTS) break
+            }
+            if (pts.size < 3) continue
+            layers.add(
+                RegionLayer(
+                    id = id.take(RegionLayer.MAX_ID_LENGTH),
+                    kind = kind,
+                    strengthPct = o.optInt("strengthPct", RegionLayer.DEFAULT_STRENGTH_PCT).coerceIn(1, 100),
+                    points = pts,
+                ),
+            )
+        }
+        return if (layers.isEmpty()) null else RegionLayers(layers)
     }
 
     /** The wire form is 8 uppercase hex digits (AARRGGBB); anything else reads as the default color. */

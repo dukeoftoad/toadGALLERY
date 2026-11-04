@@ -818,6 +818,16 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var brushWidth by remember { mutableStateOf(3) }
     var brushOpacity by remember { mutableStateOf(100) }
     var brushSmoothing by remember { mutableStateOf(50) }
+    // r37 region state: the region paint mode (mutually exclusive with
+    // Draw mode --- one paint mode at a time, enforced at both toggles),
+    // the in-progress gesture's live point list, and the next region's
+    // kind + strength (plain state in paint mode; the live-draft pattern
+    // for a selected region).
+    var selectedRegionLayerId by remember { mutableStateOf<String?>(null) }
+    var regionMode by remember { mutableStateOf(false) }
+    var regionPaintDraft by remember { mutableStateOf<List<RegionLayer.Point>?>(null) }
+    var regionKind by remember { mutableStateOf(RegionKind.MOSAIC) }
+    var regionStrength by remember { mutableStateOf(12) }
 
     val committed = uiState.recipe
 
@@ -954,6 +964,42 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         opacity = brushOpacity,
                         smoothingPct = brushSmoothing,
                         points = paintPts,
+                    ),
+                ),
+            )
+        }
+        // r37: the region LIVE state --- the strength slider draft (key
+        // "region-strength@<id>") for a selected region, and the
+        // in-progress paint gesture as a TRANSIENT draft region (the
+        // pipeline's region stage reads it through the same apply() call,
+        // so the preview shows the effect AT PAINT TIME).
+        val regionSlider = d?.takeIf { it.first.startsWith("region-strength@") }
+            ?.let { (key, value) ->
+                val id = key.removePrefix("region-strength@")
+                if (id.isNotEmpty()) id to value else null
+            }
+        if (regionSlider != null && effective.mosaicRegions != null) {
+            effective = effective.copy(
+                mosaicRegions = RegionLayers(
+                    effective.mosaicRegions!!.layers.map { layer ->
+                        if (regionSlider.first == layer.id) {
+                            layer.copy(strengthPct = regionSlider.second)
+                        } else {
+                            layer
+                        }
+                    },
+                ),
+            )
+        }
+        val regionPts = regionPaintDraft
+        if (regionPts != null && regionPts.size >= 3) {
+            effective = effective.copy(
+                mosaicRegions = RegionLayers(
+                    (effective.mosaicRegions?.layers ?: emptyList()) + RegionLayer(
+                        id = "draft",
+                        kind = regionKind,
+                        strengthPct = regionStrength,
+                        points = regionPts,
                     ),
                 ),
             )
@@ -1097,6 +1143,51 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitPosDraftIfPending()
         commitStickerPosDraftIfPending()
         commitPaintDraftIfPending()
+        commitRegionPaintDraftIfPending()
+    }
+
+    // ---- r37 region helpers (the family conventions) ----
+
+    /** Commits an edit to ONE region layer, by id, over the CURRENT recipe. */
+    fun commitRegionLayerById(id: String, edit: (RegionLayer) -> RegionLayer) {
+        val current = uiState.recipe
+        val rl = current.mosaicRegions ?: return
+        val idx = rl.layers.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        commit(
+            current.copy(
+                mosaicRegions = RegionLayers(
+                    rl.layers.mapIndexed { i, l -> if (i == idx) edit(l) else l },
+                ),
+            ),
+        )
+    }
+
+    /** Commits an edit to the SELECTED region (no-op when nothing is selected). */
+    fun commitSelectedRegionLayer(edit: (RegionLayer) -> RegionLayer) {
+        selectedRegionLayerId?.let { commitRegionLayerById(it, edit) }
+    }
+
+    /**
+     * Sweeps the in-progress region gesture into one snapshot: thin the
+     * live point list, then commit ONE region IF it still has >= 3 points
+     * (a region needs a painted AREA; a tap or a two-sample flick drops
+     * honestly --- the model refuses less). Does NOT select the new
+     * region: the user keeps painting.
+     */
+    fun commitRegionPaintDraftIfPending() {
+        val pending = regionPaintDraft ?: return
+        regionPaintDraft = null
+        if (pending.size < 3) return
+        val current = uiState.recipe
+        val existing = current.mosaicRegions?.layers ?: emptyList()
+        val newLayer = RegionLayer(
+            id = RegionLayer.newId(existing.map { it.id }),
+            kind = regionKind,
+            strengthPct = regionStrength,
+            points = RegionLayer.thin(pending, RegionLayer.MAX_POINTS),
+        )
+        commit(current.copy(mosaicRegions = RegionLayers(existing + newLayer)))
     }
 
     // First composition: decode the bounded preview + parse the bundled
@@ -1128,6 +1219,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     LaunchedEffect(
         previewBase, committed, draft, textDraft, posDraft, stickerPosDraft,
         paintDraft, brushColor, brushWidth, brushOpacity, brushSmoothing,
+        regionPaintDraft, regionKind, regionStrength,
         looks, importedStickers,
     ) {
         val base = previewBase ?: return@LaunchedEffect
@@ -1411,22 +1503,26 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
         }
 
-        // ---- Preview (with the crop overlay rect) ----
         // r34: the box also carries the text-layer DRAG gesture (drag near
         // the SELECTED layer's center to reposition it; live-drafted, one
         // commit on release). r35: the same gesture targets the SELECTED
         // STICKER layer first (one selection across the families). r36:
-        // with Draw mode ON, the gesture PAINTS instead --- onDragStart
-        // opens the live point list, onDrag appends, release commits ONE
-        // stroke layer (a tap is a dot). Keyed on the selections AND the
-        // mode: the handler restarts when any of them changes, and every
-        // value it reads is a LIVE delegated state so long-lived closures
-        // never see stale data.
+        // with Draw mode ON, the gesture PAINTS instead. r37: a SECOND
+        // paint mode --- Region mode paints the region path (the effect
+        // previews through the pipeline stage at paint time); the two
+        // paint modes are mutually exclusive, enforced at their toggles.
+        // Keyed on the selections AND both modes: the handler restarts
+        // when any of them changes, and every value it reads is a LIVE
+        // delegated state so long-lived closures never see stale data.
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(selectedTextLayerId, selectedStickerLayerId, selectedDrawLayerId, drawMode) {
+                .pointerInput(
+                    selectedTextLayerId, selectedStickerLayerId,
+                    selectedDrawLayerId, selectedRegionLayerId,
+                    drawMode, regionMode,
+                ) {
                     val grabRadiusPx = 48.dp.toPx()
 
                     // Screen position -> output-canvas fractions (the same
@@ -1508,15 +1604,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
                     var dragging = false
                     var painting = false
+                    var paintingRegion = false
                     detectDragGestures(
                         onDragStart = { start ->
-                            painting = drawMode
+                            painting = drawMode || regionMode
+                            paintingRegion = painting && regionMode
                             if (painting) {
-                                // r36: the paint gesture opens the live
-                                // point list at the first sample (a tap
-                                // is a dot --- one point commits too).
                                 mapToFraction(start)?.let { (fx, fy) ->
-                                    paintDraft = listOf(DrawLayer.Point(fx, fy))
+                                    if (paintingRegion) {
+                                        regionPaintDraft = listOf(RegionLayer.Point(fx, fy))
+                                    } else {
+                                        paintDraft = listOf(DrawLayer.Point(fx, fy))
+                                    }
                                 }
                             } else {
                                 val center = stickerLayerCenterScreen() ?: textLayerCenterScreen()
@@ -1530,7 +1629,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         onDrag = { change, _ ->
                             if (painting) {
                                 mapToFraction(change.position)?.let { (fx, fy) ->
-                                    paintDraft = (paintDraft ?: emptyList()) + DrawLayer.Point(fx, fy)
+                                    if (paintingRegion) {
+                                        regionPaintDraft =
+                                            (regionPaintDraft ?: emptyList()) + RegionLayer.Point(fx, fy)
+                                    } else {
+                                        paintDraft = (paintDraft ?: emptyList()) + DrawLayer.Point(fx, fy)
+                                    }
                                 }
                                 change.consume()
                             } else if (dragging) {
@@ -1541,16 +1645,20 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             }
                         },
                         onDragEnd = {
-                            if (painting) commitPaintDraftIfPending()
+                            if (paintingRegion) commitRegionPaintDraftIfPending()
+                            if (painting && !paintingRegion) commitPaintDraftIfPending()
                             if (dragging) sweepPendingDrafts()
                             dragging = false
                             painting = false
+                            paintingRegion = false
                         },
                         onDragCancel = {
-                            if (painting) commitPaintDraftIfPending()
+                            if (paintingRegion) commitRegionPaintDraftIfPending()
+                            if (painting && !paintingRegion) commitPaintDraftIfPending()
                             if (dragging) sweepPendingDrafts()
                             dragging = false
                             painting = false
+                            paintingRegion = false
                         },
                     )
                 },
@@ -2052,6 +2160,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         // r35: the new layer becomes THE selection --- one
                         // selected layer at a time across the families.
                         selectedStickerLayerId = null
+                        selectedRegionLayerId = null
                     },
                     enabled = !exporting,
                     label = { Text(stringResource(R.string.editor_text_add)) },
@@ -2064,8 +2173,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             if (selectedTextLayerId != layer.id) {
                                 sweepPendingDrafts()
                                 selectedTextLayerId = layer.id
-                                // r35: one selection across the families.
+                                // r35/r37: one selection across the families.
                                 selectedStickerLayerId = null
+                                selectedRegionLayerId = null
                             }
                         },
                         enabled = !exporting,
@@ -2275,6 +2385,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             )
                             selectedStickerLayerId = newLayer.id
                             selectedTextLayerId = null
+                            selectedRegionLayerId = null
                         },
                         enabled = !exporting,
                         label = { Text(entry.displayName) },
@@ -2298,6 +2409,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             )
                             selectedStickerLayerId = newLayer.id
                             selectedTextLayerId = null
+                            selectedRegionLayerId = null
                         },
                         enabled = !exporting,
                         label = { Text(id) },
@@ -2332,6 +2444,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 sweepPendingDrafts()
                                 selectedStickerLayerId = layer.id
                                 selectedTextLayerId = null
+                                selectedRegionLayerId = null
                             }
                         },
                         enabled = !exporting,
@@ -2479,10 +2592,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         if (drawMode) {
                             // Entering paint mode drops every selection ---
                             // painting owns the gesture; the user keeps
-                            // painting across strokes.
+                            // painting across strokes. The r37 twin: the two
+                            // paint modes are mutually exclusive.
+                            regionMode = false
                             selectedTextLayerId = null
                             selectedStickerLayerId = null
                             selectedDrawLayerId = null
+                            selectedRegionLayerId = null
                         }
                     },
                     enabled = !exporting,
@@ -2497,8 +2613,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 sweepPendingDrafts()
                                 selectedDrawLayerId = layer.id
                                 drawMode = false // the duality is exclusive
+                                regionMode = false // and so are the paint modes
                                 selectedTextLayerId = null
                                 selectedStickerLayerId = null
+                                selectedRegionLayerId = null
                             }
                         },
                         enabled = !exporting,

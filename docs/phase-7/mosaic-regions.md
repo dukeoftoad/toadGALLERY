@@ -1,11 +1,12 @@
 # The Mosaic/Blur Regions — r37 Round Design (Phase 7, layer type 4 of 5)
 
-**Status:** the design contract for the r37 round (authored first, per the
-family convention; the delivery record lands at the bottom when the round
-delivers). Layer type 4 of Phase 7's five. This one breaks the family
-shape deliberately: regions are a PIXEL stage, not a compositing pass ---
-the user paints a region, the editor applies a mosaic or a linear blur to
-that region only, and the effect must see the FULLY graded pixels.
+**Status:** DELIVERED on `tg-p7-mosaic` (2026-11-04, the r37 round; pending
+PR/CI/merge per the F-12 convention --- see the delivery record at the
+bottom). This doc was the design contract the round implemented. Layer
+type 4 of Phase 7's five. This one breaks the family shape deliberately:
+regions are a PIXEL stage, not a compositing pass --- the user paints a
+region, the editor applies a mosaic or a linear blur to that region only,
+and the effect must see the FULLY graded pixels.
 
 ---
 
@@ -128,3 +129,60 @@ F-15 applies here too).
 Parametric code only; no asset, no import. The roadmap's Phase 7 exit
 criterion needs nothing from this round beyond project-authored code
 (GPL-3.0 with the project).
+
+---
+
+## Delivery record (r37, 2026-11-04, branch `tg-p7-mosaic`)
+
+The round landed every decision above, with these recorded deltas:
+
+1. **The model — as designed.** `RegionLayer` (id, `RegionKind`,
+   `strengthPct` 1..100, points 3..512) in `RegionLayers.kt`; the wire
+   kinds `"mosaic"` / `"linearBlur"`; the `r`-prefix `newId`; the thinning
+   rule duplicated from the stroke family (documented in both places).
+2. **The mask — as designed.** The even-odd scanline fill with strict
+   pixel centres: the triangle and the self-crossing bowtie are pinned
+   by exact masks (15 and 12 pixels; the bowtie's middle pinch is
+   test-pinned empty); a degenerate path masks nothing.
+3. **The kernels — as designed, integer floor throughout.** The mosaic
+   block average (origin-aligned cells, per-cell reads before writes)
+   and the linear blur's sliding window (snapshot source, clamped
+   window, floor division) are pinned by exact hand grids; the sliding
+   window is pinned equivalent to a naive per-pixel loop on a
+   deterministic LCG grid (r=3, w=12). The pre-push harness caught the
+   usual single-arithmetic slips (the x=0 window is [0,1], not [0,2];
+   a `DoubleArray` has no `chunked`; a missing `kind` argument) ---
+   all test-side, the kernels were per spec.
+4. **The pipeline stage — as designed.** Stage 13 after sharpen;
+   `STAGE_ORDER` grew the tail (the pre-existing stage-order assertion
+   stays true); the regions-only recipe is NOT identity and `apply`
+   censors (pinned by the 4x4 pipeline test). The grid-relative honesty
+   is the vignette's, verbatim in the stage's comment.
+5. **The recipe — as designed.** Absent key = a pre-r37 sidecar loads
+   clean (test-pinned with one carrying r34 text + r35 stickers + r36
+   strokes --- the round-four stacking proof); the unknown-kind skip
+   (`"gaussian"` and case-mismatched `"MOSAIC"` both skip --- corrupt
+   data, never a crash); points tolerate like the stroke family's;
+   strength clamps 1..100 with default 12.
+6. **The UI — as designed, the second paint mode.** The Region-mode
+   chip is mutually exclusive with the Draw-mode chip (enforced at both
+   toggles); the kind chips + strength slider run under the paint
+   duality; the draft region previews AT PAINT TIME (the transient
+   draft rides the effective recipe through the same `apply()` stage
+   the export runs); a tap or two-sample flick drops honestly (the
+   commit refuses < 3 points). The selection unification extended to
+   the fourth family: every selection point clears the region
+   selection (the r35 contract, carried forward).
+7. **Tests — the two owed families, all JVM.** `RegionLayersTest` (14:
+   model, thinning, the pinned masks, the strength mapping, both
+   kernels, the sliding equivalence, the pipeline stage, the order
+   tail) + `RegionLayersRecipeTest` (12: the round-four stacking proof,
+   the lossless round-trip, the unknown-kind skip, the under-three
+   skip, points tolerance, clamps, defaults, duplicates, identity
+   folding) --- **26 new tests; the edit module at 340** (r36's 314 +
+   26). The local harness ran 333 pure tests green pre-push.
+
+*The §26 device rows ride the checklist, human-only.*
+
+*Delivered on the branch `tg-p7-mosaic`, cut from post-#111 main
+(`8c466ee`), in the 2026-11-04 window after the r36 merge.*

@@ -18,12 +18,17 @@ package io.github.dukeoftoad.gallery.edit
  * 10. LUT filter (the `.cube` look at its intensity; r33)
  * 11. vignette
  * 12. sharpen (unsharp mask)
+ * 13. mosaic/blur regions (r37: the painted regions censor the
+ *     FULLY graded pixels; the FINAL pixel stage --- no downstream
+ *     stage re-processes the censored output, so sharpening a mosaic
+ *     edge cannot halo it)
  *
- * The r34 TEXT pass is NOT stage 13 of this pixel pipeline: it is a
- * COMPOSITING pass that runs after `apply` returns, over the OUTPUT
- * canvas (see `TextCompositor` --- geometry/adjustments/LUT/vignette/
- * sharpen all render first, then the text layers draw last, above
- * everything, through the same shared code path the preview uses).
+ * The r34-r36 compositing passes (text over everything; stickers below
+ * text; strokes between them) are NOT stages of this pixel pipeline:
+ * they run after `apply` returns, over the OUTPUT canvas (see the
+ * compositors --- geometry/adjustments/LUT/vignette/sharpen/regions all
+ * render first, then the layers draw, through the same shared code
+ * paths the previews use).
  *
  * The look stage sits AFTER the colour grade (the look grades the
  * graded pixels, like a film stock over a developed negative) and
@@ -40,7 +45,7 @@ object EditPipeline {
     const val STAGE_ORDER: String =
         "flip -> straighten -> perspective -> quarterTurns -> crop -> " +
             "tone LUT -> saturation -> temperature/tint -> HSL bands -> " +
-            "LUT filter -> vignette -> sharpen"
+            "LUT filter -> vignette -> sharpen -> mosaic/blur regions"
 
     /**
      * Applies [recipe] to the grid. [filter] is the caller-RESOLVED
@@ -114,6 +119,17 @@ object EditPipeline {
         // ---- Grade + detail (display-space: after the crop) ----
         applyVignette(current, w, h, recipe.vignette)
         applySharpen(current, w, h, recipe.sharpness)
+
+        // ---- Regions (r37: the final pixel stage, after sharpen) ----
+        // The painted regions censor the fully graded grid; the stage is
+        // grid-relative (the vignette's honesty: exact in the export, where
+        // the stage grid IS the output canvas; approximate in the preview
+        // when a crop is active, exactly as the vignette's centre is).
+        recipe.mosaicRegions?.let { regions ->
+            if (!regions.isIdentity) {
+                RegionPass.applyAll(current, w, h, regions)
+            }
+        }
 
         return GeometryResult(current, w, h)
     }

@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-04T07:17:39.205Z",
+  "updatedBy": "dashboard PATCH /api/progress",
+  "statusFactors": {
+    "done": 1,
+    "in-progress": 0.5,
+    "pending": 0
+  },
+  "project": {
+    "label": "toadGALLERY — overall app development",
+    "sourceOfTruth": "roadmap.md Phases 0-11 + tasks.md milestone table (weights mirror planned effort share)",
+    "percent": 73,
+    "phases": [
+      {
+        "id": "p0",
+        "label": "Phase 0 — scope alignment & baselines",
+        "weight": 4,
+        "status": "done",
+        "evidence": "docs/phase-0/sign-off.md; upstream pins (Fossify e9812299, Aves 4f940ae)"
+      },
+      {
+        "id": "p1",
+        "label": "Phase 1 — source audits, ADRs, contract spec",
+        "weight": 6,
+        "status": "done",
+        "evidence": "PR #9 (42fd9981); docs/phase-1/*; docs/integration-decisions.md ADR-0001..0007"
+      },
+      {
+        "id": "p2",
+        "label": "Phase 2 — Compose shell, visual foundation, privacy, CI",
+        "weight": 10,
+        "status": "done",
+        "evidence": "PRs #15/#16/#23/#46/#47; ADR-0009/0013/0014; docs/phase-2/privacy-gate.md"
+      },
+      {
+        "id": "p3",
+        "label": "Phase 3 — browsing, file ops, trash, vault, viewer",
+        "weight": 16,
+        "status": "done",
+        "evidence": "16/16 issues closed by PR #70 (timeline #26, paging #37, file ops #48, trash #53, vault #55/#68, viewer #51/#56)"
+      },
+      {
+        "id": "p4",
+        "label": "Phase 4 — Aves-grade metadata layer",
+        "weight": 12,
+        "status": "done",
+        "evidence": "PRs #78-#92 (r10-r20): Room catalogue v1-v6, EXIF write-back, map, filters, format audit"
+      },
+      {
+        "id": "p5",
+        "label": "Phase 5 — Ente AI port + MI-style organisational UX",
+        "weight": 16,
+        "status": "in-progress",
+        "evidence": "code-complete r21-r28 merged (PRs #93-#100, 23a1495/84aab67/27c5e71); on-device dogfood + exit gate pending (tasks.md Phase 5)"
+      },
+      {
+        "id": "p6",
+        "label": "Phase 6 — toadGALLERY Edit v1 (core adjustments, non-destructive pipeline)",
+        "weight": 10,
+        "status": "done",
+        "evidence": "PR #106 merged as 938effa (r29-r32; editor v1 exit; Issue #14 closed)"
+      },
+      {
+        "id": "p7",
+        "label": "Phase 7 — toadGALLERY Edit v2 (filters, text, stickers, drawing, mosaic, frames)",
+        "weight": 12,
+        "status": "in-progress",
+        "evidence": "task 1/5 merged: r33 LUT .cube + import as 314bd9c (PR #107); text tool contract at docs/phase-7/text-tool.md"
+      },
+      {
+        "id": "p8",
+        "label": "Phase 8 — Edit v3 on-device AI editing",
+        "weight": 5,
+        "status": "pending",
+        "evidence": "ADR-0010; no code asset exists (declared honestly in worklog Run #9)"
+      },
+      {
+        "id": "p9",
+        "label": "Phase 9 — lightweight video editor",
+        "weight": 4,
+        "status": "pending",
+        "evidence": "roadmap.md Phase 9; ADR-0012"
+      },
+      {
+        "id": "p10",
+        "label": "Phase 10 — performance, compatibility, accessibility hardening",
+        "weight": 3,
+        "status": "pending",
+        "evidence": "roadmap.md Phase 10"
+      },
+      {
+        "id": "p11",
+        "label": "Phase 11 — release readiness",
+        "weight": 2,
+        "status": "in-progress",
+        "evidence": "partially pulled forward: release.yml live (ADR-0018, issue #59); F-Droid/FOSS review pending"
+      }
+    ]
+  },
+  "entePort": {
+    "label": "Ente port — on-device AI from ente/ente (Phase 5 workstream)",
+    "sourceOfTruth": "docs/phase-5/ente-pin.md + ADR-0020 + tasks.md Phase 5 rows (independent of the project scope)",
+    "percent": 95,
+    "phases": [
+      {
+        "id": "e1",
+        "label": "Upstream source pin + provenance record",
+        "weight": 10,
+        "status": "done",
+        "evidence": "pin 423b2d80d9ec89d45f5680cb1e1d777bac225f41 (2026-11-02); docs/phase-5/ente-pin.md; engine/NOTICE.md"
+      },
+      {
+        "id": "e2",
+        "label": "Vendored crates: ente-ml, ente-assets, ente-image",
+        "weight": 15,
+        "status": "done",
+        "evidence": "r21 PR #93; 85 files proven byte-identical (engine/NOTICE.md)"
+      },
+      {
+        "id": "e3",
+        "label": "Photos-side crates: ente-vecdb + ente-photos-ml",
+        "weight": 15,
+        "status": "done",
+        "evidence": "r23 PR #96; 324 + 202 upstream tests vendored; crypto seam recorded"
+      },
+      {
+        "id": "e4",
+        "label": "JNI bridge (toad-ml-jni) + -PwithEngine packaging",
+        "weight": 10,
+        "status": "done",
+        "evidence": "r22 PR #95 (net-new crate, 4 fn surface; r23 extends to 10 fns); engine-android CI job; engine/scripts/build-android.sh"
+      },
+      {
+        "id": "e5",
+        "label": "Model provisioner + sole-host downloader (models.ente.com)",
+        "weight": 15,
+        "status": "done",
+        "evidence": "r22 HttpModelDownloader + ModelManifest/Verifier/Provisioner; INTERNET allowlist entry (ADR-0020); egress suites"
+      },
+      {
+        "id": "e6",
+        "label": "Face indexing + clustering pipeline",
+        "weight": 10,
+        "status": "done",
+        "evidence": "r23 IndexCoordinator.kt @ 0.24 threshold; ml-index store via vendored MlStore"
+      },
+      {
+        "id": "e7",
+        "label": "Magic Search (semantic/CLIP) integration",
+        "weight": 10,
+        "status": "done",
+        "evidence": "r26 Magic Search round 84aab67 merged (tasks.md Phase 5)"
+      },
+      {
+        "id": "e8",
+        "label": "Offline model-pack delivery channel",
+        "weight": 5,
+        "status": "done",
+        "evidence": "r28 Workstream 8: -PwithBundledModels + modelpack-apk.yml (ADR-0020 §7)"
+      },
+      {
+        "id": "e9",
+        "label": "On-device dogfood + ente-port exit gate",
+        "weight": 10,
+        "status": "in-progress",
+        "evidence": "r22/r23/r28 Settings dogfood screens shipped; device-validation checklist rows pending (human-only)"
+      }
+    ]
+  }
+}

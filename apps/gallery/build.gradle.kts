@@ -483,7 +483,7 @@ android {
     sourceSets {
         // Same AGP 9 plain-File srcDir convention as the engine jniLibs and
         // model-pack srcDirs (the task dependency below covers freshness).
-        getByName("main").assets.srcDir(progressAssetsDir)
+        getByName("main").assets.srcDir(progressAssetsDir.get().asFile)
     }
 }
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {

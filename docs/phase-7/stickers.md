@@ -1,11 +1,11 @@
 # The Sticker Tool — r35 Round Design (Phase 7, layer type 2 of 5)
 
-**Status:** the design contract for the r35 round (authored first, per the
-r34 convention; the delivery record lands at the bottom when the round
-delivers). This is layer type 2 of Phase 7's five ("text, stickers,
-freehand drawing, mosaic/blur regions, frames — each a round",
-`docs/phase-7/text-tool.md`); it follows the r34 text tool, whose
-structures it inherits wherever they exist.
+**Status:** DELIVERED on `tg-p7-stickers` (2026-11-04, the r35 round; pending
+PR/CI/merge per the F-12 convention --- see the delivery record at the
+bottom). This doc was the design contract the round implemented; the
+decisions below are the ones argued with and, where reality disagreed,
+the delivery record records the deltas. It follows the r34 text tool,
+whose structures it inherits wherever they exist.
 
 ---
 
@@ -193,3 +193,89 @@ per-file license. The authorship record is
 roadmap's Phase 7 exit criterion ("No bundled asset has an incompatible
 license") has its stickers evidence in place before any asset-shaped
 follow-up (an imported-frame round, say) could blur the line.
+
+---
+
+## Delivery record (r35, 2026-11-04, branch `tg-p7-stickers`)
+
+The round landed every decision above, with these recorded deltas:
+
+1. **The bundled set — as designed.** Eight in-code vector shapes in
+   `BundledStickers` (pure Kotlin, JVM-tested), integer coordinates in
+   the 0..100 design box, fills only; the authored formulas (ngon /
+   arcPts / poly + the heart's four cubics) are recorded in
+   `bundled-stickers.md`. No image asset, no sha256 pin, no §5 row —
+   instead `BundledStickersTest` pins the structural invariants and the
+   spot coordinates (safe rounding margins ≥ 0.3 units from a .5
+   boundary), so a change to any formula fails the build. The local
+   pre-push harness caught two authored-coordinate errors before any
+   push (the smiley spot test conflated the pin's r=26 centre with the
+   face's r=46; a flower op-count was off by five per subpath) — the
+   first round in the campaign with tests executed BEFORE CI.
+2. **The recipe — as designed, with the image-shaped tolerance delta.**
+   Absent key = a pre-r35 sidecar loads clean (test-pinned, including
+   one carrying r34 text layers — the stacking proof); an unresolvable
+   `stickerId` round-trips verbatim and renders NOTHING (there is no
+   default sticker to degrade to); a blank `stickerId` is a skip
+   alongside a blank `id` — the one delta from r34's blank-fontId-
+   reads-as-default (a fake sticker would draw something the user never
+   chose). Numerics coerce like every other slider; empty normalises
+   back to absent.
+3. **The composite order — as designed.** `StickerCompositor` runs in
+   OUTPUT space, BELOW the `TextCompositor` pass (scene objects under
+   captions), through the same crop-region arguments in the preview and
+   origin 0 in the export --- preview ≡ export by construction. Vectors
+   draw from the op list scaled into the size square (centred on the
+   anchor); imported bitmaps FIT inside the square preserving aspect.
+4. **Two resolution kinds, one resolver — as designed.** The activity's
+   `stickerResolver` resolves bundled-vector-first, imported-bitmap-
+   second; the imported bitmaps live in ONE shared activity map
+   (the bundledFonts pattern) that the composition's loader
+   (keyed on a version counter, the looks pattern) refills per import —
+   the preview and the export render through the same instances, and a
+   payload that fails to decode is absent, never thrown.
+5. **Undo/redo — as designed, granularity per-commit.** Sticker add /
+   per-layer slider release / drag-release / remove each push exactly
+   one snapshot; the draft-sweep set extended across the families:
+   undo, redo, export, add, remove and target switch now sweep BOTH
+   position drafts (text and sticker) — the r34 text surface took three
+   additive edits for this (recorded as the round's touch on merged
+   code, all additive).
+6. **The UI — as designed plus one contract.** The registry chips are
+   ADD actions, not selections (a tap adds a layer at canvas centre and
+   selects it); the layer chips carry the selection; **one selected
+   layer at a time across the families** --- selecting a sticker clears
+   the text selection and vice versa, and the preview's drag gesture
+   follows the single selection (the sticker wins). The string recount:
+   `strings_r35.xml` adds **10** strings; the module's string-ref count
+   moves **94 → 104** (strings.xml 46 + r32 16 + r33 12 + r34 20 + r35
+   10). The design doc's 106 estimate dropped the numbered layer-chip
+   fallback on delivery --- a sticker layer's chip always resolves to
+   its sticker's display name (the raw id for an import or an
+   unresolvable id), so no fallback string exists.
+7. **Tests — the four owed families, all JVM.** `StickerLayersTest`
+   (model, the s-prefix `newId`, the size box, the opacity-only alpha,
+   the origin-offset identity, list order), `StickerLayersRecipeTest`
+   (absent-key clean incl. the r34-stacking proof, lossless round-trip,
+   the stickerId tolerance, clamps, skips, defaults, duplicate-id
+   structured failure), `BundledStickersTest` (registry, structural
+   validity, the spot coordinates, the palette), `ImportedStickerStoreTest`
+   (magic-before-write, verbatim bytes, collision suffixing vs the
+   bundled set and existing imports, the listing-as-index, idempotent
+   delete, rejection leaves the store byte-identical). **46 new JVM
+   tests; the edit module at 287** (r34's 241 + 46). The local harness
+   ran all 278 pure tests green before the push (the module's CI total
+   adds ExportPolicyTest's 9).
+8. **The import store — as designed.** PNG/WebP magic-before-write
+   (≥ 12 bytes, PNG signature or RIFF…WEBP), a 2 MB cap, verbatim
+   storage under the magic's extension, derived collision-suffixed
+   ids that can never shadow the bundled set; the directory listing is
+   the index; delete is idempotent and path-safe. No UI affordance
+   surfaces delete yet (the recorded follow-up F-13); the store API is
+   complete and tested so the affordance is additive later.
+
+*The §24 device rows ride the checklist, human-only.*
+
+*Delivered on the branch `tg-p7-stickers`, cut from post-#109 main
+(`5e8cf19`), in the 2026-11-04 window after the r34 merge window
+(Run #12).*

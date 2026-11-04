@@ -137,3 +137,21 @@ fix recorded in `docs/workplan.md` §3).
   superseded under the ci-main concurrency group (the merge tree ≡
   `699fd03`'s, already validated green). The standing guidance stays:
   add a docs-only paths-ignore in a dedicated low-risk window.
+
+## 2026-11-04 (latest) — the r35 sticker-tool round (authored on `tg-p7-stickers`)
+
+- **F-13 (new, open)** — the imported-sticker library has no management
+  affordance yet: `ImportedStickerStore.delete` exists and is JVM-tested,
+  but no UI surfaces it, so removing a bad import requires app-data
+  clearing or a hand-edit. The affordance is additive (a
+  "remove from library" action near the registry chips, mirroring the
+  imported-looks remove); land it with the frames round or a dedicated
+  small window, NOT mid-round.
+- **F-14 (new, open, rides F-11)** — the position drag remains
+  TalkBack-unreachable (the r34 F-11 family); the r35 round inherited
+  the gap for sticker layers and extended the gesture across both
+  families. The gesture-a11y family (position sliders or a11y-aware
+  drag) still owes one round across ALL layer families.
+- **Note** — the r34 text-tool bullet moved to MERGED truth in
+  `tasks.md`/roadmap v2.7 (PR #109 `6bb17a4`); `progress.json` stays
+  untouched until the r35 merge per the F-12 convention.

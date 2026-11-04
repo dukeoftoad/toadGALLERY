@@ -25,6 +25,22 @@ frozen; v2 adds optional fields only, or bumps `MIN_SUPPORTED` explicitly.
 > `image/jpeg|png|webp|heic` in its filter — undecodable formats answer
 > `ERROR_UNSUPPORTED`. See `docs/phase-6/contract-gate.md`.
 
+> **r31 implementation note (the Edit v1 exit).** Two additive deltas,
+> recorded here because the spec is the source of truth: **(1)** the
+> metadata policy is honored as a PRIVACY FLOOR — the editor's export
+> sheet (r31) offers the three §4.4 policies per export, but a choice
+> that would strip LESS than the launch request's policy is disabled
+> (`ExportPolicyChoice.isBlockedByFloor`); `EXTRA_METADATA_POLICY_APPLIED`
+> continues to echo the policy ACTUALLY applied (the user's stronger
+> choice or the request's floor), so §4.4's "respected exactly" holds and
+> the upgrade is explicit, opt-in, and reported; **(2)** the gallery's
+> honesty UI is now code: additive `SavedCopy.removesLocation` /
+> `stripsAllMetadata` triggers over the parsed echo
+> (`EditResult.kt`) choose the saved-copy narration — a `null` echo (a
+> pre-r29 editor) makes no claim. No frozen constant changed; no new
+> error code (the r31 preflight rides `ERROR_IO`/`ERROR_UNSUPPORTED`);
+> the wire surface is byte-identical to v1.
+
 ## 1. Identity & discovery
 
 | Item | Value |

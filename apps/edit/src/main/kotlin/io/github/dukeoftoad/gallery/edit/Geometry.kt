@@ -72,6 +72,23 @@ data class CropRect(val left: Double, val top: Double, val right: Double, val bo
     companion object {
         /** The smallest surviving normalized span (never a zero-size crop). */
         const val MIN_SPAN: Double = 1.0 / 512.0
+
+        /**
+         * The inverse of [toPixels] (r32): a pixel rect over a w x h frame
+         * back to normalized coordinates, normalized on the way out. The
+         * crop-preset UI used to do this division inline; one tested pure
+         * function means the preset math and the codec's normalization can
+         * never drift apart.
+         */
+        fun fromPixelRect(rect: PixelRect, width: Int, height: Int): CropRect {
+            require(width > 0 && height > 0) { "frame dimensions must be positive ($width x $height)" }
+            return CropRect(
+                left = rect.x0 / width.toDouble(),
+                top = rect.y0 / height.toDouble(),
+                right = rect.x1 / width.toDouble(),
+                bottom = rect.y1 / height.toDouble(),
+            ).normalized()
+        }
     }
 }
 

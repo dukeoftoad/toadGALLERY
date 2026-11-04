@@ -86,8 +86,22 @@ android {
         // selector + per-band sliders, the export sheet). The pipeline
         // cores are all in pure Kotlin --- the session, sidecar, pipeline,
         // geometry and export plans are JVM-tested end to end.
-        versionCode = 2
-        versionName = "0.2.0-edit-alpha"
+        // versionCode 3 (r31 round): the Phase 6 exit round --- the
+        // per-export metadata-policy choice (the launch request's policy as
+        // the privacy floor; the sheet may strip more, never less) and the
+        // export preflight (the 48 MP decode guard, the 1.5x-headroom
+        // storage check, the documented process-death policy). The on-device
+        // half rides the device checklist section 20.
+        // versionCode 4 (r32 round): the Phase 6 hardening pass --- the
+        // accessibility sweep over the whole editor surface (every slider
+        // announces its name + live value via semantics; the HSL rows speak
+        // the selected band; the flip toggles are proper FilterChips with
+        // 48dp targets and selected-state announcements), the straighten
+        // slider follows the drag live like every other slider, and the
+        // crop-preset chips commit through the tested pure inverse
+        // CropRect.fromPixelRect (5 new JVM tests).
+        versionCode = 4
+        versionName = "0.3.1-edit-alpha"
     }
 
     buildFeatures {

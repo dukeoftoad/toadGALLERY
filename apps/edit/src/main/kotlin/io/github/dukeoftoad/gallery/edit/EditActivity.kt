@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
@@ -18,7 +19,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +60,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
@@ -277,6 +280,20 @@ class EditActivity : ComponentActivity() {
     }
 
     /**
+     * The device's allocatable bytes (the r31 storage preflight), or null
+     * when the platform answer is unavailable --- an unknown value must
+     * never block an export (MediaStore enforces regardless).
+     */
+    internal fun queryAllocatableBytes(): Long? = try {
+        val storageManager = getSystemService(StorageManager::class.java) ?: return null
+        storageManager.getAllocatableBytes(StorageManager.UUID_DEFAULT)
+    } catch (_: IOException) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    }
+
+    /**
      * The export pipeline. IO dispatcher; on ANY failure the pending row is
      * cancelled (Q+) and RESULT_ERROR answers --- never a partial entry.
      * On success the sidecar is CLEARED (the edit resolved into the copy).
@@ -288,14 +305,54 @@ class EditActivity : ComponentActivity() {
         val format = export.format
         try {
 
-            // 1. Full-resolution decode.
+            // 1. The cheap bounds pass: the large-file decode guard refuses
+            //    a source the pipeline could not hold anyway (r31) --- the
+            //    honest failure is ERROR_UNSUPPORTED before any work.
+            val bounds = decodeBounds(sourceUri)
+            if (bounds != null &&
+                ExportPreflight.decodeGuard(
+                    bounds.outWidth,
+                    bounds.outHeight,
+                    ExportPreflight.MAX_EXPORT_PIXELS,
+                ) == ExportPreflight.Decision.INSUFFICIENT
+            ) {
+                throw ExportException(
+                    EditContract.ERROR_UNSUPPORTED,
+                    "the image is too large to edit on this device",
+                )
+            }
+
+            // 2. The storage preflight: refuse to start an insert the device
+            //    cannot hold (advisory --- unknown availability proceeds;
+            //    MediaStore still enforces). The error rides ERROR_IO so the
+            //    frozen v1 contract surface stays untouched.
+            val allocatable = queryAllocatableBytes()
+            if (allocatable != null) {
+                val assumedPixels =
+                    if (bounds != null && bounds.outWidth > 0 && bounds.outHeight > 0) {
+                        bounds.outWidth.toLong() * bounds.outHeight.toLong()
+                    } else {
+                        ExportPreflight.ASSUMED_PIXELS
+                    }
+                val estimated = ExportPreflight.estimateBytes(assumedPixels, format, export.quality)
+                if (ExportPreflight.decide(estimated, allocatable) ==
+                    ExportPreflight.Decision.INSUFFICIENT
+                ) {
+                    throw ExportException(
+                        EditContract.ERROR_IO,
+                        "not enough free storage for the exported copy",
+                    )
+                }
+            }
+
+            // 3. Full-resolution decode.
             val source = decodeBitmap(sourceUri, Int.MAX_VALUE)
                 ?: throw ExportException(
                     EditContract.ERROR_UNSUPPORTED,
                     "cannot decode the source at full resolution",
                 )
 
-            // 2. The ordered pipeline (geometry first, then colour/detail).
+            // 4. The ordered pipeline (geometry first, then colour/detail).
             val width = source.width
             val height = source.height
             val pixels = IntArray(width * height)
@@ -308,7 +365,7 @@ class EditActivity : ComponentActivity() {
                 pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height,
             )
 
-            // 3. Insert the NEW MediaStore row (IS_PENDING on Q+).
+            // 5. Insert the NEW MediaStore row (IS_PENDING on Q+).
             val displayName = ExportPlan.displayNameFor(sourceDisplayName(sourceUri), format)
             val collection = if (api29Plus) {
                 MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -326,7 +383,7 @@ class EditActivity : ComponentActivity() {
                 ?: throw ExportException(EditContract.ERROR_IO, "MediaStore refused the insert")
             outputUri = inserted
 
-            // 4. Compress into the pending row (quality: lossy formats only).
+            // 6. Compress into the pending row (quality: lossy formats only).
             val compressFormat = when (format) {
                 ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
                 ExportFormat.PNG -> Bitmap.CompressFormat.PNG
@@ -340,10 +397,10 @@ class EditActivity : ComponentActivity() {
                 out.flush()
             } ?: throw ExportException(EditContract.ERROR_IO, "cannot open the output stream")
 
-            // 5. Apply the EXIF metadata policy exactly (contract 4.4).
+            // 7. Apply the EXIF metadata policy exactly (contract 4.4).
             applyMetadataPolicy(sourceUri, inserted, export.metadataPolicy)
 
-            // 6. Finalize (clear IS_PENDING).
+            // 8. Finalize (clear IS_PENDING).
             if (api29Plus) {
                 val finalize = ContentValues()
                 ExportPlan.finalizeValues(api29Plus).forEach { (key, value) ->
@@ -352,7 +409,7 @@ class EditActivity : ComponentActivity() {
                 contentResolver.update(inserted, finalize, null, null)
             }
 
-            // 7. The sidecar's edit resolved into the copy: clear it BEFORE
+            // 9. The sidecar's edit resolved into the copy: clear it BEFORE
             // reporting success (a failure here answers OK --- the export
             // itself succeeded; a leftover sidecar self-heals on next load).
             try {
@@ -455,10 +512,16 @@ data class EditorUiState(
     val canRedo: Boolean,
 )
 
-/** The export sheet's state: format + quality chosen by the user. */
+/**
+ * The export sheet's state: format, quality, and the per-export metadata
+ * policy chosen by the user. A `null` [metadataPolicy] means "no override"
+ * --- the launch request's policy rides as-is (r31: the request's policy is
+ * the privacy floor; the sheet may strip more, never less).
+ */
 data class ExportChoice(
     val format: ExportFormat = ExportPlan.DEFAULT_FORMAT,
     val quality: Int = ExportPlan.DEFAULT_QUALITY,
+    val metadataPolicy: MetadataPolicy? = null,
 )
 
 /**
@@ -486,26 +549,32 @@ private class EditSessionEngine(initial: EditRecipe) {
     }
 }
 
-/** One slider's binding: identity key, current value, next-state builder. */
+/**
+ * One slider's binding: identity key, current value, next-state builder.
+ * The a11y name (r32) is the semantics contentDescription; the label string
+ * still carries the live value for the visible text AND the
+ * stateDescription.
+ */
 private data class SliderSpec(
     val key: String,
     val label: Int,
+    val a11yNameRes: Int,
     val get: (EditRecipe) -> Int,
     val set: (EditRecipe, Int) -> EditRecipe,
 )
 
 /** The tone + colour + detail sliders (the full r30 adjustment suite minus HSL bands). */
 private val ADJUST_SLIDERS: List<SliderSpec> = listOf(
-    SliderSpec("exposure", R.string.editor_exposure, { it.exposure }, { r, v -> r.copy(exposure = v) }),
-    SliderSpec("brightness", R.string.editor_brightness, { it.brightness }, { r, v -> r.copy(brightness = v) }),
-    SliderSpec("contrast", R.string.editor_contrast, { it.contrast }, { r, v -> r.copy(contrast = v) }),
-    SliderSpec("saturation", R.string.editor_saturation, { it.saturation }, { r, v -> r.copy(saturation = v) }),
-    SliderSpec("temperature", R.string.editor_temperature, { it.temperature }, { r, v -> r.copy(temperature = v) }),
-    SliderSpec("tint", R.string.editor_tint, { it.tint }, { r, v -> r.copy(tint = v) }),
-    SliderSpec("highlights", R.string.editor_highlights, { it.highlights }, { r, v -> r.copy(highlights = v) }),
-    SliderSpec("shadows", R.string.editor_shadows, { it.shadows }, { r, v -> r.copy(shadows = v) }),
-    SliderSpec("vignette", R.string.editor_vignette, { it.vignette }, { r, v -> r.copy(vignette = v) }),
-    SliderSpec("sharpness", R.string.editor_sharpness, { it.sharpness }, { r, v -> r.copy(sharpness = v) }),
+    SliderSpec("exposure", R.string.editor_exposure, R.string.editor_a11y_exposure, { it.exposure }, { r, v -> r.copy(exposure = v) }),
+    SliderSpec("brightness", R.string.editor_brightness, R.string.editor_a11y_brightness, { it.brightness }, { r, v -> r.copy(brightness = v) }),
+    SliderSpec("contrast", R.string.editor_contrast, R.string.editor_a11y_contrast, { it.contrast }, { r, v -> r.copy(contrast = v) }),
+    SliderSpec("saturation", R.string.editor_saturation, R.string.editor_a11y_saturation, { it.saturation }, { r, v -> r.copy(saturation = v) }),
+    SliderSpec("temperature", R.string.editor_temperature, R.string.editor_a11y_temperature, { it.temperature }, { r, v -> r.copy(temperature = v) }),
+    SliderSpec("tint", R.string.editor_tint, R.string.editor_a11y_tint, { it.tint }, { r, v -> r.copy(tint = v) }),
+    SliderSpec("highlights", R.string.editor_highlights, R.string.editor_a11y_highlights, { it.highlights }, { r, v -> r.copy(highlights = v) }),
+    SliderSpec("shadows", R.string.editor_shadows, R.string.editor_a11y_shadows, { it.shadows }, { r, v -> r.copy(shadows = v) }),
+    SliderSpec("vignette", R.string.editor_vignette, R.string.editor_a11y_vignette, { it.vignette }, { r, v -> r.copy(vignette = v) }),
+    SliderSpec("sharpness", R.string.editor_sharpness, R.string.editor_a11y_sharpness, { it.sharpness }, { r, v -> r.copy(sharpness = v) }),
 )
 
 /** The eight HSL bands with their display names (fixed order). */
@@ -554,7 +623,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     fun effectiveRecipe(): EditRecipe {
         val d = draft ?: return committed
         val spec = ADJUST_SLIDERS.firstOrNull { it.key == d.first }
-        return if (spec != null) spec.set(committed, d.second) else committed
+        return when {
+            spec != null -> spec.set(committed, d.second)
+            // r32: the straighten drag previews live too (it previously
+            // waited for release, burning a per-tick re-render for nothing).
+            d.first == "straighten" -> committed.copy(straightenDeg = d.second.toDouble())
+            else -> committed
+        }
     }
 
     fun commit(recipe: EditRecipe) {
@@ -627,7 +702,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     recipe = committed,
                     format = choice.format,
                     quality = choice.quality,
-                    metadataPolicy = policy,
+                    // The per-export choice, resolved against the request's
+                    // privacy floor (contract 4.4: never strip less than asked).
+                    metadataPolicy = ExportPolicyChoice.effectivePolicy(
+                        policy,
+                        choice.metadataPolicy,
+                    ),
                 ),
             )
         }
@@ -782,10 +862,16 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                     )
+                    val qualityName = stringResource(R.string.editor_a11y_quality)
+                    val qualityState = stringResource(R.string.editor_quality, choice.quality)
                     Slider(
                         value = choice.quality.toFloat(),
                         onValueChange = { exportChoice = choice.copy(quality = it.toInt()) },
                         valueRange = 1f..100f,
+                        modifier = Modifier.semantics {
+                            contentDescription = qualityName
+                            stateDescription = qualityState
+                        },
                     )
                 } else {
                     Text(
@@ -794,6 +880,44 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+
+                // ---- The per-export metadata-policy choice (r31) ----
+                // The launch request's policy is the privacy floor: options
+                // that would strip LESS than the request are disabled (the
+                // editor respects the requested policy exactly, contract 4.4).
+                Text(
+                    text = stringResource(R.string.editor_section_metadata),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    MetadataPolicy.entries.forEach { option ->
+                        FilterChip(
+                            selected = (choice.metadataPolicy ?: policy) == option,
+                            onClick = { exportChoice = choice.copy(metadataPolicy = option) },
+                            enabled = !exporting &&
+                                !ExportPolicyChoice.isBlockedByFloor(policy, option),
+                            label = { Text(policyLabel(option)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+                if (policy != MetadataPolicy.PRESERVE) {
+                    Text(
+                        text = stringResource(
+                            R.string.editor_metadata_floor,
+                            policyLabel(policy),
+                        ),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.editor_metadata_note),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
                 Button(onClick = { requestSave() }, modifier = Modifier.padding(top = 4.dp)) {
                     Text(stringResource(R.string.editor_save_copy))
                 }
@@ -834,50 +958,68 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         tint = Color.White,
                     )
                 }
-                IconButton(
+                // r32 a11y: both flip toggles are FilterChips. A text
+                // label inside an IconButton overflows the 48dp target, and
+                // a clickable Text was a sub-48dp touch target; a selected
+                // chip gives the proper target, the state highlight AND the
+                // selected/not-selected announcement next to the on/off text.
+                FilterChip(
+                    selected = committed.horizontalFlip,
                     onClick = {
                         commit(committed.copy(horizontalFlip = !committed.horizontalFlip))
                     },
                     enabled = !exporting,
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.editor_flip_horizontal_toggle,
-                            if (committed.horizontalFlip) {
-                                stringResource(R.string.editor_on)
-                            } else {
-                                stringResource(R.string.editor_off)
-                            },
-                        ),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                Text(
-                    text = stringResource(
-                        R.string.editor_flip_vertical_toggle,
-                        if (committed.verticalFlip) {
-                            stringResource(R.string.editor_on)
-                        } else {
-                            stringResource(R.string.editor_off)
-                        },
-                    ),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier
-                        .padding(end = 8.dp)
-                        .clickable(enabled = !exporting) {
-                            commit(committed.copy(verticalFlip = !committed.verticalFlip))
-                        },
+                    label = {
+                        Text(
+                            text = stringResource(
+                                R.string.editor_flip_horizontal_toggle,
+                                if (committed.horizontalFlip) {
+                                    stringResource(R.string.editor_on)
+                                } else {
+                                    stringResource(R.string.editor_off)
+                                },
+                            ),
+                        )
+                    },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                FilterChip(
+                    selected = committed.verticalFlip,
+                    onClick = {
+                        commit(committed.copy(verticalFlip = !committed.verticalFlip))
+                    },
+                    enabled = !exporting,
+                    label = {
+                        Text(
+                            text = stringResource(
+                                R.string.editor_flip_vertical_toggle,
+                                if (committed.verticalFlip) {
+                                    stringResource(R.string.editor_on)
+                                } else {
+                                    stringResource(R.string.editor_off)
+                                },
+                            ),
+                        )
+                    },
+                    modifier = Modifier.padding(end = 8.dp),
                 )
             }
+            // r32: the straighten slider follows the drag live (the label,
+            // the thumb, the preview) exactly like the adjustment sliders;
+            // it previously held the committed value until release. The
+            // value stays a Double so a fractional sidecar straighten (e.g.
+            // 7.5) displays exactly, not truncated.
+            val straightenLive = draft?.takeIf { it.first == "straighten" }?.second?.toDouble()
+                ?: committed.straightenDeg
+            val straightenName = stringResource(R.string.editor_a11y_straighten)
+            val straightenState = stringResource(R.string.editor_straighten, straightenLive.toInt())
             Text(
-                text = stringResource(R.string.editor_straighten, committed.straightenDeg.toInt()),
+                text = straightenState,
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge,
             )
             Slider(
-                value = committed.straightenDeg.toFloat(),
+                value = straightenLive.toFloat(),
                 onValueChange = { draft = Pair("straighten", it.toInt()) },
                 onValueChangeFinished = {
                     draft?.let { d ->
@@ -889,12 +1031,16 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 },
                 valueRange = -15f..15f,
                 enabled = !exporting,
+                modifier = Modifier.semantics {
+                    contentDescription = straightenName
+                    stateDescription = straightenState
+                },
             )
 
             // ---- Crop aspect presets (centered fits over the post-geometry frame) ----
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 listOf(
-                    "free" to CropAspect.FREE,
+                    null to CropAspect.FREE, // the ratios are locale-neutral; the word is not (r32)
                     "1:1" to CropAspect.SQUARE,
                     "4:3" to CropAspect.RATIO_4_3,
                     "3:4" to CropAspect.RATIO_3_4,
@@ -914,21 +1060,23 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                     previewBase?.height ?: 1,
                                 )
                                 val fitted = aspect.fit(plan.cropPixelRect, plan.postGeometryWidth, plan.postGeometryHeight)
-                                val w = plan.postGeometryWidth.toDouble()
-                                val h = plan.postGeometryHeight.toDouble()
+                                // r32: the pixel-rect -> normalized conversion
+                                // is the tested pure inverse (CropRect.fromPixelRect),
+                                // not an inline division that could drift.
                                 commit(
                                     committed.copy(
-                                        crop = CropRect(
-                                            left = fitted.x0 / w,
-                                            top = fitted.y0 / h,
-                                            right = fitted.x1 / w,
-                                            bottom = fitted.y1 / h,
+                                        crop = CropRect.fromPixelRect(
+                                            fitted,
+                                            plan.postGeometryWidth,
+                                            plan.postGeometryHeight,
                                         ),
                                     ),
                                 )
                             }
                         },
-                        label = { Text(label) },
+                        label = {
+                            Text(label ?: stringResource(R.string.editor_crop_free))
+                        },
                         modifier = Modifier.padding(end = 8.dp),
                         enabled = !exporting,
                     )
@@ -944,8 +1092,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             for (spec in ADJUST_SLIDERS) {
                 val committedValue = spec.get(committed)
                 val live = if (draft?.first == spec.key) draft!!.second else committedValue
+                val labelText = stringResource(spec.label, live)
+                val a11yName = stringResource(spec.a11yNameRes)
                 Text(
-                    text = stringResource(spec.label, live),
+                    text = labelText,
                     color = Color.White,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -962,6 +1112,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     },
                     valueRange = -100f..100f,
                     enabled = !exporting,
+                    // r32 a11y: every slider announces its NAME and its live
+                    // VALUE, not just the default percent-of-range.
+                    modifier = Modifier.semantics {
+                        contentDescription = a11yName
+                        stateDescription = labelText
+                    },
                 )
             }
 
@@ -982,7 +1138,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 }
             }
             val band = HSL_BANDS.first { it.first == selectedBand }.second(committed.hslBands)
+            val bandLabel = stringResource(bandNameRes(selectedBand))
             HslBandSlider(
+                name = stringResource(
+                    R.string.editor_a11y_band_control,
+                    bandLabel,
+                    stringResource(R.string.editor_a11y_hue),
+                ),
                 label = stringResource(R.string.editor_hsl_hue, band.hue),
                 value = band.hue.toFloat(),
                 range = -180f..180f,
@@ -999,6 +1161,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 },
             )
             HslBandSlider(
+                name = stringResource(
+                    R.string.editor_a11y_band_control,
+                    bandLabel,
+                    stringResource(R.string.editor_a11y_saturation),
+                ),
                 label = stringResource(R.string.editor_hsl_saturation, band.saturation),
                 value = band.saturation.toFloat(),
                 range = -100f..100f,
@@ -1015,6 +1182,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 },
             )
             HslBandSlider(
+                name = stringResource(
+                    R.string.editor_a11y_band_control,
+                    bandLabel,
+                    stringResource(R.string.editor_a11y_luminance),
+                ),
                 label = stringResource(R.string.editor_hsl_luminance, band.luminance),
                 value = band.luminance.toFloat(),
                 range = -100f..100f,
@@ -1032,8 +1204,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             )
 
             // ---- The always-visible honesty line ----
+            // Reflects the policy this export would apply: the pending
+            // per-export choice resolved against the request's floor.
             Text(
-                text = stringResource(R.string.editor_policy_line, policyLabel(policy)),
+                text = stringResource(
+                    R.string.editor_policy_line,
+                    policyLabel(
+                        ExportPolicyChoice.effectivePolicy(policy, exportChoice?.metadataPolicy),
+                    ),
+                ),
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Start,
@@ -1044,6 +1223,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
 @Composable
 private fun HslBandSlider(
+    name: String,
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
@@ -1065,6 +1245,12 @@ private fun HslBandSlider(
         },
         valueRange = range,
         enabled = enabled,
+        // r32 a11y: the band control announces "BAND: CONTROL" as its name
+        // and the formatted label (with the value) as its state.
+        modifier = Modifier.semantics {
+            contentDescription = name
+            stateDescription = label
+        },
     )
 }
 

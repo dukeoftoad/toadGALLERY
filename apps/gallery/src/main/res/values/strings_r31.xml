@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r31: the export honesty narrations. The editor echoes the metadata
+     policy it APPLIED on every RESULT_OK (contract section 5); the gallery
+     narrates what actually happened to the copy's metadata instead of a
+     bare "saved". The original is never modified either way. -->
+<resources>
+
+    <!-- Export narrations (the editor replies through the contract). -->
+    <string name="viewer_edit_saved_location">Saved copy — location removed, and the gallery picked it up through MediaStore.</string>
+    <string name="viewer_edit_saved_stripped">Saved copy — metadata stripped, and the gallery picked it up through MediaStore.</string>
+
+</resources>

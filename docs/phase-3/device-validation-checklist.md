@@ -509,3 +509,86 @@ written; this section is the contract round trip itself.
 - [ ] **Zero egress during AI-free editing**: the editor runs with no
       network capability at all (its merged manifest carries no INTERNET;
       the editor privacy gate proves it at build time).
+
+---
+
+## 20. r31 pass — the export robustness matrix (Phase 6 exit items)
+
+**Build target:** the gallery build from §19 PLUS the editor APK at the
+r31 tip (versionCode 3) — the per-export metadata-policy choice (r31
+wave 1) and the export preflight (r31 wave 2) are the code-side half of
+the Phase 6 exit items; this section is the physical half. The JVM
+decisions behind every row are pinned in `ExportPolicyTest` /
+`ExportPreflightTest`; only the on-device behavior needs a human.
+
+- [ ] **Policy choice surface**: Save copy → the sheet shows "Metadata
+      for this copy" with the three policy chips; the launch request's
+      policy (`preserve` from the gallery) is preselected; the note
+      captions state the copy-only scope (the original is never
+      modified).
+- [ ] **Opt-in location strip (GPS verification)**: pick a photo WITH
+      GPS tags → export with "metadata preserved, location removed" →
+      the copy carries NO GPS tags (any EXIF inspector), every other
+      EXIF tag survives, the ORIGINAL still has its GPS tags
+      (byte-identical hash), and the gallery's narration reports the
+      location removal (the applied-policy echo).
+- [ ] **Opt-in full strip**: export with "metadata stripped" → the copy
+      carries no EXIF at all; the original is untouched.
+- [ ] **Privacy floor (debug path)**: launch the editor with the
+      request's policy set to `strip_location` (debug intent) → the
+      "metadata preserved" chip is DISABLED with the floor caption ("The
+      gallery requested at least: …"); no combination of taps can make
+      the applied policy strip less than the request.
+- [ ] **Honesty line tracks the pending choice**: with the sheet open on
+      an upgrade choice, the always-visible policy line narrates the
+      CHOSEN policy; closing the sheet reverts it to the request's.
+- [ ] **Large-file guard**: open a >48 MP source (e.g. a 108 MP
+      capture) → Save copy → RESULT_ERROR `ERROR_UNSUPPORTED` with the
+      too-large narration, no crash, no partial MediaStore entry; a
+      12 MP control source exports normally on the same device.
+- [ ] **Low-storage preflight**: (dev setup) fill storage until the
+      allocatable bytes drop under the estimate's 1.5× headroom → export
+      → RESULT_ERROR `ERROR_IO` with the free-storage narration BEFORE
+      any insert happens (no pending row, no partial entry); free space
+      → the same edit exports successfully.
+- [ ] **Process death mid-export (Q+)**: start an export of a large
+      image and kill the editor mid-write (`adb shell am kill <pkg>` or
+      swipe-away) → no visible partial entry ever appears (the pending
+      row is invisible to every app and MediaStore reclaims it); open
+      the source for edit again → the session restores losslessly from
+      the sidecar (the recipe survived; the sidecar clears only after a
+      successful export).
+- [ ] **Process death pre-Q (API 26–28 device)**: the same kill may
+      leave a visible partial row — record it in the round report: the
+      editor holds no delete permission by design, so the row is the
+      user's to remove (the acceptance is the DOCUMENTED behavior, not
+      cleanup).
+- [ ] **Distinct failure narrations**: the three failure classes
+      (unsupported / storage / I-O) each narrate their own honest
+      message through the gallery — never a generic "something failed".
+
+## 21. r32 pass — the editor accessibility sweep (versionCode 4, UNRELEASED)
+
+The r32 hardening round's device half: the code asserts the semantics
+(`contentDescription` + `stateDescription` on every slider); the device
+confirms the ANNOUNCEMENTS, their live updates, and the touch targets.
+
+- [ ] **The adjustment slider announcements**: with TalkBack on, focus
+      each of the 10 adjustment sliders (Exposure … Sharpness) — each
+      must announce its NAME and its live value, and the spoken value
+      must update as the thumb moves (scrub with the volume keys).
+- [ ] **The HSL band rows**: select a band (e.g. Red) — the three rows
+      must announce "Red: Hue" / "Red: Saturation" / "Red: Luminance";
+      switching the band must change the announced prefix.
+- [ ] **The flip chips**: both flip toggles announce their label with
+      the on/off text AND the selected/not-selected state; each touch
+      target is at least 48dp (tap accuracy at the chip edges).
+- [ ] **The straighten live drag**: dragging straighten moves the thumb
+      and updates the preview DURING the drag (not only on release);
+      the label's degree value follows.
+- [ ] **The export quality slider**: announces "Export quality" + the
+      number, updating live as the value changes.
+- [ ] **The crop presets still crop correctly after the pure-inverse
+      refactor**: each preset (1:1, 4:3, 3:4, 16:9, 9:16) produces the
+      expected output aspect on export (the §19 round trip re-run with
+      one preset applied covers this end to end).

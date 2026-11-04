@@ -12,6 +12,38 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[toadGALLERY Edit] The mosaic/blur regions — the pixel-stage break,
+  the additive RegionLayers recipe, the final pipeline stage** (r37
+  round, Phase 7 layer type 4 of 5, branch `tg-p7-mosaic`): paint a
+  region over the photo; the region gets a mosaic (block average,
+  origin-aligned cells) or a linear blur (horizontal box window) at a
+  strength — applied to the FULLY graded pixels as the pipeline's FINAL
+  stage, after sharpen (no downstream stage re-processes the censored
+  output). Grid-relative like the vignette: exact in the export (where
+  the stage grid IS the output canvas), approximate in the preview
+  under an active crop — the r30 characteristic, stated honestly. The
+  recipe's `RegionLayers` is additive like the family contract: a
+  pre-r37 sidecar loads clean — proven with one carrying r34 text +
+  r35 stickers + r36 strokes, the round-four stacking proof; an unknown
+  `kind` is corrupt data and the layer is skipped, never a crash;
+  points tolerate like the stroke family's (2-element arrays,
+  malformed entries dropped, survivors clamped, the count capped at
+  512, thinned at commit by the same stride rule). The pure
+  `RegionMask` is an even-odd scanline fill (pixel centres strictly
+  inside; the triangle and the self-crossing bowtie pinned by exact
+  masks, the bowtie's pinch empty); `RegionEffects` is
+  integer-deterministic (the mosaic's per-cell reads-before-writes; the
+  blur's sliding window over a snapshot, pinned equivalent to the
+  per-pixel loop). The UI: the second paint mode (mutually exclusive
+  with Draw mode), the kind chips + strength slider under the paint
+  duality, the draft region previewing AT PAINT TIME through the same
+  stage the export runs, and the selection unification extended to the
+  fourth family. 26 new JVM tests (the edit module at 340; the local
+  harness ran 333 pure green pre-push); the module string count
+  114 → 122; editor `versionCode 10` (`0.4.5-edit-alpha`). The
+  on-device pass rides checklist §26; the delivery record is
+  `docs/phase-7/mosaic-regions.md`.
+
 - **[toadGALLERY Edit] The freehand drawing tool — stroke-per-layer, the
   additive DrawLayers recipe, the shared compositing pass between
   stickers and text** (r36 round, Phase 7 layer type 3 of 5, branch

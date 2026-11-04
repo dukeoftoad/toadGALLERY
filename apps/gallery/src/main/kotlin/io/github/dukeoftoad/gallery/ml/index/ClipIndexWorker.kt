@@ -32,10 +32,13 @@ import java.io.File
  * One run = one bounded batch:
  *  1. session gates, in the honest order (each a permanent
  *     failure-with-message --- no retry can download a library or a
- *     model pack): engine library present -> FACE models provisioned ->
- *     `initialize` (the engine session is FACE-based in r26; see the
- *     honest limitation in `docs/phase-5/magic-search.md`) -> SEMANTIC
- *     models provisioned -> `initSemantic` -> `openFaceIndex`;
+ *     model pack): engine library present -> SEMANTIC models
+ *     provisioned -> `initSemantic` (r39: installs the semantic session
+ *     from scratch when none exists --- the semantic-only session --- or
+ *     upgrades an existing face session; the FACE pack and
+ *     `initialize` are NO LONGER gates, the r26 round's documented
+ *     limitation dropped; see `docs/phase-5/ente-exit.md`) ->
+ *     `openFaceIndex`;
  *  2. candidates: the r24 face worker's own [eligibleCandidates] filter
  *     (JPEGs on the indexable external-primary volume, newest first ---
  *     the three-gate `EligiblePublicMedia` discipline: vault media are
@@ -57,8 +60,8 @@ import java.io.File
  *     persistence, and cancels cleanly with the unique name.
  *
  * Failure shapes are honest, never paraphrased away: a missing engine
- * library, unprovisioned FACE or SEMANTIC models, an engine-init,
- * semantic-init or store-open failure is a permanent
+ * library, unprovisioned SEMANTIC models, a semantic-init or store-open
+ * failure is a permanent
  * [androidx.work.ListenableWorker.Result.failure] carrying the engine's
  * own message; a mid-run engine fault retries with WorkManager backoff
  * up to [MAX_RUN_ATTEMPTS] and then fails with the same message. A
@@ -82,27 +85,12 @@ class ClipIndexWorker(
 
         val provisioner = app.modelProvisioner
 
-        // Session gates, honest order. The FACE gate comes first because
-        // the r26 engine session is face-based: `initialize` loads the
-        // face models even when the caller only wants CLIP (the engine's
-        // own session shape --- a semantic-only session is a named
-        // follow-up in the round doc).
-        if (provisioner.capabilityState(ModelManifest.Capability.FACE) != ModelProvisioner.CapabilityState.Ready) {
-            return Result.failure(
-                Data.Builder().putString(KEY_CLIP_MESSAGE, "FACE models are not installed; use the model download above").build(),
-            )
-        }
-        when (val init = engine.initialize(provisioner.modelsDir.absolutePath)) {
-            is MlEngine.State.Ready -> Unit
-            is MlEngine.State.Error ->
-                return Result.failure(
-                    Data.Builder().putString(KEY_CLIP_MESSAGE, "engine init failed: ${init.message}").build(),
-                )
-            else ->
-                return Result.failure(
-                    Data.Builder().putString(KEY_CLIP_MESSAGE, "engine init: $init").build(),
-                )
-        }
+        // Session gates, honest order. The r39 shape: the semantic queue
+        // needs ONLY the SEMANTIC pack --- `initSemantic` installs the
+        // session from scratch when none exists (the semantic-only
+        // session), so the FACE capability gate and the `initialize`
+        // call the r26 worker carried are gone (the round's documented
+        // limitation, dropped; `docs/phase-5/ente-exit.md`).
         if (provisioner.capabilityState(ModelManifest.Capability.SEMANTIC) != ModelProvisioner.CapabilityState.Ready) {
             return Result.failure(
                 Data.Builder().putString(KEY_CLIP_MESSAGE, "SEMANTIC models are not installed; use the semantic model download above").build(),

@@ -48,7 +48,7 @@ import org.json.JSONObject
  *
  * r26 adds the semantic (Magic Search) layer over the same two state
  * machines: [initSemantic] / [semanticState] (a THIRD open/closed state
- * --- the CLIP half of an already-initialized engine, tracked like
+ * --- the CLIP half of an engine session, tracked like
  * [initialize]'s error so [semanticState] stays honest, reset by
  * [release] with the engine), the CLIP encoders ([clipImageEmbedding] /
  * [clipTextEmbedding] --- 512-float vectors; the engine's own
@@ -58,6 +58,19 @@ import org.json.JSONObject
  * [deleteClipsForFiles] / [clipIndexedFileIds] / [clipCount] /
  * [searchClips] / [fillClipIndex]): clip rows live in the same
  * `ml-index.sqlite`, so the r23 open-store gate governs them too.
+ *
+ * r39 makes the session halves SYMMETRIC and adds the distance-cut
+ * search: [initSemantic] no longer presupposes an [initialize]d engine
+ * --- the native layer installs a SEMANTIC-ONLY session from scratch
+ * (the r26 round's documented FACE-model requirement, dropped; see
+ * `docs/phase-5/ente-exit.md`) --- and [initialize] upgrades such a
+ * session with the face half in place. The facade's two state machines
+ * stay independent and honest: [state] reports the FACE half,
+ * [semanticState] the CLIP half, and neither claims the other. On a
+ * semantic-only session the face calls fail with the engine's own
+ * dedicated message (carried verbatim). [searchClipsWithin] is the
+ * r39 membership search: the same top-K over the same index, cut by
+ * cosine distance inside the vecdb (upstream's own `max_distance`).
  */
 class MlEngine(private val bridge: Bridge = JniBridge) {
 
@@ -200,6 +213,13 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         fun nativeStoreClipCount(): Long
         fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String
         fun nativeStoreFillClipIndex(): String
+
+        // ---- r39 ----
+        fun nativeStoreSearchClipsWithin(
+            queryEmbedding: FloatArray,
+            maxDistance: Float,
+            limit: Int,
+        ): String
     }
 
     private object JniBridge : Bridge {
@@ -269,6 +289,13 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
             MlEngineJni.nativeStoreSearchClips(queryEmbedding, limit)
 
         override fun nativeStoreFillClipIndex(): String = MlEngineJni.nativeStoreFillClipIndex()
+
+        // ---- r39 ----
+        override fun nativeStoreSearchClipsWithin(
+            queryEmbedding: FloatArray,
+            maxDistance: Float,
+            limit: Int,
+        ): String = MlEngineJni.nativeStoreSearchClipsWithin(queryEmbedding, maxDistance, limit)
     }
 
     private var sessionOpen = false
@@ -557,14 +584,22 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
     // ---- r26: the semantic (Magic Search) layer ----
 
     /**
-     * Opens the semantic (CLIP) half of an ALREADY-initialized engine
-     * session over [modelsDir] (r26). Returns the new [SemanticState]:
-     * [SemanticState.Ready] on a true [Bridge.nativeInitSemantic],
-     * [SemanticState.Error] on a false one (the flag stays false),
-     * [SemanticState.LibraryMissing] when the build carries no library
-     * (no native call). Requires nothing about the face-index store; an
-     * IllegalStateException from the native layer (e.g. no engine
-     * session --- initialize first) propagates unchanged.
+     * Opens the semantic (CLIP) half of the engine session over
+     * [modelsDir] (r26; r39 makes the halves symmetric). Returns the new
+     * [SemanticState]: [SemanticState.Ready] on a true
+     * [Bridge.nativeInitSemantic], [SemanticState.Error] on a false one
+     * (the flag stays false), [SemanticState.LibraryMissing] when the
+     * build carries no library (no native call).
+     *
+     * Since r39 this call does NOT presuppose [initialize]: the native
+     * layer installs the CLIP half on an existing face session (the r26
+     * upgrade) or FROM SCRATCH as a semantic-only session (the r26
+     * round's documented FACE-model requirement, dropped --- Magic
+     * Search and Things run on the SEMANTIC pack alone). [initialize] on
+     * a semantic-only session upgrades it with the face half in place;
+     * [state] and [semanticState] report the two halves independently.
+     * Requires nothing about the face-index store; an
+     * IllegalStateException from the native layer propagates unchanged.
      */
     @Synchronized
     fun initSemantic(modelsDir: String): SemanticState {
@@ -583,7 +618,10 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
     /**
      * The current [SemanticState] (r26); [SemanticState.LibraryMissing]
      * dominates when set, then a remembered [initSemantic] error, then
-     * ready, then uninitialized (no engine session, or released).
+     * ready, then uninitialized. Since r39 "uninitialized" means only
+     * what it says --- the CLIP half is not installed --- with NO claim
+     * about the face half ([state] owns that truth; either half may be
+     * installed first, and the other upgrades in place).
      */
     @Synchronized
     fun semanticState(): SemanticState = when {
@@ -697,6 +735,39 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         }
         require(limit > 0) { "limit must be positive; got $limit" }
         return parseClipMatches(bridge.nativeStoreSearchClips(queryEmbedding, limit))
+    }
+
+    /**
+     * Runs the DISTANCE-CUT vector search over the CLIP index (r39, the
+     * Things/membership half): the same index and the same honest
+     * order-preserving parse as [searchClips], but only matches at
+     * cosine distance `<= [maxDistance]` (INCLUSIVE) come back --- the
+     * cut runs INSIDE the vecdb (upstream's own `max_distance`, plumbed
+     * through the r39 bridge), so a membership query never drags the
+     * whole index across the JNI boundary just to discard most of it.
+     *
+     * Throws IllegalArgumentException when [queryEmbedding] is not
+     * [CLIP_EMBEDDING_DIM] floats, [maxDistance] is non-finite or
+     * negative, or [limit] is not positive (all checked HERE, before any
+     * native call) and IllegalStateException when the store is not open
+     * (or the build is library-less), the native call fails, or the JSON
+     * shape is not the pinned array.
+     */
+    @Synchronized
+    fun searchClipsWithin(
+        queryEmbedding: FloatArray,
+        maxDistance: Float,
+        limit: Int,
+    ): List<ClipMatch> {
+        requireFaceIndexOpen()
+        require(queryEmbedding.size == CLIP_EMBEDDING_DIM) {
+            "query embedding must be $CLIP_EMBEDDING_DIM floats; got ${queryEmbedding.size}"
+        }
+        require(maxDistance.isFinite() && maxDistance >= 0f) {
+            "max distance must be a finite non-negative float; got $maxDistance"
+        }
+        require(limit > 0) { "limit must be positive; got $limit" }
+        return parseClipMatches(bridge.nativeStoreSearchClipsWithin(queryEmbedding, maxDistance, limit))
     }
 
     /**

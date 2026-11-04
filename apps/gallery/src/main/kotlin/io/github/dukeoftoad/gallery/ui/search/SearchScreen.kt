@@ -91,7 +91,7 @@ import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
  *
  * CONTENT MODE renders [MagicSearchUiState] (the r26 sibling pipeline's
  * honest states): the shared permission surface; the pure
- * [io.github.dukeoftoad.gallery.ml.search.MagicSearchContentPolicy]'s
+ * [io.github.dukeoftoad.gallery.ml.search.SemanticContentPolicy]'s
  * gating cards (consent off -> "enable Magic search in Settings" with an
  * [onOpenSettings] affordance wired the People/Map consent way; engine
  * missing -> the build-shape card; models not provisioned -> the download

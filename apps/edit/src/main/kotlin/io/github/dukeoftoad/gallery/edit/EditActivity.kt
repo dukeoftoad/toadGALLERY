@@ -21,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -36,7 +37,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
@@ -74,6 +74,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -1096,8 +1097,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         val offY = (size.height - image.height * scale) / 2f
                         val imgX = (position.x - offX) / scale
                         val imgY = (position.y - offY) / scale
-                        val fx = ((imgX - rect.x0) / rect.width).coerceIn(0.0, 1.0)
-                        val fy = ((imgY - rect.y0) / rect.height).coerceIn(0.0, 1.0)
+                        val fx = ((imgX - rect.x0) / rect.width).coerceIn(0f, 1f).toDouble()
+                        val fy = ((imgY - rect.y0) / rect.height).coerceIn(0f, 1f).toDouble()
                         return fx to fy
                     }
 
@@ -1117,8 +1118,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                         val offX = (size.width - image.width * scale) / 2f
                         val offY = (size.height - image.height * scale) / 2f
-                        val cxImg = rect.x0 + layer.centerX * rect.width
-                        val cyImg = rect.y0 + layer.centerY * rect.height
+                        val cxImg = (rect.x0 + layer.centerX * rect.width).toFloat()
+                        val cyImg = (rect.y0 + layer.centerY * rect.height).toFloat()
                         return Offset(offX + cxImg * scale, offY + cyImg * scale)
                     }
 
@@ -1643,7 +1644,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         commitTextDraftIfPending()
                         val existing = committed.textLayers?.layers ?: emptyList()
                         val newLayer = TextLayer(
-                            id = TextLayer.newId(existing),
+                            id = TextLayer.newId(existing.map { it.id }),
                             text = "",
                             fontId = BundledFonts.DEFAULT_ID,
                         )
@@ -2031,13 +2032,19 @@ private fun ColorSwatch(
                 color = if (selected) Color.White else Color.White.copy(alpha = 0.4f),
                 shape = CircleShape,
             )
-            .toggleable(
-                value = selected,
+            // toggleable is not on this foundation build's API surface
+            // (unresolved at the r34 head's first compile); clickable +
+            // explicit semantics carries the same a11y contract --- the
+            // repo-wide clickable convention, role + selected stated here.
+            .clickable(
                 enabled = enabled,
                 role = Role.RadioButton,
-                onValueChange = { onPick() },
+                onClick = { onPick() },
             )
-            .semantics { contentDescription = name },
+            .semantics {
+                selected = selected
+                contentDescription = name
+            },
     )
 }
 

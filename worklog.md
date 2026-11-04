@@ -77,7 +77,7 @@
   * Updated all 7 files in `/home/z/my-project/download/toadGALLERY-v2/` (`~2.3k` lines) and requested the PAT again since the session environment had reset.
 
 ### Turn 5 (Lines 341–442) — Roadmap v2.2: Reference-Only Upstreams, From-Scratch Compose & GitHub Actions CI
-* **User Prompt**: *"we are taking only features, ui/ux, designs from all apps for toadGALLERY. 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 " clean up all docs which are dead and stale. another blocker you said about environment which we use github actions as solution."*
+* **User Prompt**: *"we are taking only features, ui/ux, designs from all apps for toadGALLERY. [REDACTED:github_token] " clean up all docs which are dead and stale. another blocker you said about environment which we use github actions as solution."*
 * **Execution (Branch `roadmap-v2`, PR #16)**:
   * Configured PAT in git credential store. Inspected repo state and identified conflicts between landed Phase 0/1/2 docs and the new reference-only + Compose directives.
   * Superseded **ADR-0001** → **ADR-0008** (features/UI/UX/designs reference only; zero code copied from Fossify, Aves, or MI Gallery; `licensing-and-attribution.md` provenance ledger emptied; GPL-3.0 voluntary per ADR-0004).
@@ -270,7 +270,7 @@
   * Verified 233 JVM tests green, bumped to `versionCode 10`, updated `roadmap.md` to *"code-complete pending device validation"*, merged **PR #68** (`d02c080`), and published signed pre-release **`v0.4.0-alpha-r5`**.
 
 ### Turns 22 & 23 (Lines 2032–2206) — Codebase Discovery, Vault Thumbnail Lock-Race Fix (`#69`, PRs #70, #71, #72) & Release `v0.4.1-alpha-r7`
-* **User Prompts**: *"Take a lead role and act as expert and discover current codebase repo and completed the partial, incomplete, pending works upto phase 3. Before that proposed plan for approval and Q/A if needed."* (Turn 22) and provided PAT `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` after Q/A confirmation (Turn 23).
+* **User Prompts**: *"Take a lead role and act as expert and discover current codebase repo and completed the partial, incomplete, pending works upto phase 3. Before that proposed plan for approval and Q/A if needed."* (Turn 22) and provided PAT `[REDACTED:github_token]` after Q/A confirmation (Turn 23).
 * **Discovery & Audit**:
   * After syncing `main` (`d02c080`), verified that Waves 1 & 2 (`#67`, `#68`) had landed, but audited `VaultViewModel.ensureThumbnails()` against the user's Q/A race-guard requirement and found a real bug: `ensureThumbnails()` checked `is Unlocked` before `decodeThumbnail(entry)`, but **did not re-check after async decode before publishing the bitmap**, nor did `onBackgrounded()` cancel the in-flight decode `Job`.
 * **Implementation & Release (`#69`, PRs #70, #71, #72)**:
@@ -337,7 +337,7 @@
   * Raised project `gradle.properties` to `-Xmx2048m -XX:MaxMetaspaceSize=768m` and workflow timeout to 45 minutes in **PR #80**, verified locally with project caps active, merged **PR #80**, re-tagged `v0.4.1-alpha-r10` (Run #11), renamed release assets from `-r11` to `-r10` for consistency, and verified SHA-256 + signature digest `8a4640e0`.
 
 ### Turns 31 & 32 (Lines 3242–3370) — Resolving User's Draft PR #81 & Shipping Build 15 Hardening (PR #82, `r11`)
-* **User Prompts**: *"Follow up and checkout #81 pr and launch sub agents to resolve"* (Turn 31) and *"Pat token `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`"* (Turn 32).
+* **User Prompts**: *"Follow up and checkout #81 pr and launch sub agents to resolve"* (Turn 31) and *"Pat token `[REDACTED:github_token]`"* (Turn 32).
 * **Investigation of PR #81 (`docs/crash-investigation-draft`)**:
   * Read user's draft PR #81 containing 4 crash findings (including build-14 logcat crash `IllegalArgumentException: Crypto-based authentication is not supported for Class 2 (Weak) biometrics`) and 13 repo-wide audit items (`A`–`M`).
   * Verified `androidx.biometric:1.1.0` source (`BiometricPrompt.java` / `AuthenticatorUtils.java`): `authenticate(PromptInfo, CryptoObject)` unconditionally rejects any prompt whose allowed authenticators include `BIOMETRIC_WEAK` (checking requested flags, not device sensor class).
@@ -396,7 +396,7 @@
   * Opened and merged integrator docs **PR #90** (`f99964b`, bumping `versionCode` 18 → 22, updating `CHANGELOG.md`, marking Phase 4 complete in `roadmap.md`, and adding device checklist §16).
 
 ### Turns 36 & 37 (Lines 3719–3899) — Whole-Codebase Opus Audit, Round `r19` (7 Slices) & Release Build 23 (`v0.4.1-alpha-r19`, PR #91)
-* **User Prompts**: *"Use opus model and check for code improvement overall add functions and features and release build 22 if none done else 23 if done"* (Turn 36) and provided PAT `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` (Turn 37).
+* **User Prompts**: *"Use opus model and check for code improvement overall add functions and features and release build 22 if none done else 23 if done"* (Turn 36) and provided PAT `[REDACTED:github_token]` (Turn 37).
 * **3 Read-Only Opus Audits + 7 Parallel Opus Implementation Slices (`tg-r19-quality-features` → PR #91)**:
   * **IMPL-1 (`121a58e` — P0 `media_type` Fix)**: Fixed `Favorites.kt:64` and `SearchQuery.kt:120-122` from `media_type IN (1, 2)` (which leaked audio `2` and dropped all videos `3`) to `media_type IN (1, 3)` (`MEDIA_TYPE_IMAGE`, `MEDIA_TYPE_VIDEO`), with cross-check tests against `TimelineFilter`.
   * **IMPL-2 (`VaultStore` Concurrency Mutex & Thumbnail Tail Auth)**: Closed a P0 data-loss race where concurrent `unlock()` (running `sweepStaleTempFiles`) and `moveToVault()` could delete in-flight `.tmp` blobs by adding a store-level mutex + 10-minute temp-file sweep grace window + parked-stream concurrency test; also enforced full stream read before bitmap decode in `VaultViewModel` so AES-GCM authentication tags are always verified.
@@ -410,7 +410,7 @@
   * CI passed green (`71872ded`) including KSP verification of hand-written `5.json`. Squash-merged **PR #91** (`93a5d0f`) and pushed annotated tag **`v0.4.1-alpha-r19`**, publishing signed **Build 23** (4.2 MB APK, SHA-256 verified).
 
 ### Turn 38 (Lines 3900–4078) — Round `r20`: The Scan-Debt Round (Combined Single-Read EXIF, Room v6 Healing Pass, Volume Hot-Plug & Vault Batch Store, PR #92)
-* **User Prompt**: *"No new builds under phase 5 completion . follow up and continue building . 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"*.
+* **User Prompt**: *"No new builds under phase 5 completion . follow up and continue building . [REDACTED:github_token]"*.
 * **Implementation (`tg-r20-scan-debt` → PR #92, `versionCode 24`)**:
   * **1. Combined Single-Read EXIF Indexer (`CombinedExifIndexer.kt`)**: Replaced the separate `CaptureDateIndexer` and `LocationIndexer` (which opened and parsed every image twice) with a single-open, single-parse pass that populates both capture date and GPS location and skips non-EXIF formats with zero byte reads.
   * **2. NULL-Provenance Healing Pass (Room v5→v6)**: Added `provenanceIndexedAtMillis` column to `CatalogueItemEntity` (`MIGRATION_5_6`, `6.json` with derived `identityHash = 46adb27b56f18c9ea5f4bfeb06ecb168`, verified against KSP) stamped only after all writes for a row succeed, plus `ProvenanceHealingPass` retrying bounded batches of `NULL`-stamped rows on startup until convergence.
@@ -421,8 +421,8 @@
 ### Turns 39, 40 & 41 (Lines 4080–4195) — Phase 5 Audit Alignment & Workstream Diff Analysis
 * **User Prompts**:
   * Turn 39: Re-attached `toadGALLERY_Phase4_Compatibility_Audit_and_Phase5_Ente_AI_Plan-1.docx` (312.3 KB): *"This is the plan for your reference. Follow up"*.
-  * Turn 40: *"agreed and follow up `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`"*.
-  * Turn 41: *"in between i want to understand what you have done and docs says , diff and what we need to do if we are following document, then help me direction chosen outcomes and proposed plan to move next steps .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"*.
+  * Turn 40: *"agreed and follow up `[REDACTED:github_token]`"*.
+  * Turn 41: *"in between i want to understand what you have done and docs says , diff and what we need to do if we are following document, then help me direction chosen outcomes and proposed plan to move next steps .[REDACTED:github_token]"*.
 * **Sandbox Recovery & Authoritative Audit Diff**:
   * During Turns 39–40 the container shell failed to start; once recovered in Turn 41, rebuilt credentials, verified `main @ ae5d7f5` (r20), and delivered a contract-by-contract diff between the audit doc (snapshotted at `0.4.0-alpha`) and `main` (`0.4.1-alpha` build 24):
     * **Closed in `r10`–`r20` (Workstreams 0 & 1 complete)**: Media identity (`MediaIdentity`), Dates (`MediaDates`/`MediaDateResolver`), Revision tracking (`MediaRevision.diff()`), Media read boundary (`MediaReadHandle`), Canonical decode (`CanonicalImageDecoder`), Metadata breadth (`FormatSniffer`), Location (`ACCESS_MEDIA_LOCATION`), Database (`Room v6`), Incremental discovery (`MediaChangeFeed` + `MediaScanDriver` + healing pass + volume hot-plug), and Vault boundary (`EligiblePublicMedia`).
@@ -451,7 +451,7 @@
   * Opened **PR #93** (102 files staged, `c170ad7`), passed both CI jobs (`build` + `engine`), and squash-merged (`583aaa6`, `versionCode 25`, zero tags/releases).
 
 ### Turns 46 & 47 (Lines 4393–4560) — Round `r22`: Allowlisted HTTPS Model Downloader, JNI Bridge, ORT 1.31.0 Packaging & Dogfood UI (`#94`, PR #95)
-* **User Prompts**: *"Follow up `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`"* (Turn 46) and *"Follow up"* (Turn 47).
+* **User Prompts**: *"Follow up `[REDACTED:github_token]`"* (Turn 46) and *"Follow up"* (Turn 47).
 * **Fact-Finding & 3 Parallel Opus Subagents**:
   * Verified via live HTTP `HEAD` requests that all 5 core models serve directly from `https://models.ente.com/{filename}` with HTTP 200, zero redirects, and `Content-Length` matching `ModelManifest.kt` to the byte.
   * Launched 3 parallel Opus subagents (`A`: Rust `toad-ml-jni` crate; `B`: Kotlin `HttpModelDownloader`, `MlEngine` JNI facade, `AiEngineDogfoodViewModel` + Settings dogfood screen; `C`: `scripts/build-rust-android.sh`, `-PwithEngine` Gradle packaging, `engine-android` CI job, ADR-0020 revision).
@@ -774,3 +774,11 @@
 * **Phase 8 declared**: no code asset exists (on-device AI per ADR-0010) --- nothing dispatched, nothing merged, no fake progress; the roadmap's Phase 8 section stands untouched and the wave map records the honest gap.
 * **Wave D (the Flaw Review, bounded: the Phase 6–8 surfaces + `.github/workflows/*.yml`)**: **BLOCKERS: none** --- the two merge-gating CI runs are the arbiter and both are green; the standing batteries re-ran clean post-rebase. **NON-BLOCKERS FIXED in this docs wave**: the ledger rows' final forms (#106 → `938effa`; the r32-rides row re-keyed to the `| — |` PR-less-row convention; the r33 row re-keyed `**#108` → `**#107` --- the PR-number race resolved in the merged reality); the roadmap Phase 6 MERGED status + the Phase 7 merged note; the tasks.md Phase 6/7 milestone cells + the parent-line annotation. **NITS RECORDED (no action)**: the worklog top-of-file residue (main's stray #104 row + the duplicated Run #2 push-note lines --- append-only tolerated); the Run #6 section's mid-file position (the union artifact; every entry intact); CHANGELOG's two `[0.4.2-alpha]` headings (pre-existing on main, the r29-era addition pattern); `ci.yml` has no paths-ignore for docs-only pushes and the build job's 20-minute timeout headroom shrinks as the editor grows (the Phase 7/8 layers to watch); the `pull_request` delivery stall (documented in-file, the dispatch workaround standing); PR **#108** (another actor's `tg-p7-lut-import`, RED, redundant with #107's import flow --- untouched per the ownership boundary; its actor should reconcile); f96aaa1's "~74 to ~90 string recount owed" (the r34 prep debt, rides the branch docs).
 * **The docs wave (this push)**: one batched commit --- the campaign entries Run #7/#8/#9 (Run #7 reconstructed honestly; the gap at Run #4 stands as published) + the ledger final forms + the roadmap/tasks status truth. One push, one main CI; the window's CI bill: 2 dispatches (one per PR head) + the automatic main runs on the three pushes (#106 squash, #107 squash, this docs push) --- no mid-window polling, no re-dispatches, no cancelled runs.
+
+### Run #10 — 2026-11-04 ~06:40 → ~07:40 UTC (the progress-tracking + debug-APK-workflow window)
+
+* **The directive**: a sole-engineer window executing `docs/workplan.md` — assess the ente port, craft the workplan, build two independent real-time progress bars, add two debug-APK CI workflows, close with a Documentation + Flaw Review phase; one push, one ≤20-min CI poll; the new workflows NOT dispatched.
+* **The ente-port truth (derived, not assumed)**: the port = the Ente on-device AI workstream at pin `423b2d80…` — vendored crates (`ente-ml/assets/image/vecdb/photos-ml`), `toad-ml-jni`, the sole-host provisioner, indexing/clustering, Magic Search, the offline model pack — code-complete and merged (r21–r28); only the human-only on-device dogfood rows remain. Statuses + evidence pointers now live in `progress.json` (`entePort` scope, 95%).
+* **Built**: `progress.json` (project 73% / ente port 95%, weights validated); the sandbox live dashboard (two independent bars, socket.io push + 4 s polling fallback, admin controls, sticky footer, responsive — mobile grid blowout found by browser verification and fixed with `minmax(0,1fr)` tracks); `progress-service` (file-watch → broadcast, measured 1 ms push / 1985 ms fallback — both under the 5 s SLA; independence proven: an ente-only PATCH never moved the project bar); `.github/workflows/apk-build-engine.yml` + `.github/workflows/editor-apk-build.yml` (actionlint 1.7.12 PASS on both; dispatch-only; not dispatched).
+* **The final phase**: `tasks.md` milestone table collapsed (the stale duplicate Phase 5/6 rows — F-7 closed) + the Phase 5 label corrected to the merged truth; `roadmap.md` v2.4 changelog entry; README "Debug APK test builds" section; `CHANGELOG.md` bullets; `docs/ci-workflows.md` created (triggers/inputs/secrets by name); `follow-up.md` final entries (F-1..F-9); this Run #10 entry. Flaw review: 0 blockers, 2 non-blockers fixed, nits logged (F-5/F-6 carry).
+* **CI cost**: zero runs triggered by this window's work; the single push below is the one automatic main CI; the two new workflows stay undispatched.

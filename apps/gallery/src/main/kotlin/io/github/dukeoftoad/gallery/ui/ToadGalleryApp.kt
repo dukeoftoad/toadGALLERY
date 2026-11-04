@@ -52,6 +52,7 @@ import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.search.SearchScreen
 import io.github.dukeoftoad.gallery.ui.settings.AboutScreen
+import io.github.dukeoftoad.gallery.ui.settings.ProgressScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
@@ -74,6 +75,15 @@ object Destinations {
     const val ALBUMS = "albums"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
+
+    /**
+     * The progress sub-screen (F-1, follow-up 2026-11-04): the build-time
+     * progress.json mirror --- the two independent bars (overall project
+     * + the Ente port workstream) + their phase lists, reached from the
+     * Settings entry. A static snapshot by design (the app never fetches
+     * progress); sub-page UX like About (no bottom bar).
+     */
+    const val PROGRESS = "progress"
 
     /**
      * The Map tab (r16 round, Phase 4 still-open item "on-device map
@@ -511,6 +521,7 @@ fun ToadGalleryApp() {
                         vaultViewModel = vaultViewModel,
                         onOpenVault = { navController.navigate(Destinations.VAULT) },
                         onOpenAbout = { navController.navigate(Destinations.ABOUT) },
+                        onOpenProgress = { navController.navigate(Destinations.PROGRESS) },
                     )
                 }
                 composable(Destinations.PICKED) {
@@ -580,6 +591,14 @@ fun ToadGalleryApp() {
                     // vault session (the vault screen's hand-off pattern).
                     AboutScreen(
                         vaultViewModel = vaultViewModel,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Destinations.PROGRESS) {
+                    // Progress sub-screen (F-1): the build-time
+                    // progress.json mirror --- the two independent bars +
+                    // phase lists; a static snapshot (zero network).
+                    ProgressScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }

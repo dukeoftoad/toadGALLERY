@@ -168,3 +168,16 @@ fix recorded in `docs/workplan.md` §3).
 - **Note** — the r35 bullet moved to MERGED truth in tasks.md/roadmap
   v2.8 (PR #110 `980ccea`); `progress.json` stays untouched until the
   r36 merge per the F-12 convention.
+
+## 2026-11-04 (latest) — the r37 mosaic/blur round (authored on `tg-p7-mosaic`)
+
+- **F-17 (new, open)** — the linear blur runs horizontally only (the
+  roadmap names "linear blur"; v1 takes the canonical direction) and
+  the Gaussian-blur kind is the recorded candidate; an angle slider
+  and/or a third kind ride a later window with their own pinned grids.
+- **F-18 (new, open)** — feathered/soft mask edges: v1 is a hard
+  binary mask; the family decision (a blur-gradient alpha at the
+  boundary) owes its own round.
+- **Note** — the r36 bullet moved to MERGED truth in tasks.md/roadmap
+  v2.9 (PR #111 `8c466ee`); `progress.json` stays untouched until the
+  r37 merge per the F-12 convention.

@@ -2,7 +2,15 @@
 
 All workflows live under `.github/workflows/`. Canonical gate: a green `CI`
 run is required to merge any PR (ADR-0013). Release signing lives only in
-`Release` (ADR-0018). This note focuses on the two debug-APK builders added
+`Release` (ADR-0018).
+
+**Shared toolchain (F-2, 2026-11-04):** the canonical setup (JDK 17 +
+Android SDK platform 36/build-tools 36 + Gradle/cargo caches; optional
+Rust host-gates or Android-cross shapes) lives in the composite action
+`.github/actions/toad-setup` — every workflow calls it instead of
+replicating the blocks. Inputs: `rust` (`''` / `host` / `android`) and
+`android` (`'true'`/`'false'`, string inputs — the universally
+compatible composite convention). This note focuses on the two debug-APK builders added
 in the 2026-11-04 workplan window (`docs/workplan.md` P4); full workflow
 inventory at the bottom.
 

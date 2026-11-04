@@ -24,9 +24,11 @@ name: Editor APK build — include all
 # Rust/NDK deliberately absent: the editor is pure Kotlin (no -PwithEngine
 # wiring exists for :apps:edit) --- this keeps the editor builder cheap.
 #
-# Reuse policy: the repo has no composite actions / reusable workflows
-# (verified 2026-11-04); setup blocks replicate ci.yml's build job verbatim
-# (same pins, same cache keys). Composite-action extraction: follow-up.md F-2.
+# Reuse policy (F-2 delivered, 2026-11-04): the toolchain setup now lives
+# in .github/actions/toad-setup (this workflow's original "replicated
+# verbatim" note spawned that extraction); the setup call below carries the
+# same pins and cache keys the verbatim blocks had --- main's warm caches
+# restore here unchanged.
 #
 # Triggers: workflow_dispatch ONLY --- ci.yml already gates PRs/main and
 # release.yml owns v* tags (the repo's existing trigger pattern).
@@ -86,38 +88,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      # Same SDK package pins as ci.yml (platform 36, build-tools 36).
-      - name: Install Android SDK packages (platform 36, build-tools 36)
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          if command -v sdkmanager >/dev/null 2>&1; then
-            SDK_MGR="$(command -v sdkmanager)"
-          else
-            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
-          fi
-          echo "Using sdkmanager: $SDK_MGR"
-          yes | "$SDK_MGR" --licenses > /dev/null || true
-          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
-          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x ./gradlew
+      # F-2 (follow-up 2026-11-04): the canonical toolchain setup
+      # (.github/actions/toad-setup) --- the pure-Android shape (JDK 17 +
+      # SDK platform 36/build-tools 36 + the Gradle cache + gradlew chmod;
+      # no Rust: the editor is pure Kotlin).
+      - name: Set up the toolchain (Android)
+        uses: ./.github/actions/toad-setup
 
       # --- leg: edit-debug (the debug APK deliverable) -----------------------
       - name: Assemble the editor debug APK

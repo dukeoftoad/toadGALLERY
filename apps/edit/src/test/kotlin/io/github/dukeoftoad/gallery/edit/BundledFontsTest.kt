@@ -96,7 +96,9 @@ class BundledFontsTest {
     }
 
     @Test
-    fun `every font carries its SIL OFL 1.1 license beside it`() {
+    // Backticked JVM-test names cannot contain dots (dex rejects them);
+    // the version lives in the assertion below, not the name.
+    fun `every font carries the SIL Open Font License beside it`() {
         for (entry in BundledFonts.ORDERED) {
             val license = File(assetsDir(), "${entry.id}/OFL.txt")
             assertTrue("license for ${entry.id} must sit beside the TTF", license.isFile)

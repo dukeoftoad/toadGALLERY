@@ -13,7 +13,33 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.10 (2026-11-04, latest) --- the r38 frames round (authored, the
+### v2.11 (2026-11-04, latest) --- the Phase 7 campaign close-out: r38
+  MERGED, p7 done, the remaining-work line closed
+
+- **Phase 7 is CODE-COMPLETE**: the r38 frames MERGED (PR #113 squash
+  `003dafb`, merge-gate run 41847157146 GREEN on the first execution)
+  --- every roadmap Phase 7 bullet is delivered: the LUT filter system
+  with the user-import flow (#107 `314bd9c`), the text tool (#109
+  `6bb17a4`), the sticker tool (#110 `980ccea`), the freehand drawing
+  tool (#111 `8c466ee`), the mosaic/blur regions (#112 `6c206d9`, the
+  UI-section debt fix riding #113), and the frames + the undo/redo
+  extension capstone (#113 `003dafb`). The campaign's composite order
+  is final: pixel pipeline (… -> sharpen -> mosaic/blur regions) ->
+  stickers -> strokes -> text -> frame.
+- **`progress.json` at merge-time truth**: p7 → done (tasks 1-5/5 with
+  every sha); percent 73 → 79 (the weights total 100; the dashboard's
+  `computeScopePercent` agrees). The ente-port scope untouched per the
+  directive: the dogfood device rows remain human-only.
+- **The counts are executed numbers** (the r34 lesson held all
+  campaign): 131 new JVM tests across r35-r38; the edit module 241 →
+  374; the strings 94 → 129; the versionCodes 7 → 11
+  (`0.4.6-edit-alpha`).
+- The §22-§27 device rows ride the checklist, human-only. The full
+  campaign story (the pre-push harness debut, the two one-iteration
+  CI slips, the r37 debt and its fix, the CI cost) is the worklog's
+  Run #13.
+
+### v2.10 (2026-11-04, later) --- the r38 frames round (authored, the
   campaign's closing); the r37 regions MERGED + the r37 debt fix
 
 - **The r37 mosaic/blur regions MERGED** (PR #112 squash `6c206d9`;
@@ -1330,16 +1356,16 @@ phases build on.
 
 ### Phase 7 --- toadGALLERY Edit v2: filters and annotations
 
-**Status (r38): tasks 1-5 of 5 AUTHORED-OR-MERGED (the LUT `.cube` filter system
+**Status (FINAL): tasks 1-5 of 5 MERGED --- PHASE 7 CODE-COMPLETE (the LUT `.cube` filter system
 with the user-import flow (PR #107 squash `314bd9c`, CI 41781166155
 green on the rebased head `ceb731b`; editor `versionCode 6`) and the
 text tool (PR #109 squash `6bb17a4`, merge-gate run 41822887363 green
 on head `699fd03`; editor `versionCode 7`) and the sticker tool (PR
 #110 squash `980ccea`, merge-gate run 41836972158 green on the first
 execution --- the pre-push harness's debut; editor `versionCode 8`)
---- plus the mosaic/blur regions (MERGED as PR #112 `6c206d9`) and the
-frames (AUTHORED on `tg-p7-frames`, pending PR/CI/merge) completing the
-set**: the pure
+--- plus the mosaic/blur regions (MERGED as PR #112 `6c206d9`, the
+UI-section debt fix riding #113) and the frames + the undo/redo
+capstone (MERGED as PR #113 `003dafb`)**: the pure
 engine (the Adobe `.cube` parser with its honest subset rules, the
 allocation-free trilinear sampler, the alpha-preserving intensity
 blend), the recipe's additive `LutSelection` (an unresolvable id
@@ -1402,21 +1428,20 @@ editor `versionCode 10` (`0.4.5-edit-alpha`) --- MERGED as PR #112
 declaration order; 41844536338 green), with the r37 UI section's debt
 fix riding the r38 branch (the recorded correction: the r37 insertion
 script never wrote the activity back; the merged r37 carried everything
-but the surface). **The frames (task 5, second half) are AUTHORED on
-`tg-p7-frames`** (r38 round 2026-11-04, the campaign's closing; the
-design contract `docs/phase-7/frames.md`): the single `FrameSelection`
-(the LutSelection shape), five project-authored parametric frames as
-pure geometry functions (plain / inner-line / double-line / film with
-punched sprocket holes / polaroid), the shared `FrameCompositor` LAST
-in the composite order, `ImportedFrameStore` (PNG/WebP
-magic-before-write; an imported frame stretches to the full canvas
-with the honest no-controls note), the look-row UI, and the
+but the surface). **The frames (task 5, second half) are MERGED** (PR #113 `003dafb`;
+the design contract `docs/phase-7/frames.md`): the single
+`FrameSelection` (the LutSelection shape), five project-authored
+parametric frames as pure geometry functions (plain / inner-line /
+double-line / film with punched sprocket holes / polaroid), the shared
+`FrameCompositor` LAST in the composite order, `ImportedFrameStore`
+(PNG/WebP magic-before-write; an imported frame stretches to the full
+canvas with the honest no-controls note), the look-row UI, and the
 undo/redo extension capstone (`UndoRedoExtensionTest`: a mixed
 five-family session walked exactly, undo to launch, redo forward);
 32 new JVM tests (the edit module at 374), the string count 122 → 129,
 editor `versionCode 11` (`0.4.6-edit-alpha`). **Phase 7's code-side
-work is COMPLETE pending this merge**; the §22-§27 device rows ride
-the checklist, human-only.
+work is COMPLETE**; the §22-§27 device rows ride the checklist,
+human-only.
 
 **Purpose:** Add the creative layer on top of the Phase 6 pipeline:
 filters, text, stickers, drawing, mosaic, frames.

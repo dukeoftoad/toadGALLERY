@@ -198,3 +198,16 @@ the campaign's closing)
 - **Note** — the r37 bullet moved to MERGED truth in tasks.md/roadmap
   v2.10 (PR #112 `6c206d9`), carrying the r37 debt fix; `progress.json`
   stays untouched until the r38 merge per the F-12 convention.
+
+## 2026-11-04 (latest) — the Phase 7 campaign close-out (Run #13)
+
+- **The §22-§27 device rows** (one section per round: LUT §22, text
+  §23, stickers §24, drawing §25, mosaic/blur §26, frames §27) are all
+  human-only --- the standing directive holds: no round claims them,
+  no doc marks them done, and the ente-port scope is untouched.
+- **F-13/F-17/F-18/F-19 carry** (the library-management affordance for
+  imported stickers/frames; the blur angle + Gaussian candidate; the
+  feathered mask; the stackable-frames model decision).
+- **The campaign summary** is the worklog's Run #13; the counts are
+  executed numbers (131 new JVM tests; the edit module 241 -> 374; the
+  strings 94 -> 129; the versionCodes 7 -> 11).

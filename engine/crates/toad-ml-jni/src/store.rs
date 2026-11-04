@@ -1383,8 +1383,7 @@ mod tests {
         close();
 
         // The query dimension guard, the search_clips discipline:
-        let error =
-            search_clips_within(&[0.0; CLIP_EMBEDDING_DIM - 1], 1.0, 1).unwrap_err();
+        let error = search_clips_within(&[0.0; CLIP_EMBEDDING_DIM - 1], 1.0, 1).unwrap_err();
         assert!(error.contains("512"));
 
         // The distance guard names the caller's own input, BEFORE the

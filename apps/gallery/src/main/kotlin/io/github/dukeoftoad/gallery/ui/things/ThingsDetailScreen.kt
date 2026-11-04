@@ -278,7 +278,7 @@ fun ThingsDetailScreen(
                         label = { Text(stringResource(R.string.things_query_label)) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp()),
+                            .padding(top = 8.dp),
                     )
                 }
             },
@@ -346,9 +346,9 @@ private fun ThingsMemberGrid(
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(2.dp()),
-        horizontalArrangement = Arrangement.spacedBy(2.dp()),
-        verticalArrangement = Arrangement.spacedBy(2.dp()),
+        contentPadding = PaddingValues(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         itemsIndexed(items) { index, item ->
             // The whole cell is the tap target (the MediaGrid convention);
@@ -381,7 +381,7 @@ private fun ThingsStateMessage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp()),
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -399,13 +399,13 @@ private fun ThingsStateMessage(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp()),
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
         if (actionRes != null && onAction != null) {
             TextButton(
                 onClick = onAction,
-                modifier = Modifier.padding(top = 8.dp()),
+                modifier = Modifier.padding(top = 8.dp),
             ) {
                 Text(stringResource(actionRes))
             }

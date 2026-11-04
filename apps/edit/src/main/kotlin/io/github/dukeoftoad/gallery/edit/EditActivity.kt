@@ -2021,6 +2021,10 @@ private fun ColorSwatch(
     enabled: Boolean,
     onPick: () -> Unit,
 ) {
+    // A local with a distinct name: inside the semantics {} lambda the
+    // receiver's own `selected` property shadows this parameter, so an
+    // unqualified `selected = selected` reads as self-assignment.
+    val isSelected = selected
     Box(
         modifier = Modifier
             .padding(end = 10.dp)
@@ -2042,7 +2046,7 @@ private fun ColorSwatch(
                 onClick = { onPick() },
             )
             .semantics {
-                selected = selected
+                this.selected = isSelected
                 contentDescription = name
             },
     )

@@ -32,7 +32,7 @@ All notable changes to toadGALLERY are documented here. The format follows
   export by construction, test-pinned). Undo/redo rides the existing
   snapshot stack with per-commit granularity (sliders release, the text
   field commits on Done/switch/add/remove/export sweeps — never per
-  keystroke). 22 new JVM tests across TextLayersTest,
+  keystroke). 32 new JVM tests across TextLayersTest,
   TextLayersRecipeTest, BundledFontsTest; the module string count 74 → 94
   (the r33 recount debt settled); editor `versionCode 7`
   (`0.4.2-edit-alpha`). The on-device pass rides checklist §23; the

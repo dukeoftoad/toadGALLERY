@@ -13,6 +13,26 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
+### v2.6 (2026-11-04, latest) --- the r34 merge window
+
+- **Phase 7, task 2 of 5 --- the text tool MERGED** (PR #109 squash
+  `6bb17a4`, merge-gate CI run 41822887363 green on head `699fd03`:
+  1181 gallery + 241 editor JVM tests + the contract suite, both engine
+  jobs green). The merge window iterated the never-executed r34 code to
+  green in seven CI runs (the full story is the worklog's Run #12): the
+  F-1 mirror's Provider-in-SourceSet configuration failure, the gallery
+  test-locator paths, the editor's nine first-compile errors
+  (`toggleable` is not on this foundation build's API surface --- the
+  swatch uses the repo's `clickable` convention with the radio semantics
+  stated explicitly), the semantics-lambda shadowing, a dotted
+  backticked test name, and two wrong assertions. **PR #108 closed** by
+  the merge keyword (redundant with #107's merged import flow).
+- **The r34 test-count correction**: the delivery record's "22 new JVM
+  tests" was a never-executed estimate --- the r34 families are **32**
+  (TextLayersTest 14 + TextLayersRecipeTest 12 + BundledFontsTest 6),
+  the edit module at **241** (r33's 209 + 32; corrected in place below
+  and in CHANGELOG's unreleased section).
+
 ### v2.5 (2026-11-04, later) --- the r34 text tool + the F-1/F-2 follow-up window
 
 - **Phase 7, task 2 of 5 --- the text tool** (r34, branch `tg-p7-text-tool`,
@@ -29,7 +49,8 @@ designs. No Flutter. CI is GitHub Actions.**
   with per-commit drafts, font chips, size/opacity/rotation sliders, the
   named swatches, drag-to-position, remove). Editor `versionCode 7`
   (`0.4.2-edit-alpha`); the edit module string count 74 → 94 (the r33
-  recount debt settled); 22 new JVM tests. The delivery record is
+  recount debt settled); 32 new JVM tests (corrected at merge: the
+  never-executed estimate said 22). The delivery record is
   `docs/phase-7/text-tool.md` §Delivery record.
 - **F-1 closed:** the in-app progress screen --- the repo-root
   `progress.json` mirrored into the APK assets at build time
@@ -1178,10 +1199,11 @@ phases build on.
 
 ### Phase 7 --- toadGALLERY Edit v2: filters and annotations
 
-**Status (r34): task 1 MERGED, task 2 AUTHORED on `tg-p7-text-tool`
-(pending PR/CI/merge) --- the LUT `.cube` filter system with the
-user-import flow is on main** (PR #107 squash `314bd9c`, CI 41781166155
-green on the rebased head `ceb731b`; editor `versionCode 6`): the pure
+**Status (r34): tasks 1-2 of 5 MERGED --- the LUT `.cube` filter system
+with the user-import flow (PR #107 squash `314bd9c`, CI 41781166155
+green on the rebased head `ceb731b`; editor `versionCode 6`) and the
+text tool (PR #109 squash `6bb17a4`, merge-gate run 41822887363 green
+on head `699fd03`; editor `versionCode 7`)**: the pure
 engine (the Adobe `.cube` parser with its honest subset rules, the
 allocation-free trilinear sampler, the alpha-preserving intensity
 blend), the recipe's additive `LutSelection` (an unresolvable id
@@ -1198,15 +1220,17 @@ and collision-suffixed so an import can never shadow the bundled set;
 the SAF import chip, the merged registry chip row, the remove-look
 affordance). 51 new JVM tests (the edit module at 209).
 
-**The text tool (task 2) is AUTHORED on `tg-p7-text-tool`** (r34 round,
-2026-11-04): the OFL gate (four verbatim-bundled SIL OFL 1.1 faces +
+**The text tool (task 2) is MERGED** (PR #109 squash `6bb17a4`, r34
+round 2026-11-04, merge-gate run 41822887363 green on head `699fd03`):
+the OFL gate (four verbatim-bundled SIL OFL 1.1 faces +
 per-font ledger rows + `docs/phase-7/bundled-fonts.md`), the additive
 `TextLayers` recipe, the pure `TextLayout`, the shared `TextCompositor`
 (preview ≡ export), and the full editor surface --- editor
-`versionCode 7` (`0.4.2-edit-alpha`), 22 new JVM tests, the module
-string count 74 → 94. The delivery record: `docs/phase-7/text-tool.md`.
-PR #108 (the redundant `tg-p7-lut-import` PR) closes with the round's
-merge. **Remaining Phase 7 tasks**: stickers, freehand drawing,
+`versionCode 7` (`0.4.2-edit-alpha`), 32 new JVM tests (the edit module
+at 241), the module string count 74 → 94. The delivery record:
+`docs/phase-7/text-tool.md`. PR #108 (the redundant `tg-p7-lut-import`
+PR) closed with the round's merge (the `Closes #108` keyword in PR
+#109's description). **Remaining Phase 7 tasks**: stickers, freehand drawing,
 mosaic/blur regions, frames, and the undo/redo extension across them.
 
 **Purpose:** Add the creative layer on top of the Phase 6 pipeline:

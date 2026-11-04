@@ -110,3 +110,30 @@ fix recorded in `docs/workplan.md` §3).
   description should repeat `Closes #108`) → the merge-gate CI dispatch
   at the head → merge. `progress.json` deliberately NOT updated for r34
   (it records MERGED truth; update at merge time).
+
+## 2026-11-04 (latest) — the r34 merge window (F-12 executed)
+
+- **F-12 CLOSED (2026-11-04)** — the merge sequence executed with fresh
+  maintainer credentials: `tg-p7-text-tool` pushed (the six authored
+  commits + five CI-fix commits from the gate iterations), **PR #109**
+  opened (the description carries `Closes #108`; based on post-#107 main
+  `7fba75c`, no rebase), the merge-gate CI iterated to green (**run
+  41822887363** on head `699fd03`; the seven-run first-execution story
+  is the worklog's Run #12), **squash-merged as `6bb17a4`**, and
+  **PR #108 auto-closed** by the keyword (state=closed, merged=false —
+  redundant with #107's merged import flow, as sanctioned).
+  `progress.json` p7 updated at merge time as designed (tasks 1-2/5,
+  evidence with both merge shas).
+- **F-3 mechanism note** — the closure keyword rode PR #109's
+  description (not a merge-commit message); same effect: GitHub closes
+  the referenced PR when the closing PR merges to the default branch.
+- **Correction to the r34 delivery record** — "22 new JVM tests" was a
+  never-executed estimate; the r34 families are **32** (14 + 12 + 6)
+  and the edit module sits at **241** (r33's 209 + 32). Corrected in
+  roadmap v2.6, the Phase 7 status text, CHANGELOG's unreleased
+  section, and Run #12.
+- **F-5 note** — the docs-only post-merge push triggers the full ci.yml
+  run (no paths-ignore exists yet); the merge-triggered run was
+  superseded under the ci-main concurrency group (the merge tree ≡
+  `699fd03`'s, already validated green). The standing guidance stays:
+  add a docs-only paths-ignore in a dedicated low-risk window.

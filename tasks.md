@@ -14,7 +14,7 @@
 | **Phase 4** | Aves-grade metadata layer & AI media-contract foundation (`r10`–`r20`) | **Complete** (Turn 35 PR #90 + Turn 38 PR #92) |
 | **Phase 5** | Ente-derived on-device Gallery AI (`r21`–`r29`) + MI-style organisational UX | **Code-complete / exit gate landed** (`r21`–`r28` merged on `main` --- the `r26` People follow-ups `23a1495`, Magic Search `84aab67`, the `r27` organisational UX `27c5e71` and the `r28` hardening round all merged; **release freeze lifted**; on-device dogfood pending, below) |
 | **Phase 6** | toadGALLERY Edit v1: core adjustments + non-destructive pipeline (gated by `#14`) | **Code complete (r29–r32 merged: #104/#105/#106 at `938effa`; editor v1 exit)** |
-| **Phase 7** | toadGALLERY Edit v2: LUT filters, text, stickers, drawing, mosaic, frames | **Task 1 complete (r33 LUT + import merged as #107 at `314bd9c`)** |
+| **Phase 7** | toadGALLERY Edit v2: LUT filters, text, stickers, drawing, mosaic, frames | **Tasks 1-2 complete (r33 LUT as #107 `314bd9c`; r34 text tool as #109 `6bb17a4`)** |
 | **Phase 8** | toadGALLERY Edit v3: on-device AI editing (magic erase, sky replacement, bokeh, opt-in face retouch) | **Planned** |
 | **Phase 9** | Lightweight video editor (trim, mute, slow-mo, frame extraction, GIF/WebP export) | **Planned** |
 | **Phase 10** | Performance, compatibility, accessibility, reliability hardening | **Planned** |

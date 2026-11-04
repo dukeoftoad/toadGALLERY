@@ -204,8 +204,35 @@ android {
         // kind chips + strength slider under the paint duality, and the
         // draft region previewing AT PAINT TIME through the same stage.
         // JVM tests: RegionLayersTest, RegionLayersRecipeTest.
-        versionCode = 10
-        versionName = "0.4.5-edit-alpha"
+        // versionCode 11 (r38 round, the campaign's closing): the frames
+        // --- the single FrameSelection (the LutSelection shape: ONE
+        // mounting at a time; an unresolvable frameId round-trips
+        // verbatim and degrades to no frame), five PROJECT-AUTHORED
+        // parametric frames as pure geometry functions over integers
+        // (plain / inner-line / double-line / film with punched sprocket
+        // holes / polaroid; the thickness is the r37 kernels' formula
+        // max(1, widthPct x minEdge / 1000)), the shared FrameCompositor
+        // LAST in the composite order (the mounting over everything),
+        // ImportedFrameStore (the sticker store's contract, frame-shaped:
+        // PNG/WebP magic-before-write, verbatim bytes, collision-free
+        // ids; an imported frame stretches to the full canvas with the
+        // honest no-controls note), the look-row UI (None + bundled +
+        // imported + import chips; the width slider and swatches for the
+        // parametric set), and the undo/redo extension capstone:
+        // UndoRedoExtensionTest --- a mixed five-family session, a commit
+        // sequence across every family's controls, undo to launch, redo
+        // forward, the EXACT recipe asserted at every step. This round
+        // also lands the r37 UI-section debt fix (the r37 insertion
+        // script wrote the gradle file but never the activity; the
+        // section existed only in a Python variable --- the merged r37
+        // carried the model, the recipe, the pipeline stage and the
+        // gesture scaffolding without its surface, regionMode
+        // unreachable; the correction is documented in the r37 delivery
+        // record).
+        // JVM tests: FramesTest, BundledFramesTest, FramesRecipeTest,
+        // ImportedFrameStoreTest, UndoRedoExtensionTest.
+        versionCode = 11
+        versionName = "0.4.6-edit-alpha"
     }
 
     buildFeatures {

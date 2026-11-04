@@ -63,6 +63,12 @@ data class EditRecipe(
     // absent. The regions run as the pipeline's FINAL pixel stage, after
     // sharpen (see RegionLayers.kt).
     val mosaicRegions: RegionLayers? = null,
+    // ---- Frame (r38, Phase 7 v2: the single mounting; the closing round) ----
+    // Absent = a pre-r38 sidecar / a clean session. ONE frame at a time
+    // (the LutSelection shape); an unresolvable frameId round-trips
+    // verbatim and degrades to NO FRAME at render time (the look's
+    // tolerance contract; see Frames.kt).
+    val frame: FrameSelection? = null,
 ) {
 
     val isGeometryIdentity: Boolean
@@ -95,9 +101,14 @@ data class EditRecipe(
     val isRegionIdentity: Boolean
         get() = mosaicRegions == null || mosaicRegions.isIdentity
 
+    /** No frame --- nothing for the mounting pass to draw. */
+    val isFrameIdentity: Boolean
+        get() = frame == null
+
     val isIdentity: Boolean
         get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity &&
-            isTextIdentity && isStickerIdentity && isDrawIdentity && isRegionIdentity
+            isTextIdentity && isStickerIdentity && isDrawIdentity && isRegionIdentity &&
+            isFrameIdentity
 
     init {
         require(quarterTurns in 0..3) { "quarterTurns must be in 0..3" }
@@ -278,6 +289,16 @@ object EditRecipeCodec {
             }
             root.put("mosaicRegions", arr)
         }
+        // r38: the single mounting, the lut object's shape.
+        recipe.frame?.let {
+            root.put(
+                "frame",
+                org.json.JSONObject()
+                    .put("frameId", it.frameId)
+                    .put("widthPct", it.widthPct)
+                    .put("color", "%08X".format(it.colorArgb)),
+            )
+        }
         return root.toString()
     }
 
@@ -341,6 +362,7 @@ object EditRecipeCodec {
             stickerLayers = readStickerLayers(root.optJSONArray("stickerLayers")),
             drawLayers = readDrawLayers(root.optJSONArray("drawLayers")),
             mosaicRegions = readRegions(root.optJSONArray("mosaicRegions")),
+            frame = readFrame(root.optJSONObject("frame")),
         )
         ParseResult.Valid(recipe)
     } catch (e: org.json.JSONException) {
@@ -538,6 +560,25 @@ object EditRecipeCodec {
             )
         }
         return if (layers.isEmpty()) null else RegionLayers(layers)
+    }
+
+    /**
+     * The optional `frame` object (r38), the `lut` object's tolerance
+     * shape: absent or carrying a blank id means NO frame; an UNKNOWN
+     * non-blank frameId is KEPT verbatim --- the recipe is the user's
+     * data, resolution is the compositor's problem (it renders nothing);
+     * `widthPct` coerces like every other slider (default 20); a
+     * malformed colour reads as the default white.
+     */
+    private fun readFrame(frame: org.json.JSONObject?): FrameSelection? {
+        if (frame == null) return null
+        val id = frame.optString("frameId", "").trim()
+        if (id.isEmpty()) return null
+        return FrameSelection(
+            frameId = id.take(FrameSelection.MAX_ID_LENGTH),
+            widthPct = frame.optInt("widthPct", FrameSelection.DEFAULT_WIDTH_PCT).coerceIn(1, 100),
+            colorArgb = readColorArgb(frame.optString("color", "")),
+        )
     }
 
     /** The wire form is 8 uppercase hex digits (AARRGGBB); anything else reads as the default color. */

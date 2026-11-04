@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r38 (Phase 7 v2, the closing round): the frame surface. The five
+     bundled frame names (Plain, Inner line, Double line, Film, Polaroid)
+     are proper nouns and ride the BundledFrames registry, not resources;
+     an imported frame's chip label is its derived id. -->
+<resources>
+    <string name="editor_section_frames">Frames</string>
+    <string name="editor_frame_none">None</string>
+    <string name="editor_frame_width">Width: %1$d%%</string>
+    <string name="editor_a11y_frame_width">Frame width</string>
+    <string name="editor_frame_import">Import frame</string>
+    <string name="editor_frame_import_failed">Import failed: %1$s</string>
+    <string name="editor_frame_imported_note">Imported frames stretch to the photo; the width and colour controls do not apply.</string>
+</resources>

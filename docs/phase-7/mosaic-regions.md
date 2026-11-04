@@ -186,3 +186,28 @@ The round landed every decision above, with these recorded deltas:
 
 *Delivered on the branch `tg-p7-mosaic`, cut from post-#111 main
 (`8c466ee`), in the 2026-11-04 window after the r36 merge.*
+
+---
+
+## Delivery-record correction (r38's branch, 2026-11-04)
+
+Item 6 above overclaimed: **the r37 UI section never landed in the
+r37 branch.** The insertion script wrote `build.gradle.kts` (the
+versionCode 10 bump) but never wrote `EditActivity.kt` back --- the
+section existed only in a Python variable; the assert passed, the
+print said "section+versionCode ok", and the file on disk kept its old
+bytes. The merged r37 (#112 `6c206d9`) therefore carried the model, the
+recipe, the pipeline stage, the gesture scaffolding and the mutual
+exclusion --- everything except the surface: `regionMode` was
+unreachable, no region chips or sliders existed, and the 8
+`strings_r37.xml` entries shipped unused (unused strings don't fail
+builds, which is why the merge-gate CI stayed green --- the CI compiled
+what was there, honestly; it cannot test for absence).
+
+**The fix rides the r38 branch as the recorded debt** (the repo's
+delivery-record convention): the section now sits between the Drawing
+section and HSL exactly as designed (decision 6), the versionCode 11
+comment carries the story, and the r38 delivery record plus the worklog
+Run #13 narrate it. The lesson joins the campaign's file-write discipline:
+every script that mutates a file must write THAT file back --- the
+version of this failure that matters is the one where the print lies.

@@ -164,6 +164,55 @@ class EditActivity : ComponentActivity() {
     }
 
     /**
+     * The user-imported sticker store (r35): SAF-picked PNG/WebP files
+     * copied verbatim into app-private storage, ids derived and
+     * collision-suffixed so they can never shadow the bundled set (the
+     * ImportedLutStore pattern, image-shaped).
+     */
+    internal val importedStickerStore: ImportedStickerStore by lazy {
+        ImportedStickerStore(File(filesDir, "imported-stickers"))
+    }
+
+    /**
+     * The imported-sticker bitmaps (r35), decoded once per registry load
+     * and shared by the preview and every export --- the same instances,
+     * so a rendered sticker cannot differ between them (the bundledFonts
+     * pattern; a payload that fails to decode is absent, never thrown).
+     */
+    internal val importedStickerBitmaps: MutableMap<String, Bitmap> =
+        java.util.Collections.synchronizedMap(java.util.LinkedHashMap())
+
+    /**
+     * Re-decodes every imported sticker (per import/removal; called off
+     * the main thread by the composition's loader). Broken files are
+     * absent from the result, never thrown.
+     */
+    internal fun reloadImportedStickers(): Map<String, Bitmap> {
+        val reloaded = java.util.LinkedHashMap<String, Bitmap>()
+        for (sticker in importedStickerStore.list()) {
+            val file = importedStickerStore.fileFor(sticker.id) ?: continue
+            try {
+                BitmapFactory.decodeFile(file.path)?.let { reloaded[sticker.id] = it }
+            } catch (_: OutOfMemoryError) {
+            } catch (_: RuntimeException) {
+            }
+        }
+        importedStickerBitmaps.clear()
+        importedStickerBitmaps.putAll(reloaded)
+        return java.util.LinkedHashMap(reloaded)
+    }
+
+    /**
+     * The render resolution for a sticker id (the tolerance contract):
+     * the bundled vector, else the imported bitmap, else null --- the
+     * compositor renders nothing for an unresolvable id, never a crash.
+     * One resolver shared by the preview and the export.
+     */
+    internal fun stickerResolver(id: String): StickerCompositor.Resolved? =
+        BundledStickers.shape(id)?.let { StickerCompositor.Resolved.Vector(it) }
+            ?: importedStickerBitmaps[id]?.let { StickerCompositor.Resolved.Bitmap(it) }
+
+    /**
      * The bundled Typefaces (r34), created ONCE per session and shared by
      * the preview and every export --- the same instances, so a rendered
      * face cannot differ between them. A broken asset is simply absent
@@ -438,6 +487,22 @@ class EditActivity : ComponentActivity() {
             //     vignette -> sharpen), over the FULL output canvas at
             //     origin 0 --- the same TextCompositor the preview uses, so
             //     preview ≡ export by construction (no second renderer).
+            //     The r35 sticker pass draws just BEFORE it: stickers are
+            //     scene objects, captions float above them (stickers.md
+            //     decision 3).
+            export.recipe.stickerLayers?.let { stickerSpec ->
+                if (stickerSpec.layers.isNotEmpty()) {
+                    StickerCompositor.draw(
+                        adjusted,
+                        stickerSpec.layers,
+                        { stickerId -> stickerResolver(stickerId) },
+                        0f,
+                        0f,
+                        pipelined.width.toFloat(),
+                        pipelined.height.toFloat(),
+                    )
+                }
+            }
             export.recipe.textLayers?.let { textSpec ->
                 if (textSpec.layers.isNotEmpty()) {
                     TextCompositor.draw(
@@ -718,6 +783,16 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var selectedTextLayerId by remember { mutableStateOf<String?>(null) }
     var textDraft by remember { mutableStateOf<Pair<String, String>?>(null) }
     var posDraft by remember { mutableStateOf<Triple<String, Double, Double>?>(null) }
+    // r35 sticker state: the selected layer and the position drag's live
+    // draft (the r34 pattern); the imported-bitmap snapshot the preview
+    // re-renders on; the import rejection line. ONE selected layer at a
+    // time across the families (the round contract: the drag target and
+    // the per-layer controls follow the single selection).
+    var selectedStickerLayerId by remember { mutableStateOf<String?>(null) }
+    var stickerPosDraft by remember { mutableStateOf<Triple<String, Double, Double>?>(null) }
+    var importedStickers by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
+    var stickersVersion by remember { mutableStateOf(0) }
+    var stickerImportError by remember { mutableStateOf<String?>(null) }
 
     val committed = uiState.recipe
 
@@ -780,6 +855,37 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ),
             )
         }
+        // r35: the sticker LIVE state --- per-layer slider drafts (keys
+        // "sticker-size@<id>" / "sticker-opacity@<id>" /
+        // "sticker-rotation@<id>") and the position drag, over the
+        // committed layers; each commits exactly once (the per-commit
+        // granularity the round contract pins).
+        val stickerSlider = d?.takeIf { it.first.startsWith("sticker-") }
+            ?.let { (key, value) ->
+                val parts = key.removePrefix("sticker-").split("@", limit = 2)
+                if (parts.size == 2) Triple(parts[0], parts[1], value) else null
+            }
+        val spd = stickerPosDraft
+        if ((stickerSlider != null || spd != null) && effective.stickerLayers != null) {
+            effective = effective.copy(
+                stickerLayers = StickerLayers(
+                    effective.stickerLayers!!.layers.map { layer ->
+                        var l = layer
+                        if (stickerSlider != null && stickerSlider.second == layer.id) {
+                            l = when (stickerSlider.first) {
+                                "size" -> l.copy(sizePct = stickerSlider.third)
+                                "opacity" -> l.copy(opacity = stickerSlider.third)
+                                else -> l.copy(rotationDeg = stickerSlider.third)
+                            }
+                        }
+                        if (spd != null && spd.first == layer.id) {
+                            l = l.copy(centerX = spd.second, centerY = spd.third)
+                        }
+                        l
+                    },
+                ),
+            )
+        }
         return effective
     }
 
@@ -831,6 +937,37 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitLayerById(d.first) { it.copy(centerX = d.second, centerY = d.third) }
     }
 
+    // ---- r35 sticker helpers (all read the LIVE delegated states, so
+    // calls from long-lived closures --- the drag gesture, chips --- can
+    // never commit against a stale recipe; the r34 conventions) ----
+
+    /** Commits an edit to ONE sticker layer, by id, over the CURRENT recipe. */
+    fun commitStickerLayerById(id: String, edit: (StickerLayer) -> StickerLayer) {
+        val current = uiState.recipe
+        val sl = current.stickerLayers ?: return
+        val idx = sl.layers.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        commit(
+            current.copy(
+                stickerLayers = StickerLayers(
+                    sl.layers.mapIndexed { i, l -> if (i == idx) edit(l) else l },
+                ),
+            ),
+        )
+    }
+
+    /** Commits an edit to the SELECTED sticker layer (no-op when nothing is selected). */
+    fun commitSelectedStickerLayer(edit: (StickerLayer) -> StickerLayer) {
+        selectedStickerLayerId?.let { commitStickerLayerById(it, edit) }
+    }
+
+    /** Sweeps the sticker position drag's live draft into one snapshot (drag end/cancel, export). */
+    fun commitStickerPosDraftIfPending() {
+        val d = stickerPosDraft ?: return
+        stickerPosDraft = null
+        commitStickerLayerById(d.first) { it.copy(centerX = d.second, centerY = d.third) }
+    }
+
     // First composition: decode the bounded preview + parse the bundled
     // looks (both off the main thread; the looks feed the chip row and
     // the preview's filter stage --- the export shares the same cache).
@@ -853,7 +990,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // the loaded look set changes. The r34 text pass composites over the
     // same CROP REGION the overlay draws (the output canvas the export
     // will produce), through the SAME TextCompositor --- one code path.
-    LaunchedEffect(previewBase, committed, draft, textDraft, posDraft, looks) {
+    // r35: the sticker pass composites over the same region, BELOW the
+    // text pass; the effect also re-runs when the imported-bitmap
+    // registry changes (an import's decode landing re-renders the
+    // preview with the new sticker resolvable).
+    LaunchedEffect(previewBase, committed, draft, textDraft, posDraft, stickerPosDraft, looks, importedStickers) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
         val displayRecipe = effective.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0))
@@ -870,17 +1011,31 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // same recipe (plan computed over the pipeline's own dims).
             val plan = EditGeometryPlan.plan(effective, width, height)
             previewCropRect = plan.cropPixelRect
+            val crop = plan.cropPixelRect
+            // r35: stickers are scene objects --- they composite BELOW the
+            // text pass, through the same crop-region output canvas.
+            val stickerSpec = effective.stickerLayers
+            if (stickerSpec != null && stickerSpec.layers.isNotEmpty()) {
+                StickerCompositor.draw(
+                    out,
+                    stickerSpec.layers,
+                    { stickerId -> activity.stickerResolver(stickerId) },
+                    crop.x0.toFloat(),
+                    crop.y0.toFloat(),
+                    crop.width.toFloat(),
+                    crop.height.toFloat(),
+                )
+            }
             val textSpec = effective.textLayers
             if (textSpec != null && textSpec.layers.isNotEmpty()) {
-                val rect = plan.cropPixelRect
                 TextCompositor.draw(
                     out,
                     textSpec.layers,
                     { fontId -> activity.fontFor(fontId) },
-                    rect.x0.toFloat(),
-                    rect.y0.toFloat(),
-                    rect.width.toFloat(),
-                    rect.height.toFloat(),
+                    crop.x0.toFloat(),
+                    crop.y0.toFloat(),
+                    crop.width.toFloat(),
+                    crop.height.toFloat(),
                 )
             }
             out.asImageBitmap()
@@ -893,6 +1048,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     LaunchedEffect(looksVersion) {
         looks = withContext(Dispatchers.IO) {
             activity.bundledLooks + activity.importedLutStore.loadAll()
+        }
+    }
+
+    // The imported-sticker registry (r35): re-decoded per import/removal
+    // (the version counter re-runs it); the preview and the export
+    // resolve through the SAME shared instances (the activity's map).
+    LaunchedEffect(stickersVersion) {
+        importedStickers = withContext(Dispatchers.IO) {
+            activity.reloadImportedStickers()
         }
     }
 
@@ -958,6 +1122,42 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
+    // The r35 sticker import flow: SAF-pick a PNG/WebP, read it off-main,
+    // hand the BYTES to the store (magic-before-write). An import lands
+    // in the registry (its chip appears; the user taps it to add a
+    // layer), a rejection surfaces the reason.
+    val stickerImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            uiScope.launch {
+                stickerImportError = null
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        val bytes = activity.contentResolver
+                            .openInputStream(uri)
+                            ?.use { it.readBytes() }
+                        if (bytes == null) {
+                            null
+                        } else {
+                            activity.importedStickerStore.import(
+                                bytes,
+                                activity.sourceDisplayName(uri.toString()),
+                            )
+                        }
+                    } catch (_: IOException) {
+                        null
+                    }
+                }
+                when (result) {
+                    is ImportedStickerStore.ImportResult.Imported -> stickersVersion++
+                    is ImportedStickerStore.ImportResult.Rejected -> stickerImportError = result.reason
+                    null -> stickerImportError = "the file could not be read"
+                }
+            }
+        }
+    }
+
     LaunchedEffect(exporting) {
         if (exporting) {
             val choice = exportChoice ?: ExportChoice()
@@ -979,11 +1179,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     fun requestSave() {
         if (exporting) return
-        // r34: sweep any pending text/position drafts into a snapshot
-        // first --- the export reads the COMMITTED recipe, and a draft must
-        // never be silently lost at the moment of export.
+        // r34/r35: sweep any pending text/sticker/position drafts into a
+        // snapshot first --- the export reads the COMMITTED recipe, and a
+        // draft must never be silently lost at the moment of export.
         commitTextDraftIfPending()
         commitPosDraftIfPending()
+        commitStickerPosDraftIfPending()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
             PackageManager.PERMISSION_GRANTED
@@ -1024,6 +1225,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 onClick = {
                     commitTextDraftIfPending()
                     commitPosDraftIfPending()
+                    commitStickerPosDraftIfPending()
                     uiState = engine.undo()
                 },
                 enabled = uiState.canUndo && !exporting,
@@ -1034,6 +1236,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 onClick = {
                     commitTextDraftIfPending()
                     commitPosDraftIfPending()
+                    commitStickerPosDraftIfPending()
                     uiState = engine.redo()
                 },
                 enabled = uiState.canRedo && !exporting,
@@ -1068,15 +1271,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // ---- Preview (with the crop overlay rect) ----
         // r34: the box also carries the text-layer DRAG gesture (drag near
         // the SELECTED layer's center to reposition it; live-drafted, one
-        // commit on release). Keyed ONLY on the selection: the gesture must
-        // not restart when the preview bitmap updates (it re-renders every
-        // draft tick), and every value it reads is a LIVE delegated state
-        // so long-lived closures never see stale data.
+        // commit on release). r35: the same gesture now targets the
+        // SELECTED STICKER layer first (one selection across the families
+        // --- the round contract), the text layer when no sticker is
+        // selected. Keyed on BOTH selections: the gesture must not restart
+        // when the preview bitmap updates (it re-renders every draft tick),
+        // and every value it reads is a LIVE delegated state so long-lived
+        // closures never see stale data.
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(selectedTextLayerId) {
+                .pointerInput(selectedTextLayerId, selectedStickerLayerId) {
                     val grabRadiusPx = 48.dp.toPx()
 
                     // Screen position -> output-canvas fractions (the same
@@ -1102,8 +1308,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         return fx to fy
                     }
 
-                    // The selected layer's center in screen coordinates.
-                    fun layerCenterScreen(): Offset? {
+                    // The selected TEXT layer's center in screen coordinates.
+                    fun textLayerCenterScreen(): Offset? {
                         val image = previewImage ?: return null
                         val rect = previewCropRect ?: return null
                         val layerId = selectedTextLayerId ?: return null
@@ -1123,36 +1329,69 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         return Offset(offX + cxImg * scale, offY + cyImg * scale)
                     }
 
+                    // The selected STICKER layer's center in screen coordinates.
+                    fun stickerLayerCenterScreen(): Offset? {
+                        val image = previewImage ?: return null
+                        val rect = previewCropRect ?: return null
+                        val layerId = selectedStickerLayerId ?: return null
+                        val layer = uiState.recipe.stickerLayers?.layers
+                            ?.firstOrNull { it.id == layerId } ?: return null
+                        if (image.width < 1 || image.height < 1 ||
+                            rect.width < 1 || rect.height < 1
+                        ) return null
+                        val scale = minOf(
+                            size.width.toFloat() / image.width,
+                            size.height.toFloat() / image.height,
+                        )
+                        val offX = (size.width - image.width * scale) / 2f
+                        val offY = (size.height - image.height * scale) / 2f
+                        val cxImg = (rect.x0 + layer.centerX * rect.width).toFloat()
+                        val cyImg = (rect.y0 + layer.centerY * rect.height).toFloat()
+                        return Offset(offX + cxImg * scale, offY + cyImg * scale)
+                    }
+
+                    // Seeds the right draft for whichever family owns the
+                    // selection (the sticker wins --- one selection across
+                    // the families is the round contract).
+                    fun seedDraftAt(fx: Double, fy: Double) {
+                        val stickerId = selectedStickerLayerId
+                        if (stickerId != null) {
+                            stickerPosDraft = Triple(stickerId, fx, fy)
+                        } else {
+                            selectedTextLayerId?.let { id -> posDraft = Triple(id, fx, fy) }
+                        }
+                    }
+
                     var dragging = false
                     detectDragGestures(
                         onDragStart = { start ->
-                            val center = layerCenterScreen()
+                            val center = stickerLayerCenterScreen() ?: textLayerCenterScreen()
                             dragging = center != null &&
                                 (start - center).getDistance() <= grabRadiusPx
                             if (dragging) {
-                                selectedTextLayerId?.let { id ->
-                                    mapToFraction(start)?.let { (fx, fy) ->
-                                        posDraft = Triple(id, fx, fy)
-                                    }
-                                }
+                                mapToFraction(start)?.let { (fx, fy) -> seedDraftAt(fx, fy) }
                             }
                         },
                         onDrag = { change, _ ->
                             if (dragging) {
-                                selectedTextLayerId?.let { id ->
-                                    mapToFraction(change.position)?.let { (fx, fy) ->
-                                        posDraft = Triple(id, fx, fy)
-                                    }
+                                mapToFraction(change.position)?.let { (fx, fy) ->
+                                    seedDraftAt(fx, fy)
                                 }
                                 change.consume()
                             }
                         },
                         onDragEnd = {
-                            if (dragging) commitPosDraftIfPending()
+                            if (dragging) {
+                                commitPosDraftIfPending()
+                                commitStickerPosDraftIfPending()
+                            }
                             dragging = false
                         },
                         onDragCancel = {
-                            if (dragging) commitPosDraftIfPending()
+                            if (dragging) {
+                                commitPosDraftIfPending()
+                                commitStickerPosDraftIfPending()
+                            }
                             dragging = false
                         },
                     )
@@ -1642,6 +1881,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 AssistChip(
                     onClick = {
                         commitTextDraftIfPending()
+                        commitPosDraftIfPending()
+                        commitStickerPosDraftIfPending()
                         val existing = committed.textLayers?.layers ?: emptyList()
                         val newLayer = TextLayer(
                             id = TextLayer.newId(existing.map { it.id }),
@@ -1652,6 +1893,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             committed.copy(textLayers = TextLayers(existing + newLayer)),
                         )
                         selectedTextLayerId = newLayer.id
+                        // r35: the new layer becomes THE selection --- one
+                        // selected layer at a time across the families.
+                        selectedStickerLayerId = null
                     },
                     enabled = !exporting,
                     label = { Text(stringResource(R.string.editor_text_add)) },
@@ -1663,7 +1907,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         onClick = {
                             if (selectedTextLayerId != layer.id) {
                                 commitTextDraftIfPending()
+                                commitPosDraftIfPending()
+                                commitStickerPosDraftIfPending()
                                 selectedTextLayerId = layer.id
+                                // r35: one selection across the families.
+                                selectedStickerLayerId = null
                             }
                         },
                         enabled = !exporting,
@@ -1824,6 +2072,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 TextButton(
                     onClick = {
                         commitTextDraftIfPending()
+                        commitPosDraftIfPending()
+                        commitStickerPosDraftIfPending()
                         val remaining = (committed.textLayers?.layers ?: emptyList())
                             .filterNot { it.id == layerId }
                         commit(
@@ -1840,6 +2090,223 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     enabled = !exporting,
                 ) {
                     Text(stringResource(R.string.editor_text_remove))
+                }
+            }
+
+            // ---- Stickers (r35: the sticker tool) ----
+            // The contract's UI shape (stickers.md decision 6): the
+            // registry chip row (bundled eight, imported id-sorted, the
+            // SAF import chip for image/png + image/webp) --- a chip tap
+            // ADDS a layer at canvas centre; registry chips are ADD
+            // actions, not selections (the layer chips below carry the
+            // selection). One selected layer at a time across the
+            // families; the drag gesture and the per-layer controls
+            // follow the single selection.
+            Text(
+                text = stringResource(R.string.editor_section_stickers),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                BundledStickers.ORDERED.forEach { entry ->
+                    FilterChip(
+                        selected = false,
+                        onClick = {
+                            commitTextDraftIfPending()
+                            commitPosDraftIfPending()
+                            commitStickerPosDraftIfPending()
+                            val existing = committed.stickerLayers?.layers ?: emptyList()
+                            val newLayer = StickerLayer(
+                                id = StickerLayer.newId(existing.map { it.id }),
+                                stickerId = entry.id,
+                            )
+                            commit(
+                                committed.copy(stickerLayers = StickerLayers(existing + newLayer)),
+                            )
+                            selectedStickerLayerId = newLayer.id
+                            selectedTextLayerId = null
+                        },
+                        enabled = !exporting,
+                        label = { Text(entry.displayName) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                // The user-imported stickers (r35), id-sorted; the store's
+                // collision rule makes the keys disjoint from the bundled set.
+                importedStickers.keys.sorted().forEach { id ->
+                    FilterChip(
+                        selected = false,
+                        onClick = {
+                            commitTextDraftIfPending()
+                            commitPosDraftIfPending()
+                            commitStickerPosDraftIfPending()
+                            val existing = committed.stickerLayers?.layers ?: emptyList()
+                            val newLayer = StickerLayer(
+                                id = StickerLayer.newId(existing.map { it.id }),
+                                stickerId = id,
+                            )
+                            commit(
+                                committed.copy(stickerLayers = StickerLayers(existing + newLayer)),
+                            )
+                            selectedStickerLayerId = newLayer.id
+                            selectedTextLayerId = null
+                        },
+                        enabled = !exporting,
+                        label = { Text(id) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                // The import action: SAF-pick a PNG/WebP (the zero-network
+                // editor reads local documents only).
+                AssistChip(
+                    onClick = { stickerImportLauncher.launch(arrayOf("image/png", "image/webp")) },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_sticker_import)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            stickerImportError?.let { reason ->
+                Text(
+                    text = stringResource(R.string.editor_sticker_import_failed, reason),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            // The layer chips: their sticker's display name (the raw id for
+            // an import or an unresolvable id --- the tolerance contract,
+            // shown honestly exactly like an unknown look id).
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                committed.stickerLayers?.layers?.forEach { layer ->
+                    FilterChip(
+                        selected = selectedStickerLayerId == layer.id,
+                        onClick = {
+                            if (selectedStickerLayerId != layer.id) {
+                                commitTextDraftIfPending()
+                                commitPosDraftIfPending()
+                                commitStickerPosDraftIfPending()
+                                selectedStickerLayerId = layer.id
+                                selectedTextLayerId = null
+                            }
+                        },
+                        enabled = !exporting,
+                        label = {
+                            val label = BundledStickers.byId(layer.stickerId)?.displayName
+                                ?: layer.stickerId
+                            Text(if (label.length > 16) label.take(15) + "…" else label)
+                        },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+            }
+            val selectedStickerLayer = committed.stickerLayers?.layers
+                ?.firstOrNull { it.id == selectedStickerLayerId }
+            if (selectedStickerLayer != null) {
+                val layerId = selectedStickerLayer.id
+                // -- size / opacity / rotation: the live-draft pattern
+                //    (the r34 conventions; the keys carry the sticker-
+                //    prefix so effectiveRecipe() routes them).
+                val sizeLive = draft?.takeIf { it.first == "sticker-size@$layerId" }?.second
+                    ?: selectedStickerLayer.sizePct
+                val sizeLabel = stringResource(R.string.editor_sticker_size, sizeLive)
+                val sizeName = stringResource(R.string.editor_a11y_sticker_size)
+                Text(
+                    text = sizeLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = sizeLive.toFloat(),
+                    onValueChange = { draft = "sticker-size@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "sticker-size@$layerId") {
+                                commitSelectedStickerLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..300f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = sizeName
+                        stateDescription = sizeLabel
+                    },
+                )
+                val opacityLive = draft?.takeIf { it.first == "sticker-opacity@$layerId" }?.second
+                    ?: selectedStickerLayer.opacity
+                val opacityLabel = stringResource(R.string.editor_sticker_opacity, opacityLive)
+                val opacityName = stringResource(R.string.editor_a11y_sticker_opacity)
+                Text(
+                    text = opacityLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = opacityLive.toFloat(),
+                    onValueChange = { draft = "sticker-opacity@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "sticker-opacity@$layerId") {
+                                commitSelectedStickerLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = opacityName
+                        stateDescription = opacityLabel
+                    },
+                )
+                val rotationLive = draft?.takeIf { it.first == "sticker-rotation@$layerId" }?.second
+                    ?: selectedStickerLayer.rotationDeg
+                val rotationLabel = stringResource(R.string.editor_sticker_rotation, rotationLive)
+                val rotationName = stringResource(R.string.editor_a11y_sticker_rotation)
+                Text(
+                    text = rotationLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = rotationLive.toFloat(),
+                    onValueChange = { draft = "sticker-rotation@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "sticker-rotation@$layerId") {
+                                commitSelectedStickerLayer {
+                                    it.copy(rotationDeg = d.second.coerceIn(-180, 180))
+                                }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = -180f..180f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = rotationName
+                        stateDescription = rotationLabel
+                    },
+                )
+                TextButton(
+                    onClick = {
+                        commitStickerPosDraftIfPending()
+                        val remaining = (committed.stickerLayers?.layers ?: emptyList())
+                            .filterNot { it.id == layerId }
+                        commit(
+                            committed.copy(
+                                stickerLayers = if (remaining.isEmpty()) {
+                                    null
+                                } else {
+                                    StickerLayers(remaining)
+                                },
+                            ),
+                        )
+                        selectedStickerLayerId = remaining.lastOrNull()?.id
+                    },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_sticker_remove))
                 }
             }
 

@@ -181,3 +181,20 @@ fix recorded in `docs/workplan.md` §3).
 - **Note** — the r36 bullet moved to MERGED truth in tasks.md/roadmap
   v2.9 (PR #111 `8c466ee`); `progress.json` stays untouched until the
   r37 merge per the F-12 convention.
+
+## 2026-11-04 (latest) — the r38 frames round (authored on `tg-p7-frames`,
+the campaign's closing)
+
+- **F-19 (new, open)** — frame stacking stays out of scope by design
+  (one mounting at a time); if a later round wants stackable frames it
+  is a model change (a `frameLayers` container), not a UI toggle ---
+  decide it in a dedicated round.
+- **F-20 (new, open)** — the campaign's file-write discipline lesson:
+  the r37 insertion script asserted, printed "ok", and never wrote the
+  activity back (the r37 UI section existed only in a Python variable;
+  CI stayed green because it compiled what was there). Standing rule
+  for every future script that mutates a file: write THAT file back
+  within the same script, and grep the diff before committing.
+- **Note** — the r37 bullet moved to MERGED truth in tasks.md/roadmap
+  v2.10 (PR #112 `6c206d9`), carrying the r37 debt fix; `progress.json`
+  stays untouched until the r38 merge per the F-12 convention.

@@ -11,6 +11,8 @@ import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import io.github.dukeoftoad.gallery.data.diag.DiagLog
+import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
+import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
@@ -18,12 +20,20 @@ import io.github.dukeoftoad.gallery.ml.people.PeopleEngineAdapter
 import io.github.dukeoftoad.gallery.ml.people.PeopleRepository
 import io.github.dukeoftoad.gallery.ml.people.PeopleStateFile
 import io.github.dukeoftoad.gallery.ml.people.PEOPLE_STATE_FILE_NAME
+import io.github.dukeoftoad.gallery.ml.search.MagicSearchEngineAdapter
+import io.github.dukeoftoad.gallery.ml.search.SemanticContentPolicy
+import io.github.dukeoftoad.gallery.ml.search.SemanticContentState
+import io.github.dukeoftoad.gallery.ml.things.ThingsCollection
+import io.github.dukeoftoad.gallery.ml.things.ThingsRepository
+import io.github.dukeoftoad.gallery.ml.things.ThingsStateFile
+import io.github.dukeoftoad.gallery.ml.things.THINGS_STATE_FILE_NAME
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
 import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
 import io.github.dukeoftoad.gallery.data.media.location.MediaLocationDisplayRules
 import io.github.dukeoftoad.gallery.data.places.PlacesContentPolicy
 import io.github.dukeoftoad.gallery.data.places.PlacesContentState
 import io.github.dukeoftoad.gallery.ui.settings.KEY_PEOPLE_ALBUM_ENABLED
+import io.github.dukeoftoad.gallery.ui.settings.KEY_THINGS_ALBUM_ENABLED
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -79,6 +89,17 @@ import kotlin.time.Duration.Companion.milliseconds
  * geocoding; the section derives its region buckets in the composition
  * (the pure grid math), and a failure maps to the policy's honest
  * Error state.
+ *
+ * ## Things section (r39, the ente-port exit round)
+ * [thingsSection] carries the SAME pure [SemanticContentPolicy] state
+ * the Magic Search Content mode uses (ONE truth for the six semantic
+ * states, shared), refreshed by [refreshThings] alongside the
+ * People/Places reads on every tab re-entry; [thingsCollections]
+ * carries the user's named collections (the state store's own order).
+ * The section's two mutations ([createThing]/[removeThing]) persist
+ * through the no-cache [ThingsRepository] and refresh; the membership
+ * itself never lives here --- each collection's members are derived
+ * on open by the detail screen (the derived-view doctrine).
  */
 class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -135,6 +156,30 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     /** The Places section's content state (the pure policy's output, r27). */
     val places: StateFlow<PlacesContentState> = _places.asStateFlow()
 
+    // ---- r39 (the ente-port exit round): the Things section's state ----
+
+    /** The semantic engine adapter the Things repository reads through. */
+    private val thingsEngineAdapter = MagicSearchEngineAdapter.fromApplication(app)
+
+    /** The Things read path (list + mutations; no media query --- the
+     * section shows chips, the detail screen derives members). */
+    private val thingsRepository = ThingsRepository(
+        engine = thingsEngineAdapter,
+        store = ThingsStateFile(
+            File(File(app.filesDir, FACE_INDEX_DIR_NAME), THINGS_STATE_FILE_NAME),
+        ),
+    )
+
+    private val _thingsSection = MutableStateFlow<SemanticContentState>(SemanticContentState.Loading)
+
+    /** The Things section's content state (the SHARED semantic policy's output, r39). */
+    val thingsSection: StateFlow<SemanticContentState> = _thingsSection.asStateFlow()
+
+    private val _thingsCollections = MutableStateFlow<List<ThingsCollection>>(emptyList())
+
+    /** The user's named collections, in creation order (the store's own order, r39). */
+    val thingsCollections: StateFlow<List<ThingsCollection>> = _thingsCollections.asStateFlow()
+
     init {
         // API 30+ only, mirroring PhotosViewModel's gating and rationale:
         // the observer watches the unified Files collection (an R-gated
@@ -152,6 +197,7 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
         }
         refreshPeople()
         refreshPlaces()
+        refreshThings()
     }
 
     /**
@@ -228,6 +274,83 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * One Things read (r39): consent + availability + the collections
+     * list + the clip count, mapped through the SHARED pure semantic
+     * policy (the same six states Magic Search's Content mode uses).
+     * Called from `init` and on every screen re-entry alongside the
+     * People/Places reads. The consent-off, build-shape and
+     * models-not-provisioned arms are decided WITHOUT opening an engine
+     * session (the clip-count read happens only when every earlier gate
+     * passes); failures map to the policy's honest Error state.
+     */
+    fun refreshThings() {
+        viewModelScope.launch {
+            val fresh = withContext(Dispatchers.IO) {
+                runCatching {
+                    val consent = prefs.getBoolean(KEY_THINGS_ALBUM_ENABLED, false)
+                    when {
+                        !consent -> SemanticContentState.ConsentOff
+                        !thingsRepository.engineAvailable -> SemanticContentState.EngineMissing
+                        else -> {
+                            val load = thingsRepository.collections()
+                            _thingsCollections.value = load.state.collections
+                            // The r26 provisioner's own SEMANTIC capability
+                            // read (the MagicSearchViewModel gate's twin).
+                            val semanticReady = getApplication<ToadGalleryApplication>()
+                                .modelProvisioner.capabilityState(ModelManifest.Capability.SEMANTIC) ==
+                                ModelProvisioner.CapabilityState.Ready
+                            val clipCount = if (semanticReady) {
+                                thingsRepository.clipCount()
+                            } else {
+                                0L
+                            }
+                            SemanticContentPolicy.decide(
+                                consentEnabled = true,
+                                engineAvailable = true,
+                                semanticModelsReady = semanticReady,
+                                clipCount = clipCount,
+                            )
+                        }
+                    }
+                }.getOrElse { e ->
+                    SemanticContentState.Error(e.message ?: e.javaClass.simpleName)
+                }
+            }
+            _thingsSection.value = fresh
+        }
+    }
+
+    /**
+     * Creates a Things collection (the section's create action, r39):
+     * persists through the repository, then refreshes the section. A
+     * refused create (blank name) simply refreshes --- the dialog's own
+     * confirm button already refuses blank input.
+     */
+    fun createThing(name: String, query: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    thingsRepository.create(name, query, System.currentTimeMillis())
+                }
+            }
+            refreshThings()
+        }
+    }
+
+    /**
+     * Removes a Things collection (the section's per-chip remove action,
+     * r39); refreshes the section afterwards.
+     */
+    fun removeThing(collectionId: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { thingsRepository.remove(collectionId) }
+            }
+            refreshThings()
+        }
+    }
+
+    /**
      * Called by the screen once the runtime permission grant has succeeded.
      * A repeated grant (tab re-entry) re-queries --- album lists are cheap
      * snapshots and re-entry is also the below-R refresh path.
@@ -258,6 +381,9 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
         albumsObserver = null
         // r25: release the People section's engine session with the screen.
         engineAdapter.close()
+        // r39: the Things section's semantic session too (the same
+        // process-global engine, released by its own adapter).
+        thingsEngineAdapter.close()
         super.onCleared()
     }
     /**

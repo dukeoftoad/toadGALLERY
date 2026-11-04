@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -22,8 +23,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -35,8 +38,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +63,8 @@ import io.github.dukeoftoad.gallery.data.places.PlaceMediaHandoff
 import io.github.dukeoftoad.gallery.data.places.PlacesContentState
 import io.github.dukeoftoad.gallery.data.places.PlacesRegionGrid
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
+import io.github.dukeoftoad.gallery.ml.search.SemanticContentState
+import io.github.dukeoftoad.gallery.ml.things.ThingsCollection
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.ErrorState
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
@@ -133,12 +140,18 @@ fun AlbumsScreen(
     onOpenPlaces: () -> Unit,
     /** r27: a region chip's tap --- that region's media grid. */
     onOpenPlace: (regionKey: String) -> Unit,
+    /** r39: a Things collection chip's tap --- that collection's detail. */
+    onOpenThing: (collectionId: String) -> Unit,
     viewModel: AlbumsViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val peopleState by viewModel.people.collectAsState()
     // r27: the Places section's state, refreshed beside the People read.
     val placesState by viewModel.places.collectAsState()
+    // r39: the Things section's state + collections, refreshed on the same
+    // entry cadence.
+    val thingsState by viewModel.thingsSection.collectAsState()
+    val thingsCollections by viewModel.thingsCollections.collectAsState()
 
     val requester = rememberMediaPermissionRequester(
         onResult = { granted ->
@@ -177,6 +190,9 @@ fun AlbumsScreen(
         // r27: the Places section re-reads consent + rows on the same
         // cadence (the same refresh discipline, one entry effect).
         viewModel.refreshPlaces()
+        // r39: the Things section re-reads consent + collections on the
+        // same cadence.
+        viewModel.refreshThings()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -210,6 +226,8 @@ fun AlbumsScreen(
                         albums = s.albums,
                         peopleState = peopleState,
                         placesState = placesState,
+                        thingsState = thingsState,
+                        thingsCollections = thingsCollections,
                         onOpenAlbum = onOpenAlbum,
                         onOpenCollection = onOpenCollection,
                         onOpenPeople = onOpenPeople,
@@ -217,6 +235,10 @@ fun AlbumsScreen(
                         onRetryPeople = viewModel::refreshPeople,
                         onOpenPlaces = onOpenPlaces,
                         onOpenPlace = onOpenPlace,
+                        onCreateThing = viewModel::createThing,
+                        onRemoveThing = viewModel::removeThing,
+                        onOpenThing = onOpenThing,
+                        onRetryThings = viewModel::refreshThings,
                     )
                 }
             }
@@ -235,6 +257,8 @@ private fun AlbumGrid(
     albums: List<Album>,
     peopleState: PeopleContentState,
     placesState: PlacesContentState,
+    thingsState: SemanticContentState,
+    thingsCollections: List<ThingsCollection>,
     onOpenAlbum: (bucketId: Long) -> Unit,
     onOpenCollection: (DerivedCollections.DerivedCollection) -> Unit,
     onOpenPeople: () -> Unit,
@@ -242,6 +266,10 @@ private fun AlbumGrid(
     onRetryPeople: () -> Unit,
     onOpenPlaces: () -> Unit,
     onOpenPlace: (regionKey: String) -> Unit,
+    onCreateThing: (name: String, query: String) -> Unit,
+    onRemoveThing: (collectionId: String) -> Unit,
+    onOpenThing: (collectionId: String) -> Unit,
+    onRetryThings: () -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -269,6 +297,19 @@ private fun AlbumGrid(
                 state = placesState,
                 onOpenPlaces = onOpenPlaces,
                 onOpenPlace = onOpenPlace,
+            )
+        }
+        // The Things section (r39, the ente-port exit round): the third
+        // full-span sibling --- the named semantic collections over the
+        // SAME CLIP index Magic Search queries.
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ThingsSection(
+                state = thingsState,
+                collections = thingsCollections,
+                onCreate = onCreateThing,
+                onRemove = onRemoveThing,
+                onOpen = onOpenThing,
+                onRetryThings = onRetryThings,
             )
         }
         // The Collections section (r17) spans the grid's full width, so it
@@ -731,4 +772,205 @@ private fun FavoritesAlbumCard(
             modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
         )
     }
+}
+
+/**
+ * The Things section (r39, the ente-port exit round): the People/Places
+ * sections' sibling discipline --- ONE honest card over the SHARED pure
+ * [SemanticContentState] (the same states Magic Search's Content mode
+ * renders; Loading renders nothing until the first read lands, the
+ * People section's precedent):
+ *  - Loading -> nothing at all (the People section's precedent);
+ *  - ConsentOff / EngineMissing / ModelsNotProvisioned / NotIndexed /
+ *    Error -> one honest card saying exactly why there is no row of
+ *    collections, each pointing at its own recovery surface;
+ *  - Ready -> the header + a "New collection" action + a horizontal
+ *    `LazyRow` of the user's named collection chips; a chip's tap opens
+ *    that collection's detail, its trailing remove affordance deletes
+ *    it (the imported-look remove pattern, minus the confirmation ---
+ *    the collection is a derived view, never photos).
+ *
+ * The create dialog is screen-local state (one-tap decision; the
+ * mutations live in the ViewModel and re-derive from the live store).
+ */
+@Composable
+private fun ThingsSection(
+    state: SemanticContentState,
+    collections: List<ThingsCollection>,
+    onCreate: (name: String, query: String) -> Unit,
+    onRemove: (collectionId: String) -> Unit,
+    onOpen: (collectionId: String) -> Unit,
+    onRetryThings: () -> Unit,
+) {
+    var showCreate by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when (state) {
+            SemanticContentState.Loading -> Unit
+            SemanticContentState.ConsentOff -> ThingsInfoCard(
+                text = stringResource(R.string.albums_things_consent_off),
+            )
+            SemanticContentState.EngineMissing -> ThingsInfoCard(
+                text = stringResource(R.string.albums_things_engine_missing),
+            )
+            SemanticContentState.ModelsNotProvisioned -> ThingsInfoCard(
+                text = stringResource(R.string.albums_things_models_missing),
+            )
+            SemanticContentState.NotIndexed -> ThingsInfoCard(
+                text = stringResource(R.string.albums_things_not_indexed),
+            )
+            is SemanticContentState.Error -> Column(modifier = Modifier.fillMaxWidth()) {
+                ThingsInfoCard(text = stringResource(R.string.albums_things_error))
+                TextButton(
+                    onClick = onRetryThings,
+                    modifier = Modifier.testTag("albums_things_retry"),
+                ) {
+                    Text(stringResource(R.string.state_action_retry))
+                }
+            }
+            SemanticContentState.Ready -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.albums_things_header),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = { showCreate = true },
+                        modifier = Modifier.testTag("albums_things_create"),
+                    ) {
+                        Text(stringResource(R.string.albums_things_create))
+                    }
+                }
+                if (collections.isEmpty()) {
+                    ThingsInfoCard(text = stringResource(R.string.albums_things_none))
+                } else {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("albums_things_row"),
+                    ) {
+                        items(collections, key = { it.collectionId }) { collection ->
+                            ThingsCollectionChip(
+                                collection = collection,
+                                onOpen = { onOpen(collection.collectionId) },
+                                onRemove = { onRemove(collection.collectionId) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCreate) {
+        var name by remember { mutableStateOf("") }
+        var query by remember { mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showCreate = false },
+            title = { Text(stringResource(R.string.things_create_dialog_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.things_create_dialog_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.things_name_label)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.things_query_label)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showCreate = false
+                        onCreate(name, query)
+                    },
+                    // A blank name is refused by the repository; a disabled
+                    // confirm beats a lying one.
+                    enabled = name.isNotBlank(),
+                ) {
+                    Text(stringResource(R.string.things_create_dialog_confirm))
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showCreate = false }) {
+                    Text(stringResource(R.string.file_ops_action_cancel))
+                }
+            },
+        )
+    }
+}
+
+/** One collection chip: the name (tap = open), the trailing remove affordance. */
+@Composable
+private fun ThingsCollectionChip(
+    collection: ThingsCollection,
+    onOpen: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    androidx.compose.material3.Surface(
+        shape = MaterialTheme.shapes.large,
+        tonalElevation = 1.dp,
+        modifier = Modifier.testTag("albums_things_chip"),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        ) {
+            Text(
+                text = collection.name,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .clickable(onClick = onOpen)
+                    .padding(vertical = 12.dp),
+            )
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier
+                    .size(32.dp)
+                    .testTag("albums_things_chip_remove"),
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.cd_things_remove),
+                )
+            }
+        }
+    }
+}
+
+/** The section's honest one-line card (the PlacesInfoCard shape). */
+@Composable
+private fun ThingsInfoCard(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, end = 4.dp, bottom = 4.dp)
+            .testTag("albums_things_info"),
+    )
 }

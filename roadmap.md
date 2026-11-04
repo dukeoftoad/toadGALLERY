@@ -13,7 +13,34 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.7 (2026-11-04, latest) --- the r35 sticker-tool round (authored; the
+### v2.8 (2026-11-04, latest) --- the r36 drawing-tool round (authored);
+  the r35 sticker tool MERGED
+
+- **The r35 sticker tool MERGED** (PR #110 squash `980ccea`; merge-gate
+  CI run 41836972158 GREEN on the first execution --- the pre-push
+  harness's debut round; all three jobs). The `tasks.md` bullet moves
+  to MERGED truth with this entry.
+- **Phase 7, task 4 of 5 --- the freehand drawing tool AUTHORED on
+  `tg-p7-drawing`** (layer type 3 of 5; the design contract
+  `docs/phase-7/drawing-tool.md`, its delivery record appended): the
+  stroke-per-layer model (one gesture = one layer = one undo snapshot),
+  the additive `DrawLayers` recipe with the round-three stacking proof
+  (a pre-r36 sidecar carrying r34 text AND r35 stickers loads clean),
+  the commit-time stride thinning to the 512 cap (first/last kept), the
+  pure `DrawLayout` (the brush width, the r34 text alpha math, Chaikin
+  corner-cutting round(smoothing/25) -> 0..4 passes, endpoints
+  preserved), the shared `DrawCompositor` BETWEEN the sticker pass and
+  the text pass (a tap is a dot), the Draw UI under the exclusive
+  duality (paint mode tunes the NEXT stroke; a selected layer re-binds
+  the same controls), and the ONE `sweepPendingDrafts()` helper (12
+  call sites retrofitted, all additive). 27 new JVM tests (the edit
+  module at 314; the local harness ran 305 pure green pre-push,
+  catching two TEST-expectation slips and one parenthesised backticked
+  name). Editor `versionCode 9` (`0.4.4-edit-alpha`). The §25 device
+  rows ride the checklist, human-only.
+- `progress.json` untouched until merge per the F-12 convention.
+
+### v2.7 (2026-11-04, later) --- the r35 sticker-tool round (authored; the
   local pre-push harness debuts)
 
 - **Phase 7, task 3 of 5 --- the sticker tool AUTHORED on `tg-p7-stickers`**
@@ -1234,12 +1261,15 @@ phases build on.
 
 ### Phase 7 --- toadGALLERY Edit v2: filters and annotations
 
-**Status (r35): tasks 1-2 of 5 MERGED --- the LUT `.cube` filter system
+**Status (r36): tasks 1-3 of 5 MERGED (the LUT `.cube` filter system
 with the user-import flow (PR #107 squash `314bd9c`, CI 41781166155
 green on the rebased head `ceb731b`; editor `versionCode 6`) and the
 text tool (PR #109 squash `6bb17a4`, merge-gate run 41822887363 green
-on head `699fd03`; editor `versionCode 7`) --- plus task 3, the sticker
-tool, AUTHORED on `tg-p7-stickers` (pending PR/CI/merge)**: the pure
+on head `699fd03`; editor `versionCode 7`) and the sticker tool (PR
+#110 squash `980ccea`, merge-gate run 41836972158 green on the first
+execution --- the pre-push harness's debut; editor `versionCode 8`)
+--- plus task 4, the freehand drawing tool, AUTHORED on `tg-p7-drawing`
+(pending PR/CI/merge)**: the pure
 engine (the Adobe `.cube` parser with its honest subset rules, the
 allocation-free trilinear sampler, the alpha-preserving intensity
 blend), the recipe's additive `LutSelection` (an unresolvable id
@@ -1266,18 +1296,27 @@ per-font ledger rows + `docs/phase-7/bundled-fonts.md`), the additive
 at 241), the module string count 74 → 94. The delivery record:
 `docs/phase-7/text-tool.md`. PR #108 (the redundant `tg-p7-lut-import`
 PR) closed with the round's merge (the `Closes #108` keyword in PR
-#109's description). **The sticker tool (task 3) is AUTHORED on
-`tg-p7-stickers`** (r35 round 2026-11-04, the design contract
-`docs/phase-7/stickers.md`): eight project-authored IN-CODE vector
+#109's description). **The sticker tool (task 3) is MERGED** (PR #110
+squash `980ccea`, r35 round 2026-11-04, merge-gate run 41836972158
+green on the first execution): eight project-authored IN-CODE vector
 shapes (no image asset, no §5 row --- `docs/phase-7/bundled-stickers.md`
 is the authorship record), the additive `StickerLayers` recipe with the
 image-shaped tolerance delta, the shared `StickerCompositor` BELOW the
 text pass, `ImportedStickerStore` (PNG/WebP magic-before-write), the
 Sticker UI with ONE selected layer at a time across the families,
 46 new JVM tests (the edit module at 287), the string count 94 → 104,
-editor `versionCode 8` (`0.4.3-edit-alpha`). **Remaining Phase 7 work**:
-freehand drawing, mosaic/blur regions, frames, and the undo/redo
-extension across them.
+editor `versionCode 8` (`0.4.3-edit-alpha`). **The drawing tool (task 4)
+is AUTHORED on `tg-p7-drawing`** (r36 round 2026-11-04, the design
+contract `docs/phase-7/drawing-tool.md`): the stroke-per-layer model
+(one gesture = one layer = one undo snapshot), the additive `DrawLayers`
+recipe with the round-three stacking proof, the commit-time stride
+thinning to the 512 cap, the pure `DrawLayout` (Chaikin corner-cutting
+round(smoothing/25) → 0..4 passes), the shared `DrawCompositor` between
+the sticker pass and the text pass, the Draw UI under the exclusive
+duality, and the ONE `sweepPendingDrafts()` helper across the families;
+27 new JVM tests (the edit module at 314), the string count 104 → 114,
+editor `versionCode 9` (`0.4.4-edit-alpha`). **Remaining Phase 7 work**:
+mosaic/blur regions, frames, and the undo/redo extension across them.
 
 **Purpose:** Add the creative layer on top of the Phase 6 pipeline:
 filters, text, stickers, drawing, mosaic, frames.

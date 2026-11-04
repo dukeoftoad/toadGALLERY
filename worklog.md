@@ -27,7 +27,7 @@
 ## Chronological Turn-by-Turn Engineering Log
 
 ### Turn 1 (Lines 1–96) — Repository Bootstrap, Upstream Baselines & Phase 0 Tracking
-* **User Prompt**: Uploaded `roadmap.md` (20.3 KB) and requested: *"Create new repo using pat token `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` toadGALLERY START WORKING ON ROADMAP"*.
+* **User Prompt**: Uploaded `roadmap.md` (20.3 KB) and requested: *"Create new repo using pat token `*********` toadGALLERY START WORKING ON ROADMAP"*.
 * **Environment & Repo Discovery**:
   * Verified environment: `git 2.47.3`, `python 3.12`, GitHub API reachable.
   * Verified PAT token for GitHub account `dukeoftoad` (with `repo` scope).
@@ -118,7 +118,7 @@
   * Upgraded `lint` to blocking in `ci.yml`, bumped version to `0.2.1-alpha`, authored `ADR-0014` and `docs/phase-2/privacy-gate.md`, and committed `47c45ff` on branch `phase2-privacy-gate`. Requested fresh PAT to push.
 
 ### Turn 9 (Lines 635–745) — Phase 2 Exit & Phase 3 Slice 1: MediaStore Photo Timeline (`#25`, PR #26)
-* **User Prompt**: Provided PAT `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`.
+* **User Prompt**: Provided PAT `*********`.
 * **Duplicate PR Resolution**:
   * Pushed `phase2-privacy-gate` and opened **PR #24**, then discovered `#20` had already been merged on `main` via **PR #23** (commit `e9f458b`, branch `privacy/20-internet-gate`, with `gateDebugInternetPermission`/`gateReleaseInternetPermission` and emulator `PrivacyEgressTest`). Closed duplicate **PR #24** and synced `main`.
   * Triaged remaining Phase 2 issues: reassigned `#11` → Phase 5, `#13` → Phase 3, `#14` → Phase 6.

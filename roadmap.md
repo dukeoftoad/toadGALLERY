@@ -1061,6 +1061,17 @@ division. 5 new JVM tests (GeometryTest 19 → 24); editor `versionCode 4`
 Phase 6 remains code-side complete; the exit still rides the §19/§20/§21
 device rows + the merge chain.
 
+**Status (r31+r32, MERGED):** the Edit v1 exit round is on main ---
+the per-export metadata-policy choice (the request policy as the
+privacy floor), the export preflight (the 48 MP decode guard, the
+storage-headroom check, the process-death policy), the applied-policy
+honesty narration, and the r32 hardening pass (the a11y sweep, the
+straighten live-drag fix, the pure `CropRect.fromPixelRect` inverse)
+landed as PR #106 squash `938effa` (CI 41779955612 green on the union
+head `9336412`; editor `versionCode 4`). **Phase 6 is code-side
+complete**; the exit declaration rides the human-only §19/§20 device
+rows.
+
 **Purpose:** Ship the first version of the editor APK with the
 adjustment suite and the non-destructive pipeline that all later editor
 phases build on.
@@ -1114,7 +1125,7 @@ phases build on.
 ### Phase 7 --- toadGALLERY Edit v2: filters and annotations
 
 **Status (r33): OPENED --- the LUT `.cube` filter system is built,
-COMPLETE with the user-import flow** (`tg-p7-lut-engine`, PR #107,
+COMPLETE with the user-import flow, MERGED to main** (PR #107 squash `314bd9c`, CI 41781166155 green on the rebased head `ceb731b`; editor `versionCode 6`) --- the original status: (`tg-p7-lut-engine`, PR #107,
 stacked on the exit branch's PR #106; the window's scope note is in
 the worklog's Run #2 addendum 2): the pure engine (the Adobe `.cube`
 parser with its honest subset rules, the allocation-free trilinear

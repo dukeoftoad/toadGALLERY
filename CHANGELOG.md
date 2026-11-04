@@ -10,6 +10,17 @@ All notable changes to toadGALLERY are documented here. The format follows
   may proceed)
 
 ### Added
+- **Progress-tracking infrastructure + the dispatch-only debug-APK builders**
+  (2026-11-04 workplan window, `docs/workplan.md`): the committed
+  `progress.json` (independent `project` 73% / `entePort` 95% scopes),
+  `docs/ci-workflows.md` (workflow quick reference), `follow-up.md` (the
+  follow-up register), and two new workflows --- `apk-build-engine.yml`
+  ("APK build with engine": input-driven engine APK with pin validation,
+  mapping/log artifacts, fail-fast secrets guards) and
+  `editor-apk-build.yml` ("Editor APK build --- include all": all editor
+  targets in one matrix). Both are `workflow_dispatch`-only and were
+  validated by `actionlint` + static review only --- not dispatched.
+  Docs only; no app code changed in this window.
 
 - **The Phase 5 hardening round + exit gate** (r28 round; Workstream 8,
   `docs/phase-5/hardening.md`): the proof workstream that lifts the

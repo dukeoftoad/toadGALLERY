@@ -13,6 +13,29 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
+### v2.4 (2026-11-04) --- progress tracking + the debug-APK workflow family
+
+- **Progress tracking:** `progress.json` at the repo root is now the
+  machine-readable source of truth for two INDEPENDENT progress scopes ---
+  `project` (roadmap Phases 0--11, currently 73%) and `entePort` (the Ente
+  port workstream per `docs/phase-5/ente-pin.md`, currently 95%). The live
+  dashboard (sandbox deployment) renders both bars with socket.io push + a
+  4 s polling fallback (verified < 5 s); the plan, per-bar design decisions
+  and manual verification steps are in `docs/workplan.md`.
+- **CI:** two new dispatch-only debug-APK workflows --- `apk-build-engine.yml`
+  ("APK build with engine": input-driven gallery engine build, pin
+  validation, mapping/log artifacts, job summary; fail-fasts on the
+  ADR-0018 `TG_RELEASE_*` secrets for a release-variant dispatch) and
+  `editor-apk-build.yml` ("Editor APK build --- include all": all editor
+  targets in one matrix --- `edit-debug`, unsigned `edit-release` gate,
+  `contract`). Neither was dispatched in its authoring window; see
+  `docs/ci-workflows.md` for triggers, inputs and required secrets.
+- **Docs:** `docs/workplan.md` (this window's plan + ente-port definition),
+  `follow-up.md` created (the follow-up register, F-1..F-8),
+  `docs/ci-workflows.md` (workflow quick reference), `tasks.md` milestone
+  table collapsed to one row per phase (the stale duplicate Phase 5/6 rows
+  from the pre-merge era are gone).
+
 ### v2.3 (2026-10-30) --- Phase 3 progress tracker; CI scope narrowed (ADR-0016)
 
 - The Phase 3 section now carries an explicit landed / in-flight progress

@@ -97,6 +97,22 @@ No Flutter SDK required. No Dart SDK required. The CI workflow at
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the source of truth for
 "does it build"; a green CI check is required to merge any PR.
 
+### Debug APK test builds
+
+Beyond the canonical gate, three opt-in builders produce device-testable
+debug APKs (all `workflow_dispatch`-only --- zero CI cost unless dispatched):
+[`engine-apk.yml`](.github/workflows/engine-apk.yml) (the branch-scoped
+engine test build), [`apk-build-engine.yml`](.github/workflows/apk-build-engine.yml)
+("APK build with engine" --- input-driven variant + pin validation, uploads the
+APK + R8 `mapping.txt`, fail-fast guards) and
+[`editor-apk-build.yml`](.github/workflows/editor-apk-build.yml) (all editor
+targets in one matrix: the `.debug` editor APK, the unsigned release-compile
+gate, and the `:shared:editor-contract` module). Triggers, inputs and
+required secrets are catalogued in [`docs/ci-workflows.md`](docs/ci-workflows.md);
+release signing stays exclusive to [`release.yml`](.github/workflows/release.yml)
+(ADR-0018). Overall progress is tracked in the committed
+[`progress.json`](progress.json) (project + ente-port scopes).
+
 ### Release builds / testing pre-releases
 
 Testing pre-releases are produced by the dedicated `Release` workflow

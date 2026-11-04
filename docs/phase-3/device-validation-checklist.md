@@ -592,3 +592,58 @@ confirms the ANNOUNCEMENTS, their live updates, and the touch targets.
       refactor**: each preset (1:1, 4:3, 3:4, 16:9, 9:16) produces the
       expected output aspect on export (the §19 round trip re-run with
       one preset applied covers this end to end).
+
+## 22. r33 pass — the LUT filter system (versionCode 5, UNRELEASED)
+
+The Phase 7 opener's device half: the code pins the engine (24 parser/
+sampler tests), the recipe tolerance (8 tests) and the assets (9
+conformance tests with hand-verified probes); the device confirms the
+EXPERIENCE — the looks render, the intensity is honest, and the preview
+matches the export.
+
+- [ ] **The Filters section renders**: between the Adjust sliders and
+      the Colour channels (HSL) section there is a Filters row with a
+      None chip and five look chips (Warm Film, Cool Chrome, Silver
+      Mono, Matte Fade, Vivid Punch), horizontally scrollable.
+- [ ] **Each look applies**: tap each look — the preview must visibly
+      change per the look's character (Warm Film warms and lifts,
+      Cool Chrome cools and deepens, Silver Mono goes monochrome,
+      Matte Fade desaturates with lifted blacks, Vivid Punch
+      saturates); None returns to the un-looked image EXACTLY.
+- [ ] **The intensity slider is honest**: with a look selected, drag
+      the intensity — the preview follows the drag live (r32 pattern);
+      at 0% the image equals the un-looked image; at 100% it equals
+      the full look; ~50% sits between (squint-compare against the
+      two ends).
+- [ ] **Preview ≡ export**: pick a look at ~70% intensity plus one
+      adjustment (e.g. brightness +20), export a copy, and compare the
+      saved image against the on-screen preview — same look, same
+      grade (the shared-cache + one-pipeline construction).
+- [ ] **The look survives the session**: with a look selected, force-
+      stop the editor and relaunch the same source from the gallery —
+      the sidecar restores the session with the look chip selected and
+      the intensity where it was (ADR-0011).
+- [ ] **The look rides the whole pipeline**: apply a look PLUS a crop
+      plus a rotation, export, and confirm the saved copy carries the
+      look over the cropped/rotated frame (stage 10 runs after the
+      geometry and the colour stages).
+- [ ] **Undo/redo covers the look**: select a look, undo — the look
+      clears; redo — it returns with its intensity (the look is one
+      recipe snapshot like every other edit).
+- [ ] **The import flow — the happy path**: tap "Import look…", pick a
+      valid `.cube` from the document picker — the look appears in the
+      chip row (after the bundled five, titled from the file's TITLE
+      or its name) AND is auto-selected; its intensity slider works
+      exactly like a bundled look's; export carries it.
+- [ ] **The import flow — the honest rejection**: pick a non-`.cube`
+      or malformed file — nothing is added to the row, and the reason
+      line appears under the chips (no crash, no partial state).
+- [ ] **The import survives everything**: force-stop and relaunch —
+      the imported look is still in the row (the app-private store);
+      re-importing the same file yields a suffixed second copy, never
+      a shadow of the first or of a bundled look.
+- [ ] **Remove look**: with an IMPORTED look selected, "Remove look"
+      deletes it, clears the selection, and the chip row reloads
+      without it; bundled looks never show the affordance; a sidecar
+      still naming the removed look degrades to no-look (the chip row
+      shows no selection) — the tolerance contract on device.

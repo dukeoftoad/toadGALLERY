@@ -9,12 +9,12 @@ import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
-import io.github.dukeoftoad.gallery.ml.search.MagicSearchContentPolicy
 import io.github.dukeoftoad.gallery.ml.search.MagicSearchEngineAdapter
 import io.github.dukeoftoad.gallery.ml.search.MagicSearchQuery
 import io.github.dukeoftoad.gallery.ml.search.MagicSearchRepository
 import io.github.dukeoftoad.gallery.ml.search.MagicSearchResult
-import io.github.dukeoftoad.gallery.ml.search.MagicSearchState
+import io.github.dukeoftoad.gallery.ml.search.SemanticContentPolicy
+import io.github.dukeoftoad.gallery.ml.search.SemanticContentState
 import io.github.dukeoftoad.gallery.ml.search.queryMagicSearchMedia
 import io.github.dukeoftoad.gallery.ui.settings.KEY_MAGIC_SEARCH_ENABLED
 import kotlinx.coroutines.CancellationException
@@ -32,7 +32,7 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * Screen states of the Search tab's CONTENT mode (r26, Workstream 7 ---
  * Magic Search): the r19a [SearchUiState] shape, extended with the pure
- * [MagicSearchContentPolicy]'s four gating arms so every "why can't I
+ * [SemanticContentPolicy]'s four gating arms so every "why can't I
  * search by content" answer is an honest, named state instead of an
  * error loop.
  *
@@ -64,7 +64,10 @@ sealed interface MagicSearchUiState {
     /** No engine library in this build --- the build-shape state. */
     data object EngineMissing : MagicSearchUiState
 
-    /** The FACE and/or SEMANTIC model pack is not fully installed. */
+    /**
+     * The SEMANTIC model pack is not fully installed (the r39 shape: the
+     * FACE pack is no longer a Magic Search gate).
+     */
     data object ModelsNotProvisioned : MagicSearchUiState
 
     /** All gates pass but the CLIP index is empty (queue never ran / draining). */
@@ -105,16 +108,17 @@ sealed interface MagicSearchUiState {
  *
  * ## Gating (Error dominates; consent before capability)
  * Every request first consults the pure [MagicSearchQuery.isSearchable]
- * gate, then gathers the pure [MagicSearchContentPolicy]'s inputs in
+ * gate, then gathers the pure [SemanticContentPolicy]'s inputs in
  * DOMINANCE ORDER on Dispatchers.IO: the `magicSearchEnabled` consent
  * (read fresh from the house preferences at query time --- default
  * FALSE, ADR-0010), the engine seam's build-shape availability, the
- * provisioner's FACE and SEMANTIC capability states, and --- only when
- * every earlier gate passes, so no pointless engine session opens ---
- * the store's clip count. The policy alone decides the state; a failed
- * input read maps to [MagicSearchUiState.Error] with the failure's own
- * message (the `PeopleViewModel` run-and-catch contract, never an
- * escape that kills the process).
+ * provisioner's SEMANTIC capability state (r39: the FACE capability is
+ * no longer a gate --- the semantic session installs without it), and
+ * --- only when every earlier gate passes, so no pointless engine
+ * session opens --- the store's clip count. The policy alone decides
+ * the state; a failed input read maps to [MagicSearchUiState.Error]
+ * with the failure's own message (the `PeopleViewModel` run-and-catch
+ * contract, never an escape that kills the process).
  *
  * ## Execution
  * [MagicSearchRepository.search] runs on Dispatchers.IO inside
@@ -226,12 +230,16 @@ class MagicSearchViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun runQuery(rawQuery: String): MagicSearchUiState =
         when (val gate = gateState()) {
-            MagicSearchState.ConsentOff -> MagicSearchUiState.ConsentOff
-            MagicSearchState.EngineMissing -> MagicSearchUiState.EngineMissing
-            MagicSearchState.ModelsNotProvisioned -> MagicSearchUiState.ModelsNotProvisioned
-            MagicSearchState.NotIndexed -> MagicSearchUiState.NotIndexed
-            is MagicSearchState.Error -> MagicSearchUiState.Error(gate.message)
-            MagicSearchState.Ready ->
+            // The pipeline's gate read is never a held state (gateState
+            // decides synchronously per request); the arm exists because
+            // the when is exhaustive over the shared policy's states.
+            SemanticContentState.Loading -> MagicSearchUiState.Idle
+            SemanticContentState.ConsentOff -> MagicSearchUiState.ConsentOff
+            SemanticContentState.EngineMissing -> MagicSearchUiState.EngineMissing
+            SemanticContentState.ModelsNotProvisioned -> MagicSearchUiState.ModelsNotProvisioned
+            SemanticContentState.NotIndexed -> MagicSearchUiState.NotIndexed
+            is SemanticContentState.Error -> MagicSearchUiState.Error(gate.message)
+            SemanticContentState.Ready ->
                 when (val result = repository.search(rawQuery)) {
                     is MagicSearchResult.Matches -> MagicSearchUiState.Results(result.items)
                     MagicSearchResult.NoMatches -> MagicSearchUiState.NoResults
@@ -243,35 +251,32 @@ class MagicSearchViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * The pure policy's inputs, gathered in dominance order: the
      * clip-count read happens ONLY when consent, engine presence and
-     * both model packs already pass, so a consented-off or unprovisioned
-     * device never opens an engine session just to learn it cannot
-     * query. A failure here (e.g. the session cannot open on a
-     * provisioned device) folds to the policy's Error state with the
+     * the SEMANTIC pack already pass, so a consented-off or
+     * unprovisioned device never opens an engine session just to learn
+     * it cannot query. A failure here (e.g. the session cannot open on
+     * a provisioned device) folds to the policy's Error state with the
      * failure's own message.
      */
-    private suspend fun gateState(): MagicSearchState = try {
+    private suspend fun gateState(): SemanticContentState = try {
         val consent = prefs.getBoolean(KEY_MAGIC_SEARCH_ENABLED, false)
         val engineAvailable = repository.engineAvailable
-        val faceReady = provisioner.capabilityState(ModelManifest.Capability.FACE) ==
-            ModelProvisioner.CapabilityState.Ready
         val semanticReady = provisioner.capabilityState(ModelManifest.Capability.SEMANTIC) ==
             ModelProvisioner.CapabilityState.Ready
-        val clipCount = if (consent && engineAvailable && faceReady && semanticReady) {
+        val clipCount = if (consent && engineAvailable && semanticReady) {
             repository.clipCount()
         } else {
             0L
         }
-        MagicSearchContentPolicy.decide(
+        SemanticContentPolicy.decide(
             consentEnabled = consent,
             engineAvailable = engineAvailable,
-            faceModelsReady = faceReady,
             semanticModelsReady = semanticReady,
             clipCount = clipCount,
         )
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        MagicSearchState.Error(e.message ?: e.javaClass.simpleName)
+        SemanticContentState.Error(e.message ?: e.javaClass.simpleName)
     }
 
     /** Called by the screen on every keystroke (both pipelines share the text). */

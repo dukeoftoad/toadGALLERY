@@ -1107,3 +1107,83 @@
   is this one, committed per logical group immediately (the F-20 rule
   applied to the orchestrator's own tooling: a change exists when it
   is COMMITTED, not when the print says ok).
+
+### Run #14 — 2026-11-04 (the r39 ente-port exit round: complete Phase 5 + the Phase 8/9 restructure)
+
+* **The directive**: "complete task 5 the ente port", corrected within
+  the turn to "**complete Phase 5** — the ente port", plus "phase 8 & 9
+  will be skipped and moved to phase 10". The standing human-only rule
+  holds: the ente-port dogfood device rows stay untouched.
+* **The window's first action was a RECOVERY**: the prior session's
+  summary described a pre-r34 world, but the repo had moved — r34–r38
+  were already merged (the Run #13 campaign), and my initial PR #114
+  (opened from the stale view, duplicating merged #109) was closed with
+  an honest comment and its accidental merge-gate dispatch cancelled
+  within ~4 minutes. Lesson re-learned: **fetch main and read the PR
+  list BEFORE any side-effectful git operation**, not after.
+* **r39 Part A — semantic-only engine sessions**: the r26 round's
+  documented FACE-model requirement dropped. Rust: `init_semantic`
+  installs a SEMANTIC-ONLY session from scratch (blank face paths ---
+  the vendored runtime configures exactly the non-empty slots, so this
+  is a first-class upstream shape), `init` upgrades such a session with
+  the face half in place (the r26 upgrade mirrored, with the same
+  release-and-restore recovery), face calls on a semantic-only session
+  fail with the dedicated `FACE_MODELS_NOT_INSTALLED` message, the
+  info line names all three shapes, and both function tails split on
+  `engine.is_some()` BEFORE any mutable borrow (a desk-caught
+  double-borrow: the `match x.as_mut() { None => *x = … }` shape is
+  the classic error, and this sandbox has no rustc). Kotlin: the
+  facade's r39 contract (`searchClipsWithin` with facade-side require
+  guards; `state`/`semanticState` reporting the two halves
+  independently), the adapter split into its own file (the
+  PeopleEngineSeam/Adapter convention) opening
+  `initSemantic -> openFaceIndex` with NO `initialize`, the semantic
+  queue's gates dropping the FACE capability + initialize steps, and
+  the six-state policy renamed `SemanticContentPolicy` (ONE truth,
+  shared with the new Things surfaces) with the FACE input removed.
+* **r39 Part B — Things dynamic collections**: named semantic
+  collections over the SAME CLIP index. The engine: the 26th JNI
+  external `nativeStoreSearchClipsWithin` (upstream's own
+  `SearchParams { limit, max_distance }`, carried by the vendored vecdb
+  since r21 and finally plumbed; boundary guards mirror `search_clips`
+  plus the finite/non-negative distance check). The domain:
+  `ThingsState` + `ThingsStateFile` (`things-state.json` in the
+  face-index directory, the PeopleStateFile discipline: atomic
+  tmp-then-move, forgiving parse, the honest corrupt flag), the pure
+  `ThingsMembership` planner (the inclusive cut re-applied, dedupe
+  first-wins, the vecdb order preserved; DEFAULT_MAX_DISTANCE 0.70
+  round-pinned and honestly arbitrary), and the no-cache
+  `ThingsRepository` over the SHARED seam (the r26 ranking rule
+  reused). The surfaces: the Albums tab's Things section (the
+  People/Places sibling: the shared policy's honest cards, the create
+  dialog, the per-chip remove), the `things/{collectionId}` detail
+  screen (ranked members, the shared viewer hand-off,
+  rename/requery/delete), the `thingsAlbumEnabled` consent row, and 31
+  strings (strings_r39). Smart-filter integration is delivered as the
+  DerivedCollections doctrine applied to the semantic dimension: the
+  collections live in the Albums smart stack as LIVE derived views;
+  the SQL-projection `TimelineFilter` engine is deliberately untouched
+  (a CLIP membership has no persisted column --- the honest-subset
+  rule forbids the lying chip).
+* **The pre-push harness (the Run #13 discipline, gallery edition)**:
+  `/tmp/ktool/verify.sh` --- kotlinc 2.3.10 + junit + org.json +
+  coroutines over the round's PURE subset + a compile-only
+  `android.net.Uri` stub. It caught two real issues before any push:
+  the three anonymous `MlEngine.Bridge` implementations in
+  `MlEngineTest` (the new Bridge member), and the multi-line raw-string
+  fixture the house lexer rejects (rewritten to the single-line
+  convention). **83 JVM tests green locally**; all 24 touched Kotlin
+  files pass `kotlin_lex_check.py`; strings_r39.xml parses.
+* **The restructure**: roadmap v2.12 (Phase 5's code-side completion
+  status + Phases 8/9 SKIPPED with their scopes folded into Phase 10 as
+  the two explicitly-deferred sub-scopes), tasks.md (the milestone
+  rows, the two r26 follow-up bullets CLOSED, the downstream bullet),
+  the README roadmap table refreshed to merged truth, CHANGELOG's
+  [0.4.3-alpha] entry, the magic-search.md r39 closure note,
+  follow-up F-21/F-22, this Run #14. `progress.json` stays untouched
+  until the merge (the F-12 convention): at merge time p5's evidence
+  gains r39 and p8+p9 fold into p10 (weight 12; the project percent
+  stays 79 --- the folded rows were pending and stay pending).
+* **CI cost**: one merge-gate run + the merge-triggered main run (the
+  branch's PR), plus this docs push's main run. The cancelled
+  accidental dispatch (run 41926680224) is the recovery noted above.

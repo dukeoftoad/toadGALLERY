@@ -30,6 +30,16 @@ const val KEY_PEOPLE_ALBUM_ENABLED = "peopleAlbumEnabled"
 const val KEY_MAGIC_SEARCH_ENABLED = "magicSearchEnabled"
 
 /**
+ * The r39 Things consent key (the ente-port exit round): persisted in
+ * the house `toad_settings` preferences, default FALSE --- ADR-0010's
+ * opt-in rule, the exact `peopleAlbumEnabled`/`magicSearchEnabled`
+ * shape. Lives at FILE scope for the same reason: the Albums tab's
+ * ViewModel reads the same key at refresh time; a single public
+ * definition keeps it from drifting between readers.
+ */
+const val KEY_THINGS_ALBUM_ENABLED = "thingsAlbumEnabled"
+
+/**
  * State holder for the Settings tab (issue #27; appearance preferences since
  * the roadmap Phase 3 appearance slice).
  *
@@ -57,6 +67,10 @@ const val KEY_MAGIC_SEARCH_ENABLED = "magicSearchEnabled"
  *    and the same write-through shape, one round later. The Search
  *    tab's Content-mode ViewModel reads the preference at query time
  *    (its own refresh), so the same cross-screen story holds.
+ *  - the "Things collections" consent (r39, the ente-port exit round)
+ *    under [KEY_THINGS_ALBUM_ENABLED], default FALSE --- the same
+ *    opt-in rule and write-through shape. The Albums tab's ViewModel
+ *    reads the preference at its entry refresh.
  *
  * Plain prefs remain the right-sized store: a handful of scalars, read
  * synchronously once at ViewModel creation (tiny file, no first-frame
@@ -93,6 +107,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     /** Whether Magic Search is consented on (r26; default false). */
     val magicSearchEnabled: StateFlow<Boolean> = _magicSearchEnabled.asStateFlow()
 
+    // r39 (the ente-port exit round): the Things consent, default FALSE
+    // per ADR-0010 --- the same write-through shape as the sibling rows.
+    private val _thingsAlbumsEnabled =
+        MutableStateFlow(prefs.getBoolean(KEY_THINGS_ALBUM_ENABLED, false))
+
+    /** Whether Things collections are consented on (r39; default false). */
+    val thingsAlbumsEnabled: StateFlow<Boolean> = _thingsAlbumsEnabled.asStateFlow()
+
     private val _appearance = MutableStateFlow(
         Appearance(
             layout = parseLayout(prefs.getString(KEY_PHOTOS_LAYOUT, null)),
@@ -128,6 +150,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         if (enabled == _magicSearchEnabled.value) return
         _magicSearchEnabled.value = enabled
         prefs.edit().putBoolean(KEY_MAGIC_SEARCH_ENABLED, enabled).apply()
+    }
+
+    /** Sets the Things-collections consent (r39) and persists it write-through. */
+    fun setThingsAlbumsEnabled(enabled: Boolean) {
+        if (enabled == _thingsAlbumsEnabled.value) return
+        _thingsAlbumsEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_THINGS_ALBUM_ENABLED, enabled).apply()
     }
 
     fun setLayout(layout: LayoutStyle) {

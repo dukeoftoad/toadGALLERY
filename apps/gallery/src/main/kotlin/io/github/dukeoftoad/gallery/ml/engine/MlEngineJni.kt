@@ -305,6 +305,25 @@ object MlEngineJni {
     external fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String
 
     /**
+     * Runs the DISTANCE-CUT vector search over the CLIP index (r39):
+     * upstream's own `SearchParams { limit, max_distance }` plumbed
+     * through the bridge. Returns the same JSON array shape as
+     * [nativeStoreSearchClips], in the vecdb's own order, but only the
+     * matches at cosine distance `<= maxDistance` (INCLUSIVE). Throws
+     * IllegalStateException when the store is not open, the search
+     * fails, the query embedding dimension is not 512, or maxDistance
+     * is non-finite/negative (the native-side defense-in-depth guard;
+     * the facade's own require checks give the caller-input failures
+     * their IllegalArgumentException shape first).
+     */
+    @JvmStatic
+    external fun nativeStoreSearchClipsWithin(
+        queryEmbedding: FloatArray,
+        maxDistance: Float,
+        limit: Int,
+    ): String
+
+    /**
      * Fills the CLIP vector index from the SQLite rows and returns the
      * JSON report `{"outcome":"Completed"|"AlreadyFilled"|"Superseded",
      * "rows":N,"indexed":M,"skipped":K,"resumed":true|false}`. Throws

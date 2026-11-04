@@ -82,6 +82,15 @@ class MagicSearchRepositoryTest {
             return matches
         }
 
+        // r39: the seam's distance-cut twin. The r26 repository never
+        // drives it (pinned below --- it is the Things repository's path),
+        // so the fake records nothing and returns nothing.
+        override fun searchClipsWithin(
+            queryEmbedding: FloatArray,
+            maxDistance: Float,
+            limit: Int,
+        ): List<MlEngine.ClipMatch> = emptyList()
+
         override fun clipCount(): Long = clipCount
     }
 

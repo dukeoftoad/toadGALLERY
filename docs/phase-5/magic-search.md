@@ -226,6 +226,16 @@ drain:
 
 ## Named follow-ups
 
+> **r39 closure note (the ente-port exit round,
+> `docs/phase-5/ente-exit.md`)**: the first two follow-ups below are
+> CLOSED. Semantic-only engine sessions shipped as the symmetric
+> session halves (the FACE-model requirement this doc's "Honest
+> limitations" section records is dropped); Things dynamic collections
+> shipped over the same CLIP index with the distance-cut
+> `nativeStoreSearchClipsWithin` --- which is also the mechanism the
+> threshold-tuning follow-up names. The score-display follow-up stays
+> open; the scan-hook wiring stays open (the shared r24 deferred item).
+
 - **Semantic-only engine sessions** — decouple `initSemantic` from the
   face-model session so Magic Search needs only the SEMANTIC pack.
 - **Things / dynamic collections** — named semantic clusters ("dogs",

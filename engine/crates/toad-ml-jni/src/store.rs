@@ -563,6 +563,61 @@ pub(crate) fn clip_matches_json(hits: &[ClipMatch]) -> String {
     format!("[{}]", items.join(","))
 }
 
+/// Runs the DISTANCE-CUT vector search over the store's CLIP index (r39,
+/// the Things/membership half): upstream's own `MlStore::search` with
+/// `Index::Clip` and `SearchParams { limit, max_distance }` — the vecdb
+/// has carried the cut since it was vendored; the r26 bridge simply never
+/// passed it. Only matches within `max_distance` (INCLUSIVE, cosine
+/// distance) come back, in the vecdb's own order (nearest first),
+/// preserved verbatim — the adapter never re-sorts a search result.
+///
+/// Boundary guards, the `search_clips` discipline: the query dimension is
+/// validated HERE (a mismatch is an error naming the pinned dimension),
+/// and a non-finite or negative `max_distance` is rejected HERE with its
+/// own message — the vecdb's `degenerate_distance_cut` holds the same
+/// line, but the boundary names the caller's own input, not upstream's
+/// error vocabulary. A vecdb match key that does not parse as a file id
+/// is the same broken-engine-contract shape [`search_clips`] pins.
+pub(crate) fn search_clips_within(
+    query: &[f32],
+    max_distance: f32,
+    limit: i64,
+) -> Result<Vec<ClipMatch>, String> {
+    if query.len() != CLIP_EMBEDDING_DIM {
+        return Err(format!(
+            "query embedding must be {CLIP_EMBEDDING_DIM} floats; got {}",
+            query.len()
+        ));
+    }
+    if !max_distance.is_finite() || max_distance < 0.0 {
+        return Err(format!(
+            "max distance must be a finite non-negative float; got {max_distance}"
+        ));
+    }
+    with_store(|store| {
+        let params = SearchParams {
+            limit: Some(limit as usize),
+            max_distance: Some(max_distance),
+            ..SearchParams::default()
+        };
+        let matches = store
+            .search(Index::Clip, query, &params)
+            .map_err(|error| format!("search clip index: {error}"))?;
+        let mut hits: Vec<ClipMatch> = Vec::with_capacity(matches.len());
+        for hit in matches {
+            let key = &hit.key;
+            let file_id = key
+                .parse::<i64>()
+                .map_err(|_| format!("clip match key \"{key}\" is not a file id"))?;
+            hits.push(ClipMatch {
+                file_id,
+                distance: hit.distance,
+            });
+        }
+        Ok(hits)
+    })
+}
+
 /// Fills the store's CLIP vector index from the SQLite rows (r26), via
 /// upstream's own non-forced `MlStore::fill_clip_index(false)`: a no-op
 /// `AlreadyFilled` when the index is current, a resume from the stored
@@ -1277,6 +1332,72 @@ mod tests {
 
         close();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- r39: the distance-cut search (the Things/membership half) ----
+
+    #[test]
+    fn search_clips_within_cuts_by_distance_and_keeps_the_vecdb_order() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        let dir = open_temp_store("r39-search-within");
+        assert!(put_clip(1, &one_hot_clip(1)).is_ok());
+        assert!(put_clip(2, &one_hot_clip(2)).is_ok());
+        assert!(put_clip(3, &one_hot_clip(3)).is_ok());
+        assert!(fill_clip_index().is_ok());
+
+        // The exact one-hot is at cosine distance 0, the two distinct
+        // one-hots at distance 1 (the fixture's own geometry). A cut
+        // BELOW the tie keeps only the exact match:
+        let tight = search_clips_within(&one_hot_clip(2), 0.5, 10).unwrap();
+        assert_eq!(tight.len(), 1);
+        assert_eq!(tight[0].file_id, 2);
+        assert_eq!(tight[0].distance, 0.0);
+
+        // A cut at exactly the tie distance is INCLUSIVE (<=): all three
+        // come back, nearest first, the vecdb's own order preserved:
+        let inclusive = search_clips_within(&one_hot_clip(2), 1.0, 10).unwrap();
+        assert_eq!(inclusive.len(), 3);
+        assert_eq!(inclusive[0].file_id, 2);
+        assert!(inclusive[1..].iter().all(|hit| hit.distance == 1.0));
+
+        // A cut ABOVE every distance is the uncut top-K (the same result
+        // shape the plain search returns):
+        let uncut = search_clips_within(&one_hot_clip(2), 2.0, 10).unwrap();
+        assert_eq!(uncut.len(), 3);
+
+        // The limit still bounds the cut result (the vecdb's own top-K
+        // within the distance):
+        let limited = search_clips_within(&one_hot_clip(2), 1.0, 1).unwrap();
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].file_id, 2);
+
+        close();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn search_clips_within_guards_fire_before_the_store_is_touched() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        // The query dimension guard, the search_clips discipline:
+        let error = search_clips_within(&[0.0; CLIP_EMBEDDING_DIM - 1], 1.0, 1).unwrap_err();
+        assert!(error.contains("512"));
+
+        // The distance guard names the caller's own input, BEFORE the
+        // open-store check (a closed store must not mask a bad argument):
+        let error = search_clips_within(&one_hot_clip(0), -0.1, 1).unwrap_err();
+        assert!(error.contains("max distance"));
+        assert!(error.contains("-0.1"));
+        let error = search_clips_within(&one_hot_clip(0), f32::NAN, 1).unwrap_err();
+        assert!(error.contains("max distance"));
+        let error = search_clips_within(&one_hot_clip(0), f32::INFINITY, 1).unwrap_err();
+        assert!(error.contains("max distance"));
+
+        // And the closed-store shape still holds for good arguments:
+        assert!(search_clips_within(&one_hot_clip(0), 1.0, 1).is_err());
     }
 
     #[test]

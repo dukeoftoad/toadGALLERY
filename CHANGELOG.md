@@ -4,6 +4,49 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [0.4.3-alpha] — unreleased (versionCode 35; gallery `0.4.3-alpha`)
+
+### Added
+
+- **[gallery] The ente-port exit round (r39): Phase 5's last two
+  code-side items** (branch `tg-r39-ente-exit`, `docs/phase-5/ente-exit.md`):
+  - **Semantic-only engine sessions** — the r26 Magic Search round's
+    documented FACE-model requirement is dropped: the JNI bridge's
+    `nativeInitSemantic` installs a SEMANTIC-ONLY session from scratch
+    (the vendored runtime's own blank-path configuration shape),
+    `nativeInit` upgrades such a session with the face half in place,
+    face calls on a semantic-only session fail with a dedicated
+    honest message, and the engine info line names all three session
+    shapes. The Kotlin half: the adapter (now its own file, the
+    PeopleEngineSeam/Adapter convention) opens `initSemantic ->
+    openFaceIndex` with no `initialize`, the semantic background
+    queue's gates drop the FACE capability step, and the six-state
+    policy is renamed `SemanticContentPolicy` (shared by Magic Search
+    and Things) with the FACE input removed. Magic Search and the
+    semantic queue now run on the SEMANTIC pack alone (~213 MB, no
+    ~36 MB FACE requirement).
+  - **Things dynamic collections** — named semantic collections
+    ("Dogs", "Seaside") over the SAME on-device CLIP index Magic
+    Search queries: a new distance-cut engine search
+    (`nativeStoreSearchClipsWithin`, upstream's own vecdb
+    `max_distance` plumbed through the bridge), the pure membership
+    planner at a round-pinned 0.70 cosine cut, `things-state.json` in
+    the backup-excluded face-index directory (the atomic
+    people-state.json discipline), the Albums tab's Things section
+    (the People/Places sibling with the shared policy's honest cards,
+    the create dialog, per-chip remove), the `things/{collectionId}`
+    detail screen (ranked members, the shared viewer hand-off,
+    rename/edit-query/delete), and the `thingsAlbumEnabled` consent
+    row (default OFF, ADR-0010). Zero new permissions, zero new
+    dependencies, zero new network paths.
+
+### Changed
+
+- **Roadmap restructure (maintainer directive, 2026-11-04)**: Phases 8
+  (Edit v3 on-device AI editing) and 9 (lightweight video editor) are
+  SKIPPED and their scopes fold into Phase 10 (hardening + the two
+  deferred sub-scopes). See `roadmap.md` v2.12.
+
 ## [0.4.2-alpha] — unreleased (versionCodes 27–34; per maintainer
   directive no new device builds until Phase 5 completes — **the Phase 5
   release freeze is lifted as of the r28 exit gate**; the next release

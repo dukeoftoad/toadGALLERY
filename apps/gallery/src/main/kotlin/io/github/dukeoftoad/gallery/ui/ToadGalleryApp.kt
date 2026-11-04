@@ -55,6 +55,7 @@ import io.github.dukeoftoad.gallery.ui.settings.AboutScreen
 import io.github.dukeoftoad.gallery.ui.settings.ProgressScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
+import io.github.dukeoftoad.gallery.ui.things.ThingsDetailScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 import io.github.dukeoftoad.gallery.ui.trash.TrashScreen
 import io.github.dukeoftoad.gallery.ui.vault.VaultScreen
@@ -133,6 +134,17 @@ object Destinations {
     const val PLACE_DETAIL = "place/{regionKey}"
 
     /**
+     * Route pattern for the Things collection detail sub-screen (r39,
+     * the ente-port exit round): one named semantic collection's
+     * members. The collection id is a STRING nav argument (OUR OWN
+     * stable slug identity, unlike the People feature's unstable
+     * engine cluster ids) and is the WHOLE request --- the screen's
+     * ViewModel re-derives the membership from the live CLIP index
+     * through the repository, so no hand-off slot is needed.
+     */
+    const val THINGS_DETAIL = "things/{collectionId}"
+
+    /**
      * The collage creator sub-screen (r27): the Photos tab's
      * multi-selection (2..9 photos, carried by the CollageHandoff ---
      * far too large for nav args) laid out by a template and exportable
@@ -201,6 +213,10 @@ object Destinations {
     /** Builds the Place detail route for [regionKey], encoding the key. */
     fun placeDetail(regionKey: String): String =
         "place/${Uri.encode(regionKey)}"
+
+    /** Builds the Things collection detail route for [collectionId], encoding the id. */
+    fun thingsDetail(collectionId: String): String =
+        "things/${Uri.encode(collectionId)}"
 
     /** Builds the details route for [mediaId], encoding the [uri] argument. */
     fun details(mediaId: Long, uri: Uri): String =
@@ -343,6 +359,9 @@ fun ToadGalleryApp() {
                     // card opens that person's detail (the album cards' pattern).
                     // r27: the Places section's pair --- "See all" opens the
                     // Places sub-screen, a region chip opens that region's grid.
+                    // r39: the Things section's pair --- a collection chip opens
+                    // that collection's detail (the id IS the request; no
+                    // hand-off slot).
                     AlbumsScreen(
                         onOpenAlbum = { bucketId ->
                             navController.navigate(Destinations.albumDetail(bucketId))
@@ -354,6 +373,9 @@ fun ToadGalleryApp() {
                         onOpenPlaces = { navController.navigate(Destinations.PLACES) },
                         onOpenPlace = { regionKey ->
                             navController.navigate(Destinations.placeDetail(regionKey))
+                        },
+                        onOpenThing = { collectionId ->
+                            navController.navigate(Destinations.thingsDetail(collectionId))
                         },
                     )
                 }
@@ -408,6 +430,24 @@ fun ToadGalleryApp() {
                     if (!regionKey.isNullOrEmpty()) {
                         PlaceDetailScreen(
                             regionKey = regionKey,
+                            onBack = { navController.popBackStack() },
+                            onOpenViewer = openViewer,
+                        )
+                    }
+                }
+                composable(
+                    route = Destinations.THINGS_DETAIL,
+                    arguments = listOf(navArgument("collectionId") { type = NavType.StringType }),
+                ) { backStackEntry ->
+                    // r39 (the ente-port exit round): one named semantic
+                    // collection's ranked members. The ViewModel is
+                    // screen-scoped (per-collection state, the PersonDetail
+                    // factory pattern); photo taps open the SAME
+                    // shell-scoped viewer hand-off the grid screens use.
+                    val collectionId = backStackEntry.arguments?.getString("collectionId")
+                    if (!collectionId.isNullOrEmpty()) {
+                        ThingsDetailScreen(
+                            collectionId = collectionId,
                             onBack = { navController.popBackStack() },
                             onOpenViewer = openViewer,
                         )

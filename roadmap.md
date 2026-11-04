@@ -13,7 +13,42 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.6 (2026-11-04, latest) --- the r34 merge window
+### v2.7 (2026-11-04, latest) --- the r35 sticker-tool round (authored; the
+  local pre-push harness debuts)
+
+- **Phase 7, task 3 of 5 --- the sticker tool AUTHORED on `tg-p7-stickers`**
+  (layer type 2 of 5; the design contract `docs/phase-7/stickers.md`, its
+  delivery record appended): eight PROJECT-AUTHORED bundled stickers as
+  IN-CODE vector shapes (`BundledStickers` --- integer coordinates in a
+  0..100 design box, fills only; no image asset to pin, so the
+  authorship record is `docs/phase-7/bundled-stickers.md` and the
+  spot-coordinate tests carry the pin), the additive `StickerLayers`
+  recipe with the image-shaped tolerance delta (a pre-r35 sidecar loads
+  clean --- proven with one carrying r34 text layers, the stacking
+  proof; an unresolvable `stickerId` round-trips verbatim and renders
+  NOTHING; a blank stickerId is a skip alongside a blank id), the pure
+  `StickerLayout` + the ONE shared `StickerCompositor` BELOW the text
+  pass (scene objects under captions), `ImportedStickerStore` (PNG/WebP
+  magic-before-write, verbatim bytes, derived collision-suffixed ids;
+  no library-management UI yet --- the recorded F-13), the Sticker UI
+  (registry chips as ADD actions, layer chips, the r34 conventions, ONE
+  selected layer at a time across the families), the draft-sweep set
+  extended across the families, 46 new JVM tests (the edit module at
+  287), and the string recount 94 → 104. Editor `versionCode 8`
+  (`0.4.3-edit-alpha`). The §24 device rows ride the checklist,
+  human-only.
+- **The pre-push verification debut**: this round's tests were EXECUTED
+  before any push --- a local kotlinc harness (the `:apps:edit` pure
+  subset, 278 tests green incl. r35's 46) caught two authored-coordinate
+  errors pre-push; the r34 merge window's seven-iteration CI loop was
+  exactly the failure mode this exists to prevent. The two
+  android-bound files (`EditActivity.kt`, `StickerRender.kt`) remain
+  CI-compiled, lex-checked locally (`tools/kotlin_lex_check.py`).
+- **The r34 text-tool bullet moved to MERGED truth in `tasks.md`**
+  (PR #109 `6bb17a4`, the 22→32 test-count correction riding it);
+  `progress.json` untouched until merge per the F-12 convention.
+
+### v2.6 (2026-11-04, later) --- the r34 merge window
 
 - **Phase 7, task 2 of 5 --- the text tool MERGED** (PR #109 squash
   `6bb17a4`, merge-gate CI run 41822887363 green on head `699fd03`:
@@ -1199,11 +1234,12 @@ phases build on.
 
 ### Phase 7 --- toadGALLERY Edit v2: filters and annotations
 
-**Status (r34): tasks 1-2 of 5 MERGED --- the LUT `.cube` filter system
+**Status (r35): tasks 1-2 of 5 MERGED --- the LUT `.cube` filter system
 with the user-import flow (PR #107 squash `314bd9c`, CI 41781166155
 green on the rebased head `ceb731b`; editor `versionCode 6`) and the
 text tool (PR #109 squash `6bb17a4`, merge-gate run 41822887363 green
-on head `699fd03`; editor `versionCode 7`)**: the pure
+on head `699fd03`; editor `versionCode 7`) --- plus task 3, the sticker
+tool, AUTHORED on `tg-p7-stickers` (pending PR/CI/merge)**: the pure
 engine (the Adobe `.cube` parser with its honest subset rules, the
 allocation-free trilinear sampler, the alpha-preserving intensity
 blend), the recipe's additive `LutSelection` (an unresolvable id
@@ -1230,8 +1266,18 @@ per-font ledger rows + `docs/phase-7/bundled-fonts.md`), the additive
 at 241), the module string count 74 → 94. The delivery record:
 `docs/phase-7/text-tool.md`. PR #108 (the redundant `tg-p7-lut-import`
 PR) closed with the round's merge (the `Closes #108` keyword in PR
-#109's description). **Remaining Phase 7 tasks**: stickers, freehand drawing,
-mosaic/blur regions, frames, and the undo/redo extension across them.
+#109's description). **The sticker tool (task 3) is AUTHORED on
+`tg-p7-stickers`** (r35 round 2026-11-04, the design contract
+`docs/phase-7/stickers.md`): eight project-authored IN-CODE vector
+shapes (no image asset, no §5 row --- `docs/phase-7/bundled-stickers.md`
+is the authorship record), the additive `StickerLayers` recipe with the
+image-shaped tolerance delta, the shared `StickerCompositor` BELOW the
+text pass, `ImportedStickerStore` (PNG/WebP magic-before-write), the
+Sticker UI with ONE selected layer at a time across the families,
+46 new JVM tests (the edit module at 287), the string count 94 → 104,
+editor `versionCode 8` (`0.4.3-edit-alpha`). **Remaining Phase 7 work**:
+freehand drawing, mosaic/blur regions, frames, and the undo/redo
+extension across them.
 
 **Purpose:** Add the creative layer on top of the Phase 6 pipeline:
 filters, text, stickers, drawing, mosaic, frames.

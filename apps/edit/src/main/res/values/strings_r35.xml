@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r35 (Phase 7 v2): the sticker-tool surface. The eight bundled
+     sticker names (Heart, Star, Smiley, Speech bubble, Lightning,
+     Flower, Location pin, Crown) are proper nouns and ride the
+     BundledStickers registry, not resources; an imported sticker's chip
+     label is its derived id. Sliders follow the r32 semantics
+     conventions. -->
+<resources>
+    <string name="editor_section_stickers">Stickers</string>
+    <string name="editor_sticker_size">Size: %1$d%%</string>
+    <string name="editor_a11y_sticker_size">Sticker size</string>
+    <string name="editor_sticker_opacity">Opacity: %1$d%%</string>
+    <string name="editor_a11y_sticker_opacity">Sticker opacity</string>
+    <string name="editor_sticker_rotation">Rotation: %1$d°</string>
+    <string name="editor_a11y_sticker_rotation">Sticker rotation</string>
+    <string name="editor_sticker_remove">Remove sticker</string>
+    <string name="editor_sticker_import">Import sticker</string>
+    <string name="editor_sticker_import_failed">Import failed: %1$s</string>
+</resources>

@@ -47,6 +47,12 @@ data class EditRecipe(
     // absent. Unresolvable fontIds round-trip verbatim (the tolerance
     // contract; see TextLayers.kt).
     val textLayers: TextLayers? = null,
+    // ---- Stickers (r35, Phase 7 v2: the sticker layer system) ----
+    // Absent = a pre-r35 sidecar / a clean session; empty normalises to
+    // absent. Unresolvable stickerIds round-trip verbatim and render
+    // NOTHING at render time (the tolerance contract; see
+    // StickerLayers.kt) --- there is no default sticker to degrade to.
+    val stickerLayers: StickerLayers? = null,
 ) {
 
     val isGeometryIdentity: Boolean
@@ -67,8 +73,13 @@ data class EditRecipe(
     val isTextIdentity: Boolean
         get() = textLayers == null || textLayers.isIdentity
 
+    /** No sticker layers --- nothing for the compositing pass to draw. */
+    val isStickerIdentity: Boolean
+        get() = stickerLayers == null || stickerLayers.isIdentity
+
     val isIdentity: Boolean
-        get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity && isTextIdentity
+        get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity &&
+            isTextIdentity && isStickerIdentity
 
     init {
         require(quarterTurns in 0..3) { "quarterTurns must be in 0..3" }
@@ -192,6 +203,24 @@ object EditRecipeCodec {
             }
             root.put("textLayers", arr)
         }
+        // r35: the same rule for stickers --- the key exists only for a
+        // non-empty list, so a pre-r35 sidecar round-trips byte-clean.
+        recipe.stickerLayers?.takeIf { it.layers.isNotEmpty() }?.let { sl ->
+            val arr = org.json.JSONArray()
+            for (layer in sl.layers) {
+                arr.put(
+                    org.json.JSONObject()
+                        .put("id", layer.id)
+                        .put("stickerId", layer.stickerId)
+                        .put("sizePct", layer.sizePct)
+                        .put("opacity", layer.opacity)
+                        .put("rotationDeg", layer.rotationDeg)
+                        .put("centerX", layer.centerX)
+                        .put("centerY", layer.centerY),
+                )
+            }
+            root.put("stickerLayers", arr)
+        }
         return root.toString()
     }
 
@@ -252,6 +281,7 @@ object EditRecipeCodec {
             sharpness = root.optInt("sharpness", 0).coerceIn(-100, 100),
             lut = readLut(root.optJSONObject("lut")),
             textLayers = readTextLayers(root.optJSONArray("textLayers")),
+            stickerLayers = readStickerLayers(root.optJSONArray("stickerLayers")),
         )
         ParseResult.Valid(recipe)
     } catch (e: org.json.JSONException) {
@@ -320,6 +350,44 @@ object EditRecipeCodec {
             )
         }
         return if (layers.isEmpty()) null else TextLayers(layers)
+    }
+
+    /**
+     * The optional `stickerLayers` array (r35): absent or empty means NO
+     * stickers (a pre-r35 sidecar loads clean). Tolerance rules, the
+     * r34 set with the one image-shaped delta: an entry that is not an
+     * object, or whose id is blank, is SKIPPED; a blank `stickerId` is a
+     * SKIP TOO --- with no default shape to degrade to, "no sticker
+     * chosen" cannot be rendered (the r34 blank fontId read as the
+     * default face; a fake sticker would draw something the user never
+     * chose). An UNKNOWN non-blank stickerId is KEPT verbatim --- the
+     * recipe is the user's data, resolution is the compositor's problem
+     * (it renders nothing). Numerics coerce like every other slider
+     * (the tolerant-read convention).
+     */
+    private fun readStickerLayers(arr: org.json.JSONArray?): StickerLayers? {
+        if (arr == null) return null
+        val layers = ArrayList<StickerLayer>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "").trim()
+            if (id.isEmpty()) continue
+            val stickerId = o.optString("stickerId", "").trim()
+                .take(StickerLayer.MAX_ID_LENGTH)
+            if (stickerId.isEmpty()) continue
+            layers.add(
+                StickerLayer(
+                    id = id.take(StickerLayer.MAX_ID_LENGTH),
+                    stickerId = stickerId,
+                    sizePct = o.optInt("sizePct", StickerLayer.DEFAULT_SIZE_PCT).coerceIn(0, 300),
+                    opacity = o.optInt("opacity", 100).coerceIn(0, 100),
+                    rotationDeg = o.optInt("rotationDeg", 0).coerceIn(-180, 180),
+                    centerX = o.optDouble("centerX", 0.5).coerceIn(0.0, 1.0),
+                    centerY = o.optDouble("centerY", 0.5).coerceIn(0.0, 1.0),
+                ),
+            )
+        }
+        return if (layers.isEmpty()) null else StickerLayers(layers)
     }
 
     /** The wire form is 8 uppercase hex digits (AARRGGBB); anything else reads as the default color. */

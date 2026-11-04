@@ -139,8 +139,31 @@ android {
         // the preview, live-drafted, one commit on release); undo/redo and
         // the sidecar promise extended to text by construction. JVM tests:
         // TextLayersTest, TextLayersRecipeTest, BundledFontsTest.
-        versionCode = 7
-        versionName = "0.4.2-edit-alpha"
+        // versionCode 8 (r35 round): the sticker tool --- the eight
+        // project-authored bundled stickers as IN-CODE vector shapes
+        // (integer coordinates in a 0..100 design box, fills only; no
+        // image asset, so no sha256 pin and no section-5 ledger row ---
+        // the authorship record is docs/phase-7/bundled-stickers.md), the
+        // additive StickerLayers recipe with the image-shaped tolerance
+        // delta (an unresolvable stickerId round-trips verbatim and
+        // renders NOTHING --- there is no default sticker to degrade to;
+        // a blank stickerId is a skip alongside a blank id), the pure
+        // StickerLayout (the size box, the centre anchor, the
+        // opacity-only alpha), the shared StickerCompositor BELOW the text
+        // pass (scene objects under captions; vectors from op lists
+        // scaled into the box, imported bitmaps fit inside it preserving
+        // aspect), ImportedStickerStore (PNG/WebP magic-before-write,
+        // verbatim bytes, derived collision-suffixed ids that can never
+        // shadow the bundled set; the decode-at-render tolerance), the
+        // Sticker UI (registry chip row as ADD actions, layer chips, the
+        // r34 slider/drag conventions, one selected layer at a time
+        // across the families --- selecting a sticker clears the text
+        // selection and vice versa), and the preview/export passes both
+        // routing through the one activity resolver. JVM tests:
+        // StickerLayersTest, StickerLayersRecipeTest, BundledStickersTest,
+        // ImportedStickerStoreTest.
+        versionCode = 8
+        versionName = "0.4.3-edit-alpha"
     }
 
     buildFeatures {

@@ -12,6 +12,35 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[toadGALLERY Edit] The frames — the single mounting, five
+  project-authored parametric frames, the shared compositor last; plus
+  the undo/redo extension capstone** (r38 round, Phase 7 layer type 5
+  of 5, the campaign's closing; branch `tg-p7-frames`): one frame at a
+  time over the photo (a frame is a mounting, not a stackable), chosen
+  from five authored parametric frames (Plain, Inner line, Double line,
+  Film with punched sprocket holes, Polaroid) as pure integer geometry
+  (the thickness is the r37 kernels' formula `max(1, widthPct ×
+  minEdge / 1000)`; the width slider 1..100, the colour swatches the
+  r34 palette) or imported as PNG/WebP (`ImportedFrameStore`:
+  magic-before-write, verbatim bytes, collision-free ids; an imported
+  frame stretches to the full output canvas with the honest
+  no-controls note). The recipe's `frame` is the `lut` object's
+  tolerance shape: a pre-r38 sidecar loads clean (proven with one
+  carrying ALL FOUR earlier containers, the round-five stacking proof);
+  an unresolvable frameId round-trips verbatim and degrades to no
+  frame. The `FrameCompositor` draws LAST (the mounting over
+  everything). The undo/redo extension is now test-pinned:
+  `UndoRedoExtensionTest` walks a mixed five-family session (ten
+  commits, undo to launch, redo forward, the exact recipe at every
+  step). 32 new JVM tests (the edit module at 374; the local harness
+  ran 365 pure green pre-push); the module string count 122 → 129;
+  editor `versionCode 11` (`0.4.6-edit-alpha`). This round also lands
+  the r37 UI-section debt fix (the r37 insertion script never wrote the
+  activity back; the merged r37 carried everything but the surface ---
+  the recorded correction in the r37 delivery record). The on-device
+  pass rides checklist §27; the delivery record is
+  `docs/phase-7/frames.md`.
+
 - **[toadGALLERY Edit] The mosaic/blur regions — the pixel-stage break,
   the additive RegionLayers recipe, the final pipeline stage** (r37
   round, Phase 7 layer type 4 of 5, branch `tg-p7-mosaic`): paint a

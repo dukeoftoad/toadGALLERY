@@ -162,8 +162,30 @@ android {
         // routing through the one activity resolver. JVM tests:
         // StickerLayersTest, StickerLayersRecipeTest, BundledStickersTest,
         // ImportedStickerStoreTest.
-        versionCode = 8
-        versionName = "0.4.3-edit-alpha"
+        // versionCode 9 (r36 round): the freehand drawing tool --- the
+        // stroke-per-layer model (one gesture = one layer = one undo
+        // snapshot; per-layer re-edit of colour/width/opacity/smoothing,
+        // the points not editable in v1), the additive DrawLayers recipe
+        // (absent key = clean pre-r36 sidecar; points ride as 2-element
+        // arrays of output-canvas fractions, thinned at commit to the
+        // 512 cap by uniform stride, first/last always kept), the pure
+        // DrawLayout (the brush width, the r34 text alpha math, Chaikin
+        // corner-cutting round(smoothing/25) -> 0..4 passes at place time,
+        // the affine-commute exactness), the shared DrawCompositor BETWEEN
+        // the sticker pass and the text pass (annotation over the scene
+        // objects, captions above the annotation; a single-point layer
+        // renders as a dot of the brush width), the Draw UI (the Draw-mode
+        // chip + stroke layer chips under the exclusive duality: paint
+        // mode tunes the NEXT stroke through the brush state, a selected
+        // layer re-binds the same controls through the live-draft pattern;
+        // ONE selection at a time across ALL the families), the paint
+        // gesture on the preview (live point list, one commit on
+        // release/cancel), and the ONE sweepPendingDrafts() helper for
+        // every draft across the families (undo/redo/export/add/remove/
+        // switch/mode-exit --- a draft is never silently lost). JVM
+        // tests: DrawLayersTest, DrawLayersRecipeTest.
+        versionCode = 9
+        versionName = "0.4.4-edit-alpha"
     }
 
     buildFeatures {

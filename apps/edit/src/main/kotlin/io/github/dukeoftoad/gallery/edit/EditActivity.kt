@@ -482,20 +482,31 @@ class EditActivity : ComponentActivity() {
                 pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height,
             )
 
-            // 4.5 The r34 text pass: the compositing stage AFTER the whole
-            //     pixel pipeline (geometry -> adjustments -> LUT ->
-            //     vignette -> sharpen), over the FULL output canvas at
-            //     origin 0 --- the same TextCompositor the preview uses, so
-            //     preview ≡ export by construction (no second renderer).
-            //     The r35 sticker pass draws just BEFORE it: stickers are
-            //     scene objects, captions float above them (stickers.md
-            //     decision 3).
+            // 4.5 The compositing passes AFTER the whole pixel pipeline
+            //     (geometry -> adjustments -> LUT -> vignette -> sharpen),
+            //     over the FULL output canvas at origin 0 --- the same
+            //     compositors the preview uses, so preview ≡ export by
+            //     construction (no second renderer). The family order:
+            //     stickers (r35, scene objects) BELOW strokes (r36,
+            //     annotation) BELOW text (r34, captions on top).
             export.recipe.stickerLayers?.let { stickerSpec ->
                 if (stickerSpec.layers.isNotEmpty()) {
                     StickerCompositor.draw(
                         adjusted,
                         stickerSpec.layers,
                         { stickerId -> stickerResolver(stickerId) },
+                        0f,
+                        0f,
+                        pipelined.width.toFloat(),
+                        pipelined.height.toFloat(),
+                    )
+                }
+            }
+            export.recipe.drawLayers?.let { drawSpec ->
+                if (drawSpec.layers.isNotEmpty()) {
+                    DrawCompositor.draw(
+                        adjusted,
+                        drawSpec.layers,
                         0f,
                         0f,
                         pipelined.width.toFloat(),
@@ -793,6 +804,20 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var importedStickers by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     var stickersVersion by remember { mutableStateOf(0) }
     var stickerImportError by remember { mutableStateOf<String?>(null) }
+    // r36 drawing state: the paint mode (ON = painting; a selected layer
+    // = editing --- the two states are exclusive, and ONE selection at a
+    // time across ALL the families), the in-progress gesture's live point
+    // list (a transient draft layer under the brush's current settings),
+    // and the brush itself (the NEXT stroke's colour/width/opacity/
+    // smoothing; plain state, applied at commit --- the per-LAYER edits
+    // ride the draft slot like the other families).
+    var selectedDrawLayerId by remember { mutableStateOf<String?>(null) }
+    var drawMode by remember { mutableStateOf(false) }
+    var paintDraft by remember { mutableStateOf<List<DrawLayer.Point>?>(null) }
+    var brushColor by remember { mutableStateOf(0xFFFFFFFFL) }
+    var brushWidth by remember { mutableStateOf(3) }
+    var brushOpacity by remember { mutableStateOf(100) }
+    var brushSmoothing by remember { mutableStateOf(50) }
 
     val committed = uiState.recipe
 
@@ -886,6 +911,51 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ),
             )
         }
+        // r36: the stroke LIVE state, part 1 --- the per-layer slider
+        // drafts (keys "draw-width@<id>" / "draw-opacity@<id>" /
+        // "draw-smoothing@<id>"), the live-draft pattern verbatim.
+        val drawSlider = d?.takeIf { it.first.startsWith("draw-") }
+            ?.let { (key, value) ->
+                val parts = key.removePrefix("draw-").split("@", limit = 2)
+                if (parts.size == 2) Triple(parts[0], parts[1], value) else null
+            }
+        if (drawSlider != null && effective.drawLayers != null) {
+            effective = effective.copy(
+                drawLayers = DrawLayers(
+                    effective.drawLayers!!.layers.map { layer ->
+                        var l = layer
+                        if (drawSlider.second == layer.id) {
+                            l = when (drawSlider.first) {
+                                "width" -> l.copy(widthPct = drawSlider.third)
+                                "opacity" -> l.copy(opacity = drawSlider.third)
+                                else -> l.copy(smoothingPct = drawSlider.third)
+                            }
+                        }
+                        l
+                    },
+                ),
+            )
+        }
+        // r36, part 2 --- the in-progress paint gesture: a TRANSIENT draft
+        // layer (id "draft", never a session id) under the brush's current
+        // settings, so the preview shows the stroke exactly as its commit
+        // will render it. The draft layer rides ABOVE the committed
+        // strokes (list order, top last) --- the live-paint position.
+        val pd = paintDraft
+        if (pd != null && pd.isNotEmpty()) {
+            effective = effective.copy(
+                drawLayers = DrawLayers(
+                    (effective.drawLayers?.layers ?: emptyList()) + DrawLayer(
+                        id = "draft",
+                        colorArgb = brushColor,
+                        widthPct = brushWidth,
+                        opacity = brushOpacity,
+                        smoothingPct = brushSmoothing,
+                        points = pd,
+                    ),
+                ),
+            )
+        }
         return effective
     }
 
@@ -968,6 +1038,65 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitStickerLayerById(d.first) { it.copy(centerX = d.second, centerY = d.third) }
     }
 
+    // ---- r36 drawing helpers (the family conventions) ----
+
+    /** Commits an edit to ONE stroke layer, by id, over the CURRENT recipe. */
+    fun commitDrawLayerById(id: String, edit: (DrawLayer) -> DrawLayer) {
+        val current = uiState.recipe
+        val dl = current.drawLayers ?: return
+        val idx = dl.layers.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        commit(
+            current.copy(
+                drawLayers = DrawLayers(
+                    dl.layers.mapIndexed { i, l -> if (i == idx) edit(l) else l },
+                ),
+            ),
+        )
+    }
+
+    /** Commits an edit to the SELECTED stroke layer (no-op when nothing is selected). */
+    fun commitSelectedDrawLayer(edit: (DrawLayer) -> DrawLayer) {
+        selectedDrawLayerId?.let { commitDrawLayerById(it, edit) }
+    }
+
+    /**
+     * Sweeps the in-progress paint gesture into one snapshot: thin the
+     * live point list to the model cap, then commit ONE layer carrying
+     * the brush's current settings (drag end/cancel, mode exit, undo/
+     * redo, export --- a draft is never silently lost). Does NOT select
+     * the new stroke: the user keeps painting.
+     */
+    fun commitPaintDraftIfPending() {
+        val pd = paintDraft ?: return
+        paintDraft = null
+        if (pd.isEmpty()) return
+        val current = uiState.recipe
+        val existing = current.drawLayers?.layers ?: emptyList()
+        val newLayer = DrawLayer(
+            id = DrawLayer.newId(existing.map { it.id }),
+            colorArgb = brushColor,
+            widthPct = brushWidth,
+            opacity = brushOpacity,
+            smoothingPct = brushSmoothing,
+            points = DrawLayer.thin(pd, DrawLayer.MAX_POINTS),
+        )
+        commit(current.copy(drawLayers = DrawLayers(existing + newLayer)))
+    }
+
+    /**
+     * The ONE sweep point for every pending draft across the families
+     * (r36): each pending draft commits as its own snapshot, exactly as
+     * the r34 handlers did inline --- one helper so later rounds extend
+     * HERE instead of at every call site.
+     */
+    fun sweepPendingDrafts() {
+        commitTextDraftIfPending()
+        commitPosDraftIfPending()
+        commitStickerPosDraftIfPending()
+        commitPaintDraftIfPending()
+    }
+
     // First composition: decode the bounded preview + parse the bundled
     // looks (both off the main thread; the looks feed the chip row and
     // the preview's filter stage --- the export shares the same cache).
@@ -991,10 +1120,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // same CROP REGION the overlay draws (the output canvas the export
     // will produce), through the SAME TextCompositor --- one code path.
     // r35: the sticker pass composites over the same region, BELOW the
-    // text pass; the effect also re-runs when the imported-bitmap
-    // registry changes (an import's decode landing re-renders the
-    // preview with the new sticker resolvable).
-    LaunchedEffect(previewBase, committed, draft, textDraft, posDraft, stickerPosDraft, looks, importedStickers) {
+    // text pass. r36: the stroke pass sits between them; the effect also
+    // re-runs on the brush values (the draft layer reads them live) and
+    // on the imported-bitmap registry.
+    LaunchedEffect(
+        previewBase, committed, draft, textDraft, posDraft, stickerPosDraft,
+        paintDraft, brushColor, brushWidth, brushOpacity, brushSmoothing,
+        looks, importedStickers,
+    ) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
         val displayRecipe = effective.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0))
@@ -1020,6 +1153,20 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     out,
                     stickerSpec.layers,
                     { stickerId -> activity.stickerResolver(stickerId) },
+                    crop.x0.toFloat(),
+                    crop.y0.toFloat(),
+                    crop.width.toFloat(),
+                    crop.height.toFloat(),
+                )
+            }
+            // r36: strokes sit between the stickers and the text ---
+            // annotation paints over the scene objects, captions float
+            // above the annotation.
+            val drawSpec = effective.drawLayers
+            if (drawSpec != null && drawSpec.layers.isNotEmpty()) {
+                DrawCompositor.draw(
+                    out,
+                    drawSpec.layers,
                     crop.x0.toFloat(),
                     crop.y0.toFloat(),
                     crop.width.toFloat(),
@@ -1179,12 +1326,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     fun requestSave() {
         if (exporting) return
-        // r34/r35: sweep any pending text/sticker/position drafts into a
-        // snapshot first --- the export reads the COMMITTED recipe, and a
-        // draft must never be silently lost at the moment of export.
-        commitTextDraftIfPending()
-        commitPosDraftIfPending()
-        commitStickerPosDraftIfPending()
+        // r34/r35/r36: sweep any pending drafts into snapshots first ---
+        // the export reads the COMMITTED recipe, and a draft must never be
+        // silently lost at the moment of export.
+        sweepPendingDrafts()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
             PackageManager.PERMISSION_GRANTED
@@ -1223,9 +1368,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             )
             TextButton(
                 onClick = {
-                    commitTextDraftIfPending()
-                    commitPosDraftIfPending()
-                    commitStickerPosDraftIfPending()
+                    sweepPendingDrafts()
                     uiState = engine.undo()
                 },
                 enabled = uiState.canUndo && !exporting,
@@ -1234,9 +1377,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
             TextButton(
                 onClick = {
-                    commitTextDraftIfPending()
-                    commitPosDraftIfPending()
-                    commitStickerPosDraftIfPending()
+                    sweepPendingDrafts()
                     uiState = engine.redo()
                 },
                 enabled = uiState.canRedo && !exporting,
@@ -1271,18 +1412,19 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // ---- Preview (with the crop overlay rect) ----
         // r34: the box also carries the text-layer DRAG gesture (drag near
         // the SELECTED layer's center to reposition it; live-drafted, one
-        // commit on release). r35: the same gesture now targets the
-        // SELECTED STICKER layer first (one selection across the families
-        // --- the round contract), the text layer when no sticker is
-        // selected. Keyed on BOTH selections: the gesture must not restart
-        // when the preview bitmap updates (it re-renders every draft tick),
-        // and every value it reads is a LIVE delegated state so long-lived
-        // closures never see stale data.
+        // commit on release). r35: the same gesture targets the SELECTED
+        // STICKER layer first (one selection across the families). r36:
+        // with Draw mode ON, the gesture PAINTS instead --- onDragStart
+        // opens the live point list, onDrag appends, release commits ONE
+        // stroke layer (a tap is a dot). Keyed on the selections AND the
+        // mode: the handler restarts when any of them changes, and every
+        // value it reads is a LIVE delegated state so long-lived closures
+        // never see stale data.
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(selectedTextLayerId, selectedStickerLayerId) {
+                .pointerInput(selectedTextLayerId, selectedStickerLayerId, selectedDrawLayerId, drawMode) {
                     val grabRadiusPx = 48.dp.toPx()
 
                     // Screen position -> output-canvas fractions (the same
@@ -1363,17 +1505,33 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     }
 
                     var dragging = false
+                    var painting = false
                     detectDragGestures(
                         onDragStart = { start ->
-                            val center = stickerLayerCenterScreen() ?: textLayerCenterScreen()
-                            dragging = center != null &&
-                                (start - center).getDistance() <= grabRadiusPx
-                            if (dragging) {
-                                mapToFraction(start)?.let { (fx, fy) -> seedDraftAt(fx, fy) }
+                            painting = drawMode
+                            if (painting) {
+                                // r36: the paint gesture opens the live
+                                // point list at the first sample (a tap
+                                // is a dot --- one point commits too).
+                                mapToFraction(start)?.let { (fx, fy) ->
+                                    paintDraft = listOf(DrawLayer.Point(fx, fy))
+                                }
+                            } else {
+                                val center = stickerLayerCenterScreen() ?: textLayerCenterScreen()
+                                dragging = center != null &&
+                                    (start - center).getDistance() <= grabRadiusPx
+                                if (dragging) {
+                                    mapToFraction(start)?.let { (fx, fy) -> seedDraftAt(fx, fy) }
+                                }
                             }
                         },
                         onDrag = { change, _ ->
-                            if (dragging) {
+                            if (painting) {
+                                mapToFraction(change.position)?.let { (fx, fy) ->
+                                    paintDraft = (paintDraft ?: emptyList()) + DrawLayer.Point(fx, fy)
+                                }
+                                change.consume()
+                            } else if (dragging) {
                                 mapToFraction(change.position)?.let { (fx, fy) ->
                                     seedDraftAt(fx, fy)
                                 }
@@ -1381,18 +1539,16 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             }
                         },
                         onDragEnd = {
-                            if (dragging) {
-                                commitPosDraftIfPending()
-                                commitStickerPosDraftIfPending()
-                            }
+                            if (painting) commitPaintDraftIfPending()
+                            if (dragging) sweepPendingDrafts()
                             dragging = false
+                            painting = false
                         },
                         onDragCancel = {
-                            if (dragging) {
-                                commitPosDraftIfPending()
-                                commitStickerPosDraftIfPending()
-                            }
+                            if (painting) commitPaintDraftIfPending()
+                            if (dragging) sweepPendingDrafts()
                             dragging = false
+                            painting = false
                         },
                     )
                 },
@@ -1880,9 +2036,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 AssistChip(
                     onClick = {
-                        commitTextDraftIfPending()
-                        commitPosDraftIfPending()
-                        commitStickerPosDraftIfPending()
+                        sweepPendingDrafts()
                         val existing = committed.textLayers?.layers ?: emptyList()
                         val newLayer = TextLayer(
                             id = TextLayer.newId(existing.map { it.id }),
@@ -1906,9 +2060,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         selected = selectedTextLayerId == layer.id,
                         onClick = {
                             if (selectedTextLayerId != layer.id) {
-                                commitTextDraftIfPending()
-                                commitPosDraftIfPending()
-                                commitStickerPosDraftIfPending()
+                                sweepPendingDrafts()
                                 selectedTextLayerId = layer.id
                                 // r35: one selection across the families.
                                 selectedStickerLayerId = null
@@ -2071,9 +2223,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 }
                 TextButton(
                     onClick = {
-                        commitTextDraftIfPending()
-                        commitPosDraftIfPending()
-                        commitStickerPosDraftIfPending()
+                        sweepPendingDrafts()
                         val remaining = (committed.textLayers?.layers ?: emptyList())
                             .filterNot { it.id == layerId }
                         commit(
@@ -2112,9 +2262,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     FilterChip(
                         selected = false,
                         onClick = {
-                            commitTextDraftIfPending()
-                            commitPosDraftIfPending()
-                            commitStickerPosDraftIfPending()
+                            sweepPendingDrafts()
                             val existing = committed.stickerLayers?.layers ?: emptyList()
                             val newLayer = StickerLayer(
                                 id = StickerLayer.newId(existing.map { it.id }),
@@ -2137,9 +2285,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     FilterChip(
                         selected = false,
                         onClick = {
-                            commitTextDraftIfPending()
-                            commitPosDraftIfPending()
-                            commitStickerPosDraftIfPending()
+                            sweepPendingDrafts()
                             val existing = committed.stickerLayers?.layers ?: emptyList()
                             val newLayer = StickerLayer(
                                 id = StickerLayer.newId(existing.map { it.id }),
@@ -2181,9 +2327,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         selected = selectedStickerLayerId == layer.id,
                         onClick = {
                             if (selectedStickerLayerId != layer.id) {
-                                commitTextDraftIfPending()
-                                commitPosDraftIfPending()
-                                commitStickerPosDraftIfPending()
+                                sweepPendingDrafts()
                                 selectedStickerLayerId = layer.id
                                 selectedTextLayerId = null
                             }
@@ -2290,7 +2434,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 )
                 TextButton(
                     onClick = {
-                        commitStickerPosDraftIfPending()
+                        sweepPendingDrafts()
                         val remaining = (committed.stickerLayers?.layers ?: emptyList())
                             .filterNot { it.id == layerId }
                         commit(
@@ -2307,6 +2451,248 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     enabled = !exporting,
                 ) {
                     Text(stringResource(R.string.editor_sticker_remove))
+                }
+            }
+
+            // ---- Drawing (r36: the freehand tool) ----
+            // The contract's UI shape (drawing-tool.md decision 6): the
+            // Draw-mode chip + the stroke layer chips, then the controls
+            // under the duality --- Draw mode ON tunes the NEXT stroke
+            // (the brush, plain state; the live gesture previews through
+            // a transient draft layer); a selected layer re-binds the SAME
+            // controls to it through the live-draft pattern. The two states
+            // are exclusive; ONE selection at a time across ALL the
+            // families (the r35 contract extended).
+            Text(
+                text = stringResource(R.string.editor_section_drawing),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(
+                    selected = drawMode,
+                    onClick = {
+                        sweepPendingDrafts()
+                        drawMode = !drawMode
+                        if (drawMode) {
+                            // Entering paint mode drops every selection ---
+                            // painting owns the gesture; the user keeps
+                            // painting across strokes.
+                            selectedTextLayerId = null
+                            selectedStickerLayerId = null
+                            selectedDrawLayerId = null
+                        }
+                    },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_draw_mode)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                committed.drawLayers?.layers?.forEachIndexed { index, layer ->
+                    FilterChip(
+                        selected = selectedDrawLayerId == layer.id,
+                        onClick = {
+                            if (selectedDrawLayerId != layer.id) {
+                                sweepPendingDrafts()
+                                selectedDrawLayerId = layer.id
+                                drawMode = false // the duality is exclusive
+                                selectedTextLayerId = null
+                                selectedStickerLayerId = null
+                            }
+                        },
+                        enabled = !exporting,
+                        label = { Text(stringResource(R.string.editor_draw_layer, index + 1)) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+            }
+            val selectedDrawLayer = committed.drawLayers?.layers
+                ?.firstOrNull { it.id == selectedDrawLayerId }
+            if (drawMode) {
+                // -- The brush (tunes the NEXT stroke): the swatches and
+                //    sliders are plain state, applied at commit; the live
+                //    gesture previews them through the draft layer.
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                        ColorSwatch(
+                            colorArgb = colorArgb,
+                            selected = brushColor == colorArgb,
+                            name = stringResource(nameRes),
+                            enabled = !exporting,
+                            onPick = { brushColor = colorArgb },
+                        )
+                    }
+                }
+                val widthName = stringResource(R.string.editor_a11y_draw_width)
+                val widthLabel = stringResource(R.string.editor_draw_width, brushWidth)
+                Text(
+                    text = widthLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = brushWidth.toFloat(),
+                    onValueChange = { brushWidth = it.toInt().coerceIn(1, 100) },
+                    valueRange = 1f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = widthName
+                        stateDescription = widthLabel
+                    },
+                )
+                val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
+                val opacityLabel = stringResource(R.string.editor_draw_opacity, brushOpacity)
+                Text(
+                    text = opacityLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = brushOpacity.toFloat(),
+                    onValueChange = { brushOpacity = it.toInt().coerceIn(0, 100) },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = opacityName
+                        stateDescription = opacityLabel
+                    },
+                )
+                val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
+                val smoothingLabel = stringResource(R.string.editor_draw_smoothing, brushSmoothing)
+                Text(
+                    text = smoothingLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = brushSmoothing.toFloat(),
+                    onValueChange = { brushSmoothing = it.toInt().coerceIn(0, 100) },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = smoothingName
+                        stateDescription = smoothingLabel
+                    },
+                )
+            } else if (selectedDrawLayer != null) {
+                val layerId = selectedDrawLayer.id
+                // -- Per-layer re-edit (the live-draft pattern; the keys
+                //    carry the draw- prefix so effectiveRecipe() routes
+                //    them). The swatches and sliders re-bind to the layer.
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                        ColorSwatch(
+                            colorArgb = colorArgb,
+                            selected = selectedDrawLayer.colorArgb == colorArgb,
+                            name = stringResource(nameRes),
+                            enabled = !exporting,
+                            onPick = {
+                                commitSelectedDrawLayer { it.copy(colorArgb = colorArgb) }
+                            },
+                        )
+                    }
+                }
+                val widthLive = draft?.takeIf { it.first == "draw-width@$layerId" }?.second
+                    ?: selectedDrawLayer.widthPct
+                val widthName = stringResource(R.string.editor_a11y_draw_width)
+                val widthLabel = stringResource(R.string.editor_draw_width, widthLive)
+                Text(
+                    text = widthLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = widthLive.toFloat(),
+                    onValueChange = { draft = "draw-width@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "draw-width@$layerId") {
+                                commitSelectedDrawLayer { it.copy(widthPct = d.second.coerceIn(1, 100)) }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 1f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = widthName
+                        stateDescription = widthLabel
+                    },
+                )
+                val opacityLive = draft?.takeIf { it.first == "draw-opacity@$layerId" }?.second
+                    ?: selectedDrawLayer.opacity
+                val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
+                val opacityLabel = stringResource(R.string.editor_draw_opacity, opacityLive)
+                Text(
+                    text = opacityLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = opacityLive.toFloat(),
+                    onValueChange = { draft = "draw-opacity@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "draw-opacity@$layerId") {
+                                commitSelectedDrawLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = opacityName
+                        stateDescription = opacityLabel
+                    },
+                )
+                val smoothingLive = draft?.takeIf { it.first == "draw-smoothing@$layerId" }?.second
+                    ?: selectedDrawLayer.smoothingPct
+                val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
+                val smoothingLabel = stringResource(R.string.editor_draw_smoothing, smoothingLive)
+                Text(
+                    text = smoothingLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = smoothingLive.toFloat(),
+                    onValueChange = { draft = "draw-smoothing@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "draw-smoothing@$layerId") {
+                                commitSelectedDrawLayer {
+                                    it.copy(smoothingPct = d.second.coerceIn(0, 100))
+                                }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = smoothingName
+                        stateDescription = smoothingLabel
+                    },
+                )
+                TextButton(
+                    onClick = {
+                        sweepPendingDrafts()
+                        val remaining = (committed.drawLayers?.layers ?: emptyList())
+                            .filterNot { it.id == layerId }
+                        commit(
+                            committed.copy(
+                                drawLayers = if (remaining.isEmpty()) {
+                                    null
+                                } else {
+                                    DrawLayers(remaining)
+                                },
+                            ),
+                        )
+                        selectedDrawLayerId = remaining.lastOrNull()?.id
+                    },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_draw_remove))
                 }
             }
 

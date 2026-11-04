@@ -1,10 +1,11 @@
 # The Freehand Drawing Tool — r36 Round Design (Phase 7, layer type 3 of 5)
 
-**Status:** the design contract for the r36 round (authored first, per the
-family convention; the delivery record lands at the bottom when the round
-delivers). Layer type 3 of Phase 7's five, after text (r34) and stickers
-(r35); it inherits the family structures and inserts itself into the
-composite order the r35 round established.
+**Status:** DELIVERED on `tg-p7-drawing` (2026-11-04, the r36 round; pending
+PR/CI/merge per the F-12 convention --- see the delivery record at the
+bottom). This doc was the design contract the round implemented. Layer
+type 3 of Phase 7's five, after text (r34) and stickers (r35); it inherits
+the family structures and inserts itself into the composite order the
+r35 round established.
 
 ---
 
@@ -133,3 +134,65 @@ an eraser (delete-the-layer is the v1 eraser); dashed/pattern brushes.
 No asset, no import, no foreign data: the brush is parametric code.
 The roadmap's Phase 7 exit criterion needs nothing from this round
 beyond the code being project-authored (GPL-3.0 with the project).
+
+---
+
+## Delivery record (r36, 2026-11-04, branch `tg-p7-drawing`)
+
+The round landed every decision above, with these recorded deltas:
+
+1. **The model — as designed.** `DrawLayer` (id, `colorArgb`,
+   `widthPct` 1..100, opacity, `smoothingPct`, points) in
+   `DrawLayers.kt`; stroke-per-layer, one gesture = one layer = one
+   undo snapshot; `newId` over the `d` prefix (the transient draft id
+   "draft" never counts --- test-pinned).
+2. **The recipe — as designed.** Absent key = a pre-r36 sidecar loads
+   clean (test-pinned with one carrying r34 text AND r35 stickers ---
+   the round-three stacking proof); points ride as 2-element arrays of
+   output-canvas fractions; the tolerant read drops malformed point
+   entries, clamps survivors, skips a layer whose points all fail or
+   that carries none, and caps the count at the model cap. Empty
+   normalises back to absent.
+3. **The thinning — as designed, with the local harness earning its
+   keep twice.** `DrawLayer.thin` (uniform stride, first/last always
+   kept; 513-over-512 thins to 257, 10-over-3 to 4) --- the pre-push
+   run caught two arithmetic slips in the TEST expectations (the code
+   was per spec): the stride test asserted raw indices instead of the
+   mapped coordinates, and the 258-vs-257 count. Also caught: a
+   parenthesised backticked JVM-test name (kotlinc rejects it; the
+   repo's names carry no parens --- the r34 dex-and-dots lesson's
+   sibling).
+4. **Smoothing — as designed.** `chaikinPasses = round(pct/25)`
+   (0..4), Chaikin at place time in pixel space, endpoints preserved
+   every pass count (test-pinned), `smoothPolyline` exact on the
+   one-pass corner cut; the compositor draws round caps/joins and a
+   single-point layer as a dot of the brush width.
+5. **The composite order — as designed.** The cumulative stack is now
+   pixel pipeline -> stickers (r35) -> strokes (r36) -> text (r34); the
+   preview and the export insert the `DrawCompositor` pass identically
+   (preview ≡ export by construction).
+6. **The UI — as designed, the duality landed.** The Draw-mode chip
+   (FilterChip, selected-state announcement per the r32 convention);
+   the stroke layer chips; the brush controls in paint mode (plain
+   state, applied at commit, previewed live through the transient
+   draft layer) versus the SAME controls re-bound to a selected layer
+   (the live-draft pattern); the paint gesture on the preview (a tap
+   is a dot); ONE selection at a time across ALL the families, and the
+   mode and the selection are exclusive.
+7. **The sweep unification (recorded touch on merged code, all
+   additive).** The r34/r35 handlers' inline three-draft sweeps became
+   ONE `sweepPendingDrafts()` helper (12 call sites retrofitted:
+   undo, redo, export, text add/chip/remove, sticker
+   registry/import/layer/remove, the gesture end/cancel) so r37's
+   regions extend HERE, not at every call site.
+8. **Tests — the two owed families, all JVM.** `DrawLayersTest` (15:
+   model, thinning, Chaikin, the layout pass) + `DrawLayersRecipeTest`
+   (12: the stacking proof, lossless round-trip, points tolerance,
+   clamps, defaults, duplicates) --- **27 new tests; the edit module at
+   314** (r35's 287 + 27). The local harness ran 305 pure tests green
+   pre-push (the module's CI total adds ExportPolicyTest's 9).
+
+*The §25 device rows ride the checklist, human-only.*
+
+*Delivered on the branch `tg-p7-drawing`, cut from post-#110 main
+(`980ccea`), in the 2026-11-04 window after the r35 merge.*

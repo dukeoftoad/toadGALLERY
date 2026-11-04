@@ -149,7 +149,7 @@ unsigned.
 | 4 | Aves-grade metadata layer (`androidx.exifinterface` + own IPTC/XMP wrappers) | planned |
 | 5 | MI-style organisational UX (Moments, Stories, opt-in auto-albums, semantic search, collage, slideshow) | planned |
 | 6 | toadGALLERY Edit v1: core adjustments + non-destructive pipeline | contract spec ready ([v1](docs/architecture/editor-contract.md)) |
-| 7 | toadGALLERY Edit v2: filters and annotations | planned |
+| 7 | toadGALLERY Edit v2: filters and annotations | in progress (r33 LUT filters + import merged; r34 text tool authored on `tg-p7-text-tool`) |
 | 8 | toadGALLERY Edit v3: on-device AI features (magic erase, sky replace, bokeh, opt-in face retouch) | planned (ADR-0010) |
 | 9 | Lightweight video editor (trim, mute, slow-mo, frame extract, GIF/WebP) | planned (ADR-0012) |
 | 10 | Performance, compatibility, accessibility, reliability hardening | planned |

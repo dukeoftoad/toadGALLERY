@@ -4,12 +4,61 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [0.4.2-alpha] — unreleased on main (versionCode 32; per maintainer
+## [0.4.2-alpha] — unreleased (versionCodes 27–34; per maintainer
   directive no new device builds until Phase 5 completes — **the Phase 5
   release freeze is lifted as of the r28 exit gate**; the next release
-  may proceed)
+  may proceed. F-6 closed 2026-11-04: the two duplicate 0.4.2-alpha
+  headings from the r29-era addition pattern are merged into this one)
 
 ### Added
+
+- **[toadGALLERY Edit] The text tool — OFL fonts, the additive TextLayers
+  recipe, the shared compositing pass** (r34 round, Phase 7 layer type 1
+  of 5, branch `tg-p7-text-tool`): styled text layers over the photo —
+  per-layer text, font (four verbatim-bundled SIL OFL 1.1 faces: Fira
+  Sans, Playfair Display, Caveat, Space Mono — each `OFL.txt` beside its
+  TTF, sha256-pinned by `BundledFontsTest`, provenance in
+  `docs/phase-7/bundled-fonts.md` + the §5 ledger; the prep doc's Noto
+  Sans candidate swapped for Fira Sans: Noto's only unmodified full form
+  is a 2.0 MB variable over the round's whole budget and the CSS API
+  serves latin subsets), size (percent of the canvas min-edge), color
+  (eight named swatches), opacity, rotation, position (drag on the
+  preview, 48dp grab radius). The recipe's `TextLayers` is additive like
+  r33's `LutSelection`: a pre-r34 sidecar loads clean, an unresolvable
+  fontId round-trips verbatim and degrades to the default face at
+  render. Text renders LAST — a compositing pass after the whole pixel
+  pipeline (geometry → … → sharpen), anchors as fractions of the OUTPUT
+  canvas, preview and export through the ONE `TextCompositor` (preview ≡
+  export by construction, test-pinned). Undo/redo rides the existing
+  snapshot stack with per-commit granularity (sliders release, the text
+  field commits on Done/switch/add/remove/export sweeps — never per
+  keystroke). 22 new JVM tests across TextLayersTest,
+  TextLayersRecipeTest, BundledFontsTest; the module string count 74 → 94
+  (the r33 recount debt settled); editor `versionCode 7`
+  (`0.4.2-edit-alpha`). The on-device pass rides checklist §23; the
+  delivery record is `docs/phase-7/text-tool.md`.
+
+- **The in-app progress screen** (F-1, follow-up 2026-11-04): the
+  repo-root `progress.json` — the same source of truth the live sandbox
+  dashboard reads — is mirrored into the APK assets at build time
+  (`copyProgressJson`; the model-pack srcDir pattern) and rendered by
+  the new Settings → Development progress screen: the two INDEPENDENT
+  scopes (overall project, Ente port workstream) as
+  `LinearProgressIndicator`s with their own stored percents + phase
+  lists + per-scope source-of-truth lines + the honest
+  build-time-snapshot note (the app never fetches progress — zero
+  uninvited egress). Pure `ProgressSnapshot` parse (org.json, no new
+  dependencies) + 7 JVM tests. Gallery `versionCode 34`.
+
+- **The toad-setup composite action** (F-2, follow-up 2026-11-04): the
+  toolchain setup blocks that `ci.yml` (×3 jobs), `engine-apk.yml`,
+  `modelpack-apk.yml`, `apk-build-engine.yml`, `editor-apk-build.yml`
+  and `release.yml` replicated verbatim now live in ONE place —
+  `.github/actions/toad-setup` (rust: none/host/android × android:
+  true/false; identical pins and cache keys, so main's warm caches
+  restore unchanged; −218 lines net). actionlint 1.7.12 PASS on all
+  six workflows + the composite.
+
 - **Progress-tracking infrastructure + the dispatch-only debug-APK builders**
   (2026-11-04 workplan window, `docs/workplan.md`): the committed
   `progress.json` (independent `project` 73% / `entePort` 95% scopes),
@@ -82,11 +131,7 @@ All notable changes to toadGALLERY are documented here. The format follows
   identity, a 14-day-retention artifact; no tags, no GitHub Releases).
   53 new JVM tests (927 → 980); versionCode 32; versionName stays
   0.4.2-alpha (the freeze lift is a records update; the next release
-  tags the whole 0.4.2-alpha line, codes 27–32).
-## [0.4.2-alpha] — unreleased on main (versionCode 33; per maintainer
-  directive no new device builds until Phase 5 completes)
-
-### Added
+  tags the whole 0.4.2-alpha line, codes 27–34).
 
 - **[toadGALLERY Edit] The LUT `.cube` filter system** (r33 round,
   Phase 7 opener, branch `tg-p7-lut-engine`): a Filters section with

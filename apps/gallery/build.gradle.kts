@@ -324,7 +324,20 @@ android {
         // r23 pin. Per maintainer directive: NO new device builds until
         // Phase 5 completes; this and subsequent rounds ride CI from main
         // only.
-        versionCode = 33
+        // versionCode 34 (F-1 window, follow-up 2026-11-04): the in-app
+        // progress screen --- the repo-root progress.json (the project's
+        // progress source of truth, the same file the live dashboard
+        // reads) is MIRRORED into the APK assets at build time by the
+        // copyProgressJson task below (a static snapshot by design: the
+        // app never fetches progress --- zero uninvited egress), parsed
+        // by the pure ProgressSnapshot (org.json, the established
+        // convention --- no new dependencies), and rendered by the new
+        // ProgressScreen (Settings -> Development progress): the two
+        // INDEPENDENT scopes (overall project + the Ente port
+        // workstream) as LinearProgressIndicators + phase lists + the
+        // honest build-time-snapshot note + per-scope source-of-truth
+        // lines. No new permissions; no network; no engine changes.
+        versionCode = 34
         versionName = "0.4.2-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
@@ -447,6 +460,34 @@ if (withEngine) {
     // preBuild is registered by AGP after this script evaluates, so anchor
     // the dependency the same way the privacy gate anchors on assemble.
     tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(buildRustEngine) }
+}
+
+// --- The progress.json build-time mirror (F-1, follow-up 2026-11-04) --------
+// The repo-root progress.json --- the project's progress source of truth,
+// the same file the live sandbox dashboard file-watches --- is COPIED into
+// the APK assets at build time and read by the Settings -> Development
+// progress screen (ui/settings/ProgressScreen.kt over the pure
+// data/ProgressSnapshot.kt). A static snapshot BY DESIGN: the app never
+// fetches progress (zero uninvited egress), and the screen says so.
+//
+// The bytes are the COMMITTED file, never generated. The assets live in
+// the BUILD directory like the model-pack srcDir below (the source tree
+// stays clean), and every mergeAssets task depends on the copy so the
+// mirror can never be stale-or-missing in an assembled APK.
+val progressAssetsDir = layout.buildDirectory.dir("generated/progressAssets")
+val copyProgressJson = tasks.register<Copy>("copyProgressJson") {
+    from(rootProject.layout.projectDirectory.file("progress.json"))
+    into(progressAssetsDir.map { it.dir("progress") })
+}
+android {
+    sourceSets {
+        // Same AGP 9 plain-File srcDir convention as the engine jniLibs and
+        // model-pack srcDirs (the task dependency below covers freshness).
+        getByName("main").assets.srcDir(progressAssetsDir.get().asFile)
+    }
+}
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+    dependsOn(copyProgressJson)
 }
 
 // --- Optional offline model-pack assets (r28, ADR-0020 offline pack) ---------

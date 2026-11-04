@@ -37,20 +37,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust (stable, minimal)
-        uses: dtolnay/rust-toolchain@stable
+      # F-2 (follow-up 2026-11-04): the canonical toolchain setup now lives
+      # in .github/actions/toad-setup --- the host-gates Rust shape (stable
+      # + rustfmt/clippy + the host cargo cache), no Android side.
+      - name: Set up the toolchain (Rust host gates)
+        uses: ./.github/actions/toad-setup
         with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            engine/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          rust: host
+          android: false
 
       # Host-target gate for the vendored Ente crates: any rot (dependency
       # drift, accidental edits breaking the workspace) fails the PR. Clippy
@@ -91,42 +85,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      # GH ubuntu runners ship a preinstalled Android SDK at $ANDROID_HOME
-      # (cmdline-tools included) but do not always put sdkmanager on PATH, and
-      # android-actions/setup-android@v3 is broken on current images (it runs the
-      # legacy `sdkmanager tools` package, which no longer exists). Resolve the
-      # binary directly and install only what the project pins.
-      - name: Install Android SDK packages (platform 36, build-tools 36)
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          if command -v sdkmanager >/dev/null 2>&1; then
-            SDK_MGR="$(command -v sdkmanager)"
-          else
-            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
-          fi
-          echo "Using sdkmanager: $SDK_MGR"
-          yes | "$SDK_MGR" --licenses > /dev/null || true
-          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
-          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x ./gradlew
+      # F-2: the canonical toolchain setup (.github/actions/toad-setup) ---
+      # the pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 +
+      # the Gradle cache + gradlew chmod; no Rust).
+      - name: Set up the toolchain (Android)
+        uses: ./.github/actions/toad-setup
 
       - name: Build debug APK
         run: ./gradlew :apps:gallery:assembleDebug --no-daemon --stacktrace
@@ -198,89 +161,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust (stable, minimal)
-        uses: dtolnay/rust-toolchain@stable
+      # F-2: the canonical toolchain setup (.github/actions/toad-setup) ---
+      # the full engine-cross shape (Rust + aarch64 target + the android
+      # cargo cache + cargo-ndk + the NDK resolve + the whole Android side).
+      - name: Set up the toolchain (Rust Android cross + Android)
+        uses: ./.github/actions/toad-setup
         with:
-          targets: aarch64-linux-android
-
-      # Same cache shape as the engine job (registry + git + engine/target)
-      # under a distinct key prefix: the Android build fills in
-      # engine/target/<android-triple>/ beside the host artifacts, and the
-      # two jobs run in parallel on the same push.
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            engine/target
-          key: cargo-android-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
-          restore-keys: cargo-android-${{ runner.os }}-
-
-      # Cache the cargo-ndk BINARY alone so `cargo install` is skipped
-      # entirely on hit (the command -v guard below makes the install a
-      # no-op, so no ~/.cargo/.crates* metadata needs caching).
-      - name: Cache cargo-ndk
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-ndk
-          key: cargo-ndk-${{ runner.os }}-3.5.4
-
-      - name: Install cargo-ndk (pinned)
-        run: command -v cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --version 3.5.4 --locked
-
-      # GH ubuntu runners ship preinstalled NDKs under $ANDROID_HOME/ndk/;
-      # pick the newest and export it. (engine/scripts/build-android.sh would
-      # discover it itself; resolving here documents the choice in the log.
-      # If the image ever drops NDKs, the script's sdkmanager fallback
-      # installs the pinned one instead --- java is set up below.)
-      - name: Resolve the preinstalled Android NDK
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          NDK_HOME="$(ls -d "$SDK_ROOT"/ndk/* 2>/dev/null | sort -V | tail -1)"
-          if [ -z "$NDK_HOME" ]; then
-            echo "No preinstalled NDK under $SDK_ROOT/ndk --- the build script's sdkmanager fallback will install one."
-          else
-            echo "Using preinstalled NDK: $NDK_HOME"
-            echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
-          fi
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      # GH ubuntu runners ship a preinstalled Android SDK at $ANDROID_HOME
-      # (cmdline-tools included) but do not always put sdkmanager on PATH, and
-      # android-actions/setup-android@v3 is broken on current images (it runs the
-      # legacy `sdkmanager tools` package, which no longer exists). Resolve the
-      # binary directly and install only what the project pins.
-      - name: Install Android SDK packages (platform 36, build-tools 36)
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          if command -v sdkmanager >/dev/null 2>&1; then
-            SDK_MGR="$(command -v sdkmanager)"
-          else
-            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
-          fi
-          echo "Using sdkmanager: $SDK_MGR"
-          yes | "$SDK_MGR" --licenses > /dev/null || true
-          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
-          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x ./gradlew
+          rust: android
 
       # -PwithEngine registers the buildRustEngine Exec task; its preBuild
       # dependency runs engine/scripts/build-android.sh (idempotent):

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +31,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -40,6 +48,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -53,17 +62,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
@@ -146,6 +162,32 @@ class EditActivity : ComponentActivity() {
     internal val importedLutStore: ImportedLutStore by lazy {
         ImportedLutStore(File(filesDir, "imported-luts"))
     }
+
+    /**
+     * The bundled Typefaces (r34), created ONCE per session and shared by
+     * the preview and every export --- the same instances, so a rendered
+     * face cannot differ between them. A broken asset is simply absent
+     * (BundledFontsTest pins the committed bytes by sha256, so an absence
+     * means a broken build, not bad data).
+     */
+    internal val bundledFonts: Map<String, Typeface> by lazy {
+        BundledFonts.ORDERED.mapNotNull { entry ->
+            try {
+                Typeface.createFromAsset(assets, BundledFonts.assetPath(entry))
+                    ?.let { entry.id to it }
+            } catch (_: RuntimeException) {
+                null
+            }
+        }.toMap()
+    }
+
+    /**
+     * The render face for a layer fontId (the tolerance contract):
+     * the bundled face, else the DEFAULT face, else null --- the platform
+     * face in the compositor. Never a crash, never a dropped layer.
+     */
+    internal fun fontFor(fontId: String): Typeface? =
+        bundledFonts[fontId] ?: bundledFonts[BundledFonts.DEFAULT_ID]
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -390,6 +432,25 @@ class EditActivity : ComponentActivity() {
             adjusted.setPixels(
                 pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height,
             )
+
+            // 4.5 The r34 text pass: the compositing stage AFTER the whole
+            //     pixel pipeline (geometry -> adjustments -> LUT ->
+            //     vignette -> sharpen), over the FULL output canvas at
+            //     origin 0 --- the same TextCompositor the preview uses, so
+            //     preview ≡ export by construction (no second renderer).
+            export.recipe.textLayers?.let { textSpec ->
+                if (textSpec.layers.isNotEmpty()) {
+                    TextCompositor.draw(
+                        adjusted,
+                        textSpec.layers,
+                        { fontId -> fontFor(fontId) },
+                        0f,
+                        0f,
+                        pipelined.width.toFloat(),
+                        pipelined.height.toFloat(),
+                    )
+                }
+            }
 
             // 5. Insert the NEW MediaStore row (IS_PENDING on Q+).
             val displayName = ExportPlan.displayNameFor(sourceDisplayName(sourceUri), format)
@@ -649,30 +710,77 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var looks by remember { mutableStateOf<Map<String, CubeLut>>(emptyMap()) }
     var looksVersion by remember { mutableStateOf(0) }
     var importError by remember { mutableStateOf<String?>(null) }
+    // r34 text state: the selected layer, the TextField's LOCAL draft
+    // (per-keystroke commits would flood the undo stack --- the per-commit
+    // granularity is the round contract) and the position drag's live
+    // draft. All three live-preview through effectiveRecipe() and commit
+    // once on done/release/target-switch/export.
+    var selectedTextLayerId by remember { mutableStateOf<String?>(null) }
+    var textDraft by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var posDraft by remember { mutableStateOf<Triple<String, Double, Double>?>(null) }
 
     val committed = uiState.recipe
 
     /** The recipe the preview renders: the committed one with any live draft applied. */
     fun effectiveRecipe(): EditRecipe {
-        val d = draft ?: return committed
-        val spec = ADJUST_SLIDERS.firstOrNull { it.key == d.first }
-        return when {
-            spec != null -> spec.set(committed, d.second)
-            // r32: the straighten drag previews live too (it previously
-            // waited for release, burning a per-tick re-render for nothing).
-            d.first == "straighten" -> committed.copy(straightenDeg = d.second.toDouble())
-            // r33: the intensity drag previews live, exactly like the
-            // adjustment sliders (the look commits on release).
-            d.first == "lut-intensity" -> {
-                val selection = committed.lut
-                if (selection != null) {
-                    committed.copy(lut = selection.copy(intensity = d.second))
-                } else {
-                    committed
+        var effective = committed
+        val d = draft
+        if (d != null) {
+            val spec = ADJUST_SLIDERS.firstOrNull { it.key == d.first }
+            effective = when {
+                spec != null -> spec.set(effective, d.second)
+                // r32: the straighten drag previews live too (it previously
+                // waited for release, burning a per-tick re-render for nothing).
+                d.first == "straighten" -> effective.copy(straightenDeg = d.second.toDouble())
+                // r33: the intensity drag previews live, exactly like the
+                // adjustment sliders (the look commits on release).
+                d.first == "lut-intensity" -> {
+                    val selection = effective.lut
+                    if (selection != null) {
+                        effective.copy(lut = selection.copy(intensity = d.second))
+                    } else {
+                        effective
+                    }
                 }
+                else -> effective
             }
-            else -> committed
         }
+        // r34: the text LIVE state --- per-layer slider drafts (keys
+        // "text-size@<id>" / "text-opacity@<id>" / "text-rotation@<id>"),
+        // the TextField draft and the position drag all apply over the
+        // committed layers; each commits exactly once (the per-commit
+        // granularity the round contract pins).
+        val textSlider = d?.takeIf { it.first.startsWith("text-") }
+            ?.let { (key, value) ->
+                val parts = key.removePrefix("text-").split("@", limit = 2)
+                if (parts.size == 2) Triple(parts[0], parts[1], value) else null
+            }
+        val td = textDraft
+        val pd = posDraft
+        if ((textSlider != null || td != null || pd != null) && effective.textLayers != null) {
+            effective = effective.copy(
+                textLayers = TextLayers(
+                    effective.textLayers!!.layers.map { layer ->
+                        var l = layer
+                        if (textSlider != null && textSlider.second == layer.id) {
+                            l = when (textSlider.first) {
+                                "size" -> l.copy(sizePct = textSlider.third)
+                                "opacity" -> l.copy(opacity = textSlider.third)
+                                else -> l.copy(rotationDeg = textSlider.third)
+                            }
+                        }
+                        if (td != null && td.first == layer.id) {
+                            l = l.copy(text = td.second.take(TextLayer.MAX_TEXT_LENGTH))
+                        }
+                        if (pd != null && pd.first == layer.id) {
+                            l = l.copy(centerX = pd.second, centerY = pd.third)
+                        }
+                        l
+                    },
+                ),
+            )
+        }
+        return effective
     }
 
     fun commit(recipe: EditRecipe) {
@@ -683,6 +791,44 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         } catch (_: RuntimeException) {
             // Best-effort persistence; the session stays in memory.
         }
+    }
+
+    // ---- r34 text helpers (all read the LIVE delegated states, so calls
+    // from long-lived closures --- the drag gesture, chips --- can never
+    // commit against a stale recipe) ----
+
+    /** Commits an edit to ONE layer, by id, over the CURRENT recipe. */
+    fun commitLayerById(id: String, edit: (TextLayer) -> TextLayer) {
+        val current = uiState.recipe
+        val tl = current.textLayers ?: return
+        val idx = tl.layers.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        commit(
+            current.copy(
+                textLayers = TextLayers(
+                    tl.layers.mapIndexed { i, l -> if (i == idx) edit(l) else l },
+                ),
+            ),
+        )
+    }
+
+    /** Commits an edit to the SELECTED layer (no-op when nothing is selected). */
+    fun commitSelectedLayer(edit: (TextLayer) -> TextLayer) {
+        selectedTextLayerId?.let { commitLayerById(it, edit) }
+    }
+
+    /** Sweeps the TextField's pending draft into one snapshot (IME Done, target switch, add/remove, export). */
+    fun commitTextDraftIfPending() {
+        val d = textDraft ?: return
+        textDraft = null
+        commitLayerById(d.first) { it.copy(text = d.second.take(TextLayer.MAX_TEXT_LENGTH)) }
+    }
+
+    /** Sweeps the position drag's live draft into one snapshot (drag end/cancel, export). */
+    fun commitPosDraftIfPending() {
+        val d = posDraft ?: return
+        posDraft = null
+        commitLayerById(d.first) { it.copy(centerX = d.second, centerY = d.third) }
     }
 
     // First composition: decode the bounded preview + parse the bundled
@@ -704,8 +850,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     // Live preview: re-run the ordered pipeline (without the crop --- the
     // crop draws as the overlay rect) whenever the effective recipe or
-    // the loaded look set changes.
-    LaunchedEffect(previewBase, committed, draft, looks) {
+    // the loaded look set changes. The r34 text pass composites over the
+    // same CROP REGION the overlay draws (the output canvas the export
+    // will produce), through the SAME TextCompositor --- one code path.
+    LaunchedEffect(previewBase, committed, draft, textDraft, posDraft, looks) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
         val displayRecipe = effective.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0))
@@ -720,7 +868,21 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             out.setPixels(pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height)
             // The crop overlay rect rides the POST-geometry frame of the
             // same recipe (plan computed over the pipeline's own dims).
-            previewCropRect = EditGeometryPlan.plan(effective, width, height).cropPixelRect
+            val plan = EditGeometryPlan.plan(effective, width, height)
+            previewCropRect = plan.cropPixelRect
+            val textSpec = effective.textLayers
+            if (textSpec != null && textSpec.layers.isNotEmpty()) {
+                val rect = plan.cropPixelRect
+                TextCompositor.draw(
+                    out,
+                    textSpec.layers,
+                    { fontId -> activity.fontFor(fontId) },
+                    rect.x0.toFloat(),
+                    rect.y0.toFloat(),
+                    rect.width.toFloat(),
+                    rect.height.toFloat(),
+                )
+            }
             out.asImageBitmap()
         }
     }
@@ -817,6 +979,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     fun requestSave() {
         if (exporting) return
+        // r34: sweep any pending text/position drafts into a snapshot
+        // first --- the export reads the COMMITTED recipe, and a draft must
+        // never be silently lost at the moment of export.
+        commitTextDraftIfPending()
+        commitPosDraftIfPending()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
             PackageManager.PERMISSION_GRANTED
@@ -853,10 +1020,24 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { uiState = engine.undo() }, enabled = uiState.canUndo && !exporting) {
+            TextButton(
+                onClick = {
+                    commitTextDraftIfPending()
+                    commitPosDraftIfPending()
+                    uiState = engine.undo()
+                },
+                enabled = uiState.canUndo && !exporting,
+            ) {
                 Text(stringResource(R.string.editor_undo))
             }
-            TextButton(onClick = { uiState = engine.redo() }, enabled = uiState.canRedo && !exporting) {
+            TextButton(
+                onClick = {
+                    commitTextDraftIfPending()
+                    commitPosDraftIfPending()
+                    uiState = engine.redo()
+                },
+                enabled = uiState.canRedo && !exporting,
+            ) {
                 Text(stringResource(R.string.editor_redo))
             }
             if (exporting) {
@@ -885,10 +1066,97 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
 
         // ---- Preview (with the crop overlay rect) ----
+        // r34: the box also carries the text-layer DRAG gesture (drag near
+        // the SELECTED layer's center to reposition it; live-drafted, one
+        // commit on release). Keyed ONLY on the selection: the gesture must
+        // not restart when the preview bitmap updates (it re-renders every
+        // draft tick), and every value it reads is a LIVE delegated state
+        // so long-lived closures never see stale data.
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .pointerInput(selectedTextLayerId) {
+                    val grabRadiusPx = 48.dp.toPx()
+
+                    // Screen position -> output-canvas fractions (the same
+                    // FIT mapping the crop overlay draws; the crop rect is
+                    // the output canvas the export will produce).
+                    fun mapToFraction(position: Offset): Pair<Double, Double>? {
+                        val image = previewImage ?: return null
+                        val rect = previewCropRect ?: return null
+                        if (image.width < 1 || image.height < 1 ||
+                            rect.width < 1 || rect.height < 1
+                        ) return null
+                        val scale = minOf(
+                            size.width.toFloat() / image.width,
+                            size.height.toFloat() / image.height,
+                        )
+                        if (scale <= 0f) return null
+                        val offX = (size.width - image.width * scale) / 2f
+                        val offY = (size.height - image.height * scale) / 2f
+                        val imgX = (position.x - offX) / scale
+                        val imgY = (position.y - offY) / scale
+                        val fx = ((imgX - rect.x0) / rect.width).coerceIn(0f, 1f).toDouble()
+                        val fy = ((imgY - rect.y0) / rect.height).coerceIn(0f, 1f).toDouble()
+                        return fx to fy
+                    }
+
+                    // The selected layer's center in screen coordinates.
+                    fun layerCenterScreen(): Offset? {
+                        val image = previewImage ?: return null
+                        val rect = previewCropRect ?: return null
+                        val layerId = selectedTextLayerId ?: return null
+                        val layer = uiState.recipe.textLayers?.layers
+                            ?.firstOrNull { it.id == layerId } ?: return null
+                        if (image.width < 1 || image.height < 1 ||
+                            rect.width < 1 || rect.height < 1
+                        ) return null
+                        val scale = minOf(
+                            size.width.toFloat() / image.width,
+                            size.height.toFloat() / image.height,
+                        )
+                        val offX = (size.width - image.width * scale) / 2f
+                        val offY = (size.height - image.height * scale) / 2f
+                        val cxImg = (rect.x0 + layer.centerX * rect.width).toFloat()
+                        val cyImg = (rect.y0 + layer.centerY * rect.height).toFloat()
+                        return Offset(offX + cxImg * scale, offY + cyImg * scale)
+                    }
+
+                    var dragging = false
+                    detectDragGestures(
+                        onDragStart = { start ->
+                            val center = layerCenterScreen()
+                            dragging = center != null &&
+                                (start - center).getDistance() <= grabRadiusPx
+                            if (dragging) {
+                                selectedTextLayerId?.let { id ->
+                                    mapToFraction(start)?.let { (fx, fy) ->
+                                        posDraft = Triple(id, fx, fy)
+                                    }
+                                }
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            if (dragging) {
+                                selectedTextLayerId?.let { id ->
+                                    mapToFraction(change.position)?.let { (fx, fy) ->
+                                        posDraft = Triple(id, fx, fy)
+                                    }
+                                }
+                                change.consume()
+                            }
+                        },
+                        onDragEnd = {
+                            if (dragging) commitPosDraftIfPending()
+                            dragging = false
+                        },
+                        onDragCancel = {
+                            if (dragging) commitPosDraftIfPending()
+                            dragging = false
+                        },
+                    )
+                },
             contentAlignment = Alignment.Center,
         ) {
             val image = previewImage
@@ -1357,6 +1625,224 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 }
             }
 
+            // ---- Text layers (r34: the OFL-font text tool) ----
+            // The contract's UI shape (text-tool.md decision 5): an Add
+            // chip -> the layer list -> per-layer controls (text field,
+            // font chip row, size/opacity/rotation sliders with the r32
+            // semantics conventions, color swatches). Layer chips show
+            // their text (the fallback labels empty layers); repositioning
+            // is the drag gesture on the preview (documented nit: position
+            // has no slider, so it is not TalkBack-reachable in v1).
+            Text(
+                text = stringResource(R.string.editor_section_text),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                AssistChip(
+                    onClick = {
+                        commitTextDraftIfPending()
+                        val existing = committed.textLayers?.layers ?: emptyList()
+                        val newLayer = TextLayer(
+                            id = TextLayer.newId(existing.map { it.id }),
+                            text = "",
+                            fontId = BundledFonts.DEFAULT_ID,
+                        )
+                        commit(
+                            committed.copy(textLayers = TextLayers(existing + newLayer)),
+                        )
+                        selectedTextLayerId = newLayer.id
+                    },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_text_add)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                committed.textLayers?.layers?.forEachIndexed { index, layer ->
+                    FilterChip(
+                        selected = selectedTextLayerId == layer.id,
+                        onClick = {
+                            if (selectedTextLayerId != layer.id) {
+                                commitTextDraftIfPending()
+                                selectedTextLayerId = layer.id
+                            }
+                        },
+                        enabled = !exporting,
+                        label = {
+                            val fallback = stringResource(R.string.editor_text_layer, index + 1)
+                            val label = layer.text.ifBlank { fallback }
+                            Text(if (label.length > 16) label.take(15) + "…" else label)
+                        },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+            }
+            val selectedTextLayer = committed.textLayers?.layers
+                ?.firstOrNull { it.id == selectedTextLayerId }
+            if (selectedTextLayer != null) {
+                val layerId = selectedTextLayer.id
+                // -- The text field: drafts locally (per-keystroke commits
+                //    would flood the undo stack); commits on IME Done, on
+                //    target switch, on add/remove and before an export.
+                val fieldText = textDraft?.takeIf { it.first == layerId }?.second
+                    ?: selectedTextLayer.text
+                val textContentName = stringResource(R.string.editor_a11y_text_content)
+                val fieldHint = stringResource(R.string.editor_text_field_hint)
+                OutlinedTextField(
+                    value = fieldText,
+                    onValueChange = { value ->
+                        textDraft = layerId to value.take(TextLayer.MAX_TEXT_LENGTH)
+                    },
+                    enabled = !exporting,
+                    singleLine = true,
+                    placeholder = { Text(fieldHint, color = Color.White.copy(alpha = 0.5f)) },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                        capitalization = KeyboardCapitalization.Sentences,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { commitTextDraftIfPending() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = textContentName },
+                )
+                // -- The font chips: the bundled four; an unresolvable
+                //    fontId selects NO chip (the tolerance contract, shown
+                //    honestly exactly like an unknown look id).
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    BundledFonts.ORDERED.forEach { entry ->
+                        FilterChip(
+                            selected = selectedTextLayer.fontId == entry.id,
+                            onClick = {
+                                commitSelectedLayer { it.copy(fontId = entry.id) }
+                            },
+                            enabled = !exporting,
+                            label = { Text(entry.displayName) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+                // -- size / opacity / rotation: the live-draft pattern.
+                val sizeLive = draft?.takeIf { it.first == "text-size@$layerId" }?.second
+                    ?: selectedTextLayer.sizePct
+                val sizeLabel = stringResource(R.string.editor_text_size, sizeLive)
+                val sizeName = stringResource(R.string.editor_a11y_text_size)
+                Text(
+                    text = sizeLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = sizeLive.toFloat(),
+                    onValueChange = { draft = "text-size@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "text-size@$layerId") {
+                                commitSelectedLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..300f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = sizeName
+                        stateDescription = sizeLabel
+                    },
+                )
+                val opacityLive = draft?.takeIf { it.first == "text-opacity@$layerId" }?.second
+                    ?: selectedTextLayer.opacity
+                val opacityLabel = stringResource(R.string.editor_text_opacity, opacityLive)
+                val opacityName = stringResource(R.string.editor_a11y_text_opacity)
+                Text(
+                    text = opacityLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = opacityLive.toFloat(),
+                    onValueChange = { draft = "text-opacity@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "text-opacity@$layerId") {
+                                commitSelectedLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = opacityName
+                        stateDescription = opacityLabel
+                    },
+                )
+                val rotationLive = draft?.takeIf { it.first == "text-rotation@$layerId" }?.second
+                    ?: selectedTextLayer.rotationDeg
+                val rotationLabel = stringResource(R.string.editor_text_rotation, rotationLive)
+                val rotationName = stringResource(R.string.editor_a11y_text_rotation)
+                Text(
+                    text = rotationLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = rotationLive.toFloat(),
+                    onValueChange = { draft = "text-rotation@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "text-rotation@$layerId") {
+                                commitSelectedLayer {
+                                    it.copy(rotationDeg = d.second.coerceIn(-180, 180))
+                                }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = -180f..180f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = rotationName
+                        stateDescription = rotationLabel
+                    },
+                )
+                // -- The color swatches: a fixed named palette, a11y-labelled
+                //    (TalkBack announces each control; selection is radio
+                //    semantics --- one color at a time).
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                        ColorSwatch(
+                            colorArgb = colorArgb,
+                            selected = selectedTextLayer.colorArgb == colorArgb,
+                            name = stringResource(nameRes),
+                            enabled = !exporting,
+                            onPick = {
+                                commitSelectedLayer { it.copy(colorArgb = colorArgb) }
+                            },
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = {
+                        commitTextDraftIfPending()
+                        val remaining = (committed.textLayers?.layers ?: emptyList())
+                            .filterNot { it.id == layerId }
+                        commit(
+                            committed.copy(
+                                textLayers = if (remaining.isEmpty()) {
+                                    null
+                                } else {
+                                    TextLayers(remaining)
+                                },
+                            ),
+                        )
+                        selectedTextLayerId = remaining.lastOrNull()?.id
+                    },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_text_remove))
+                }
+            }
+
             // ---- Per-channel HSL: band selector + three sliders ----
             Text(
                 text = stringResource(R.string.editor_section_hsl),
@@ -1509,6 +1995,61 @@ private fun lookNameRes(id: String): Int = when (id) {
     "matte-fade" -> R.string.editor_filter_matte_fade
     "vivid-punch" -> R.string.editor_filter_vivid_punch
     else -> R.string.editor_filter_none
+}
+
+/**
+ * The r34 swatch palette: fixed, named, TalkBack-labelled (one of N radio
+ * semantics). ARGB Longs; the layer keeps the exact value it picked.
+ */
+private val TEXT_COLORS: List<Pair<Long, Int>> = listOf(
+    0xFFFFFFFFL to R.string.editor_color_white,
+    0xFF111111L to R.string.editor_color_black,
+    0xFFF44336L to R.string.editor_color_red,
+    0xFFFF9800L to R.string.editor_color_orange,
+    0xFFFDD835L to R.string.editor_color_yellow,
+    0xFF43A047L to R.string.editor_color_green,
+    0xFF00ACC1L to R.string.editor_color_cyan,
+    0xFF1E88E5L to R.string.editor_color_blue,
+)
+
+/** One color swatch: a bordered circle with radio selection semantics. */
+@Composable
+private fun ColorSwatch(
+    colorArgb: Long,
+    selected: Boolean,
+    name: String,
+    enabled: Boolean,
+    onPick: () -> Unit,
+) {
+    // A local with a distinct name: inside the semantics {} lambda the
+    // receiver's own `selected` property shadows this parameter, so an
+    // unqualified `selected = selected` reads as self-assignment.
+    val isSelected = selected
+    Box(
+        modifier = Modifier
+            .padding(end = 10.dp)
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(Color(colorArgb.toInt()))
+            .border(
+                width = if (selected) 3.dp else 1.dp,
+                color = if (selected) Color.White else Color.White.copy(alpha = 0.4f),
+                shape = CircleShape,
+            )
+            // toggleable is not on this foundation build's API surface
+            // (unresolved at the r34 head's first compile); clickable +
+            // explicit semantics carries the same a11y contract --- the
+            // repo-wide clickable convention, role + selected stated here.
+            .clickable(
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = { onPick() },
+            )
+            .semantics {
+                this.selected = isSelected
+                contentDescription = name
+            },
+    )
 }
 
 @Composable

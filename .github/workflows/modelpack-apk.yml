@@ -48,83 +48,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust (stable, minimal)
-        uses: dtolnay/rust-toolchain@stable
+      # F-2 (follow-up 2026-11-04): the canonical toolchain setup now lives
+      # in .github/actions/toad-setup --- the full engine-cross shape (Rust +
+      # aarch64 target + the android cargo cache + cargo-ndk + the NDK
+      # resolve + the whole Android side), same pins, same cache keys (the
+      # warm caches from main's CI restore here unchanged).
+      - name: Set up the toolchain (Rust Android cross + Android)
+        uses: ./.github/actions/toad-setup
         with:
-          targets: aarch64-linux-android
-
-      # Same cache keys as ci.yml's engine-android job / engine-apk.yml:
-      # caches saved on the default branch are restorable from this
-      # branch, so main's green CI state is reused (warm build).
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            engine/target
-          key: cargo-android-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
-          restore-keys: cargo-android-${{ runner.os }}-
-
-      # Cache the cargo-ndk BINARY alone so `cargo install` is skipped
-      # entirely on hit (the command -v guard below makes the install a
-      # no-op, so no ~/.cargo/.crates* metadata needs caching).
-      - name: Cache cargo-ndk
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-ndk
-          key: cargo-ndk-${{ runner.os }}-3.5.4
-
-      - name: Install cargo-ndk (pinned)
-        run: command -v cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --version 3.5.4 --locked
-
-      # Same NDK resolution as ci.yml's engine-android job: pick the
-      # newest preinstalled NDK and export it (engine/scripts
-      # /build-android.sh also discovers it itself; resolving here
-      # documents the choice in the log).
-      - name: Resolve the preinstalled Android NDK
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          NDK_HOME="$(ls -d "$SDK_ROOT"/ndk/* 2>/dev/null | sort -V | tail -1)"
-          if [ -z "$NDK_HOME" ]; then
-            echo "No preinstalled NDK under $SDK_ROOT/ndk --- the build script's sdkmanager fallback will install one."
-          else
-            echo "Using preinstalled NDK: $NDK_HOME"
-            echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
-          fi
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      # Same SDK package pins as ci.yml (platform 36, build-tools 36).
-      - name: Install Android SDK packages (platform 36, build-tools 36)
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          if command -v sdkmanager >/dev/null 2>&1; then
-            SDK_MGR="$(command -v sdkmanager)"
-          else
-            SDK_MGR="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' | sort | tail -1)"
-          fi
-          echo "Using sdkmanager: $SDK_MGR"
-          yes | "$SDK_MGR" --licenses > /dev/null || true
-          "$SDK_MGR" --install "platforms;android-36" "build-tools;36.0.0"
-          "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x ./gradlew
+          rust: android
 
       # THE model-pack step: fetch the pinned FACE assets from the single
       # allowlisted host and verify size + SHA-256 against the pin BEFORE

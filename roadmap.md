@@ -13,7 +13,39 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.8 (2026-11-04, latest) --- the r36 drawing-tool round (authored);
+### v2.9 (2026-11-04, latest) --- the r37 mosaic/blur round (authored);
+  the r36 drawing tool MERGED
+
+- **The r36 drawing tool MERGED** (PR #111 squash `8c466ee`; merge-gate
+  CI 41839665527 caught the `effectiveRecipe` `pd` name collision ---
+  android-bound file, CI-compiled --- then **41840639163 GREEN**, all
+  three jobs). The `tasks.md` bullet moves to MERGED truth with this
+  entry.
+- **Phase 7, task 5 of 5 (its first half) --- the mosaic/blur regions
+  AUTHORED on `tg-p7-mosaic`** (layer type 4 of 5; the design contract
+  `docs/phase-7/mosaic-regions.md`, its delivery record appended): the
+  pixel-stage break from the family shape --- the painted regions
+  censor the FULLY graded pixels as the pipeline's FINAL stage (after
+  sharpen; `STAGE_ORDER` grew the tail), grid-relative like the
+  vignette (exact in the export, approximate in the preview under an
+  active crop). The additive `RegionLayers` recipe with the round-four
+  stacking proof (a pre-r37 sidecar carrying r34 text + r35 stickers +
+  r36 strokes loads clean; an unknown `kind` is corrupt data --- the
+  skip), the pure `RegionMask` (even-odd scanline fill, strict pixel
+  centres --- the triangle and the self-crossing bowtie pinned by
+  exact masks) + `RegionEffects` (integer-deterministic: the mosaic
+  block average over origin-aligned cells; the linear blur's
+  sliding-window horizontal box over a snapshot), the second paint
+  mode (mutually exclusive with Draw mode; a tap under three samples
+  drops honestly), the kind chips + strength slider under the paint
+  duality, and the draft region previewing AT PAINT TIME through the
+  same stage the export runs. 26 new JVM tests (the edit module at
+  340; the local harness ran 333 pure green pre-push, catching the
+  single-arithmetic slips). Editor `versionCode 10` (`0.4.5-edit-alpha`).
+  The §26 device rows ride the checklist, human-only.
+- `progress.json` untouched until merge per the F-12 convention.
+
+### v2.8 (2026-11-04, later) --- the r36 drawing-tool round (authored);
   the r35 sticker tool MERGED
 
 - **The r35 sticker tool MERGED** (PR #110 squash `980ccea`; merge-gate
@@ -1261,14 +1293,14 @@ phases build on.
 
 ### Phase 7 --- toadGALLERY Edit v2: filters and annotations
 
-**Status (r36): tasks 1-3 of 5 MERGED (the LUT `.cube` filter system
+**Status (r37): tasks 1-4 of 5 MERGED (the LUT `.cube` filter system
 with the user-import flow (PR #107 squash `314bd9c`, CI 41781166155
 green on the rebased head `ceb731b`; editor `versionCode 6`) and the
 text tool (PR #109 squash `6bb17a4`, merge-gate run 41822887363 green
 on head `699fd03`; editor `versionCode 7`) and the sticker tool (PR
 #110 squash `980ccea`, merge-gate run 41836972158 green on the first
 execution --- the pre-push harness's debut; editor `versionCode 8`)
---- plus task 4, the freehand drawing tool, AUTHORED on `tg-p7-drawing`
+--- plus task 5, the mosaic/blur regions, AUTHORED on `tg-p7-mosaic`
 (pending PR/CI/merge)**: the pure
 engine (the Adobe `.cube` parser with its honest subset rules, the
 allocation-free trilinear sampler, the alpha-preserving intensity
@@ -1315,8 +1347,20 @@ round(smoothing/25) → 0..4 passes), the shared `DrawCompositor` between
 the sticker pass and the text pass, the Draw UI under the exclusive
 duality, and the ONE `sweepPendingDrafts()` helper across the families;
 27 new JVM tests (the edit module at 314), the string count 104 → 114,
-editor `versionCode 9` (`0.4.4-edit-alpha`). **Remaining Phase 7 work**:
-mosaic/blur regions, frames, and the undo/redo extension across them.
+editor `versionCode 9` (`0.4.4-edit-alpha`). **The mosaic/blur regions
+(task 5, first half) are AUTHORED on `tg-p7-mosaic`** (r37 round
+2026-11-04, the design contract `docs/phase-7/mosaic-regions.md`): the
+pixel-stage break --- the painted regions censor the fully graded pixels
+as the pipeline's final stage (after sharpen), grid-relative like the
+vignette; the additive `RegionLayers` recipe (the round-four stacking
+proof; the unknown-kind skip), the pure `RegionMask` (even-odd scanline
+fill, strict pixel centres) + `RegionEffects` (integer-deterministic
+mosaic block average + sliding-window linear blur), the second paint
+mode (mutually exclusive with Draw mode), and the draft region
+previewing at paint time through the same stage the export runs;
+26 new JVM tests (the edit module at 340), the string count 114 → 122,
+editor `versionCode 10` (`0.4.5-edit-alpha`). **Remaining Phase 7 work**:
+frames, and the undo/redo extension across them.
 
 **Purpose:** Add the creative layer on top of the Phase 6 pipeline:
 filters, text, stickers, drawing, mosaic, frames.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r37 (Phase 7 v2): the mosaic/blur region surface. The two kinds are
+     the roadmap's named pair; the strength slider follows the r32
+     semantics conventions. The kind names are localized (unlike the
+     sticker proper nouns, these are category words). -->
+<resources>
+    <string name="editor_section_regions">Regions</string>
+    <string name="editor_region_mode">Region mode</string>
+    <string name="editor_region_mosaic">Mosaic</string>
+    <string name="editor_region_blur">Linear blur</string>
+    <string name="editor_region_layer">Region %1$d</string>
+    <string name="editor_region_strength">Strength: %1$d%%</string>
+    <string name="editor_a11y_region_strength">Region strength</string>
+    <string name="editor_region_remove">Remove region</string>
+</resources>

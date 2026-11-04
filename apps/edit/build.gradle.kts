@@ -184,8 +184,28 @@ android {
         // every draft across the families (undo/redo/export/add/remove/
         // switch/mode-exit --- a draft is never silently lost). JVM
         // tests: DrawLayersTest, DrawLayersRecipeTest.
-        versionCode = 9
-        versionName = "0.4.4-edit-alpha"
+        // versionCode 10 (r37 round): the mosaic/blur regions --- the
+        // pixel-stage break from the family shape: the painted regions
+        // censor the FULLY graded pixels as the pipeline's FINAL stage
+        // (after sharpen; STAGE_ORDER grows the tail), grid-relative
+        // like the vignette (exact in the export where the stage grid IS
+        // the output canvas; approximate in the preview under an active
+        // crop, exactly as the vignette's centre is). The additive
+        // RegionLayers recipe (absent key = clean pre-r37 sidecar; an
+        // unknown kind is corrupt data --- the skip; points tolerate
+        // like the stroke family's, thinned at commit to the shared 512
+        // cap by the duplicated-not-coupled stride rule), the pure
+        // RegionMask (even-odd scanline fill, pixel centres strictly
+        // inside) + RegionEffects (integer-deterministic: the mosaic
+        // block average over origin-aligned cells; the linear blur's
+        // sliding-window horizontal box over a snapshot), the region
+        // paint mode (mutually exclusive with Draw mode; a tap under
+        // three samples drops honestly --- a region needs an area), the
+        // kind chips + strength slider under the paint duality, and the
+        // draft region previewing AT PAINT TIME through the same stage.
+        // JVM tests: RegionLayersTest, RegionLayersRecipeTest.
+        versionCode = 10
+        versionName = "0.4.5-edit-alpha"
     }
 
     buildFeatures {

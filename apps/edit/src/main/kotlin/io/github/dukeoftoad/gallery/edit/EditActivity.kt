@@ -1132,20 +1132,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commit(current.copy(drawLayers = DrawLayers(existing + newLayer)))
     }
 
-    /**
-     * The ONE sweep point for every pending draft across the families
-     * (r36): each pending draft commits as its own snapshot, exactly as
-     * the r34 handlers did inline --- one helper so later rounds extend
-     * HERE instead of at every call site.
-     */
-    fun sweepPendingDrafts() {
-        commitTextDraftIfPending()
-        commitPosDraftIfPending()
-        commitStickerPosDraftIfPending()
-        commitPaintDraftIfPending()
-        commitRegionPaintDraftIfPending()
-    }
-
     // ---- r37 region helpers (the family conventions) ----
 
     /** Commits an edit to ONE region layer, by id, over the CURRENT recipe. */
@@ -1189,6 +1175,21 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         )
         commit(current.copy(mosaicRegions = RegionLayers(existing + newLayer)))
     }
+
+    /**
+     * The ONE sweep point for every pending draft across the families
+     * (r36): each pending draft commits as its own snapshot, exactly as
+     * the r34 handlers did inline --- one helper so later rounds extend
+     * HERE instead of at every call site.
+     */
+    fun sweepPendingDrafts() {
+        commitTextDraftIfPending()
+        commitPosDraftIfPending()
+        commitStickerPosDraftIfPending()
+        commitPaintDraftIfPending()
+        commitRegionPaintDraftIfPending()
+    }
+
 
     // First composition: decode the bounded preview + parse the bundled
     // looks (both off the main thread; the looks feed the chip row and

@@ -13,7 +13,44 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.9 (2026-11-04, latest) --- the r37 mosaic/blur round (authored);
+### v2.10 (2026-11-04, latest) --- the r38 frames round (authored, the
+  campaign's closing); the r37 regions MERGED + the r37 debt fix
+
+- **The r37 mosaic/blur regions MERGED** (PR #112 squash `6c206d9`;
+  merge-gate CI 41843555827 caught the local-function declaration
+  order, **41844536338 GREEN**). The `tasks.md` bullet moves to MERGED
+  truth with this entry.
+- **The r37 debt fix (recorded in the r37 delivery record's correction
+  note)** --- the r37 UI section never landed in the r37 branch: the
+  insertion script wrote `build.gradle.kts` but never the activity; the
+  merged r37 carried the model, the recipe, the pipeline stage and the
+  gesture scaffolding without its surface (`regionMode` unreachable,
+  the 8 `strings_r37.xml` entries shipped unused). The section rides
+  the r38 branch exactly as designed; the merge-gate CI stayed green
+  throughout because it compiled what was there --- it cannot test for
+  absence. The lesson joins the campaign's file-write discipline.
+- **Phase 7, task 5 of 5 (its second half) --- the frames AUTHORED on
+  `tg-p7-frames`** (layer type 5 of 5; the design contract
+  `docs/phase-7/frames.md`, its delivery record appended): the single
+  `FrameSelection` (the `LutSelection` shape: ONE mounting at a time;
+  an unresolvable frameId round-trips verbatim and degrades to no
+  frame), five PROJECT-AUTHORED parametric frames as pure geometry
+  functions over integers (plain / inner-line / double-line / film
+  with punched sprocket holes / polaroid; the thickness is the r37
+  kernels' formula), the shared `FrameCompositor` LAST in the composite
+  order (the mounting over everything), `ImportedFrameStore` (the
+  sticker store's contract, frame-shaped; an imported frame stretches
+  to the full canvas with the honest no-controls note), the look-row
+  UI, and **the undo/redo extension capstone**: `UndoRedoExtensionTest`
+  --- a mixed five-family session, ten commits across every family's
+  controls, undo to launch, redo forward, the EXACT recipe asserted at
+  every step. 32 new JVM tests (the edit module at 374; the local
+  harness ran 365 pure green pre-push). Editor `versionCode 11`
+  (`0.4.6-edit-alpha`); strings 122 → 129. The §27 device rows ride
+  the checklist, human-only.
+- `progress.json` untouched until merge per the F-12 convention.
+
+### v2.9 (2026-11-04, later) --- the r37 mosaic/blur round (authored);
   the r36 drawing tool MERGED
 
 - **The r36 drawing tool MERGED** (PR #111 squash `8c466ee`; merge-gate
@@ -1293,15 +1330,16 @@ phases build on.
 
 ### Phase 7 --- toadGALLERY Edit v2: filters and annotations
 
-**Status (r37): tasks 1-4 of 5 MERGED (the LUT `.cube` filter system
+**Status (r38): tasks 1-5 of 5 AUTHORED-OR-MERGED (the LUT `.cube` filter system
 with the user-import flow (PR #107 squash `314bd9c`, CI 41781166155
 green on the rebased head `ceb731b`; editor `versionCode 6`) and the
 text tool (PR #109 squash `6bb17a4`, merge-gate run 41822887363 green
 on head `699fd03`; editor `versionCode 7`) and the sticker tool (PR
 #110 squash `980ccea`, merge-gate run 41836972158 green on the first
 execution --- the pre-push harness's debut; editor `versionCode 8`)
---- plus task 5, the mosaic/blur regions, AUTHORED on `tg-p7-mosaic`
-(pending PR/CI/merge)**: the pure
+--- plus the mosaic/blur regions (MERGED as PR #112 `6c206d9`) and the
+frames (AUTHORED on `tg-p7-frames`, pending PR/CI/merge) completing the
+set**: the pure
 engine (the Adobe `.cube` parser with its honest subset rules, the
 allocation-free trilinear sampler, the alpha-preserving intensity
 blend), the recipe's additive `LutSelection` (an unresolvable id
@@ -1359,8 +1397,26 @@ mosaic block average + sliding-window linear blur), the second paint
 mode (mutually exclusive with Draw mode), and the draft region
 previewing at paint time through the same stage the export runs;
 26 new JVM tests (the edit module at 340), the string count 114 → 122,
-editor `versionCode 10` (`0.4.5-edit-alpha`). **Remaining Phase 7 work**:
-frames, and the undo/redo extension across them.
+editor `versionCode 10` (`0.4.5-edit-alpha`) --- MERGED as PR #112
+`6c206d9` (merge-gate CI 41843555827 caught the local-function
+declaration order; 41844536338 green), with the r37 UI section's debt
+fix riding the r38 branch (the recorded correction: the r37 insertion
+script never wrote the activity back; the merged r37 carried everything
+but the surface). **The frames (task 5, second half) are AUTHORED on
+`tg-p7-frames`** (r38 round 2026-11-04, the campaign's closing; the
+design contract `docs/phase-7/frames.md`): the single `FrameSelection`
+(the LutSelection shape), five project-authored parametric frames as
+pure geometry functions (plain / inner-line / double-line / film with
+punched sprocket holes / polaroid), the shared `FrameCompositor` LAST
+in the composite order, `ImportedFrameStore` (PNG/WebP
+magic-before-write; an imported frame stretches to the full canvas
+with the honest no-controls note), the look-row UI, and the
+undo/redo extension capstone (`UndoRedoExtensionTest`: a mixed
+five-family session walked exactly, undo to launch, redo forward);
+32 new JVM tests (the edit module at 374), the string count 122 → 129,
+editor `versionCode 11` (`0.4.6-edit-alpha`). **Phase 7's code-side
+work is COMPLETE pending this merge**; the §22-§27 device rows ride
+the checklist, human-only.
 
 **Purpose:** Add the creative layer on top of the Phase 6 pipeline:
 filters, text, stickers, drawing, mosaic, frames.

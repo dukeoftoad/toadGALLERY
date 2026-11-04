@@ -213,6 +213,40 @@ class EditActivity : ComponentActivity() {
             ?: importedStickerBitmaps[id]?.let { StickerCompositor.Resolved.Bitmap(it) }
 
     /**
+     * The user-imported frame store (r38): the SAF-picked PNG/WebP files
+     * copied verbatim into app-private storage, ids derived and
+     * collision-suffixed so they can never shadow the bundled set (the
+     * sticker store's contract, frame-shaped).
+     */
+    internal val importedFrameStore: ImportedFrameStore by lazy {
+        ImportedFrameStore(File(filesDir, "imported-frames"))
+    }
+
+    /**
+     * The imported-frame bitmaps (r38), decoded once per registry load and
+     * shared by the preview and every export (the sticker bitmaps'
+     * pattern; a payload that fails to decode is absent, never thrown).
+     */
+    internal val importedFrameBitmaps: MutableMap<String, Bitmap> =
+        java.util.Collections.synchronizedMap(java.util.LinkedHashMap())
+
+    /** Re-decodes every imported frame (per import); broken files are absent. */
+    internal fun reloadImportedFrames(): Map<String, Bitmap> {
+        val reloaded = java.util.LinkedHashMap<String, Bitmap>()
+        for (frame in importedFrameStore.list()) {
+            val file = importedFrameStore.fileFor(frame.id) ?: continue
+            try {
+                BitmapFactory.decodeFile(file.path)?.let { reloaded[frame.id] = it }
+            } catch (_: OutOfMemoryError) {
+            } catch (_: RuntimeException) {
+            }
+        }
+        importedFrameBitmaps.clear()
+        importedFrameBitmaps.putAll(reloaded)
+        return java.util.LinkedHashMap(reloaded)
+    }
+
+    /**
      * The bundled Typefaces (r34), created ONCE per session and shared by
      * the preview and every export --- the same instances, so a rendered
      * face cannot differ between them. A broken asset is simply absent
@@ -527,6 +561,20 @@ class EditActivity : ComponentActivity() {
                     )
                 }
             }
+            // r38: the frame LAST, the mounting over everything.
+            export.recipe.frame?.let { frameSel ->
+                FrameCompositor.draw(
+                    adjusted,
+                    frameSel,
+                    { frameId ->
+                        importedFrameBitmaps[frameId]?.let { FrameCompositor.Resolved.Bitmap(it) }
+                    },
+                    0f,
+                    0f,
+                    pipelined.width.toFloat(),
+                    pipelined.height.toFloat(),
+                )
+            }
 
             // 5. Insert the NEW MediaStore row (IS_PENDING on Q+).
             val displayName = ExportPlan.displayNameFor(sourceDisplayName(sourceUri), format)
@@ -828,6 +876,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var regionPaintDraft by remember { mutableStateOf<List<RegionLayer.Point>?>(null) }
     var regionKind by remember { mutableStateOf(RegionKind.MOSAIC) }
     var regionStrength by remember { mutableStateOf(12) }
+    // r38 frame state: the imported-bitmap snapshot + the version counter
+    // + the import rejection line. The frame selection itself lives in
+    // the recipe (a single selection, like the look); the width slider
+    // drafts through the generic draft slot (key "frame-width").
+    var importedFrames by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
+    var framesVersion by remember { mutableStateOf(0) }
+    var frameImportError by remember { mutableStateOf<String?>(null) }
 
     val committed = uiState.recipe
 
@@ -1003,6 +1058,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     ),
                 ),
             )
+        }
+        // r38: the frame width's live draft (the intensity slider's shape:
+        // a single selection, no per-layer id in the key).
+        if (d != null && d.first == "frame-width" && effective.frame != null) {
+            effective = effective.copy(frame = effective.frame!!.copy(widthPct = d.second))
         }
         return effective
     }
@@ -1221,7 +1281,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         previewBase, committed, draft, textDraft, posDraft, stickerPosDraft,
         paintDraft, brushColor, brushWidth, brushOpacity, brushSmoothing,
         regionPaintDraft, regionKind, regionStrength,
-        looks, importedStickers,
+        looks, importedStickers, importedFrames,
     ) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
@@ -1280,6 +1340,22 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     crop.height.toFloat(),
                 )
             }
+            // r38: the frame LAST --- the mounting covers the edges of
+            // everything (a caption spilling into the border goes under
+            // it, the physical metaphor).
+            effective.frame?.let { frameSel ->
+                FrameCompositor.draw(
+                    out,
+                    frameSel,
+                    { frameId ->
+                        importedFrames[frameId]?.let { FrameCompositor.Resolved.Bitmap(it) }
+                    },
+                    crop.x0.toFloat(),
+                    crop.y0.toFloat(),
+                    crop.width.toFloat(),
+                    crop.height.toFloat(),
+                )
+            }
             out.asImageBitmap()
         }
     }
@@ -1299,6 +1375,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     LaunchedEffect(stickersVersion) {
         importedStickers = withContext(Dispatchers.IO) {
             activity.reloadImportedStickers()
+        }
+    }
+
+    // The imported-frame registry (r38): the sticker machinery, frame-shaped.
+    LaunchedEffect(framesVersion) {
+        importedFrames = withContext(Dispatchers.IO) {
+            activity.reloadImportedFrames()
         }
     }
 
@@ -1395,6 +1478,39 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     is ImportedStickerStore.ImportResult.Imported -> stickersVersion++
                     is ImportedStickerStore.ImportResult.Rejected -> stickerImportError = result.reason
                     null -> stickerImportError = "the file could not be read"
+                }
+            }
+        }
+    }
+
+    // The r38 frame import flow: the sticker import flow, frame-shaped.
+    val frameImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            uiScope.launch {
+                frameImportError = null
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        val bytes = activity.contentResolver
+                            .openInputStream(uri)
+                            ?.use { it.readBytes() }
+                        if (bytes == null) {
+                            null
+                        } else {
+                            activity.importedFrameStore.import(
+                                bytes,
+                                activity.sourceDisplayName(uri.toString()),
+                            )
+                        }
+                    } catch (_: IOException) {
+                        null
+                    }
+                }
+                when (result) {
+                    is ImportedFrameStore.ImportResult.Imported -> framesVersion++
+                    is ImportedFrameStore.ImportResult.Rejected -> frameImportError = result.reason
+                    null -> frameImportError = "the file could not be read"
                 }
             }
         }
@@ -2815,6 +2931,331 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ) {
                     Text(stringResource(R.string.editor_draw_remove))
                 }
+            }
+
+            // ---- Regions (r37: the mosaic/blur pixel stage) ----
+            // The r37 UI section, landed here as the recorded debt fix (the
+            // r37 insertion script wrote the gradle file but never the
+            // activity --- the section existed only in a Python variable;
+            // the merged r37 carried the model, the recipe, the pipeline
+            // stage and the gesture scaffolding without this surface, and
+            // regionMode was unreachable. The correction rides r38; the
+            // r37 delivery record gains the note).
+            //
+            // The contract's UI shape (mosaic-regions.md decision 6): the
+            // Region-mode chip (mutually exclusive with Draw mode --- one
+            // paint mode at a time, enforced at both toggles), the region
+            // layer chips, and the controls under the duality: paint mode
+            // tunes the NEXT region (kind chips + strength slider, plain
+            // state, previewed live through the transient draft region);
+            // a selected region re-binds the same controls through the
+            // live-draft pattern. The effect previews AT PAINT TIME: the
+            // draft region rides the effective recipe through the same
+            // pipeline stage the export runs.
+            Text(
+                text = stringResource(R.string.editor_section_regions),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(
+                    selected = regionMode,
+                    onClick = {
+                        sweepPendingDrafts()
+                        regionMode = !regionMode
+                        if (regionMode) {
+                            // Entering region paint mode drops every
+                            // selection and exits the other paint mode;
+                            // the user keeps painting across regions.
+                            drawMode = false
+                            selectedTextLayerId = null
+                            selectedStickerLayerId = null
+                            selectedDrawLayerId = null
+                            selectedRegionLayerId = null
+                        }
+                    },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_region_mode)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                committed.mosaicRegions?.layers?.forEachIndexed { index, layer ->
+                    FilterChip(
+                        selected = selectedRegionLayerId == layer.id,
+                        onClick = {
+                            if (selectedRegionLayerId != layer.id) {
+                                sweepPendingDrafts()
+                                selectedRegionLayerId = layer.id
+                                regionMode = false
+                                drawMode = false
+                                selectedTextLayerId = null
+                                selectedStickerLayerId = null
+                                selectedDrawLayerId = null
+                            }
+                        },
+                        enabled = !exporting,
+                        label = { Text(stringResource(R.string.editor_region_layer, index + 1)) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+            }
+            val selectedRegionLayer = committed.mosaicRegions?.layers
+                ?.firstOrNull { it.id == selectedRegionLayerId }
+            if (regionMode) {
+                // -- The next region's kind + strength (plain state; the
+                //    live gesture previews them through the draft region).
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    FilterChip(
+                        selected = regionKind == RegionKind.MOSAIC,
+                        onClick = { regionKind = RegionKind.MOSAIC },
+                        enabled = !exporting,
+                        label = { Text(stringResource(R.string.editor_region_mosaic)) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    FilterChip(
+                        selected = regionKind == RegionKind.LINEAR_BLUR,
+                        onClick = { regionKind = RegionKind.LINEAR_BLUR },
+                        enabled = !exporting,
+                        label = { Text(stringResource(R.string.editor_region_blur)) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                val strengthName = stringResource(R.string.editor_a11y_region_strength)
+                val strengthLabel = stringResource(R.string.editor_region_strength, regionStrength)
+                Text(
+                    text = strengthLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = regionStrength.toFloat(),
+                    onValueChange = { regionStrength = it.toInt().coerceIn(1, 100) },
+                    valueRange = 1f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = strengthName
+                        stateDescription = strengthLabel
+                    },
+                )
+            } else if (selectedRegionLayer != null) {
+                val layerId = selectedRegionLayer.id
+                // -- Per-region re-edit (the live-draft pattern; chips
+                //    commit immediately, the strength slider drafts).
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    FilterChip(
+                        selected = selectedRegionLayer.kind == RegionKind.MOSAIC,
+                        onClick = {
+                            commitSelectedRegionLayer { it.copy(kind = RegionKind.MOSAIC) }
+                        },
+                        enabled = !exporting,
+                        label = { Text(stringResource(R.string.editor_region_mosaic)) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    FilterChip(
+                        selected = selectedRegionLayer.kind == RegionKind.LINEAR_BLUR,
+                        onClick = {
+                            commitSelectedRegionLayer { it.copy(kind = RegionKind.LINEAR_BLUR) }
+                        },
+                        enabled = !exporting,
+                        label = { Text(stringResource(R.string.editor_region_blur)) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                val strengthLive = draft?.takeIf { it.first == "region-strength@$layerId" }?.second
+                    ?: selectedRegionLayer.strengthPct
+                val strengthName = stringResource(R.string.editor_a11y_region_strength)
+                val strengthLabel = stringResource(R.string.editor_region_strength, strengthLive)
+                Text(
+                    text = strengthLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = strengthLive.toFloat(),
+                    onValueChange = { draft = "region-strength@$layerId" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "region-strength@$layerId") {
+                                commitSelectedRegionLayer { it.copy(strengthPct = d.second.coerceIn(1, 100)) }
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 1f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = strengthName
+                        stateDescription = strengthLabel
+                    },
+                )
+                TextButton(
+                    onClick = {
+                        sweepPendingDrafts()
+                        val remaining = (committed.mosaicRegions?.layers ?: emptyList())
+                            .filterNot { it.id == layerId }
+                        commit(
+                            committed.copy(
+                                mosaicRegions = if (remaining.isEmpty()) {
+                                    null
+                                } else {
+                                    RegionLayers(remaining)
+                                },
+                            ),
+                        )
+                        selectedRegionLayerId = remaining.lastOrNull()?.id
+                    },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_region_remove))
+                }
+            }
+
+            // ---- Frames (r38: the single mounting; the closing round) ----
+            // The contract's UI shape (frames.md decision 6): the look
+            // row's conventions --- the None chip, the bundled five, the
+            // imported chips, the SAF import chip; the width slider +
+            // colour swatches for a PARAMETRIC selection (the live-draft
+            // pattern, single-selection keys like the intensity slider);
+            // the honest no-controls note for an imported one (the bitmap
+            // is the frame). No paint mode, no gesture: a frame needs no
+            // dragging.
+            Text(
+                text = stringResource(R.string.editor_section_frames),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(
+                    selected = committed.frame == null,
+                    onClick = { sweepPendingDrafts(); commit(committed.copy(frame = null)) },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_frame_none)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                BundledFrames.ORDERED.forEach { entry ->
+                    FilterChip(
+                        selected = committed.frame?.frameId == entry.id,
+                        onClick = {
+                            sweepPendingDrafts()
+                            // A new frame keeps the current width and
+                            // colour (continuity while auditioning, the
+                            // look row's rule).
+                            commit(
+                                committed.copy(
+                                    frame = FrameSelection(
+                                        frameId = entry.id,
+                                        widthPct = committed.frame?.widthPct ?: FrameSelection.DEFAULT_WIDTH_PCT,
+                                        colorArgb = committed.frame?.colorArgb ?: FrameSelection.DEFAULT_COLOR,
+                                    ),
+                                ),
+                            )
+                        },
+                        enabled = !exporting,
+                        label = { Text(entry.displayName) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                // The user-imported frames, id-sorted; the store's collision
+                // rule makes the keys disjoint from the bundled set.
+                importedFrames.keys.sorted().forEach { id ->
+                    FilterChip(
+                        selected = committed.frame?.frameId == id,
+                        onClick = {
+                            sweepPendingDrafts()
+                            commit(
+                                committed.copy(
+                                    frame = FrameSelection(
+                                        frameId = id,
+                                        widthPct = committed.frame?.widthPct ?: FrameSelection.DEFAULT_WIDTH_PCT,
+                                        colorArgb = committed.frame?.colorArgb ?: FrameSelection.DEFAULT_COLOR,
+                                    ),
+                                ),
+                            )
+                        },
+                        enabled = !exporting,
+                        label = { Text(id) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                AssistChip(
+                    onClick = { frameImportLauncher.launch(arrayOf("image/png", "image/webp")) },
+                    enabled = !exporting,
+                    label = { Text(stringResource(R.string.editor_frame_import)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            frameImportError?.let { reason ->
+                Text(
+                    text = stringResource(R.string.editor_frame_import_failed, reason),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            val frameSelection = committed.frame
+            if (frameSelection != null) {
+                if (BundledFrames.byId(frameSelection.frameId) != null) {
+                    // -- The parametric controls: width (the single-selection
+                    //    draft key) + the swatches (immediate commits).
+                    val widthLive = draft?.takeIf { it.first == "frame-width" }?.second
+                        ?: frameSelection.widthPct
+                    val widthName = stringResource(R.string.editor_a11y_frame_width)
+                    val widthLabel = stringResource(R.string.editor_frame_width, widthLive)
+                    Text(
+                        text = widthLabel,
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Slider(
+                        value = widthLive.toFloat(),
+                        onValueChange = { draft = "frame-width" to it.toInt() },
+                        onValueChangeFinished = {
+                            draft?.let { d ->
+                                if (d.first == "frame-width" && committed.frame != null) {
+                                    commit(
+                                        committed.copy(
+                                            frame = committed.frame!!.copy(widthPct = d.second.coerceIn(1, 100)),
+                                        ),
+                                    )
+                                }
+                            }
+                            draft = null
+                        },
+                        valueRange = 1f..100f,
+                        enabled = !exporting,
+                        modifier = Modifier.semantics {
+                            contentDescription = widthName
+                            stateDescription = widthLabel
+                        },
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                            ColorSwatch(
+                                colorArgb = colorArgb,
+                                selected = frameSelection.colorArgb == colorArgb,
+                                name = stringResource(nameRes),
+                                enabled = !exporting,
+                                onPick = {
+                                    commit(
+                                        committed.copy(
+                                            frame = frameSelection.copy(colorArgb = colorArgb),
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                } else if (importedFrames.containsKey(frameSelection.frameId)) {
+                    // -- An imported frame: the bitmap is the frame; the
+                    //    width/colour controls do not apply, and the UI
+                    //    says so instead of showing dead controls.
+                    Text(
+                        text = stringResource(R.string.editor_frame_imported_note),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                // An unresolvable id (a version skew, a deleted import)
+                // selects NO chip --- the tolerance contract, shown
+                // honestly exactly like an unknown look id.
             }
 
             // ---- Per-channel HSL: band selector + three sliders ----

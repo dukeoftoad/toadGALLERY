@@ -958,3 +958,152 @@
   untouched, per the standing discipline). One transient push rejection
   (GitHub "Internal Server Error", request E1CC:9957C) cleared on the
   first backoff retry.
+
+### Run #13 — 2026-11-04 ~13:00 → ~14:35 UTC (the Phase 7 remaining-tasks campaign: r35-r38, all five merged)
+
+* **The directive**: "Remaining Phase 7: stickers, freehand drawing,
+  mosaic/blur, frames (+ the undo/redo extension). The ente-port
+  dogfood device rows remain human-only." Credentials: the maintainer
+  PAT (verified read-only before first use; stored only in command
+  strings; masked in every push/API output; wiped at window close).
+* **The campaign plan**: four code rounds, each a branch off the
+  previous merge (the r33/r34 flow), each its own design contract
+  authored FIRST, its own delivery record, its own PR + merge-gate CI
+  + squash-merge; the layer types are the roadmap's five
+  (text r34 / stickers r35 / drawing r36 / mosaic-blur r37 / frames
+  r38); the campaign's tasks numbering: 1 = LUT (r33), 2 = text (r34),
+  3 = stickers (r35), 4 = drawing (r36), 5 = r37 + r38 (the roadmap's
+  two named halves) + the undo/redo extension pinned by r38's capstone.
+* **The pre-push harness debut (the campaign's structural upgrade)**:
+  a local kotlinc harness (the `:apps:edit` pure subset + the contract
+  module, `/tmp/ktool/verify.sh`) ran every round's JVM tests BEFORE
+  any push --- the r34 merge window's seven-iteration CI loop was the
+  failure mode this exists to prevent. Per round it caught two-to-four
+  single-arithmetic slips, ALL test-side (the code was per spec every
+  time). The two known gaps stayed honest: the android-bound files
+  (`EditActivity.kt`, the compositors) remained CI-compiled with the
+  local `kotlin_lex_check.py` + desk review --- and cost exactly one
+  CI iteration each on the two rounds where a same-scope name
+  collision (r36's `pd`) and a local-function declaration order (r37)
+  slipped through. The r38 round, whose two UI sections were inserted
+  as pure text, went green on the FIRST execution.
+* **r35 — the sticker tool** (branch `tg-p7-stickers`; layer type 2 of
+  5): eight project-authored bundled stickers as IN-CODE vector shapes
+  (integer coordinates in a 0..100 design box, fills only --- no image
+  asset to pin, so the authorship record `docs/phase-7/bundled-stickers.md`
+  and the spot-coordinate tests carry the pin); the additive
+  `StickerLayers` recipe with the image-shaped tolerance delta (an
+  unresolvable `stickerId` round-trips verbatim and renders NOTHING ---
+  there is no default sticker to degrade to; a blank stickerId is a
+  skip alongside a blank id); the pure `StickerLayout` + the ONE shared
+  `StickerCompositor` BELOW the text pass (scene objects under
+  captions; imported bitmaps FIT inside the size box preserving
+  aspect); `ImportedStickerStore` (PNG/WebP magic-before-write,
+  verbatim bytes, derived collision-suffixed ids); the Sticker UI
+  (registry chips as ADD actions, layer chips, the r34 slider/drag
+  conventions, ONE selected layer at a time across the families);
+  46 new JVM tests; strings 94 → 104. **PR #110, squash `980ccea`,
+  merge-gate run 41836972158 GREEN ON THE FIRST EXECUTION.**
+* **r36 — the freehand drawing tool** (branch `tg-p7-drawing`; layer
+  type 3 of 5): the stroke-per-layer model (one gesture = one layer =
+  one undo snapshot); the additive `DrawLayers` recipe with the
+  round-three stacking proof (a pre-r36 sidecar carrying r34 text AND
+  r35 stickers loads clean); the commit-time stride thinning to the
+  512 cap (first/last always kept); the pure `DrawLayout` (the brush
+  width, the r34 text alpha math, Chaikin corner-cutting
+  `round(smoothing/25)` → 0..4 passes at place time, endpoints
+  preserved); the ONE shared `DrawCompositor` BETWEEN the stickers and
+  the text (annotation over the scene objects, captions above the
+  annotation; a tap is a dot); the Draw UI under the exclusive duality
+  (paint mode tunes the NEXT stroke; a selected layer re-binds the
+  same controls); the paint gesture; and the ONE `sweepPendingDrafts()`
+  helper across the families (12 call sites retrofitted, all
+  additive); 27 new JVM tests; strings 104 → 114. **PR #111, squash
+  `8c466ee`; merge-gate 41839665527 caught the `effectiveRecipe` `pd`
+  name collision (the r34 posDraft binding vs the r36 paint-draft
+  binding in one scope), 41840639163 GREEN.**
+* **r37 — the mosaic/blur regions** (branch `tg-p7-mosaic`; layer type
+  4 of 5): the PIXEL-STAGE break from the family shape --- the painted
+  regions censor the FULLY graded pixels as the pipeline's FINAL stage
+  (13, after sharpen; `STAGE_ORDER` grew the tail), grid-relative like
+  the vignette (exact in the export where the stage grid IS the output
+  canvas; approximate in the preview under an active crop --- the r30
+  characteristic, stated honestly); the additive `RegionLayers` recipe
+  with the round-four stacking proof (r34 text + r35 stickers + r36
+  strokes); the unknown-kind skip (corrupt data, never a crash); the
+  pure `RegionMask` (an even-odd scanline fill, pixel centres strictly
+  inside --- the triangle and the self-crossing bowtie pinned by exact
+  masks, the pinch empty) + `RegionEffects` (integer-deterministic: the
+  mosaic block average over origin-aligned cells; the linear blur's
+  sliding-window horizontal box over a snapshot, pinned equivalent to
+  the per-pixel loop); the second paint mode (mutually exclusive with
+  Draw mode; a tap under three samples drops honestly); the draft
+  region previewing AT PAINT TIME through the same stage the export
+  runs; 26 new JVM tests; strings 114 → 122. **PR #112, squash
+  `6c206d9`; merge-gate 41843555827 caught the local-function
+  declaration order (`sweepPendingDrafts` referenced a helper declared
+  later), 41844536338 GREEN.**
+* **The r37 debt (found and fixed in-window, the recorded correction)**:
+  the r37 UI SECTION never landed in the r37 branch --- the insertion
+  script wrote `build.gradle.kts` but never wrote `EditActivity.kt`
+  back; the assert passed, the print said "section+versionCode ok",
+  and the section existed only in a Python variable. The merged r37
+  (#112) carried the model, the recipe, the pipeline stage and the
+  gesture scaffolding without its surface: `regionMode` was
+  unreachable, no region chips or sliders existed, and the 8
+  `strings_r37.xml` entries shipped unused (unused strings don't fail
+  builds, which is why the merge-gate CI stayed green --- it compiled
+  what was there, honestly; it cannot test for absence). The fix rode
+  the r38 branch exactly as designed; the correction is recorded in
+  the r37 delivery record and F-20 carries the standing rule.
+* **r38 — the frames + the undo/redo capstone** (branch `tg-p7-frames`;
+  layer type 5 of 5, the campaign's closing): the single
+  `FrameSelection` (the `LutSelection` shape: ONE mounting at a time;
+  an unresolvable frameId round-trips verbatim and degrades to no
+  frame); five PROJECT-AUTHORED parametric frames as pure integer
+  geometry (plain / inner-line / double-line / film with punched
+  sprocket holes / polaroid; the thickness the r37 kernels' formula
+  `max(1, widthPct × minEdge / 1000)`); the ONE shared
+  `FrameCompositor` LAST in the composite order (the mounting over
+  everything; the film holes CLEAR through to the photo);
+  `ImportedFrameStore` (the sticker store's contract, frame-shaped; an
+  imported frame stretches to the full canvas with the honest
+  no-controls note); the look-row UI; and **the undo/redo extension
+  capstone** --- `UndoRedoExtensionTest`: a mixed five-family session,
+  ten commits across every family's controls, undo all the way to the
+  launch state, redo forward, the EXACT recipe asserted at every step;
+  32 new JVM tests (the edit module at 374); strings 122 → 129.
+  **PR #113, squash `003dafb`, merge-gate 41847157146 GREEN ON THE
+  FIRST EXECUTION** (both UI sections, r37's fix and r38's own, were
+  inserted as text and compiled clean on the first try).
+* **The campaign's composite order (final)**: pixel pipeline
+  (geometry → adjustments → LUT → vignette → sharpen → mosaic/blur
+  regions) → stickers → strokes → text → frame. The cross-type rule
+  was pinned round by round: scene objects under annotation,
+  annotation under captions, the mounting over everything.
+* **The recount corrections (the standing discipline)**: every round's
+  test count and string count were EXECUTED numbers, never estimates
+  (the r34 lesson held all campaign): 46 + 27 + 26 + 32 = 131 new JVM
+  tests; the edit module 241 → 374; the strings 94 → 129; the
+  versionCodes 7 → 11 (`0.4.6-edit-alpha`).
+* **This docs pass (the closing push)**: `progress.json` p7 → done
+  (tasks 1-5/5 with every sha; percent 73 → 79 --- the weights total
+  100, the dashboard's `computeScopePercent` agrees), roadmap v2.11 +
+  the Phase 7 status at final merged truth, `tasks.md` (the r38 bullet
+  to MERGED + the Phase 7 parent closed code-side with the §22-§27
+  device rows human-only), the follow-up notes, this Run #13. The
+  ente-port scope is untouched per the directive: the dogfood device
+  rows remain human-only.
+* **CI cost**: 6 merge-gate pull_request runs (41836972158, 41839665527
+  + 41840639163, 41843555827 + 41844536338, 41847157146) + the four
+  merge-triggered main runs (each superseded under the ci-main
+  concurrency group by the next push; the last merge's run is
+  superseded by THIS push) + this push's own main run --- the final
+  state's validation. ZERO dispatches; the two dispatch-only APK
+  workflows remain untouched, per the standing discipline.
+* **Window note**: this docs pass was authored twice --- the first
+  pass was staged but uncommitted when a branch-cleanup command
+  (`git reset --hard` on the wrong branch) wiped it; the second pass
+  is this one, committed per logical group immediately (the F-20 rule
+  applied to the orchestrator's own tooling: a change exists when it
+  is COMMITTED, not when the print says ok).

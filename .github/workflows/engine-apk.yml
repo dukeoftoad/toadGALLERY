@@ -23,6 +23,11 @@ name: Engine APK (test build)
 # stands), debug key only (same shape as the r23 device artifact).
 #
 # Triggers: pushes to tg-engine-apk-* branches and manual dispatch.
+#
+# r46 (the APK-matrix round): the engine-enabled build is the ENGINE FLAVOR
+# (:apps:gallery:assembleEngineDebug --- applicationIdSuffix .engine, so the
+# debug artifact installs as io.github.dukeoftoad.gallery.engine.debug), and
+# the output paths are flavor-qualified (apk/engine/debug/).
 
 on:
   push:
@@ -60,14 +65,15 @@ jobs:
       # (ORT 1.31.0 official AAR) for arm64-v8a into
       # apps/gallery/build/rust-jniLibs/, which the jniLibs srcDir packages.
       - name: Engine-enabled debug assemble (arm64-v8a)
-        run: ./gradlew :apps:gallery:assembleDebug -PwithEngine --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:assembleEngineDebug -PwithEngine --no-daemon --stacktrace
 
       # Verbatim gate from ci.yml's engine-android job: the engine-enabled
       # APK must actually carry BOTH native libraries (a silently broken
       # jniLibs wiring would otherwise pass the assemble step).
+      # r46: the ENGINE flavor's output dir (apk/engine/debug/).
       - name: Verify the native libraries are packaged
         run: |
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           echo "APK: $APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
@@ -83,14 +89,14 @@ jobs:
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort | tail -1)"
           [ -n "$AAPT2" ] || { echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; }
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
           [ -n "$EXPECTED_VC" ] || { echo "::error::could not derive versionCode from apps/gallery/build.gradle.kts"; exit 1; }
           BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
           echo "badging: $BADGE"
           echo "derived expected versionCode: $EXPECTED_VC"
-          echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.debug'" \
-            || { echo "::error::unexpected application id (expected the .debug variant)"; exit 1; }
+          echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.engine.debug'" \
+            || { echo "::error::unexpected application id (expected the .engine.debug variant)"; exit 1; }
           echo "$BADGE" | grep -q "versionCode='$EXPECTED_VC'" \
             || { echo "::error::unexpected versionCode (expected $EXPECTED_VC, derived from the checkout)"; exit 1; }
 
@@ -103,7 +109,7 @@ jobs:
       # owns the current versionCode.
       - name: Stage the APK (r23-convention name, derived)
         run: |
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
           VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/gallery/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
           LAST_ROUND="$(grep -oE 'versionCode [0-9]+ .r[0-9]+ round' apps/gallery/build.gradle.kts | tail -1 || true)"

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r46 (the APK-matrix round): the BASIC flavor's launcher label.
+     The canonical id (no applicationIdSuffix) keeps the unchanged
+     "toadGALLERY" name; the engine-family flavors append their shape
+     ("toadGALLERY Engine" etc.) via their own copies of this file, so all
+     four coexist on one launcher like the separate edit app. Flavor res
+     overrides the main source set's same-named resource (the main value
+     stays the fallback). -->
+<resources>
+    <string name="app_launcher_name">toadGALLERY</string>
+</resources>

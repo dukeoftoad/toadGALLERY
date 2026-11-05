@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.buildshape.BuildShape
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
@@ -591,596 +592,631 @@ fun SettingsScreen(
         // is the provisioner's own disk-backed derivation, never cached
         // wishful thinking. Actions run on Dispatchers.IO inside the VM;
         // the buttons sit disabled while one is in flight.
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = stringResource(R.string.settings_ai_section),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .testTag("settings_ai_section")
-                .semantics { heading() },
-        )
-        Text(
-            text = stringResource(R.string.settings_ai_section_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-
-        // ---- People albums consent (r25, Workstream 6; ADR-0010) ----
-        // The opt-in gate for the People UI: default OFF, one Switch, copy
-        // that states the on-device posture. The row rides the SHELL-scoped
-        // settingsViewModel (write-through persistence under the
-        // `peopleAlbumEnabled` key); the People/Albums surfaces read the
-        // preference at their own entry refresh, so a toggle here lands
-        // there on the next visit.
-        val peopleAlbumsEnabled by settingsViewModel.peopleAlbumsEnabled.collectAsState()
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        // r46 build-shape gate: the WHOLE AI engine section --- header,
+        // consent rows, provisioning cards, queue cards --- renders only
+        // where the build carries the engine library (the basic APK hides
+        // every engine surface, and the AiEngineViewModel below is never
+        // constructed there).
+        if (BuildShape.withEngine) {
+            Spacer(Modifier.height(24.dp))
             Text(
-                text = stringResource(R.string.settings_people_albums),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
-                checked = peopleAlbumsEnabled,
-                onCheckedChange = { settingsViewModel.setPeopleAlbumsEnabled(it) },
+                text = stringResource(R.string.settings_ai_section),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .padding(start = 16.dp)
-                    .testTag("settings_toggle_people_albums"),
+                    .testTag("settings_ai_section")
+                    .semantics { heading() },
             )
-        }
-        Text(
-            text = stringResource(R.string.settings_people_albums_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-
-        // ---- Magic search consent (r26, Workstream 7; ADR-0010) ----
-        // The opt-in gate for the Search tab's Content mode: the SAME row
-        // shape as the People consent one row above (default OFF, one
-        // Switch, on-device copy, write-through under the
-        // `magicSearchEnabled` key); the Search tab's Content-mode
-        // ViewModel reads the preference at query time, so a toggle here
-        // lands there on the next query.
-        val magicSearchEnabled by settingsViewModel.magicSearchEnabled.collectAsState()
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
             Text(
-                text = stringResource(R.string.settings_magic_search),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
+                text = stringResource(R.string.settings_ai_section_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
             )
-            Switch(
-                checked = magicSearchEnabled,
-                onCheckedChange = { settingsViewModel.setMagicSearchEnabled(it) },
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .testTag("settings_toggle_magic_search"),
-            )
-        }
-        Text(
-            text = stringResource(R.string.settings_magic_search_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
 
-        // ---- Things collections consent (r39, the ente-port exit round;
-        // ADR-0010) ----
-        // The opt-in gate for the Albums tab's Things section: the SAME
-        // row shape as the two rows above (default OFF, one Switch,
-        // on-device copy, write-through under the `thingsAlbumEnabled`
-        // key). Things rides the SAME semantic models and the SAME
-        // semantic index as Magic Search --- no new download card, no
-        // new queue; the body copy says so.
-        val thingsAlbumsEnabled by settingsViewModel.thingsAlbumsEnabled.collectAsState()
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.settings_things_albums),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
-                checked = thingsAlbumsEnabled,
-                onCheckedChange = { settingsViewModel.setThingsAlbumsEnabled(it) },
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .testTag("settings_toggle_things_albums"),
-            )
-        }
-        Text(
-            text = stringResource(R.string.settings_things_albums_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-
-        val aiViewModel: AiEngineViewModel = viewModel()
-        val aiState by aiViewModel.state.collectAsState()
-        LaunchedEffect(Unit) { aiViewModel.refresh() }
-        Text(
-            text = stringResource(
-                if (aiState.engineLibraryPresent) {
-                    R.string.settings_ai_library_present
-                } else {
-                    R.string.settings_ai_library_missing
+            // r46 build-shape gate: FACE-index surfaces exist only on
+            // the engine and face flavors.
+            if (BuildShape.faceIndex) {
+                // ---- People albums consent (r25, Workstream 6; ADR-0010) ----
+                // The opt-in gate for the People UI: default OFF, one Switch, copy
+                // that states the on-device posture. The row rides the SHELL-scoped
+                // settingsViewModel (write-through persistence under the
+                // `peopleAlbumEnabled` key); the People/Albums surfaces read the
+                // preference at their own entry refresh, so a toggle here lands
+                // there on the next visit.
+                val peopleAlbumsEnabled by settingsViewModel.peopleAlbumsEnabled.collectAsState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_people_albums),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = peopleAlbumsEnabled,
+                        onCheckedChange = { settingsViewModel.setPeopleAlbumsEnabled(it) },
+                        modifier = Modifier
+                            .padding(start = 16.dp)
+                            .testTag("settings_toggle_people_albums"),
+                    )
                 }
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Text(
-            text = stringResource(
-                when (aiState.faceCapability) {
-                    ModelProvisioner.CapabilityState.NotProvisioned -> R.string.settings_ai_state_none
-                    is ModelProvisioner.CapabilityState.Partial -> R.string.settings_ai_state_partial
-                    ModelProvisioner.CapabilityState.Ready -> R.string.settings_ai_state_ready
-                }
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        aiState.assets.forEach { asset ->
-            Text(
-                text = asset.fileName + " — " + stringResource(
-                    if (asset.installed) {
-                        R.string.settings_ai_asset_installed
-                    } else {
-                        R.string.settings_ai_asset_missing
-                    }
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Button(
-            onClick = aiViewModel::downloadFaceModels,
-            enabled = !aiState.busy,
-            modifier = Modifier
-                .padding(top = 16.dp)
-                .testTag("settings_ai_download"),
-        ) {
-            Text(stringResource(R.string.settings_ai_download))
-        }
-        Button(
-            onClick = aiViewModel::deleteFaceModels,
-            enabled = !aiState.busy,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_delete"),
-        ) {
-            Text(stringResource(R.string.settings_ai_delete))
-        }
-        Button(
-            onClick = aiViewModel::runSelfTest,
-            enabled = !aiState.busy,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_selftest"),
-        ) {
-            Text(stringResource(R.string.settings_ai_selftest))
-        }
-        when (val note = aiState.note) {
-            AiDogfoodState.Note.Downloaded -> Text(
-                text = stringResource(R.string.settings_ai_download_done),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is AiDogfoodState.Note.DownloadFailed -> Text(
-                text = stringResource(R.string.settings_ai_download_failed, note.reason),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            AiDogfoodState.Note.Deleted -> Text(
-                text = stringResource(R.string.settings_ai_deleted),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            AiDogfoodState.Note.SemanticDownloaded -> Text(
-                text = stringResource(R.string.settings_ai_semantic_download_done),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is AiDogfoodState.Note.SemanticDownloadFailed -> Text(
-                text = stringResource(R.string.settings_ai_semantic_download_failed, note.reason),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            AiDogfoodState.Note.SemanticDeleted -> Text(
-                text = stringResource(R.string.settings_ai_semantic_deleted),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            null -> Unit
-        }
-        when (val result = aiState.selfTest) {
-            AiDogfoodState.SelfTestResult.LibraryMissing -> Text(
-                text = stringResource(R.string.settings_ai_selftest_library_missing),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            AiDogfoodState.SelfTestResult.NoJpegFound -> Text(
-                text = stringResource(R.string.settings_ai_selftest_no_jpeg),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is AiDogfoodState.SelfTestResult.Ok -> Text(
-                text = pluralStringResource(
-                    R.plurals.settings_ai_selftest_faces,
-                    result.faces,
-                    result.fileName,
-                    result.faces,
-                    result.elapsedMs,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is AiDogfoodState.SelfTestResult.Failed -> Text(
-                text = stringResource(R.string.settings_ai_selftest_failed, result.message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            null -> Unit
-        }
-
-        // ---- Semantic models (r26, Workstream 7) ----
-        // The SEMANTIC pack's card: the r22 FACE download card's shape
-        // over the CLIP image/text/vocab assets --- per-asset presence
-        // rows from the provisioner's own disk-backed derivation, the
-        // capability state line, Download + Delete, and outcome notes.
-        // The size is the manifest pin's own total (never a
-        // hand-maintained copy), formatted with the house byte formatter.
-        Text(
-            text = stringResource(R.string.settings_ai_semantic_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Text(
-            text = stringResource(
-                when (aiState.semanticCapability) {
-                    ModelProvisioner.CapabilityState.NotProvisioned -> R.string.settings_ai_semantic_state_none
-                    is ModelProvisioner.CapabilityState.Partial -> R.string.settings_ai_semantic_state_partial
-                    ModelProvisioner.CapabilityState.Ready -> R.string.settings_ai_semantic_state_ready
-                }
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        aiState.semanticAssets.forEach { asset ->
-            Text(
-                text = asset.fileName + " — " + stringResource(
-                    if (asset.installed) {
-                        R.string.settings_ai_asset_installed
-                    } else {
-                        R.string.settings_ai_asset_missing
-                    }
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Button(
-            onClick = aiViewModel::downloadSemanticModels,
-            enabled = !aiState.busy,
-            modifier = Modifier
-                .padding(top = 16.dp)
-                .testTag("settings_ai_semantic_download"),
-        ) {
-            Text(
-                stringResource(
-                    R.string.settings_ai_semantic_download,
-                    aiViewModel.semanticModelsSize,
-                )
-            )
-        }
-        Button(
-            onClick = aiViewModel::deleteSemanticModels,
-            enabled = !aiState.busy,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_semantic_delete"),
-        ) {
-            Text(stringResource(R.string.settings_ai_semantic_delete))
-        }
-        when (val note = aiState.note) {
-            AiDogfoodState.Note.SemanticDownloaded -> Text(
-                text = stringResource(R.string.settings_ai_semantic_download_done),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is AiDogfoodState.Note.SemanticDownloadFailed -> Text(
-                text = stringResource(R.string.settings_ai_semantic_download_failed, note.reason),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            AiDogfoodState.Note.SemanticDeleted -> Text(
-                text = stringResource(R.string.settings_ai_semantic_deleted),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            else -> Unit // the FACE notes render in their own block above
-        }
-
-        // ---- Background face indexing (r24 dogfood) ----
-        // The r24 slice replaces the r23 12-photo manual run with the
-        // WorkManager-backed queue: revision-aware planning, bounded
-        // batches, retry/resume across process death, live progress from
-        // the queue state, and the threshold tuning control the r23
-        // round flagged for this round. Reset cancels + erases the whole
-        // app-private face-index directory (ML store AND queue state).
-        Text(
-            text = stringResource(R.string.settings_ai_queue_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        val queueState by aiViewModel.queueState.collectAsState()
-        val queueThreshold by aiViewModel.threshold.collectAsState()
-        Text(
-            text = stringResource(
-                R.string.settings_ai_queue_threshold,
-                String.format(java.util.Locale.ROOT, "%.2f", queueThreshold),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_queue_threshold"),
-        )
-        Slider(
-            value = queueThreshold.toFloat(),
-            onValueChange = { aiViewModel.setThreshold(it.toDouble()) },
-            valueRange = AI_THRESHOLD_MIN.toFloat()..AI_THRESHOLD_MAX.toFloat(),
-            steps = AI_THRESHOLD_STEPS,
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .testTag("settings_ai_queue_threshold_slider"),
-        )
-        Button(
-            onClick = aiViewModel::startBackgroundIndex,
-            enabled = aiState.engineLibraryPresent,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_index_run"),
-        ) {
-            Text(stringResource(R.string.settings_ai_queue_start))
-        }
-        when (queueState) {
-            is FaceIndexWorkState.Enqueued, is FaceIndexWorkState.Running -> Button(
-                onClick = aiViewModel::cancelBackgroundIndex,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .testTag("settings_ai_queue_cancel"),
-            ) {
-                Text(stringResource(R.string.settings_ai_queue_cancel))
-            }
-            else -> Unit
-        }
-        Button(
-            onClick = aiViewModel::resetFaceIndex,
-            enabled = !aiState.busy,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_index_delete"),
-        ) {
-            Text(stringResource(R.string.settings_ai_queue_reset))
-        }
-        when (val queue = queueState) {
-            is FaceIndexWorkState.Running -> Text(
-                text = stringResource(
-                    R.string.settings_ai_queue_progress,
-                    queue.processedThisRun,
-                    queue.batchSize,
-                    queue.queueDepth,
-                    queue.facesWrittenThisRun,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is FaceIndexWorkState.Enqueued -> Text(
-                text = stringResource(R.string.settings_ai_queue_enqueued),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is FaceIndexWorkState.Succeeded -> {
-                val clusters = queue.output.getInt(KEY_OUT_CLUSTERS, -1)
                 Text(
-                    // Two honest terminal shapes: the draining run that
-                    // clustered (clusters >= 0) and the no-op drain that
-                    // did not (empty plan --- no wasted recluster pass).
-                    text = if (clusters >= 0) {
-                        stringResource(
-                            R.string.settings_ai_queue_done,
-                            queue.output.getInt(KEY_OUT_INDEXED, 0),
-                            queue.output.getInt(KEY_OUT_FACES, 0),
-                            queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
-                            clusters,
-                            queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
-                        )
-                    } else {
-                        stringResource(
-                            R.string.settings_ai_queue_done_no_cluster,
-                            queue.output.getInt(KEY_OUT_INDEXED, 0),
-                            queue.output.getInt(KEY_OUT_FACES, 0),
-                            queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
-                            queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
-                        )
-                    },
+                    text = stringResource(R.string.settings_people_albums_body),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
-            }
-            is FaceIndexWorkState.Failed -> Text(
-                text = stringResource(R.string.settings_ai_queue_failed, queue.message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            FaceIndexWorkState.Cancelled -> Text(
-                text = stringResource(R.string.settings_ai_queue_cancelled),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            FaceIndexWorkState.Idle -> Unit
-        }
+            } // BuildShape.faceIndex
 
-        // ---- Background semantic indexing (r26, Workstream 7) ----
-        // The semantic queue's card: the r24 face queue card's shape,
-        // sibling edition --- its own unique WorkManager chain, live
-        // per-batch progress, terminal outcome lines (including the
-        // once-per-drain reconciliation pass's report), start / cancel /
-        // reset. The reset's honest scope: the QUEUE's bookkeeping only
-        // (`clip-index-state.json`); the clip ROWS ride the r24 Reset
-        // face index, whose directory delete erases the whole
-        // `ml-index.sqlite` both queues share.
-        Text(
-            text = stringResource(R.string.settings_ai_semantic_queue_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        val clipQueueState by aiViewModel.clipQueueState.collectAsState()
-        Button(
-            onClick = aiViewModel::startSemanticIndex,
-            enabled = aiState.engineLibraryPresent,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_semantic_index_run"),
-        ) {
-            Text(stringResource(R.string.settings_ai_semantic_queue_start))
-        }
-        when (clipQueueState) {
-            is ClipIndexWorkState.Enqueued, is ClipIndexWorkState.Running -> Button(
-                onClick = aiViewModel::cancelSemanticIndex,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .testTag("settings_ai_semantic_queue_cancel"),
-            ) {
-                Text(stringResource(R.string.settings_ai_semantic_queue_cancel))
-            }
-            else -> Unit
-        }
-        Button(
-            onClick = aiViewModel::resetSemanticIndex,
-            enabled = !aiState.busy,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag("settings_ai_semantic_index_delete"),
-        ) {
-            Text(stringResource(R.string.settings_ai_semantic_queue_reset))
-        }
-        when (val clip = clipQueueState) {
-            is ClipIndexWorkState.Running -> Text(
+            // r46 build-shape gate: SEMANTIC-index surfaces exist only on
+            // the engine and semantic flavors.
+            if (BuildShape.semanticIndex) {
+                // ---- Magic search consent (r26, Workstream 7; ADR-0010) ----
+                // The opt-in gate for the Search tab's Content mode: the SAME row
+                // shape as the People consent one row above (default OFF, one
+                // Switch, on-device copy, write-through under the
+                // `magicSearchEnabled` key); the Search tab's Content-mode
+                // ViewModel reads the preference at query time, so a toggle here
+                // lands there on the next query.
+                val magicSearchEnabled by settingsViewModel.magicSearchEnabled.collectAsState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_magic_search),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = magicSearchEnabled,
+                        onCheckedChange = { settingsViewModel.setMagicSearchEnabled(it) },
+                        modifier = Modifier
+                            .padding(start = 16.dp)
+                            .testTag("settings_toggle_magic_search"),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.settings_magic_search_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            } // BuildShape.semanticIndex
+
+            // r46 build-shape gate: SEMANTIC-index surfaces exist only on
+            // the engine and semantic flavors.
+            if (BuildShape.semanticIndex) {
+                // ---- Things collections consent (r39, the ente-port exit round;
+                // ADR-0010) ----
+                // The opt-in gate for the Albums tab's Things section: the SAME
+                // row shape as the two rows above (default OFF, one Switch,
+                // on-device copy, write-through under the `thingsAlbumEnabled`
+                // key). Things rides the SAME semantic models and the SAME
+                // semantic index as Magic Search --- no new download card, no
+                // new queue; the body copy says so.
+                val thingsAlbumsEnabled by settingsViewModel.thingsAlbumsEnabled.collectAsState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_things_albums),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = thingsAlbumsEnabled,
+                        onCheckedChange = { settingsViewModel.setThingsAlbumsEnabled(it) },
+                        modifier = Modifier
+                            .padding(start = 16.dp)
+                            .testTag("settings_toggle_things_albums"),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.settings_things_albums_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            } // BuildShape.semanticIndex
+
+            val aiViewModel: AiEngineViewModel = viewModel()
+            val aiState by aiViewModel.state.collectAsState()
+            LaunchedEffect(Unit) { aiViewModel.refresh() }
+            Text(
                 text = stringResource(
-                    R.string.settings_ai_semantic_queue_progress,
-                    clip.processedThisRun,
-                    clip.batchSize,
-                    clip.queueDepth,
+                    if (aiState.engineLibraryPresent) {
+                        R.string.settings_ai_library_present
+                    } else {
+                        R.string.settings_ai_library_missing
+                    }
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = 8.dp),
             )
-            is ClipIndexWorkState.Enqueued -> Text(
-                text = stringResource(R.string.settings_ai_semantic_queue_enqueued),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            is ClipIndexWorkState.Succeeded -> {
-                // Two honest terminal shapes, like the r24 card's: the
-                // draining run that ran the reconciliation pass (a fill
-                // outcome string present) and the no-op drain that did not
-                // (empty plan --- no wasted fill pass).
-                val fillOutcome = clip.output.getString(KEY_CLIP_OUT_FILL_OUTCOME)
+            // r46 build-shape gate: FACE-index surfaces exist only on
+            // the engine and face flavors.
+            if (BuildShape.faceIndex) {
                 Text(
                     text = stringResource(
-                        R.string.settings_ai_semantic_queue_done,
-                        clip.output.getInt(KEY_CLIP_OUT_INDEXED, 0),
-                        clip.output.getInt(KEY_CLIP_OUT_SKIPPED_UP_TO_DATE, 0),
-                        clip.output.getLong(KEY_CLIP_OUT_TOTAL_CLIPS, 0L),
+                        when (aiState.faceCapability) {
+                            ModelProvisioner.CapabilityState.NotProvisioned -> R.string.settings_ai_state_none
+                            is ModelProvisioner.CapabilityState.Partial -> R.string.settings_ai_state_partial
+                            ModelProvisioner.CapabilityState.Ready -> R.string.settings_ai_state_ready
+                        }
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                 )
-                if (fillOutcome != null) {
-                    // The engine's own reconciliation report, surfaced
-                    // verbatim (outcome + counters + the resumed flag).
+                aiState.assets.forEach { asset ->
                     Text(
-                        text = stringResource(
-                            R.string.settings_ai_semantic_fill,
-                            fillOutcome,
-                            clip.output.getInt(KEY_CLIP_OUT_FILL_ROWS, 0),
-                            clip.output.getInt(KEY_CLIP_OUT_FILL_INDEXED, 0),
-                            clip.output.getInt(KEY_CLIP_OUT_FILL_SKIPPED, 0),
-                            if (clip.output.getBoolean(KEY_CLIP_OUT_FILL_RESUMED, false)) {
-                                stringResource(R.string.settings_ai_semantic_fill_resumed_yes)
+                        text = asset.fileName + " — " + stringResource(
+                            if (asset.installed) {
+                                R.string.settings_ai_asset_installed
                             } else {
-                                stringResource(R.string.settings_ai_semantic_fill_resumed_no)
-                            },
+                                R.string.settings_ai_asset_missing
+                            }
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
-            }
-            is ClipIndexWorkState.Failed -> Text(
-                text = stringResource(R.string.settings_ai_semantic_queue_failed, clip.message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            ClipIndexWorkState.Cancelled -> Text(
-                text = stringResource(R.string.settings_ai_semantic_queue_cancelled),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            ClipIndexWorkState.Idle -> Unit
-        }
+                Button(
+                    onClick = aiViewModel::downloadFaceModels,
+                    enabled = !aiState.busy,
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .testTag("settings_ai_download"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_download))
+                }
+                Button(
+                    onClick = aiViewModel::deleteFaceModels,
+                    enabled = !aiState.busy,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_delete"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_delete))
+                }
+                Button(
+                    onClick = aiViewModel::runSelfTest,
+                    enabled = !aiState.busy,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_selftest"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_selftest))
+                }
+                when (val note = aiState.note) {
+                    AiDogfoodState.Note.Downloaded -> Text(
+                        text = stringResource(R.string.settings_ai_download_done),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is AiDogfoodState.Note.DownloadFailed -> Text(
+                        text = stringResource(R.string.settings_ai_download_failed, note.reason),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    AiDogfoodState.Note.Deleted -> Text(
+                        text = stringResource(R.string.settings_ai_deleted),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    AiDogfoodState.Note.SemanticDownloaded -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_download_done),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is AiDogfoodState.Note.SemanticDownloadFailed -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_download_failed, note.reason),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    AiDogfoodState.Note.SemanticDeleted -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_deleted),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    null -> Unit
+                }
+                when (val result = aiState.selfTest) {
+                    AiDogfoodState.SelfTestResult.LibraryMissing -> Text(
+                        text = stringResource(R.string.settings_ai_selftest_library_missing),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    AiDogfoodState.SelfTestResult.NoJpegFound -> Text(
+                        text = stringResource(R.string.settings_ai_selftest_no_jpeg),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is AiDogfoodState.SelfTestResult.Ok -> Text(
+                        text = pluralStringResource(
+                            R.plurals.settings_ai_selftest_faces,
+                            result.faces,
+                            result.fileName,
+                            result.faces,
+                            result.elapsedMs,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is AiDogfoodState.SelfTestResult.Failed -> Text(
+                        text = stringResource(R.string.settings_ai_selftest_failed, result.message),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    null -> Unit
+                }
+            } // BuildShape.faceIndex
+
+            // r46 build-shape gate: SEMANTIC-index surfaces exist only on
+            // the engine and semantic flavors.
+            if (BuildShape.semanticIndex) {
+                // ---- Semantic models (r26, Workstream 7) ----
+                // The SEMANTIC pack's card: the r22 FACE download card's shape
+                // over the CLIP image/text/vocab assets --- per-asset presence
+                // rows from the provisioner's own disk-backed derivation, the
+                // capability state line, Download + Delete, and outcome notes.
+                // The size is the manifest pin's own total (never a
+                // hand-maintained copy), formatted with the house byte formatter.
+                Text(
+                    text = stringResource(R.string.settings_ai_semantic_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Text(
+                    text = stringResource(
+                        when (aiState.semanticCapability) {
+                            ModelProvisioner.CapabilityState.NotProvisioned -> R.string.settings_ai_semantic_state_none
+                            is ModelProvisioner.CapabilityState.Partial -> R.string.settings_ai_semantic_state_partial
+                            ModelProvisioner.CapabilityState.Ready -> R.string.settings_ai_semantic_state_ready
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                aiState.semanticAssets.forEach { asset ->
+                    Text(
+                        text = asset.fileName + " — " + stringResource(
+                            if (asset.installed) {
+                                R.string.settings_ai_asset_installed
+                            } else {
+                                R.string.settings_ai_asset_missing
+                            }
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Button(
+                    onClick = aiViewModel::downloadSemanticModels,
+                    enabled = !aiState.busy,
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .testTag("settings_ai_semantic_download"),
+                ) {
+                    Text(
+                        stringResource(
+                            R.string.settings_ai_semantic_download,
+                            aiViewModel.semanticModelsSize,
+                        )
+                    )
+                }
+                Button(
+                    onClick = aiViewModel::deleteSemanticModels,
+                    enabled = !aiState.busy,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_semantic_delete"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_semantic_delete))
+                }
+                when (val note = aiState.note) {
+                    AiDogfoodState.Note.SemanticDownloaded -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_download_done),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is AiDogfoodState.Note.SemanticDownloadFailed -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_download_failed, note.reason),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    AiDogfoodState.Note.SemanticDeleted -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_deleted),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    else -> Unit // the FACE notes render in their own block above
+                }
+            } // BuildShape.semanticIndex
+
+            // r46 build-shape gate: FACE-index surfaces exist only on
+            // the engine and face flavors.
+            if (BuildShape.faceIndex) {
+                // ---- Background face indexing (r24 dogfood) ----
+                // The r24 slice replaces the r23 12-photo manual run with the
+                // WorkManager-backed queue: revision-aware planning, bounded
+                // batches, retry/resume across process death, live progress from
+                // the queue state, and the threshold tuning control the r23
+                // round flagged for this round. Reset cancels + erases the whole
+                // app-private face-index directory (ML store AND queue state).
+                Text(
+                    text = stringResource(R.string.settings_ai_queue_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                val queueState by aiViewModel.queueState.collectAsState()
+                val queueThreshold by aiViewModel.threshold.collectAsState()
+                Text(
+                    text = stringResource(
+                        R.string.settings_ai_queue_threshold,
+                        String.format(java.util.Locale.ROOT, "%.2f", queueThreshold),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_queue_threshold"),
+                )
+                Slider(
+                    value = queueThreshold.toFloat(),
+                    onValueChange = { aiViewModel.setThreshold(it.toDouble()) },
+                    valueRange = AI_THRESHOLD_MIN.toFloat()..AI_THRESHOLD_MAX.toFloat(),
+                    steps = AI_THRESHOLD_STEPS,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .testTag("settings_ai_queue_threshold_slider"),
+                )
+                Button(
+                    onClick = aiViewModel::startBackgroundIndex,
+                    enabled = aiState.engineLibraryPresent,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_index_run"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_queue_start))
+                }
+                when (queueState) {
+                    is FaceIndexWorkState.Enqueued, is FaceIndexWorkState.Running -> Button(
+                        onClick = aiViewModel::cancelBackgroundIndex,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testTag("settings_ai_queue_cancel"),
+                    ) {
+                        Text(stringResource(R.string.settings_ai_queue_cancel))
+                    }
+                    else -> Unit
+                }
+                Button(
+                    onClick = aiViewModel::resetFaceIndex,
+                    enabled = !aiState.busy,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_index_delete"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_queue_reset))
+                }
+                when (val queue = queueState) {
+                    is FaceIndexWorkState.Running -> Text(
+                        text = stringResource(
+                            R.string.settings_ai_queue_progress,
+                            queue.processedThisRun,
+                            queue.batchSize,
+                            queue.queueDepth,
+                            queue.facesWrittenThisRun,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is FaceIndexWorkState.Enqueued -> Text(
+                        text = stringResource(R.string.settings_ai_queue_enqueued),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is FaceIndexWorkState.Succeeded -> {
+                        val clusters = queue.output.getInt(KEY_OUT_CLUSTERS, -1)
+                        Text(
+                            // Two honest terminal shapes: the draining run that
+                            // clustered (clusters >= 0) and the no-op drain that
+                            // did not (empty plan --- no wasted recluster pass).
+                            text = if (clusters >= 0) {
+                                stringResource(
+                                    R.string.settings_ai_queue_done,
+                                    queue.output.getInt(KEY_OUT_INDEXED, 0),
+                                    queue.output.getInt(KEY_OUT_FACES, 0),
+                                    queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
+                                    clusters,
+                                    queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.settings_ai_queue_done_no_cluster,
+                                    queue.output.getInt(KEY_OUT_INDEXED, 0),
+                                    queue.output.getInt(KEY_OUT_FACES, 0),
+                                    queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
+                                    queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                                )
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                    is FaceIndexWorkState.Failed -> Text(
+                        text = stringResource(R.string.settings_ai_queue_failed, queue.message),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    FaceIndexWorkState.Cancelled -> Text(
+                        text = stringResource(R.string.settings_ai_queue_cancelled),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    FaceIndexWorkState.Idle -> Unit
+                }
+            } // BuildShape.faceIndex
+
+            // r46 build-shape gate: SEMANTIC-index surfaces exist only on
+            // the engine and semantic flavors.
+            if (BuildShape.semanticIndex) {
+                // ---- Background semantic indexing (r26, Workstream 7) ----
+                // The semantic queue's card: the r24 face queue card's shape,
+                // sibling edition --- its own unique WorkManager chain, live
+                // per-batch progress, terminal outcome lines (including the
+                // once-per-drain reconciliation pass's report), start / cancel /
+                // reset. The reset's honest scope: the QUEUE's bookkeeping only
+                // (`clip-index-state.json`); the clip ROWS ride the r24 Reset
+                // face index, whose directory delete erases the whole
+                // `ml-index.sqlite` both queues share.
+                Text(
+                    text = stringResource(R.string.settings_ai_semantic_queue_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                val clipQueueState by aiViewModel.clipQueueState.collectAsState()
+                Button(
+                    onClick = aiViewModel::startSemanticIndex,
+                    enabled = aiState.engineLibraryPresent,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_semantic_index_run"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_semantic_queue_start))
+                }
+                when (clipQueueState) {
+                    is ClipIndexWorkState.Enqueued, is ClipIndexWorkState.Running -> Button(
+                        onClick = aiViewModel::cancelSemanticIndex,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testTag("settings_ai_semantic_queue_cancel"),
+                    ) {
+                        Text(stringResource(R.string.settings_ai_semantic_queue_cancel))
+                    }
+                    else -> Unit
+                }
+                Button(
+                    onClick = aiViewModel::resetSemanticIndex,
+                    enabled = !aiState.busy,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("settings_ai_semantic_index_delete"),
+                ) {
+                    Text(stringResource(R.string.settings_ai_semantic_queue_reset))
+                }
+                when (val clip = clipQueueState) {
+                    is ClipIndexWorkState.Running -> Text(
+                        text = stringResource(
+                            R.string.settings_ai_semantic_queue_progress,
+                            clip.processedThisRun,
+                            clip.batchSize,
+                            clip.queueDepth,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is ClipIndexWorkState.Enqueued -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_queue_enqueued),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is ClipIndexWorkState.Succeeded -> {
+                        // Two honest terminal shapes, like the r24 card's: the
+                        // draining run that ran the reconciliation pass (a fill
+                        // outcome string present) and the no-op drain that did not
+                        // (empty plan --- no wasted fill pass).
+                        val fillOutcome = clip.output.getString(KEY_CLIP_OUT_FILL_OUTCOME)
+                        Text(
+                            text = stringResource(
+                                R.string.settings_ai_semantic_queue_done,
+                                clip.output.getInt(KEY_CLIP_OUT_INDEXED, 0),
+                                clip.output.getInt(KEY_CLIP_OUT_SKIPPED_UP_TO_DATE, 0),
+                                clip.output.getLong(KEY_CLIP_OUT_TOTAL_CLIPS, 0L),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        if (fillOutcome != null) {
+                            // The engine's own reconciliation report, surfaced
+                            // verbatim (outcome + counters + the resumed flag).
+                            Text(
+                                text = stringResource(
+                                    R.string.settings_ai_semantic_fill,
+                                    fillOutcome,
+                                    clip.output.getInt(KEY_CLIP_OUT_FILL_ROWS, 0),
+                                    clip.output.getInt(KEY_CLIP_OUT_FILL_INDEXED, 0),
+                                    clip.output.getInt(KEY_CLIP_OUT_FILL_SKIPPED, 0),
+                                    if (clip.output.getBoolean(KEY_CLIP_OUT_FILL_RESUMED, false)) {
+                                        stringResource(R.string.settings_ai_semantic_fill_resumed_yes)
+                                    } else {
+                                        stringResource(R.string.settings_ai_semantic_fill_resumed_no)
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                    is ClipIndexWorkState.Failed -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_queue_failed, clip.message),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    ClipIndexWorkState.Cancelled -> Text(
+                        text = stringResource(R.string.settings_ai_semantic_queue_cancelled),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    ClipIndexWorkState.Idle -> Unit
+                }
+            } // BuildShape.semanticIndex
+        } // BuildShape.withEngine
 
         // ---- Progress (F-1: the build-time progress.json mirror) ----
         // Placed ABOVE About (it changes with the roadmap; About is the

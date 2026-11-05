@@ -231,8 +231,14 @@ android {
         // record).
         // JVM tests: FramesTest, BundledFramesTest, FramesRecipeTest,
         // ImportedFrameStoreTest, UndoRedoExtensionTest.
-        versionCode = 11
-        versionName = "0.4.6-edit-alpha"
+        // versionCode 12 (r40, the Phase 10 hardening round): the editor
+        // side of the a11y sweep --- the top-bar title carries the same
+        // heading semantics the gallery screens landed (the editor's
+        // per-control a11y was already at the r32 standard; this closes
+        // the one remaining heading gap). No behavior change; no new
+        // strings.
+        versionCode = 12
+        versionName = "0.4.7-edit-alpha"
     }
 
     buildFeatures {

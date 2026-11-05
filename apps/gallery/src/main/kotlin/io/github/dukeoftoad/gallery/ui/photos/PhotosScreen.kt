@@ -53,6 +53,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.paging.LoadState
@@ -737,7 +741,12 @@ private fun PhotosHeaderBar(
     onStartSlideshow: () -> Unit,
 ) {
     TopAppBar(
-        title = { Text(stringResource(R.string.nav_photos)) },
+        title = {
+            Text(
+                text = stringResource(R.string.nav_photos),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         actions = {
             IconButton(
                 onClick = onStartSlideshow,
@@ -855,7 +864,12 @@ private fun FileOpsSelectionBar(
 ) {
     TopAppBar(
         title = {
-            Text(pluralStringResource(R.plurals.file_ops_selection_count, count, count))
+            Text(
+                pluralStringResource(R.plurals.file_ops_selection_count, count, count),
+                // r40 a11y: the count is a dynamic surface --- a polite live
+                // region so TalkBack announces selection changes.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         },
         navigationIcon = {
             IconButton(onClick = onExit) {
@@ -1154,7 +1168,13 @@ private fun FileOpsProgressDialog(
                 Text(stringResource(R.string.file_ops_action_cancel))
             }
         },
-        title = { Text(stringResource(messageRes, done, total)) },
+        title = {
+            Text(
+                text = stringResource(messageRes, done, total),
+                // r40 a11y: the batch progress updates politely announce.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        },
         modifier = Modifier.testTag("file_ops_progress"),
     )
 }
@@ -1218,7 +1238,13 @@ private fun VaultMoveProgressDialog(
                 Text(stringResource(R.string.file_ops_action_cancel))
             }
         },
-        title = { Text(stringResource(R.string.vault_progress_move, done, total)) },
+        title = {
+            Text(
+                text = stringResource(R.string.vault_progress_move, done, total),
+                // r40 a11y: the batch progress updates politely announce.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        },
         modifier = Modifier.testTag("vault_progress"),
     )
 }

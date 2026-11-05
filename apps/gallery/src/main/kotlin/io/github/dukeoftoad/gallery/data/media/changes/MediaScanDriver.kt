@@ -7,6 +7,8 @@ import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.identity.MediaIdentity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -424,7 +426,19 @@ class MediaScanDriver(
      * the diff --- absence from THIS walk is not death for THEM.
      */
     private suspend fun rescanVolume(volume: String, liveToken: String?, trigger: ScanTrigger) {
-        val rows = rowSource.scanVolume(volume)
+        // r40 hardening: the walk's cooperative cancellation probe --- the
+        // driver's own coroutine context is the truth (a cancelled app-start
+        // pass must stop walking mid-volume, not only between volumes; see
+        // ScanWalkPolicy). The CONTEXT is captured once HERE (rescanVolume is
+        // a suspend function --- `currentCoroutineContext()` cannot be called
+        // inside the non-suspend probe lambda, the merge-gate's exact catch);
+        // the captured `Job` is live: once cancelled, `isActive` reads false
+        // for every later probe, and the thrown CancellationException
+        // propagates through this method's caller (`scanAllVolumes` rethrows
+        // it untouched).
+        val walkContext = currentCoroutineContext()
+        val walkCancelled = { !walkContext.isActive }
+        val rows = rowSource.scanVolume(volume, walkCancelled)
         val liveRecords = catalogue.recordsMap().filterKeys { key ->
             MediaIdentity.fromKeyString(key)?.volumeName == volume
         }

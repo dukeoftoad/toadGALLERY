@@ -48,6 +48,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -384,7 +386,9 @@ private fun PlacesSection(
                             text = stringResource(R.string.albums_places_header),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .semantics { heading() },
                         )
                         TextButton(
                             onClick = onOpenPlaces,
@@ -507,7 +511,9 @@ private fun PeopleSection(
                             text = stringResource(R.string.albums_people_header),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .semantics { heading() },
                         )
                         TextButton(
                             onClick = onOpenPeople,
@@ -593,6 +599,7 @@ private fun CollectionsSection(
             text = stringResource(R.string.albums_collections_header),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         Text(
             text = stringResource(R.string.albums_collections_subtitle),
@@ -837,7 +844,9 @@ private fun ThingsSection(
                         text = stringResource(R.string.albums_things_header),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { heading() },
                     )
                     TextButton(
                         onClick = { showCreate = true },
@@ -948,9 +957,7 @@ private fun ThingsCollectionChip(
             )
             IconButton(
                 onClick = onRemove,
-                modifier = Modifier
-                    .size(32.dp)
-                    .testTag("albums_things_chip_remove"),
+                modifier = Modifier.testTag("albums_things_chip_remove"),
             ) {
                 Icon(
                     imageVector = androidx.compose.material.icons.Icons.Filled.Close,

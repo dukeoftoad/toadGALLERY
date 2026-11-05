@@ -349,8 +349,20 @@ android {
         // detail screen, the thingsAlbumEnabled consent row, and the
         // distance-cut searchClipsWithin over upstream's own vecdb
         // max_distance). No new permissions; no new dependencies.
-        versionCode = 35
-        versionName = "0.4.3-alpha"
+        // versionCode 36 (r40, the Phase 10 hardening round): the
+        // accessibility hardening sweep --- heading semantics on every
+        // screen title + the Albums section headers, polite live regions
+        // on the dynamic surfaces (the three selection app bars, the
+        // file-ops/vault batch progress dialogs, the viewer position
+        // counter), and the Things chip remove button restored to the
+        // 48dp ToadTouchTarget floor (the explicit 32dp size shrink
+        // removed); the Phase 4 scan walk gains the cooperative
+        // cancellation probe (ScanWalkPolicy, checked every 500 rows).
+        // No new permissions; no new dependencies; no new strings (the
+        // sweep reuses the existing cd_* copy --- all fixes are semantics
+        // wiring on text that already exists).
+        versionCode = 36
+        versionName = "0.4.4-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 

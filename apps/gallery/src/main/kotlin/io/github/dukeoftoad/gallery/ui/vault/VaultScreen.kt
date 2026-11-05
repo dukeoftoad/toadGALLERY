@@ -55,6 +55,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -182,7 +186,12 @@ fun VaultScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.vault_title)) },
+                title = {
+                    Text(
+                        text = stringResource(R.string.vault_title),
+                        modifier = Modifier.semantics { heading() },
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -502,6 +511,9 @@ private fun VaultContent(
                             R.string.vault_progress_delete
                         },
                     ),
+                    // r40 a11y: the vault batch progress updates politely
+                    // announce (the same convention as the file-ops bars).
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             },
             modifier = Modifier.testTag("vault_progress"),

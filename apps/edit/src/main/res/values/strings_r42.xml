@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r42 (Phase 10 sub-scope B): the lightweight video editor surface
+     (ADR-0012; docs/phase-10/video-editor.md). The nine colour sliders
+     reuse the photo surface's r30 labels + the r32 a11y names verbatim
+     (the Phase 6 parameter set, reused not re-declared); everything here
+     is the video-specific surface copy. -->
+<resources>
+    <string name="editor_video_app_name">toadGALLERY Edit — Video</string>
+    <string name="editor_video_title">Video editor</string>
+
+    <!-- Trim -->
+    <string name="editor_video_section_trim">Trim</string>
+    <string name="editor_video_trim_start">Trim start: %1$s</string>
+    <string name="editor_a11y_video_trim_start">Trim start position</string>
+    <string name="editor_video_trim_end">Trim end: %1$s</string>
+    <string name="editor_a11y_video_trim_end">Trim end position</string>
+
+    <!-- Audio (the honest fact, never a dead toggle) -->
+    <string name="editor_video_section_audio">Audio</string>
+    <string name="editor_video_mute">Mute audio in the export</string>
+    <string name="editor_a11y_video_mute">Mute audio in the export</string>
+    <string name="editor_video_mute_state_on">muted</string>
+    <string name="editor_video_mute_state_off">sound on</string>
+    <string name="editor_video_no_audio">No audio track — the export proceeds video only.</string>
+
+    <!-- Speed -->
+    <string name="editor_video_section_speed">Speed</string>
+    <string name="editor_video_speed">Playback speed: %1$s</string>
+    <string name="editor_a11y_video_speed">Whole-clip playback speed</string>
+    <string name="editor_video_speed_whole_clip">Whole clip</string>
+    <string name="editor_video_speed_region">Selected region</string>
+    <string name="editor_video_region_start">Region start: %1$s</string>
+    <string name="editor_a11y_video_region_start">Speed region start position</string>
+    <string name="editor_video_region_end">Region end: %1$s</string>
+    <string name="editor_a11y_video_region_end">Speed region end position</string>
+    <string name="editor_video_region_speed">Region speed: %1$s</string>
+    <string name="editor_a11y_video_region_speed">Region speed factor</string>
+    <string name="editor_video_region_note">The region speed applies to the export; the preview plays at normal speed. The rest of the clip rides at 1x.</string>
+
+    <!-- Frame extraction -->
+    <string name="editor_video_section_frame">Extract frame</string>
+    <string name="editor_video_frame_timestamp">Frame time: %1$s</string>
+    <string name="editor_a11y_video_frame_timestamp">Frame extraction timestamp</string>
+    <string name="editor_video_frame_jpeg">JPEG</string>
+    <string name="editor_video_frame_png">PNG</string>
+    <string name="editor_video_frame_note">The frame is saved from the source video, without the colour adjustments.</string>
+    <string name="editor_video_frame_extract">Extract frame</string>
+    <string name="editor_video_frame_saved">Frame saved as a new image.</string>
+
+    <!-- Animation export -->
+    <string name="editor_video_section_animation">Export animation</string>
+    <string name="editor_video_animation_start">In point: %1$s</string>
+    <string name="editor_a11y_video_animation_start">Animation in point</string>
+    <string name="editor_video_animation_end">Out point: %1$s</string>
+    <string name="editor_a11y_video_animation_end">Animation out point</string>
+    <string name="editor_video_animation_width">Width: %1$d px</string>
+    <string name="editor_a11y_video_animation_width">Animation frame width</string>
+    <string name="editor_video_animation_fps">Frame rate: %1$d fps</string>
+    <string name="editor_a11y_video_animation_fps">Animation frame rate</string>
+    <string name="editor_video_animation_gif">GIF</string>
+    <string name="editor_video_animation_webp">WebP</string>
+    <string name="editor_video_animation_estimate">About %1$d frames, roughly %2$d MiB.</string>
+    <string name="editor_video_animation_export">Export animation</string>
+    <string name="editor_video_animation_saved">Animation saved as a new image.</string>
+
+    <!-- Export progress + the honest narrations -->
+    <string name="editor_video_export_failed">The export failed: %1$s</string>
+    <string name="editor_video_exporting">Exporting: %1$d%%</string>
+    <string name="editor_a11y_video_export_progress">%1$d percent</string>
+    <string name="editor_video_frame_progress">Rendering frames: %1$d%%</string>
+    <string name="editor_video_cancel_export">Cancel</string>
+    <string name="editor_video_permission_refused">The storage permission was refused — the export needs it to save a copy on this Android version.</string>
+    <string name="editor_a11y_video_preview">Video preview with the current trim, speed, mute and colour adjustments</string>
+</resources>

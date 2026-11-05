@@ -237,6 +237,7 @@ android {
         // per-control a11y was already at the r32 standard; this closes
         // the one remaining heading gap). No behavior change; no new
         // strings.
+
         // versionCode 13 (r41, the Phase 10 Edit v3 AI round): the four
         // on-device AI features --- magic erase (the third paint mode;
         // u2netp + MI-GAN), sky replacement (five PROJECT-AUTHORED
@@ -256,6 +257,49 @@ android {
         // UndoRedoAiExtensionTest.
         versionCode = 13
         versionName = "0.4.8-edit-alpha"
+// versionCode 14 (r42, the Phase 10 sub-scope B round): the
+        // LIGHTWEIGHT VIDEO EDITOR (ADR-0012; docs/phase-10/
+        // video-editor.md) --- the edit APK hosts it (the recorded lean;
+        // the measured APK delta rides the human-only device rows). (1)
+        // the pure :shared:video-edit module (the ExportPlan pattern,
+        // video-shaped): the validated VideoEditPlan (trim TimeRange,
+        // sorted non-overlapping 0.25x..2x speed segments with the
+        // monotonicity rule + the derived output duration, the
+        // audioTrackPresent input fact where mute on a no-audio clip is a
+        // recorded no-op, the nine ADR-0012 colour parameters),
+        // FrameExtractPlan, AnimationExportPlan (the deduplicated frame
+        // count + the 32 MiB byte-budget preflight refusing BEFORE any
+        // render, the round-pinned caps 64..1280 px width / 2..30 fps),
+        // the VideoOutputPlan non-destructive MediaStore policy (INSERT
+        // only, IS_PENDING on Q+, the failed-write pending-row cancel,
+        // the "-edit" naming rule --- no replace-original path exists),
+        // the project-authored GIF LZW encoder + animated WebP muxer, and
+        // the VideoExportRunner seam + coordinator --- all JVM-tested;
+        // (2) the media3 surface at the pinned 1.11.1 (Apache-2.0, no
+        // INTERNET, minSdk 21): ExoPlayer preview + Transformer export
+        // consuming the SAME shared shader/uniform struct
+        // (VideoAdjustProjection), so preview and export agree by
+        // construction (one model, two realizations); the Transformer
+        // rides behind the runner seam so only the thin runner touches
+        // media3; (3) the launch path: the ADDITIVE editor-contract v2
+        // extension (the optional media-kind extra, absent = image so the
+        // v1 wire is byte-identical for image launches; the video mimes
+        // on this activity's own filter, meta-data contract version 2)
+        // consumed by the gallery's launch site; (4) the surface:
+        // VideoEditActivity --- trim/mute/speed controls (whole-clip
+        // factor previewed exactly via playback speed; the optional region
+        // honestly noted as export-applied), the nine adjustment sliders
+        // live-previewed through the GL effect, the frame-extract +
+        // animation sheets (the preflight refusal shown honestly), the
+        // honest "no audio track" note instead of a dead toggle, honest
+        // progress + cancellation, the r32 a11y conventions throughout
+        // (TalkBack names + live values, 48dp targets, the no-audio note
+        // announced); frame extraction + animation frames ride the
+        // MediaMetadataRetriever path (documented in the contract doc).
+        // Zero new permissions; the INTERNET gate stays green with the
+        // media3 artifacts present.
+        versionCode = 14
+        versionName = "0.4.9-edit-alpha"
     }
 
     buildFeatures {
@@ -390,6 +434,23 @@ configurations.configureEach {
 dependencies {
     // --- The versioned contract (ADR-0002 / ADR-0007): one truth, both apps ---
     implementation(project(":shared:editor-contract"))
+
+    // --- The pure video-edit plan module (r42): the plans, the nine-row
+    // ADR-0012 adjustment projection + shader/uniform struct, the runner
+    // seam, the encoders, the MediaStore policy. No Android type crosses
+    // it --- the same pure-JVM shape as the editor contract module.
+    implementation(project(":shared:video-edit"))
+
+    // --- media3 at the pinned catalog version 1.11.1 (r42, ADR-0012):
+    // ExoPlayer + PlayerView for the in-app preview (content URIs only,
+    // the gallery viewer precedent), Transformer + effect for the export
+    // pipeline. Apache-2.0; verified against the Google Maven POM + the
+    // 1.11.1 release notes: no declared permissions at all, so the
+    // module's own merged-manifest INTERNET gate above stays green.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
 
     // --- Compose (ADR-0009) ---
     implementation(platform(libs.compose.bom))

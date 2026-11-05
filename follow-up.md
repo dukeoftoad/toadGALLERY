@@ -630,3 +630,45 @@ r46-era sandbox lacked). What they decoded to, and what shipped:
   "models not installed" / ABI absence --- arm64-v8a only). The first
   dogfood run after this merge answers it from the DiagLog ring.
  (r48: the README screenshots land (Roborazzi, the toadFILES pattern), the workflow-truth pass, and the 'indexing are failing' fixes)
+
+---
+
+## The r49 window (2026-11-06) --- the workflow organization round (branch `tg-r49-workflow-consolidation`, PR pending)
+
+- **The consolidation (this round's whole scope)** --- the four opt-in APK
+  test builders (`apk-build-engine.yml`, `engine-apk.yml`,
+  `modelpack-apk.yml`, `editor-apk-build.yml`) become ONE dispatch
+  surface, `.github/workflows/apk-build.yml`: a `prepare` job resolves
+  the `gallery-engine` / `gallery-modelpack` / `editor` target + variants
+  from dispatch inputs or the surviving `tg-engine-apk-*` /
+  `tg-modelpack-*` branch-push convention (unknown branch names fail-fast
+  with the fix in the message), then a gallery job (the full engine-cross
+  toolchain) and an editor matrix (cheap pure-Android) build with every
+  documented gate intact. Eight workflow files → five, one concern each.
+- **The rot removed in the move** --- the model-pack builder's hardcoded
+  `toadGALLERY-0.4.2-alpha-r28-modelpack-engine-debug.apk` staging name
+  and `versionCode >= 32` identity gate (both stale since r46/r48 moved
+  the checkout to 0.4.5-alpha / versionCode 38) are replaced by the
+  checkout-derived naming + exact-versionCode gate the newer builders
+  already used; the derivation-rule split (gallery first-live-assignment,
+  editor last-wins) is now written down per file instead of living in
+  release.yml's comment only.
+- **Least-privilege baseline (new, enforced)** --- every workflow declares
+  explicit `permissions:`; `contents: read` everywhere except
+  `release.yml` (`contents: write`, the only signing/publishing path).
+  Before r49, `ci.yml` and the four builders silently inherited the repo
+  default token scope.
+- **F-2 note (the follow-up trail)** --- `docs/ci-workflows.md`'s stale
+  "the repo has no composite actions / reusable workflows" line (false
+  since F-2 delivered `.github/actions/toad-setup`) is gone in the r49
+  rewrite; the F-2 extraction itself stands delivered, no new item.
+- **No new follow-up opened** --- the consolidation is complete as of
+  this branch; the honest gap is below, not a work item.
+- **Honest limit** --- the consolidated builder is proven by
+  actionlint 1.7.7 (clean on all five workflows) + the ci.yml gate on
+  this PR, but the three dispatch paths (gallery-engine release variant,
+  gallery-modelpack, editor legs) have NOT been dispatched for real yet;
+  the first real dispatch is the verdict, exactly like the r48 honest
+  limits note. The `tg-engine-apk-*` / `tg-modelpack-*` push triggers are
+  exercised the next time a dogfood branch is cut.
+ (r49: the workflows organized --- four near-duplicate APK builders become one `apk-build.yml` dispatch surface, the least-privilege permissions baseline, and the living docs rewritten to the five-file truth)

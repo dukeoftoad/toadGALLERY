@@ -119,16 +119,40 @@ Testing pre-releases are produced by the dedicated `Release` workflow
 ([`.github/workflows/release.yml`](.github/workflows/release.yml), ADR-0018,
 issue #59), separate from CI: push a `v*` tag, or dispatch the workflow by
 hand (its `tag_name` input defaults to a `versionName`-derived
-`v0.4.2-alpha-r<run_number>`, so testing releases can be cut ad hoc). The
-signed APK is published as a GitHub **pre-release** --- never marked latest
-while pre-1.0 --- together with a `.sha256` checksum and the R8
-`mapping.txt` for de-obfuscating crash traces. A hard `apksigner verify`
-gate pins the signer certificate SHA-256 digest
-(`8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494`), so an
-unsigned or wrongly-signed APK cannot publish. Verify a downloaded APK with
-`apksigner verify --print-certs` and compare the digest. Local builds are
-unaffected: without the signing env vars the release build falls back to
-unsigned.
+`v<versionName>-r<run_number>`, so testing releases can be cut ad hoc).
+Since the Phase 11 close-out release each pre-release ships **both apps**:
+the gallery APK and the toadGALLERY Edit APK, each with its own `.sha256`
+checksum and its own R8 `mapping.txt` (release builds are minified; the
+per-app mappings de-obfuscate crash traces from testing devices), named
+per app --- `toadGALLERY-<version>-r<round>.apk` and
+`toadGALLERY-edit-<version>-r<round>.apk` (+ `.sha256` +
+`-mapping.txt`). Both install on **Android 8.0+**, under distinct app
+IDs, so they update independently. The signed artifacts are published as
+GitHub **pre-releases** --- never marked latest while pre-1.0. A hard
+`apksigner verify` gate pins the signer certificate SHA-256 digest
+(`8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494`), so
+an unsigned or wrongly-signed APK cannot publish. Verify a downloaded
+release with:
+
+```bash
+sha256sum -c toadGALLERY-<version>-r<round>.apk.sha256
+apksigner verify --print-certs toadGALLERY-<version>-r<round>.apk
+# Signer #1 certificate SHA-256 digest must equal the pinned digest above
+```
+
+Local builds are unaffected: without the signing env vars the release
+build falls back to unsigned. Release documentation lives in
+[`docs/phase-11/`](docs/phase-11/): the release notes + full version
+history ([release-notes.md](docs/phase-11/release-notes.md)), the honest
+known-limitations list
+([known-limitations.md](docs/phase-11/known-limitations.md)), the
+permission/privacy declaration package
+([permissions-and-privacy.md](docs/phase-11/permissions-and-privacy.md)),
+the FOSS review record
+([foss-review.md](docs/phase-11/foss-review.md)), the F-Droid metadata
+([fdroid-metadata.md](docs/phase-11/fdroid-metadata.md)) and the
+reproducible-build instructions
+([reproducible-builds.md](docs/phase-11/reproducible-builds.md)).
 
 ## Upstream references (recorded 2026-10-29)
 

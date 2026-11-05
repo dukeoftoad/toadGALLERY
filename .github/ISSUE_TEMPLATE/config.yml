@@ -1,0 +1,19 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, install & verification help
+    url: https://github.com/dukeoftoad/toadGALLERY/issues
+    about: >
+      Usage questions, install or checksum/signature verification trouble ---
+      open a question issue (there is no Discussions board yet; the issue
+      tracker is the support surface).
+  - name: Read the docs first
+    url: https://github.com/dukeoftoad/toadGALLERY/blob/main/README.md
+    about: >
+      The README links everything --- the feature overview, the build/CI
+      notes, and the docs/ tree (release notes, known limitations,
+      permissions & privacy, reproducible builds under docs/phase-11/).
+  - name: Known limitations before you file
+    url: https://github.com/dukeoftoad/toadGALLERY/blob/main/docs/phase-11/known-limitations.md
+    about: >
+      The honest known-limitations list --- please check it before filing a
+      bug; many "issues" are recorded, scheduled follow-ups.

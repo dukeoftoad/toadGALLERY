@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -685,6 +686,10 @@ private fun AlbumCard(
         AsyncImage(
             model = album.coverUri,
             contentDescription = null, // decorative; the label below carries meaning
+            // r47 ux fix: the decode-failure plate (MediaThumb's r19a idiom):
+            // a corrupt cover used to render as fully blank pixels ---
+            // indistinguishable from loading --- under the folder's name.
+            error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
@@ -749,6 +754,8 @@ private fun FavoritesAlbumCard(
             AsyncImage(
                 model = album.coverUri,
                 contentDescription = null, // decorative; the label below carries meaning
+                // r47 ux fix: the decode-failure plate, same as [AlbumCard].
+                error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
                 modifier = Modifier.matchParentSize(),
             )
             Box(

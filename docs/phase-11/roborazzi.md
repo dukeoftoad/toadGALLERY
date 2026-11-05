@@ -1,18 +1,18 @@
 # Roborazzi screenshot testing --- the record-first pipeline for the state cards
 
-**Status:** LANDED (2026-11-06, the Phase 11 screenshot-testing round). This
-doc records what Roborazzi is, what was wired into the build (version
-catalog, plugins, testOptions, test dependencies), the three captured
-subjects and their baseline tags, the record flow that works today, and the
-verify flow that activates once baselines are committed. It is written
-honestly about its own limits: **no baseline PNGs are committed yet, so
-nothing in this round gates on visual drift yet** --- there is no local
-Android SDK in the sandbox this code was written in, so the PNGs must come
-from the CI record run's artifact first. Cross-references: ADR-0013 (CI as
-the canonical build environment), ADR-0014 (the privacy gate --- everything
-added here is test-classpath-only and touches zero runtime surface),
-docs/architecture/screen-states.md (the state-card system the captures
-pin), and `.github/workflows/screenshots.yml` (the record job).
+**Status:** LANDED, then made PLUGIN-FIRST (2026-11-06, Phase 11; plugin-first
+r47 follow-up). This doc records what Roborazzi is, what was wired into the
+build (version catalog, plugins, testOptions, test dependencies), the three
+captured subjects and their baseline tags, the record flow, and the verify
+flow that activates once baselines are committed. It is written honestly
+about its own limits: **no baseline PNGs are committed yet, so nothing gates
+on visual drift yet** --- there is no local Android SDK in the sandbox this
+code was written in, so the PNGs must come from the CI record run's artifact
+first. Cross-references: ADR-0013 (CI as the canonical build environment),
+ADR-0014 (the privacy gate --- everything added here is test-classpath-only
+and touches zero runtime surface), docs/architecture/screen-states.md (the
+state-card system the captures pin), and `.github/workflows/screenshots.yml`
+(the record/verify job).
 
 ---
 
@@ -23,10 +23,12 @@ is a JVM screenshot-testing library for Android: it renders the REAL Compose
 UI inside Robolectric (no emulator, no device) and captures the rendered
 pixels as PNG files. Its workflow is the standard two-phase one:
 
-- **Record**: a test run (or the plugin's `recordRoborazzi*` task) writes
-  the current render to disk. With no verify flag set, Roborazzi's
-  `captureRoboImage()` **records by default** during a plain unit-test run
-  --- which is why the record half of this pipeline needs no special task.
+- **Record**: the plugin's `recordRoborazzi*` task runs the capture tests
+  with `roborazzi.test.record=true` and writes the current render to disk.
+  With the plugin applied, a PLAIN unit-test run does NOT record: the plugin
+  sets `roborazzi.test.record=false` on every test task unless a roborazzi
+  task is in the graph, so `captureRoboImage()` no-ops (exactly the toadFILES
+  behavior --- CI test runs stay fast and green without capturing).
 - **Verify**: the plugin's `verifyRoborazzi*` task re-renders and fails on a
   pixel diff against the committed baseline (and `compareRoborazzi*` writes
   diff overlays). The task only bites once baseline PNGs exist in the repo.
@@ -51,17 +53,55 @@ load-bearing, not cosmetic.
   com.github.takahirom.roborazzi --- the Kotlin API package predates the
   maven-group rename to io.github.takahirom, so the IMPORT is the
   com.github.takahirom.roborazzi one)).
-- **gradle/libs.versions.toml (plugins): deliberately ABSENT.** The
-  `io.github.takahirom.roborazzi` plugin was wired first and caught by the
-  merge gate twice: 1.26.0 does not exist (resolution failure), and the
-  real 1.77.0 --- while it applies --- drags a newer AGP variant API onto
-  the script classpath that hard-errors this module's existing
-  `srcDir(Any)` call sites (script-compilation errors at the
-  withEngine/progress/bundled-models blocks that were green without the
-  plugin). The documented fallback activated: the plugin entry is removed;
-  the captures ride plain unit-test runs, which need no plugin. The
-  verify/compare task pairs get their own round when an AGP-9-clean
-  plugin story exists.
+- **gradle/libs.versions.toml (plugins): APPLIED since r47.** The
+  `io.github.takahirom.roborazzi` plugin (version.ref = the existing
+  `roborazzi = "1.77.0"` line) is declared in the catalog and applied in
+  `apps/gallery/build.gradle.kts`, closing the r46-era "deliberately ABSENT"
+  state. The r46 verdict ("the real 1.77.0 drags a newer AGP variant API
+  onto the script classpath that hard-errors the module's `srcDir(Any)` call
+  sites") was re-examined at the ARTIFACT level before the alias went back
+  in, and does not survive the re-examination: the published 1.77.0 plugin's
+  runtime graph (its POM and its gradle module metadata --- what Gradle
+  actually resolves) carries NO AGP at all (roborazzi-core-jvm, kotlin-stdlib,
+  differ, kotlinx-serialization-json, kotlinx-io-core, webjars --- nothing
+  else), every AGP class the plugin's bytecode references exists in AGP
+  9.2.1's `gradle-api` jar (Sources, HasUnitTest, UnitTestOptions, ...), and
+  the sibling toadFILES repo runs this exact plugin version green on a NEWER
+  AGP line (9.5.0 / Gradle 9.8.2) --- so the r46 script-compilation failure
+  was most plausibly a misattribution inside that branch's error cascade
+  (its own testOptions map-syntax error is recorded as real), not a
+  plugin-vs-AGP incompatibility. CI remains the judge (ADR-0013): if the
+  merge gate still trips the script, the recorded escape hatch is documented
+  in section 7. What the plugin application CHANGES for real: plain
+  unit-test runs stop recording (section 1), and the
+  record/verify/compare task pairs become the pipeline's drivers (sections
+  4-5).
+- **apps/gallery/build.gradle.kts, the `roborazzi { }` extension** (new
+  block, right after the plugins): the plugin's capture output dir is moved
+  OFF the default `build/outputs/roborazzi` (a build dir can never hold
+  committed baselines) onto the committed location:
+
+  ```kotlin
+  roborazzi {
+      outputDir.set(layout.projectDirectory.dir("src/test/resources/roborazzi"))
+  }
+  ```
+
+  The plugin resolves this Provider and hands it to the tests as the
+  `roborazzi.output.dir` system property, so `recordRoborazziBasicDebug`
+  writes the PNGs straight into the directory they are committed from and
+  `verifyRoborazziBasicDebug` reads them back from the same place --- no
+  copy step ever exists between a recorded artifact and a committed
+  baseline. The three `srcDir` call sites in the module's build script (the
+  withEngine jniLibs dir, the copyProgressJson generated assets dir, the
+  withBundledModels assets dir) were re-audited for this round and STAY on
+  the explicit plain-File form: that is the form AGP 9.2.1 accepts at
+  RUNTIME (its `DefaultAndroidSourceDirectorySet.srcDir(Object)` throws
+  "You cannot add Provider instances to the Android SourceSet API" for a
+  Provider argument unless the `android.sourceset.disallowProvider=false`
+  escape hatch is set --- verified in the AGP 9.2.1 bytecode, and that hatch
+  is deliberately NOT set here), and the plugin puts no AGP on the script
+  classpath that could remove the `srcDir(Any)` overload (see above).
 - **apps/gallery/build.gradle.kts, testOptions** (new block, next to
   `buildFeatures`):
 
@@ -131,54 +171,55 @@ Two determinism decisions worth recording:
 
 ## 4. The record flow (what works today)
 
-Record happens during a PLAIN unit-test run --- Roborazzi records by default
-when no verify flag is set, so the capture calls fire on every test run:
+Record is the plugin's `recordRoborazziBasicDebug` task (r47, plugin-first;
+a PLAIN unit-test run no longer records --- section 1):
 
 - **In CI**: the `screenshots` job of `.github/workflows/screenshots.yml`
-  (trigger: `workflow_dispatch`, or pull_request touching `apps/gallery/**`
-  / `gradle/libs.versions.toml`; `permissions: contents: read`; the
-  canonical `./ ./.github/actions/toad-setup` toolchain) runs:
+  (trigger: `workflow_dispatch` --- mode `record` explicitly, or any run
+  while ZERO baselines are committed, so the F-34 source artifact always
+  exists; plus `pull_request` touching `apps/gallery/**` /
+  `gradle/libs.versions.toml`; `permissions: contents: read`; the canonical
+  `./.github/actions/toad-setup` toolchain) runs:
 
   ```bash
-  ./gradlew :apps:gallery:testBasicDebugUnitTest --stacktrace --no-daemon
+  ./gradlew :apps:gallery:recordRoborazziBasicDebug --stacktrace --no-daemon
   ```
 
-  then uploads the recorded PNGs as the `roborazzi-screenshots` artifact
-  (retention 14 days), probing BOTH candidate locations ---
-  `apps/gallery/src/test/resources/**/*.png` and
-  `apps/gallery/build/outputs/roborazzi/**` --- because Roborazzi's default
-  capture output directory moved between releases and the pinned 1.77.0's
-  choice is not verified from the sandbox. `if-no-files-found` stays at the
-  default `warn` (never `error`): an empty capture set must not mask the
-  outcome of the test run itself.
-- **Locally** (any machine with an Android SDK): the same invocation ---
-  `./gradlew :apps:gallery:testBasicDebugUnitTest --stacktrace` --- writes
-  the PNGs under the module.
+  The task runs the three capture tests with `roborazzi.test.record=true`
+  and writes the PNGs into the plugin extension's output dir,
+  `apps/gallery/src/test/resources/roborazzi` --- the committed-baseline
+  location ITSELF, so no copy step ever exists between a recorded artifact
+  and a committed baseline --- then uploads them as the
+  `roborazzi-baselines` artifact (retention 14 days).
+- **Locally** (any machine with an Android SDK): the same task invocation
+  --- `./gradlew :apps:gallery:recordRoborazziBasicDebug --stacktrace` ---
+  writes the PNGs into the same committed location.
 
-## 5. The future verify flow (what activates once baselines land)
+## 5. The verify flow (what activates once baselines are committed)
 
-1. Download the `roborazzi-screenshots` artifact from a green record run
-   (or record locally on an SDK machine).
-2. Copy the PNGs into the module's capture output location
-   (`apps/gallery/src/test/resources/` or wherever the pinned version wrote
-   them --- the artifact's internal layout tells you which).
+The verify gate step ALREADY EXISTS in `screenshots.yml` (r47): every
+non-record run executes `verifyRoborazziBasicDebug` when committed baselines
+exist under `apps/gallery/src/test/resources/roborazzi/`, and SKIPS it
+loudly (step log + job summary + a `::notice::`) when none do. Activation
+is therefore purely the maintainer's baseline-commit step (F-34 step 2) ---
+no workflow edit is needed:
+
+1. Download the `roborazzi-baselines` artifact from a green record run (or
+   record locally on an SDK machine).
+2. Unzip it at the repo root so the PNGs land at
+   `apps/gallery/src/test/resources/roborazzi/` (that directory IS the
+   capture output dir --- no path fixing needed).
 3. Commit them as the reviewed baselines (they are committed artifacts, not
    build outputs --- `.gitignore` excludes `build/` but not
    `src/test/resources/`).
-4. Add the gate step to `screenshots.yml`'s job (after the unit-test step):
 
-   ```bash
-   ./gradlew :apps:gallery:verifyRoborazziBasicDebug --stacktrace --no-daemon
-   ```
-
-   From that point the job fails on visual drift in the three state cards,
-   and `compareRoborazziBasicDebug` produces diff overlays for triage.
-
-Until step 4 exists, the screenshots are documentation and a drift
-early-warning (a human comparing artifacts across runs), NOT a gate. That
-limitation is recorded here rather than papered over: record-only is the
-honest first step when no local Android SDK exists to have produced the
-baselines from.
+From that first commit onward the same job runs
+`./gradlew :apps:gallery:verifyRoborazziBasicDebug --stacktrace
+--no-daemon` on every verify-mode run and FAILS on visual drift in the
+three state cards; `compareRoborazziBasicDebug` produces diff overlays for
+triage. Until that commit lands, the screenshots are documentation and a
+drift early-warning (a human comparing artifacts across runs), NOT a gate
+--- and the skip is loud, never silent.
 
 ## 6. The flavor-qualified task-name note
 
@@ -187,34 +228,34 @@ With the gallery's product flavors (basic / engine / semantic / face, one
 `testDebugUnitTest` becomes `testBasicDebugUnitTest` (and siblings), and the
 Roborazzi plugin's task pairs follow the same grammar:
 `recordRoborazziBasicDebug` / `verifyRoborazziBasicDebug` /
-`compareRoborazziBasicDebug`. This round's workflow and doc use the FINAL,
-flavor-qualified names by design. Sequencing caveat, recorded honestly: if
-this PR is reviewed/merged BEFORE the flavors PR, the record step fails with
-"task not found" until the flavor PR merges --- a known, deliberate red, not
-a silent skip (the same note lives in the workflow's header comment). Once
-the flavor PR lands, the names resolve as written.
+`compareRoborazziBasicDebug`. The workflow and doc use the flavor-qualified
+names, which resolve as written since the flavors PR (#124, r46) merged ---
+the r46-era "known red until the flavors merge" sequencing caveat is
+closed.
 
 ## 7. Compatibility risks, stated plainly
 
-- **Roborazzi gradle plugin vs AGP 9.2.1 --- CAUGHT, fallback ACTIVATED.**
-  The first attempt (1.26.0) never resolved --- that version does not
-  exist; the merge-gate run failed at plugin resolution and the published
-  line was re-verified against Maven Central metadata (marker
+- **Roborazzi gradle plugin vs AGP 9.2.1 --- caught in r46, RE-EXAMINED
+  and RESOLVED in r47.** The r46 history, kept honest: the first attempt
+  (1.26.0) never resolved --- that version does not exist; the merge-gate
+  run failed at plugin resolution and the published line was re-verified
+  against Maven Central metadata (marker
   `io.github.takahirom.roborazzi:io.github.takahirom.roborazzi.gradle.
   plugin`, latest 1.77.0 --- the plugin id is the `io.github...` one, not
-  `com.github...`). The second attempt (1.77.0) applied cleanly but broke
-  the BUILD SCRIPT itself: the plugin's classpath carried a newer AGP
-  variant API in which `srcDir(Any)` is gone (deprecated ->
-  `directories`), so the module's pre-existing withEngine /
-  copyProgressJson / withBundledModels srcDir call sites became script
-  COMPILATION ERRORS ("No 'set' operator..."-class failures alongside the
-  genuinely-wrong testOptions map syntax, itself fixed to
-  `systemProperty(key, value)` method calls). The documented fallback
-  activated exactly as written: the plugin alias and the catalog plugin
-  entry are removed; recording via plain test runs needs no plugin; only
-  the verify/compare task pairs do, and section 5's flow is not activated
-  yet anyway. A future round may pin an AGP-9-clean plugin version --- the
-  catalog comment marks the spot.
+  `com.github...`). The second attempt (1.77.0) applied with the merge
+  gate red, and r46 fell back to the no-plugin record-by-default pipeline,
+  blaming the plugin's classpath for the script-compilation failures. The
+  r47 re-examination (the full artifact-level audit is recorded in
+  section 2) found that blame did not survive scrutiny: the published
+  plugin's runtime graph carries NO AGP at all, every AGP class its
+  bytecode references exists in AGP 9.2.1's `gradle-api` jar, and the
+  sibling toadFILES repo runs this exact plugin version green on a newer
+  AGP line (9.5.0 / Gradle 9.8.2). The plugin alias is therefore back in
+  (section 2), the pipeline is plugin-first, and the recorded escape
+  hatch if CI still trips the script --- set
+  `android.sourceset.disallowProvider=false`, never preemptively --- is
+  the only remaining lever (the three srcDir call sites already sit on
+  the runtime-safe plain-File form).
 - **Robolectric 4.17 and sdk 34.** The tests pin sdk 34 explicitly in
   `@Config`, so newer compileSdk/targetSdk values do not change what
   Robolectric renders. Robolectric downloads its android-all jars from

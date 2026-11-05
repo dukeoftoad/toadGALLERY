@@ -4,6 +4,92 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r47 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
+
+### Added
+
+- **[gallery] The indexing-failure honesty fix (both AI queues)** (the
+  2026-11-05 device-screenshot round): the engine build's Settings cards
+  reported the circular "Indexing failed: indexing failed" /
+  "Semantic indexing failed: semantic indexing failed" — the cause-less
+  FALLBACK literals, which could only mean the workers reached FAILED
+  with EMPTY output data (an uncaught throw escaping `doWork`). Root
+  cause of the escape found at two seams: (a) `MlEngine.openFaceIndex`
+  does not only return false — the JNI `nativeStoreOpen` THROWS
+  `IllegalStateException` with the Rust message and the worker's
+  false-return guard never saw it (one failing `ml-index.sqlite` open
+  breaks BOTH queues, exactly the field evidence); (b) the setup-phase
+  calls (the catalogue read, the state-file load, the r24/r26 JNI
+  indexed-list reads) had no catch at all. Both workers now carry a
+  seam-named catch on the store open ("face index store did not open:
+  \<engine cause\>") plus a whole-body catch-all with the same
+  retry-then-fail-with-cause shape the mid-run guard already had
+  (`uncaught \<class\>: \<message\>`), CancellationException rethrown;
+  the fallback literals now say "worker ended without a message
+  (uncaught termination)" instead of parroting the failure label. The
+  next dogfood run surfaces the real native cause on the card itself.
+- **[gallery] The Roborazzi pipeline goes plugin-first (toadFILES
+  parity)** (branch `tg-r47-a-roborazzi`): the
+  `io.github.takahirom.roborazzi` gradle plugin (1.77.0) is now applied
+  to `:apps:gallery`, matching the toadFILES repo's setup — the r46-era
+  `srcDir(Any)` script-classpath breakage was re-verified as already
+  rewritten into the AGP-9-safe plain-`File` form, so the r46
+  "deliberately absent" escape hatch is retired. Capture output is
+  pinned to `src/test/resources/roborazzi` (the committed-baseline
+  location). `screenshots.yml` gains a `mode` input (record/verify,
+  default verify): with no committed baselines it records and uploads
+  the `roborazzi-baselines` artifact with a loud honest-skip notice;
+  once baselines are committed the `verifyRoborazziBasicDebug` gate
+  self-activates — no workflow edit needed (F-34 progressed).
+
+### Changed
+
+- **[gallery] The engine flavor's launcher label now reads
+  "toadGALLERY"** (branch `tg-r47-b-label`): the
+  full-engine build drops the "toadGALLERY Engine" suffix — the
+  `.engine` applicationIdSuffix already keeps it a separate install
+  beside the basic/semantic/face builds, so the user-visible name is
+  the canonical "toadGALLERY" for the engine build too. The
+  semantic/face flavors keep their suffixed labels (unify the same
+  way on request); no applicationId, versionCode, or build-config
+  change.
+- **[gallery] The UI/UX flaw round (gallery core)** (branch
+  `tg-r47-c-uiux-gallery`): the viewer's top bar no longer pushes
+  Rename/Delete off-screen on 360dp phones (Edit/Rename/Delete moved
+  behind an overflow menu; all test tags preserved); the viewer counter
+  no longer wraps to a vertical pile; the collage pending-slot
+  placeholder reads `surfaceVariant` instead of a hardcoded light gray
+  (dark-mode flash fixed); album covers get an error painter
+  (`ColorPainter(surfaceVariant)`) so corrupt covers are honest, not
+  blank; the vault setup/unlock bodies consume the IME inset
+  (`imePadding()`) so the keyboard no longer covers the PIN UI; the
+  trash confirm dialog's confirm button joins the error-colored
+  destructive idiom; collage template cards use `ToadShapes.small`.
+- **[edit] The editor family theme (the purple is gone)** (the
+  2026-11-05 device-screenshot round): both editor surfaces rendered
+  with the Material 3 BASELINE PURPLE scheme — their `setContent`
+  wrapped content in a bare `MaterialTheme {}` with no colorScheme, so
+  the library default leaked through every accent role (sliders, chips,
+  the Save-copy pill), reading as a different app family next to the
+  toad-green gallery. The new self-contained `EditorTheme` applies the
+  gallery's toad-green dark palette (the issue-#11 token values,
+  deliberately duplicated — the edit app stays a zero-dependency
+  sibling of the gallery, so no shared theme module). Deliberately NOT
+  dynamic-color: the editor is a fixed-dark surface over the photo
+  canvas by design, and a wallpaper-derived scheme could re-introduce
+  any hue (purple included); the family accent is always the toad green
+  here.
+- **[edit] The UI/UX flaw round (edit app)** (branch
+  `tg-r47-d-uiux-edit`): both editor surfaces gain edge-to-edge inset
+  handling (`enableEdgeToEdge` + statusBars/navigationBars padding) —
+  targetSdk 36 enforced edge-to-edge on API 35+, which previously drew
+  the top bar under the status bar; status-bar icons now stay light
+  over the always-dark canvas; the color swatch tap target rises to the
+  48dp floor; the HSL band chips freeze during export like every other
+  control. Logged for a later round: mid-export cancel on the photo
+  surface (needs export-runner plumbing), the rotate icon (needs
+  material-icons-extended), the edit app's baseline color scheme.
+
 ## [0.4.3-alpha] — unreleased (versionCode 35; gallery `0.4.3-alpha`)
 
 ### Added

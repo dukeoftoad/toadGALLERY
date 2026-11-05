@@ -13,6 +13,7 @@ import io.github.dukeoftoad.gallery.ToadGalleryApplication
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.io.File
@@ -74,8 +75,23 @@ class ClipIndexWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
 
-    override suspend fun doWork(): Result {
-        val app = applicationContext as ToadGalleryApplication
+    override suspend fun doWork(): Result =
+        // r47 honesty fix (the maintainer's 2026-11-05 device screenshots:
+        // "Semantic indexing failed: semantic indexing failed" --- the
+        // cause-less FALLBACK fired, which means the worker reached a
+        // FAILED terminal state with EMPTY output data: an uncaught throw
+        // from one of the unguarded setup seams (the catalogue read, the
+        // state-file load, the r26 JNI clip-indexed-list call --- the
+        // MlEngine facade's contract propagates the engine's
+        // IllegalStateException with the Rust message) escaped doWork
+        // entirely. The whole body now rides this catch-all with the SAME
+        // retry-then-fail-with-cause shape the mid-run processBatch guard
+        // already had, so the next dogfood report carries the REAL cause
+        // instead of the circular fallback. Cancellation is rethrown --- a
+        // user Cancel/Reset is not a failure (the queue's own contract,
+        // resumable by Start again).
+        try {
+            val app = applicationContext as ToadGalleryApplication
         val engine = MlEngine()
         if (!engine.available) {
             return Result.failure(
@@ -110,7 +126,29 @@ class ClipIndexWorker(
 
         val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
         try {
-            if (!engine.openFaceIndex(faceIndexDir.absolutePath)) {
+            // r47 honesty fix, part 2: the JNI store open THROWS
+            // IllegalStateException on a native failure --- it does not
+            // only return false (the facade's contract propagates the
+            // Rust message; `nativeStoreOpen` is documented as
+            // "failure throws java.lang.IllegalStateException"), so the
+            // false-return guard alone let the throw escape doWork and
+            // produce the cause-less fallback the device screenshots
+            // caught. The seam-named catch turns a store-open failure
+            // into the honest card message WITH the engine's own cause.
+            // (The clip queue shares the SAME ml-index.sqlite store the
+            // face queue opens --- one failing store breaks both queues,
+            // which is exactly the field evidence: both cards failed
+            // with the same cause-less message.)
+            val storeOpened = try {
+                engine.openFaceIndex(faceIndexDir.absolutePath)
+            } catch (e: IllegalStateException) {
+                return Result.failure(
+                    Data.Builder()
+                        .putString(KEY_CLIP_MESSAGE, "face index store did not open: ${e.message}")
+                        .build(),
+                )
+            }
+            if (!storeOpened) {
                 return Result.failure(
                     Data.Builder().putString(KEY_CLIP_MESSAGE, "face index store did not open").build(),
                 )
@@ -174,7 +212,16 @@ class ClipIndexWorker(
             engine.closeFaceIndex()
             engine.release()
         }
-    }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (runAttemptCount < MAX_RUN_ATTEMPTS) return Result.retry()
+            return Result.failure(
+                Data.Builder()
+                    .putString(KEY_CLIP_MESSAGE, "uncaught ${e.javaClass.simpleName}: ${e.message}")
+                    .build(),
+            )
+        }
 
     /** The outcome as the terminal output the Settings card renders. */
     private fun outcomeData(outcome: ClipIndexQueueProcessor.BatchOutcome): Data = Data.Builder()
@@ -319,7 +366,13 @@ sealed class ClipIndexWorkState {
             )
             WorkInfo.State.SUCCEEDED -> Succeeded(info.outputData)
             WorkInfo.State.FAILED -> Failed(
-                info.outputData.getString(KEY_CLIP_MESSAGE) ?: "semantic indexing failed",
+                // r47 honesty fix: the fallback can no longer be the
+                // circular "semantic indexing failed" --- if the worker
+                // dies without writing KEY_CLIP_MESSAGE (uncaught
+                // termination), the card must SAY so instead of parroting
+                // the failure label.
+                info.outputData.getString(KEY_CLIP_MESSAGE)
+                    ?: "worker ended without a message (uncaught termination)",
             )
             WorkInfo.State.CANCELLED -> Cancelled
             WorkInfo.State.BLOCKED -> Enqueued

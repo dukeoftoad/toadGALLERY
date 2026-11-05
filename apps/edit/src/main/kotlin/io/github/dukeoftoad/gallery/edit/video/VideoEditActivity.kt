@@ -14,8 +14,10 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -60,6 +63,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import io.github.dukeoftoad.gallery.edit.EditorTheme
 import io.github.dukeoftoad.gallery.edit.R
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
 import io.github.dukeoftoad.gallery.edit.contract.EditRequest
@@ -155,6 +159,15 @@ class VideoEditActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // r47 ux fix: the photo surface's edge-to-edge posture verbatim ---
+        // targetSdk 36 enforces it on API 35+; the dark SystemBarStyle
+        // forces light icons over the always-black canvas (the auto style
+        // rendered dark-on-black in light mode).
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
+
         // ---- Contract validation (pre-UI: invalid calls answer immediately) ----
         val sourceFromClip = intent?.clipData?.let { clip ->
             if (clip.itemCount > 0) clip.getItemAt(0).uri?.toString() else null
@@ -210,7 +223,10 @@ class VideoEditActivity : ComponentActivity() {
         renderedHeightPx = facts.heightPx
 
         setContent {
-            MaterialTheme {
+            // r47 ux fix: the family theme (toad-green, fixed dark) instead of
+            // the bare MaterialTheme whose baseline purple leaked through
+            // every accent role (the maintainer's device screenshot).
+            EditorTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                     VideoEditorContent(activity = this@VideoEditActivity)
                 }
@@ -987,6 +1003,10 @@ private fun VideoEditorContent(activity: VideoEditActivity) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            // r47 ux fix: pay the system-bar insets once, at the root, so
+            // the top bar and the sliders never sit under the status/
+            // navigation bars (edge-to-edge is enforced at targetSdk 36+).
+            .systemBarsPadding()
             .verticalScroll(rememberScrollState()),
     ) {
         // ---- Top bar: close / title / save copy ----

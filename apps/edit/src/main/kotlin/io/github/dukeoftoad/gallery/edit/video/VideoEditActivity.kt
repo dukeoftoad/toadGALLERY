@@ -63,6 +63,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import io.github.dukeoftoad.gallery.edit.EditorTheme
 import io.github.dukeoftoad.gallery.edit.R
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
 import io.github.dukeoftoad.gallery.edit.contract.EditRequest
@@ -222,7 +223,10 @@ class VideoEditActivity : ComponentActivity() {
         renderedHeightPx = facts.heightPx
 
         setContent {
-            MaterialTheme {
+            // r47 ux fix: the family theme (toad-green, fixed dark) instead of
+            // the bare MaterialTheme whose baseline purple leaked through
+            // every accent role (the maintainer's device screenshot).
+            EditorTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                     VideoEditorContent(activity = this@VideoEditActivity)
                 }

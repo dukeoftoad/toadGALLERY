@@ -8,6 +8,26 @@ All notable changes to toadGALLERY are documented here. The format follows
 
 ### Added
 
+- **[gallery] The indexing-failure honesty fix (both AI queues)** (the
+  2026-11-05 device-screenshot round): the engine build's Settings cards
+  reported the circular "Indexing failed: indexing failed" /
+  "Semantic indexing failed: semantic indexing failed" — the cause-less
+  FALLBACK literals, which could only mean the workers reached FAILED
+  with EMPTY output data (an uncaught throw escaping `doWork`). Root
+  cause of the escape found at two seams: (a) `MlEngine.openFaceIndex`
+  does not only return false — the JNI `nativeStoreOpen` THROWS
+  `IllegalStateException` with the Rust message and the worker's
+  false-return guard never saw it (one failing `ml-index.sqlite` open
+  breaks BOTH queues, exactly the field evidence); (b) the setup-phase
+  calls (the catalogue read, the state-file load, the r24/r26 JNI
+  indexed-list reads) had no catch at all. Both workers now carry a
+  seam-named catch on the store open ("face index store did not open:
+  \<engine cause\>") plus a whole-body catch-all with the same
+  retry-then-fail-with-cause shape the mid-run guard already had
+  (`uncaught \<class\>: \<message\>`), CancellationException rethrown;
+  the fallback literals now say "worker ended without a message
+  (uncaught termination)" instead of parroting the failure label. The
+  next dogfood run surfaces the real native cause on the card itself.
 - **[gallery] The Roborazzi pipeline goes plugin-first (toadFILES
   parity)** (branch `tg-r47-a-roborazzi`): the
   `io.github.takahirom.roborazzi` gradle plugin (1.77.0) is now applied
@@ -45,6 +65,20 @@ All notable changes to toadGALLERY are documented here. The format follows
   (`imePadding()`) so the keyboard no longer covers the PIN UI; the
   trash confirm dialog's confirm button joins the error-colored
   destructive idiom; collage template cards use `ToadShapes.small`.
+- **[edit] The editor family theme (the purple is gone)** (the
+  2026-11-05 device-screenshot round): both editor surfaces rendered
+  with the Material 3 BASELINE PURPLE scheme — their `setContent`
+  wrapped content in a bare `MaterialTheme {}` with no colorScheme, so
+  the library default leaked through every accent role (sliders, chips,
+  the Save-copy pill), reading as a different app family next to the
+  toad-green gallery. The new self-contained `EditorTheme` applies the
+  gallery's toad-green dark palette (the issue-#11 token values,
+  deliberately duplicated — the edit app stays a zero-dependency
+  sibling of the gallery, so no shared theme module). Deliberately NOT
+  dynamic-color: the editor is a fixed-dark surface over the photo
+  canvas by design, and a wallpaper-derived scheme could re-introduce
+  any hue (purple included); the family accent is always the toad green
+  here.
 - **[edit] The UI/UX flaw round (edit app)** (branch
   `tg-r47-d-uiux-edit`): both editor surfaces gain edge-to-edge inset
   handling (`enableEdgeToEdge` + statusBars/navigationBars padding) —

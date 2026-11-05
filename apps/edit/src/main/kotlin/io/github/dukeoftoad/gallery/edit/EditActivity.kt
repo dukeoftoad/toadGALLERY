@@ -447,7 +447,10 @@ class EditActivity : ComponentActivity() {
         val restored = sidecarStore.load(request.sourceUri) ?: EditRecipe()
 
         setContent {
-            MaterialTheme {
+            // r47 ux fix: the family theme (toad-green, fixed dark) instead of
+            // the bare MaterialTheme whose baseline purple leaked through
+            // every accent role (the maintainer's device screenshot).
+            EditorTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                     EditorContent(activity = this@EditActivity, initialRecipe = restored)
                 }

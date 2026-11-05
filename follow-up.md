@@ -540,3 +540,56 @@ version green on a newer AGP line (9.5.0 / Gradle 9.8.2). Landed:
   record run, unzip at the repo root, commit the PNGs (the recipe is
   docs/phase-11/roborazzi.md section 5). No workflow edit is needed to
   activate the gate.
+
+## The r47 window, part 2 (2026-11-05) --- the device-screenshot evidence round
+
+The maintainer re-attached the four field screenshots from the r46
+`toadGALLERY Engine` build (plus a fresh credential for the push/PR the
+r46-era sandbox lacked). What they decoded to, and what shipped:
+
+- **The viewer screenshot** (two identical pencil icons for Edit/Rename +
+  the "7 of 120" counter wrapped one character per line down the edge):
+  both are ALREADY closed by the r47 task-3 viewer round (the labeled
+  overflow menu disambiguates Edit/Rename/Delete by text; the counter is
+  single-line + ellipsis). No further action.
+- **The video-editor screenshot** (the M3 baseline PURPLE accents): the
+  r47 task-4 log item ("the edit app's baseline color scheme") was
+  promoted to a fix this round --- the new self-contained `EditorTheme`
+  (toad-green dark palette, deliberately duplicated from the gallery's
+  issue-#11 tokens; no shared module, the APK-matrix separation keeps
+  the edit app a zero-dependency sibling; deliberately NOT dynamic
+  color, the editor is fixed-dark over the canvas by design) now wraps
+  both `setContent` surfaces.
+- **The Settings screenshot** ("Indexing failed: indexing failed" +
+  "Semantic indexing failed: semantic indexing failed"): the circular
+  text is the workers' FALLBACK literals, which fire only when a worker
+  reaches FAILED with EMPTY output data --- an uncaught throw escaping
+  `doWork`. Two escape seams found and closed: (a) `openFaceIndex` does
+  not only return false, the JNI `nativeStoreOpen` THROWS
+  `IllegalStateException` with the Rust message past the worker's
+  false-guard (ONE failing `ml-index.sqlite` open breaks BOTH queues
+  --- exactly the field evidence of both cards failing identically);
+  (b) the setup-phase calls (catalogue read, state-file load, the
+  r24/r26 JNI indexed-list reads) had no catch at all. Both workers now
+  carry a seam-named store-open catch + a whole-body retry-then-fail-
+  with-cause catch-all (CancellationException rethrown), and the
+  fallback literals now say "worker ended without a message (uncaught
+  termination)".
+- **F-38 (new, open)** --- the REAL native cause of the device's store
+  failure is still unknown from here (no device, no SDK): the r47 build
+  surfaces it by name on the Settings card ("face index store did not
+  open: \<engine cause\>" or "uncaught \<class\>: \<message\>"). The
+  next dogfood run of the r47 APKs reports it; diagnose from that text
+  (leading candidate: the device's `ml-index.sqlite` left in a state
+  the vendored migrations reject --- possibly from an earlier r2x
+  engine build; the honest Reset path may also need a store-level
+  clear, which is a design call once the message is in hand).
+- **F-39 (new, open)** --- the r47 branch also carries the Roborazzi
+  plugin application whose script-classpath compile is proven only on
+  CI (the r46 catches documented in docs/phase-11/roborazzi.md); the
+  first `screenshots.yml` run on the PR is the verdict. If the AGP
+  variant-API clash resurfaces, the documented escape hatch
+  (`android.sourceset.disallowProvider=false`) is set only on evidence.
+- **The Photos screenshot** showed a healthy grid (the stray vertical
+  "1 2 0" tile is the user's own earlier viewer screenshot displayed as
+  content --- not an app flaw); no action.

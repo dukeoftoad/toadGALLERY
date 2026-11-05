@@ -30,11 +30,13 @@ Description: |-
     (io.github.dukeoftoad.gallery.edit), opened from the gallery through a
     versioned content-URI contract and usable standalone.
 
-    It is offline-first by construction: the app declares no INTERNET
-    permission at all, a build-time gate fails the build if any dependency
-    injects one into the merged manifest, and the OS therefore blocks every
-    socket the app process could open. There are no accounts, no cloud
-    sync, no ads, no analytics.
+    It is offline-first by construction: the app carries ONE narrow,
+    allowlist-gated INTERNET grant (ADR-0020) that exists solely for the
+    OPT-IN on-device-AI model download from models.ente.com --- every
+    other byte of the app works fully offline, and a build-time gate
+    (ADR-0014) fails the build if INTERNET ever appears in the merged
+    manifest without the allowlist's authorization. There are no
+    accounts, no cloud sync, no ads, no analytics.
 
     The AI features run entirely on-device and are opt-in: semantic search
     and people clustering (an explicit consent dialog; no face data leaves
@@ -91,9 +93,12 @@ MaintainerNotes: |-
     artifact is the comparison target.
 
     AntiFeatures is empty because the app has none by construction: no ads, no
-    tracking, no nonfree network --- the INTERNET permission is build-time-gated
-    to absent (ADR-0014), so the merged manifest this build produces carries no
-    INTERNET permission at all and the OS blocks every socket.
+    tracking, no nonfree network --- the only INTERNET permission is the
+    ADR-0020 model-fetch grant behind an explicit opt-in (the AI model
+    download from models.ente.com), and the ADR-0014 build-time gate fails
+    any build where INTERNET appears in the merged manifest without the
+    allowlist authorizing exactly that grant (docs/phase-2/privacy-gate.md
+    records the full three-layer story).
 
     the optional vendored Rust ML engine (engine/, AGPL-3.0 per engine/NOTICE.md,
     ADR-0020) is NOT packaged by this recipe: its native libraries only enter

@@ -52,12 +52,16 @@ optimistically:
   reproducibility is the **unsigned** artifact built from source (the
   sibling doc's §1).
 - `AntiFeatures: []` --- none, by construction: no ads, no tracking, no
-  nonfree-net. The INTERNET permission is build-time-gated to absent in
-  both apps (ADR-0014; the editor's gate is even stricter --- no allowlist
-  mechanism at all, and the r41 catch hard-strips the ONNX Runtime AAR's
-  sample-convenience INTERNET declaration from the merged manifest), so
-  the OS blocks every socket and there is no code path that could phone
-  home.
+  nonfree-net. The editor's INTERNET posture is the strict one: no
+  allowlist mechanism at all, and the r41 catch hard-strips the ONNX
+  Runtime AAR's sample-convenience INTERNET declaration from the merged
+  manifest, so the edit APK carries no INTERNET permission and the OS
+  blocks every socket. The gallery carries exactly ONE allowlist-gated
+  INTERNET grant (ADR-0020, landed r22): the OPT-IN on-device-AI model
+  download from models.ente.com, and the ADR-0014 build-time gate fails
+  any build where INTERNET appears in the merged manifest without the
+  allowlist authorizing exactly that grant (docs/phase-2/privacy-gate.md
+  records the full story). No other code path could phone home.
 - `scanignore` --- the standard gradle-wrapper jar entry in both files,
   plus the editor's ONNX model directory (data files, not executables ---
   the disposition is argued in the file's MaintainerNotes). The bundled

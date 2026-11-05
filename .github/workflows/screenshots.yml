@@ -1,0 +1,96 @@
+name: Screenshots (Roborazzi)
+
+# Phase 11 screenshot testing (docs/phase-11/roborazzi.md).
+#
+# RECORD-ONLY, AND HONEST ABOUT IT. This job runs the gallery's unit tests,
+# whose three Roborazzi tests (apps/gallery/src/test/.../ui/screenshot/)
+# capture the shared ui/media state cards as PNGs during a PLAIN test run ---
+# Roborazzi records by default when no verify flag is set, so no special
+# record task is needed.
+#
+# No baseline PNGs are committed to the repo yet: there is no local Android
+# SDK in this project's sandbox to have produced them from, so the honest
+# first step is record-only. This job's artifact IS the baseline source: once
+# its PNGs are downloaded and committed under the module (src/test/resources
+# or wherever Roborazzi's default output dir puts them for the pinned
+# version), a follow-up adds the verification step:
+#   ./gradlew :apps:gallery:verifyRoborazziBasicDebug --no-daemon --stacktrace
+# which is when the screenshots stop being documentation and start being a
+# gate. Until then nothing here fails on visual drift --- that limitation is
+# recorded in docs/phase-11/roborazzi.md rather than papered over.
+#
+# FLAVOR NOTE (known red-until-flavors-merge): the gallery's product flavors
+# (basic/engine/semantic/face) land in a parallel PR. After that merge,
+# unit-test tasks are flavor-qualified (testDebugUnitTest ->
+# testBasicDebugUnitTest, and the Roborazzi plugin's task pairs become
+# recordRoborazziBasicDebug / verifyRoborazziBasicDebug / ...). This workflow
+# is written against the FINAL, flavor-qualified name --- until the flavor
+# PR merges, the gradle step below fails with "task not found". That is a
+# known, deliberate red, not a silent skip.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/gallery/**'
+      - 'gradle/libs.versions.toml'
+      - '.github/workflows/screenshots.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Record gallery state-card screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The canonical toolchain setup (.github/actions/toad-setup): the
+      # pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 + the
+      # Gradle cache + gradlew chmod; no Rust --- the screenshot tests are a
+      # pure JVM/Robolectric surface, no engine code involved).
+      - name: Set up the toolchain (Android)
+        uses: ./.github/actions/toad-setup
+
+      # Flavor-qualified unit-test task (basic + debug). During the plain
+      # run the three captureRoborazzi() calls record PNGs (record-by-default
+      # when no roborazzi verify flag is set). NOTE for the future verify
+      # step: once baselines are committed, this same run turns into the
+      # verification --- the record-only artifact upload below is then only
+      # for diff review; the gate is verifyRoborazziBasicDebug.
+      - name: Run unit tests (Roborazzi records on plain runs)
+        run: ./gradlew :apps:gallery:testBasicDebugUnitTest --stacktrace --no-daemon
+
+      # Both globs are probed because Roborazzi's default capture output
+      # directory moved between releases (src/test/resources in some lines,
+      # build/outputs/roborazzi in others); whichever the pinned 1.26.0 uses,
+      # the artifact carries it. if-no-files-found stays at the default
+      # 'warn' (never 'error'): an empty capture set must not mask the
+      # outcome of the test run itself.
+      - name: Upload recorded screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: roborazzi-screenshots
+          path: |
+            apps/gallery/src/test/resources/**/*.png
+            apps/gallery/build/outputs/roborazzi/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: roborazzi-test-reports
+          path: apps/gallery/build/reports/tests/
+          if-no-files-found: warn
+          retention-days: 14

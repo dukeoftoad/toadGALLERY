@@ -14,6 +14,12 @@ plugins {
     // KSP drives the Room schema compiler for the Phase 4 media catalogue
     // (ADR-0006 persistence layer); see the room-* entries in the catalog.
     alias(libs.plugins.ksp)
+    // Roborazzi screenshot-test task wiring (Phase 11, docs/phase-11/
+    // roborazzi.md): registers the record/verify/compare task pairs over the
+    // unit-test variants. The captures themselves ride plain unit-test runs
+    // (record by default); the plugin's verify tasks activate once baselines
+    // are committed.
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -387,6 +393,27 @@ android {
         // per-flavor WITH_ENGINE / INDEX_FACE / INDEX_SEMANTIC fields, so
         // BuildConfig generation must stay on.
         buildConfig = true
+    }
+
+    // --- Screenshot tests (Phase 11, docs/phase-11/roborazzi.md) ---
+    // Roborazzi captures render the real Compose UI under Robolectric, so:
+    // - isIncludeAndroidResources gives the JVM tests the app's actual
+    //   resources (the state cards resolve stringResource copy);
+    // - NATIVE graphics mode is mandatory (Robolectric's default LEGACY mode
+    //   cannot produce pixels for captureToImage). Set both as system
+    //   properties here so every unit-test task inherits them (with the
+    //   flavor matrix: testBasicDebugUnitTest and siblings --- the
+    //   namingStrategy property pins PNG names to the fully-qualified test
+    //   method, keeping baseline paths stable across refactors).
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty["robolectric.graphicsMode"] = "NATIVE"
+                it.systemProperty["roborazzi.record.namingStrategy"] = "fullyQualifiedName"
+            }
+        }
+    }
     }
 
     // --- Release signing (issue #59) ---
@@ -792,6 +819,22 @@ dependencies {
     // shape tests); android.jar's stub throws "not mocked". Test classpath
     // only --- zero new runtime surface (see the catalog note).
     testImplementation(libs.org.json)
+
+    // --- Screenshot tests (Phase 11, docs/phase-11/roborazzi.md) ---
+    // Robolectric renders the three ui/media state cards on the JVM and
+    // Roborazzi records the PNGs. compose-ui-test-junit4 already serves the
+    // instrumented suite above; it must ALSO sit on the unit-test classpath
+    // for createComposeRule() + Robolectric (BOM-pinned, same artifact).
+    // androidx.test.ext:junit provides the AndroidJUnit4 runner; the
+    // debug-scope ui-test-manifest already on the classpath registers the
+    // ComponentActivity the rule launches. Test classpath only --- zero new
+    // runtime APK surface (ADR-0014 unaffected).
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.androidx.test.ext.junit)
     // Instrumented egress suite: runtime permission assert + socket-egress probe +
     // cold-launch/tab-walk; run in connectedDebugAndroidTest on the CI emulator.
     androidTestImplementation(libs.androidx.test.runner)

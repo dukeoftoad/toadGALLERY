@@ -1615,14 +1615,19 @@ release)
   the r22/ADR-0020 truth (ONE allowlist-gated model-fetch grant; the
   overclaim would fail an F-Droid review that reads the merged
   manifest).
-- **The close-out release**: the `v0.4.5-alpha-r45` tag cut FROM this
-  truth commit --- the release workflow builds BOTH APKs from the
-  tagged SHA (the gallery `0.4.5-alpha` versionCode 37 + the edit app's
+- **The close-out release**: the `v0.4.5-alpha-r45` tag cut from the
+  truth commit's catch-fix successor (the first push caught
+  `lintVitalAnalyzeRelease` --- the second lintVital-family member with
+  the implicit progressAssets dependency; broadened to the whole family,
+  nothing had published, tag re-cut) --- the release workflow builds
+  BOTH APKs from the tagged SHA (the gallery `0.4.5-alpha` versionCode 37 + the edit app's
   FIRST release artifact `0.4.10-edit-alpha` versionCode 15), and the
   reproducible-build workflow takes its first real measurement on the
   same push. Cutting the tag from the truth commit means the shipped
   gallery APK's embedded progress snapshot (the copyProgressJson
-  mirror) reports the closed-out truth: 92, p11 done.
+  mirror) reports the closed-out truth: 92, p11 done (the catch-fix
+  successor is a one-block build-script change --- the embedded
+  snapshot is byte-identical to the truth commit's).
 - **The truth docs riding this commit** (the `f610860` pattern):
   `progress.json` (p11 → done with the r43+r44+r45 evidence, the
   project percent 91 → 92, weights validated = 100; the entePort scope

@@ -237,8 +237,25 @@ android {
         // per-control a11y was already at the r32 standard; this closes
         // the one remaining heading gap). No behavior change; no new
         // strings.
-        versionCode = 12
-        versionName = "0.4.7-edit-alpha"
+        // versionCode 13 (r41, the Phase 10 Edit v3 AI round): the four
+        // on-device AI features --- magic erase (the third paint mode;
+        // u2netp + MI-GAN), sky replacement (five PROJECT-AUTHORED
+        // parametric skies + the import chip; the shared u2netp
+        // saliency), bokeh (Depth-Anything-V2-Small int8) and the OPT-IN
+        // face retouch (YuNet + the first consent dialog + the settings
+        // kill-switch). Four ONNX graphs ship in assets/models/ (the
+        // ship-in-APK rule, ADR-0010's revision: 61,613,133 bytes, the
+        // sha256-pinned EditAiManifest) and ONNX Runtime 1.31.1 joins as
+        // the prebuilt-AAR inference seam (NNAPI-first, CPU fallback;
+        // no editor NDK build surface). The merged-manifest INTERNET
+        // gate stays green and allowlist-free --- assets carry no
+        // permission, and the zero-network posture is unconditional.
+        // JVM tests: AiLayersRecipeTest, AiRenderTest, BundledSkiesTest,
+        // EditAiEngineTest, EditAiManifestTest, EditAiPrivacyScanTest,
+        // EditAiStoreTest, ImportedSkyStoreTest, RetouchConsentTest,
+        // UndoRedoAiExtensionTest.
+        versionCode = 13
+        versionName = "0.4.8-edit-alpha"
     }
 
     buildFeatures {
@@ -283,8 +300,16 @@ android {
  * the editor NEVER requires network. Unlike the gallery's gate there is no
  * allowlist file at all --- no ADR authorizes a single byte of egress from
  * this app (the gallery's models.ente.com grant belongs to the GALLERY's
- * model downloader; the editor has no models). If a dependency ever injects
- * INTERNET into the merged manifest, this fails the build with instructions.
+ * model downloader, never here). Since r41 the editor BUNDLES its four AI
+ * models in assets/models/ (the ship-in-APK rule, ADR-0010's revision) and
+ * runs them through ONNX Runtime. The FIRST merge-gate run caught the r41
+ * narration's own error: the onnxruntime-android AAR's manifest DECLARES
+ * INTERNET (the sample-convenience packaging), so the merged manifest
+ * gained it and this gate failed the build --- the honest fix is the app
+ * manifest's hard strip (tools:node="remove", the r41 correction note in
+ * AndroidManifest.xml): the merged manifest this gate reads, and the
+ * device installs, carries NO INTERNET at all. A strip is recorded, never
+ * an allowlist; the gate's logic is unchanged and stays the proof.
  */
 abstract class EditInternetPermissionGateTask : DefaultTask() {
 
@@ -381,6 +406,16 @@ dependencies {
 
     // --- Theme resource for the manifest activity ---
     implementation(libs.material)
+
+    // --- r41: the on-device inference seam (Phase 10 sub-scope A) ---
+    // ONNX Runtime as a PREBUILT AAR (the contract's open-item-1 answer:
+    // no editor NDK/Rust build surface is added). Apache-2.0; a local
+    // inference library that declares no INTERNET permission --- the
+    // merged-manifest gate above stays green with it aboard. NNAPI-first
+    // with CPU fallback per ADR-0010 section 3; the classes stay behind
+    // the EditAiInference facade (EditAiOrtRuntime.kt is the only file
+    // that touches them --- pinned by EditAiPrivacyScanTest).
+    implementation(libs.onnxruntime.android)
 
     // --- JVM tests (r30): the REAL org.json for the recipe/sidecar tests
     // --- android.jar's stub throws "not mocked" on the platform classes;

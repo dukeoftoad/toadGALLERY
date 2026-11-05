@@ -1,15 +1,14 @@
 # The Edit v3 AI features — the Phase 10 sub-scope A design contract (folded
 # from Phase 8; magic erase, sky replacement, bokeh, opt-in face retouch)
 
-**Status:** CONTRACT-ONLY (2026-11-05). This round delivers **the design
-only** — no code, no tests, no models, no strings ride it. The
-implementation rounds that consume this contract are the Phase 10 rounds
-after the hardening block; their r-round naming and tasks.md wiring are a
-parallel track this doc deliberately does not touch. This contract
-decomposes the Phase 8 task text **verbatim** (the roadmap carries it
-unchanged under Phase 10's deferred sub-scope A) — it never shrinks it:
-all four features, the models-in-APK packaging, the extended privacy
-suite, and every Phase 8 exit criterion are in scope below.
+**Status:** IMPLEMENTED (2026-11-05, the r41 round). The design below was
+delivered as contract-only by the r40-window contracts round; **r41
+implements it end to end** --- the four recipe containers, the pipeline
+tail, the `edit-ai/` artifact store, the inference seam, the four editor
+surfaces with the consent machinery, the model packaging, the privacy
+extensions and the version bump. The delivery record at the bottom of
+this doc is the r41 one; the device checklist rows and the
+latency/quality measurements stay human-only.
 
 ---
 
@@ -351,14 +350,122 @@ egress probe, and every device row below.
 
 ---
 
-## Delivery record (this contract round): the design only
+## Delivery record (r41: the implementation)
 
-Delivered in this round: **this document** — the design contract above.
-No code, no tests, no models, no strings, no gradle changes; and zero
-edits to roadmap.md, tasks.md, worklog.md, progress.json or
-follow-up.md (the wiring is a parallel track). No delivery claims are
-made beyond the design; no test counts, model names or sizes are
-invented here.
+The r40-window round delivered this document's design only. **r41 delivers
+the implementation** --- no claims beyond what is listed here, and the
+device rows stay open.
+
+**The model set (decision 9's criteria, resolved):** four ONNX graphs
+committed under `apps/edit/src/main/assets/models/`, every one pinned by
+the JVM literals in `EditAiManifest.kt` (name + bytes + SHA-256) and
+asserted against the committed files by `EditAiManifestTest` under both
+plausible unit-test cwds. The provenance table (source + license +
+conversion chain, with every preprocessing convention's citation status)
+is `EditAiEngine.kt`'s `EditAiModels` + the licensing ledger rows in
+`docs/licensing-and-attribution.md`.
+
+| committed name | role | bytes | sha256 |
+|---|---|---|---|
+| erase-segmentation-u2netp.onnx | erase seed->object refinement + the sky saliency input (one graph, both features) | 4,574,861 | 309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8 |
+| erase-inpaint-migan.onnx | magic-erase fill | 29,546,882 | 593eba0b7e04730f1b61c0a3cbca68d97d8d6a7ff5c6a44a7b9d7fcd880fc5ae |
+| bokeh-depth-dav2-small-int8.onnx | bokeh depth | 27,258,801 | 01aa7a23de3f4a0ee1a2bb9997e6918104c85a9f95dea46d27b9b3fb0c6b9001 |
+| retouch-faces-yunet.onnx | face-retouch localization | 232,589 | 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4 |
+
+Licenses: Apache-2.0 (u2netp, dav2), MIT (migan), Apache-2.0 (yunet) ---
+all three bands inside ADR-0010 section 2's preference set, GPL-3.0-mix
+compatible, ledger rows recorded. **The size budget (decision 9):** the
+whole set commits **61,613,133 bytes** (erase 34,121,743 / bokeh
+27,258,801 / retouch 232,589 / sky 0). The provenance sheet's stated
+total 61,612,633 carried a 500-byte arithmetic slip; the pinned literal
+is the TRUE sum and `EditAiManifestTest` asserts sum == literal so a slip
+cannot ride again.
+
+**The bundled skies are PROJECT-AUTHORED PARAMETRIC CODE** (`BundledSkies.kt`
+--- five pure deterministic render functions, the bundled-frames /
+bundled-luts precedent). **No third-party sky bitmaps ship in the APK**:
+the sky feature's only model is the shared u2netp saliency, so the sky
+row's model bytes are 0 and there is no bitmap asset, no sha256 pin and
+no bitmap ledger row. This was the round's budget decision against
+decision 6's "bundled CC0 sky set" phrasing --- the shape is kept (a
+bundled set + the import chip), the bytes are authored code instead of
+CC0 images.
+
+**Open item 1's answer (the runtime):** ONNX Runtime as the PREBUILT
+Android AAR --- `com.microsoft.onnxruntime:onnxruntime-android:1.31.1`
+(Apache-2.0, Maven Central) --- so **no editor NDK/Rust build surface is
+added**; the seam is `EditAiInference` (the facade interface,
+`EditAiEngine.kt`) with `OrtEditAiInference` (`EditAiOrtRuntime.kt`) its
+only ORT-touching implementation (pinned by `EditAiPrivacyScanTest`).
+NNAPI is requested first with CPU fallback per ADR-0010 section 3; the
+honest note: the int8 depth graph's DynamicQuantizeLinear/MatMulInteger
+ops largely resolve to the CPU execution provider, so the fallback is
+EXPECTED there --- the request stands.
+
+**On-host validation (the round's own note):** all four graphs were
+loaded and executed through ONNX Runtime 1.31.1 on the CPU execution
+provider on host, over zeros/constant inputs --- every model loads and
+runs, and the zeros-input output shapes matched the pinned graph facts
+(u2netp: 7 outputs, the LAST the fused d6 map [1,1,320,320]; migan:
+`result` [1,3,512,512] uint8; dav2: `predicted_depth` [1,518,518];
+yunet: the 12 cls/obj/bbox/kps outputs at strides 8/16/32). **Quality
+and latency rows stay human-only** (the device checklist; CI cannot run
+them, ADR-0016).
+
+**Preprocessing conventions, FETCHED AND CITED (never invented; the
+citations live in `EditAiModels`):** u2netp and dav2 feed RGB /255 +
+the ImageNet mean/std (the upstream U-2-Net `ToTensorLab` flag-0 demo
+and the Depth-Anything-V2 README's 518 default; the dav2
+preprocessor_config fetch was rate-limited at round time --- recorded
+from the model card + README, unverified against the processor source).
+migan's mask polarity and uint8 inputs follow the upstream
+Picsart-AI-Research README ("255 denotes the KNOWN region, 0 the
+masked"). yunet's BGR [0,255] scaling and the anchor decode follow the
+OpenCV Zoo demo (`demo.py`/`yunet.py`); the per-tensor scaling is
+recorded from the model card + demo code, UNVERIFIED against the
+FaceDetectorYN C++ source --- flagged as the device rows' first quality
+suspect. All resizes are NEAREST (the r37 integer-determinism
+discipline), recorded as the round's decision.
+
+**What landed, file by file:** the containers + codec (`AiLayers.kt`,
+`EditRecipe.kt`), the pipeline tail + kernels (`EditPipeline.kt`,
+`AiRender.kt`), the artifact store (`EditAiStore.kt`), the inference
+seam + commit coordinator (`EditAiEngine.kt`, `EditAiOrtRuntime.kt`),
+the manifest (`EditAiManifest.kt`), the skies (`BundledSkies.kt`,
+`ImportedSkyStore.kt`), the consent machine (`RetouchConsent.kt`), the
+four editor surfaces + the settings sheet + the consent dialog + the
+sweep wiring (`EditActivity.kt`), the strings (`strings_r41.xml`), the
+gradle surface (`onnxruntime-android` in the version catalog + the edit
+deps; `versionCode` 13, `0.4.8-edit-alpha`), and the privacy extension
+(`EditAiPrivacyScanTest`: no host literals, no network classes, the ORT
+surface stays behind the facade; the gate task's comment narrates the
+models fact, its logic unchanged). Ten JVM test families land beside
+them (the containers, the kernels, the seam over fakes, the manifest,
+the store, the skies, the imports, the consent, the privacy scan, the
+nine-family undo/redo capstone); the mixed capstone covers all NINE
+families.
+
+**Honest limitations carried forward (stated, not hidden):** the fill
+patch is bounded by the session's working resolution, so an erased
+region on a very large export is softer than its surroundings (the
+full-resolution export-time re-inference pass stays the recorded
+follow-up); the sky mask is the u2netp saliency's above-the-subject
+region (a portrait-grade sky segmentation model is a follow-up, not
+this round); v1 retouch is one global selection over the detected faces
+(no per-face tuning).
+
+**Open items 1-6+8 above are CLOSED by this round; item 7 (the device
+rows) stays human-only** --- the checklist rows below, the latency
+numbers and the About-screen attribution surfacing are the physical
+release gate's.
+
+## The design (the r40-window contract, unchanged below)
+
+The contracts round's own delivery record, kept verbatim for the history:
+that round delivered this document only --- no code, no tests, no models,
+no strings, no gradle changes; and zero edits to roadmap.md, tasks.md,
+worklog.md, progress.json or follow-up.md (the wiring is a parallel
+track). Its open items, with the r41 status of each:
 
 **Open items for the implementation rounds (in order, the r-round
 naming left to the roadmap wiring):**
@@ -414,3 +521,36 @@ naming left to the roadmap wiring):**
 - **Documentation:** this contract implemented means the round's doc,
   the attribution ledger, the feature matrix and (where surfaces change
   them) the architecture docs move with it.
+
+**The first merge-gate catch (the r41 correction, recorded):** run
+41976386567 on `tg-p10-ai` failed `gateDebugInternetPermission` --- the
+merged manifest declared `android.permission.INTERNET`. The round's own
+gate narration ("the runtime declares none") was wrong: the
+onnxruntime-android AAR's manifest carries the INTERNET declaration
+(sample-convenience packaging), and the merge inherited it. The honest
+fix is a HARD STRIP, never an allowlist: the edit app's manifest now
+carries `tools:node="remove"` on the INTERNET permission, so the MERGED
+manifest the gate reads --- and the device installs --- declares no
+INTERNET at all (the app cannot even open a socket). The strip directive
+requests nothing and grants nothing; the gate's logic is unchanged; the
+conformance suite's permission pins were rewritten to the new truth (the
+only real permission request stays the pre-Q capped legacy write; every
+dotted INTERNET mention in the source manifest is the strip directive
+itself). The instrumented egress probe stays the physical-device gate.
+
+**The second merge-gate catch (16 compile errors, recorded):** the same
+run's `:apps:edit:compileDebugKotlin` surfaced 16 unresolved references,
+both clusters real. (a) The ORT 1.31.1 Java surface is NOT Map-like the
+way the runtime file assumed: `OrtSession.Result` is
+`Iterable<Map.Entry<String, OnnxValue>>` with `get(String)` returning
+`Optional<OnnxValue>` --- the file's `result.keys` / `result.get(X) ?:`
+/ `.getValue()` shapes were written against a misremembered API and are
+now the entry-iteration + `orElse(null)` forms (12 sites + the output-name
+sort for u2netp's fused d6 map). (b) Two Kotlin local-visibility
+orderings in the composable: `uiScope` was declared below its first AI
+use (locals are visible only below their declaration point), and
+`ensureSkyMaskKey` referenced sibling `detectSkyMaskKey` declared after
+it --- both reordered, declarations above uses. The authoritative API was
+fetched from the upstream Java sources (OrtSession.java/OnnxValue.java)
+rather than guessed; the files stay android-bound in the sandbox, so the
+merge-gate CI remains their only compile gate, and it caught both.

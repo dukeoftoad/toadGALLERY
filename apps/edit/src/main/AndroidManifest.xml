@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- r29 (Issue #14 gate; contract section 4.5): the editor NEVER
          requires network. There is deliberately NO INTERNET permission here
@@ -16,6 +17,22 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
+
+    <!-- r41 (the CI merge-gate catch): the onnxruntime-android AAR's own
+         manifest declares INTERNET (its packaging carries the sample
+         convenience declaration); the merge gate caught the merged
+         manifest gaining it on the FIRST merge-gate run. The fix is a
+         HARD STRIP, never an allowlist: this directive removes the
+         permission at manifest-merge time, so the merged manifest this
+         gate reads (and the device installs) carries NO INTERNET at all;
+         the app cannot even open a socket. The runtime opens no
+         socket of its own (the JVM source scan asserts no network
+         classes in our code; the instrumented egress probe stays the
+         physical-device gate per ADR-0016). This is a strip directive,
+         NOT a permission request: nothing is ever granted. -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
 
     <application
         android:allowBackup="false"

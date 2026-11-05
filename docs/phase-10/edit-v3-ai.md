@@ -521,3 +521,19 @@ naming left to the roadmap wiring):**
 - **Documentation:** this contract implemented means the round's doc,
   the attribution ledger, the feature matrix and (where surfaces change
   them) the architecture docs move with it.
+
+**The first merge-gate catch (the r41 correction, recorded):** run
+41976386567 on `tg-p10-ai` failed `gateDebugInternetPermission` --- the
+merged manifest declared `android.permission.INTERNET`. The round's own
+gate narration ("the runtime declares none") was wrong: the
+onnxruntime-android AAR's manifest carries the INTERNET declaration
+(sample-convenience packaging), and the merge inherited it. The honest
+fix is a HARD STRIP, never an allowlist: the edit app's manifest now
+carries `tools:node="remove"` on the INTERNET permission, so the MERGED
+manifest the gate reads --- and the device installs --- declares no
+INTERNET at all (the app cannot even open a socket). The strip directive
+requests nothing and grants nothing; the gate's logic is unchanged; the
+conformance suite's permission pins were rewritten to the new truth (the
+only real permission request stays the pre-Q capped legacy write; every
+dotted INTERNET mention in the source manifest is the strip directive
+itself). The instrumented egress probe stays the physical-device gate.

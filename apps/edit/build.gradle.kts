@@ -302,10 +302,14 @@ android {
  * this app (the gallery's models.ente.com grant belongs to the GALLERY's
  * model downloader, never here). Since r41 the editor BUNDLES its four AI
  * models in assets/models/ (the ship-in-APK rule, ADR-0010's revision) and
- * runs them through ONNX Runtime --- assets carry no permission and the
- * runtime declares none, so the zero-network assertion is unchanged and
- * this gate stays the proof. If a dependency ever injects INTERNET into
- * the merged manifest, this fails the build with instructions.
+ * runs them through ONNX Runtime. The FIRST merge-gate run caught the r41
+ * narration's own error: the onnxruntime-android AAR's manifest DECLARES
+ * INTERNET (the sample-convenience packaging), so the merged manifest
+ * gained it and this gate failed the build --- the honest fix is the app
+ * manifest's hard strip (tools:node="remove", the r41 correction note in
+ * AndroidManifest.xml): the merged manifest this gate reads, and the
+ * device installs, carries NO INTERNET at all. A strip is recorded, never
+ * an allowlist; the gate's logic is unchanged and stays the proof.
  */
 abstract class EditInternetPermissionGateTask : DefaultTask() {
 

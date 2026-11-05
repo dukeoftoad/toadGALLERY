@@ -126,29 +126,61 @@ class EditManifestConformanceTest {
     // ---- The zero-network posture (spec section 4.5) ----
 
     @Test
-    fun `the source manifest declares NO INTERNET permission`() {
+    fun `the source manifest's only INTERNET mention is the hard-remove strip`() {
+        // r41 (the CI merge-gate catch): the onnxruntime-android AAR's own
+        // manifest declares INTERNET; the app manifest hard-strips it at
+        // merge time (tools:node=remove) so the MERGED manifest the gate
+        // reads --- and the device installs --- carries no INTERNET at
+        // all. Every occurrence of the INTERNET string in the source
+        // manifest must therefore live inside that strip directive and
+        // nowhere else: no request, no allowlist, ever (contract 4.5).
+        val doc = manifest()
+        val permissions = doc.getElementsByTagName("uses-permission")
+        var internetStrips = 0
+        for (i in 0 until permissions.length) {
+            val p = permissions.item(i)
+            if (p.attributes.getNamedItem("android:name")?.nodeValue == "android.permission.INTERNET") {
+                assertEquals(
+                    "the INTERNET line must be the r41 merge-time strip, never a request",
+                    "remove",
+                    p.attributes.getNamedItem("tools:node")?.nodeValue,
+                )
+                internetStrips += 1
+            }
+        }
+        assertEquals("exactly one INTERNET strip directive", 1, internetStrips)
         val text = manifestText()
-        assertFalse(
-            "the editor NEVER requires network (contract 4.5): no INTERNET, not even allowlisted",
-            text.contains("android.permission.INTERNET"),
+        val mentions = Regex("android\\.permission\\.INTERNET").findAll(text).count()
+        assertEquals(
+            "every dotted INTERNET mention is the strip directive itself (comments say INTERNET, never the dotted form)",
+            internetStrips,
+            mentions,
         )
     }
 
     @Test
-    fun `the only declared permission is the pre-Q capped storage write`() {
+    fun `the only declared permission REQUEST is the pre-Q capped storage write`() {
         val doc = manifest()
         val permissions = doc.getElementsByTagName("uses-permission")
-        assertEquals("exactly one declared permission", 1, permissions.length)
-        val permission = permissions.item(0)
-        assertEquals(
-            "android.permission.WRITE_EXTERNAL_STORAGE",
-            permission.attributes.getNamedItem("android:name").nodeValue,
-        )
-        assertEquals(
-            "the legacy write grant must be capped at API 28 (Q+ inserts need no permission)",
-            "28",
-            permission.attributes.getNamedItem("android:maxSdkVersion").nodeValue,
-        )
+        // Two uses-permission ELEMENTS: the legacy write request + the
+        // r41 INTERNET strip directive (which requests nothing).
+        assertEquals("the write request + the INTERNET strip", 2, permissions.length)
+        var realRequests = 0
+        for (i in 0 until permissions.length) {
+            val p = permissions.item(i)
+            if (p.attributes.getNamedItem("tools:node")?.nodeValue == "remove") continue
+            realRequests += 1
+            assertEquals(
+                "android.permission.WRITE_EXTERNAL_STORAGE",
+                p.attributes.getNamedItem("android:name").nodeValue,
+            )
+            assertEquals(
+                "the legacy write grant must be capped at API 28 (Q+ inserts need no permission)",
+                "28",
+                p.attributes.getNamedItem("android:maxSdkVersion").nodeValue,
+            )
+        }
+        assertEquals("exactly one real permission request", 1, realRequests)
     }
 
     // ---- The application identity ----

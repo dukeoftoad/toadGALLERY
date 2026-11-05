@@ -162,6 +162,8 @@
     <string name="cd_viewer_action_share">Share</string>
     <string name="cd_viewer_action_rename">Rename</string>
     <string name="cd_viewer_action_delete">Delete</string>
+    <!-- r47 ux fix: the MoreVert overflow that carries Edit / Rename / Delete -->
+    <string name="cd_viewer_action_overflow">More actions</string>
     <string name="viewer_info_title">Details</string>
     <string name="viewer_info_name">Name</string>
     <string name="viewer_info_type">Type</string>

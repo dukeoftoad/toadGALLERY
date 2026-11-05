@@ -13,7 +13,51 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.15 (2026-11-05, latest) --- Phase 11 complete: the release-engineering
+### v2.16 (2026-11-05, latest) --- the r46 extension window: the APK matrix
+  + the contract-discovery fix + Roborazzi; the v0.4.5-alpha-r46 release
+
+- **The r46 APK-matrix round MERGED (PR #124 squash `dcc85f0`, merge-gate
+  green)** --- the four-way gallery build matrix the maintainer demanded:
+  a BASIC APK with the engine library AND the whole engine UI surface
+  removed (the canonical applicationId, BuildShape-gated
+  People/Things/Search-content/Settings-AI surfaces, the unavailable card
+  on the gated routes), plus three engine-library-included APKs that
+  install SEPARATELY on distinct applicationIds like the edit app
+  (`.engine` / `.semantic` / `.face` over one flavor dimension);
+  versionCode 38 (versionName stays 0.4.5-alpha); every workflow
+  flavor-qualified, release.yml builds basic+edit property-less and the
+  engine family with -PwithEngine (two invocations, so the global
+  property can never leak into basic), verifies FIVE signatures against
+  the pinned cert, enforces the engine-library NEGATIVE gate, and stages
+  five APKs + sha256s + five per-APK mapping.txt files; one merge-gate
+  catch recorded (triple-dash inside the flavor XML comments, forbidden
+  by the XML spec).
+- **The r46 contract-discovery hardening MERGED (PR #123 squash
+  `235b786`, merge-gate green)** --- the field bug where BOTH r45 APKs
+  were installed and the gallery Edit button still refused with the
+  outdated narration: the resolver query now carries GET_META_DATA, the
+  declared version reads through the pure EditorVersionMetadata
+  precedence (activity-level marker -> re-fetched activity bundle -> the
+  editor's new application-level marker), a zero-hit wildcard-mime query
+  retries the editor's concrete mime filters, and a package-probe
+  fallback resolves from getPackageInfo; edit versionCode 16
+  (0.4.11-edit-alpha) with the application-level contract marker; one
+  merge-gate catch recorded (the concrete-mime KDoc carried the wildcard
+  marker inside the comment and Kotlin nested comments ran it to EOF).
+- **The r46 Roborazzi round MERGED (PR #125 squash `4b86a59`, merge-gate
+  green, the record job GREEN)** --- Robolectric 4.17 + Roborazzi 1.77.0,
+  NATIVE graphics, three deterministic captures of the ui/media state
+  cards, a record-only screenshots workflow, docs/phase-11/roborazzi.md;
+  the gradle plugin deliberately absent (record needs none; the plugin
+  line 1.26.0 does not exist and 1.77.0 hard-errors the build script via
+  its AGP classpath); SEVEN merge-gate catches recorded honestly in
+  follow-up.md.
+- **The v0.4.5-alpha-r46 release cut from the truth commit** --- five
+  APKs, five sha256s, five per-APK mapping.txt files, one pinned signing
+  identity (ADR-0018); the release-notes doc restructured with the r46
+  sections on top (the r45 notes kept verbatim as history).
+
+### v2.15 (2026-11-05) --- Phase 11 complete: the release-engineering
   round r43 MERGED + the F-Droid metadata round r44 MERGED + the
   release-docs round r45 MERGED; p11 done (the project percent 91 -> 92)
 

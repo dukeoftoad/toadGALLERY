@@ -403,3 +403,97 @@ completion, branch `tg-r39-ente-exit`)
   future member covered by construction); nothing published from the
   failed runs, so the tag was honestly re-cut at the fix commit ---
   no release ever existed at the broken SHA.
+
+## The r46 extension window (2026-11-05) --- the APK matrix + the contract fix + Roborazzi
+
+The maintainer's r46 directive, executed with parallel implementation
+agents and a lead merge window: the semantic index and the face index ship
+as SEPARATE installable builds (like the edit app), the basic APK loses
+the engine library AND every engine UI surface, engine-library-included
+builds exist, the both-APKs "outdated" linking bug is fixed at its roots,
+and Roborazzi lands.
+
+- **PR #123 (`235b786`) --- the contract-discovery hardening.** The field
+  symptom ("showing edit apk is outdated for this gallery contract" with
+  both current APKs installed) closed at its true roots: the resolver
+  query now carries `GET_META_DATA`; the declared version reads through
+  the new pure `EditorVersionMetadata` precedence (activity-level marker,
+  then the re-fetched activity bundle, then the editor's NEW
+  application-level marker); a zero-hit wildcard-mime query retries the
+  editor's own concrete mime filters (the `image/*` intent never matches a
+  specific-mime filter); a package-probe fallback resolves from
+  `getPackageInfo`. Edit versionCode 16 (`0.4.11-edit-alpha`). One
+  merge-gate catch: the concrete-mime KDoc carried the wildcard marker
+  inside the comment and Kotlin's NESTED block comments ran it to EOF
+  (run 42014018173) --- one KDoc line fixed.
+- **PR #124 (`dcc85f0`) --- the gallery APK matrix.** One flavor dimension
+  ("engine"): `basic` (canonical app ID, `WITH_ENGINE=false`, the whole
+  engine UI gated out through the pure `BuildShape`: the Albums
+  People/Things sections, the Search content mode, the Settings AI
+  section, the People/Things routes with an unavailable card, defensive
+  AiEngineViewModel early returns) + `engine` (`.engine`, both indices) +
+  `semantic` (`.semantic`) + `face` (`.face`). versionCode 38; per-flavor
+  launcher labels. Workflows flavor-qualified; `release.yml` builds
+  basic+edit property-less and the engine family with `-PwithEngine` in
+  TWO invocations (a global `-PwithEngine` can never leak into basic),
+  verifies all FIVE signatures against the pinned cert, enforces the
+  engine-library NEGATIVE gate (basic carries NEITHER native library ---
+  the maintainer's exact complaint, now CI-enforced; engine/semantic/face
+  carry BOTH), stages five APKs + sha256s + five per-APK mapping.txt
+  files. One merge-gate catch: `---` inside the three flavor XML comments
+  (the XML spec forbids `--` in comments) --- dash-free rewrites.
+- **PR #125 (`4b86a59`) --- the Roborazzi screenshot pipeline.** Robolectric
+  4.17 + Roborazzi 1.77.0, NATIVE graphics; three deterministic captures
+  (ErrorState / LoadingState / UnsupportedFileState --- the param-light
+  public screen-state cards); `screenshots.yml` records PNGs into the
+  `roborazzi-screenshots` artifact (its first run GREEN). The gradle
+  plugin deliberately ABSENT: 1.26.0 does not exist (the first catch) and
+  1.77.0 --- while it applies --- drags a newer AGP variant API onto the
+  script classpath that hard-errors the module's pre-existing
+  `srcDir(Any)` call sites (the second). SEVEN catches recorded across
+  the branch: the nonexistent plugin version; the plugin-classpath
+  `srcDir(Any)` breakage; the `systemProperty[key]` map-vs-method syntax;
+  `robolectric 4.17.0` not existing (the line is literally `4.17`); the
+  capture API being `captureRoboImage()` in the `com.github.takahirom`
+  package (the Kotlin API package predates the maven-group rename); the
+  `onRoot` extension import; one rebase-resolution stray brace. Each
+  fixed in its own honest commit on the branch.
+- **The r46 release**: tag `v0.4.5-alpha-r46` cut from the truth commit;
+  `release.yml` publishes FIVE APKs (basic / engine / semantic / face /
+  edit-16) each with `.sha256`, plus FIVE per-APK mapping.txt files; the
+  reproducible-build workflow measures basic+edit as before; the
+  release-notes doc restructured (r46 sections on top, r45 kept verbatim
+  as history).
+- **F-33 (open)** --- the engine-flavor reproducibility measurement: the
+  reproducible-build workflow verifies basic+edit only; a follow-up
+  should measure the engine/semantic/face release pairs (with
+  `-PwithEngine`) once the cargo-ndk toolchain determinism is trusted on
+  runners.
+- **F-34 (open)** --- Roborazzi baselines: download the
+  `roborazzi-screenshots` artifact from the first green record run,
+  commit the PNGs under `src/test/resources` (or the recorded output
+  dir), then activate `verifyRoborazziBasicDebug` in `screenshots.yml`
+  (the recipe is docs/phase-11/roborazzi.md section 5).
+- **F-35 (open, HUMAN-ONLY)** --- the device rows for the r46 window: the
+  five-APK coexistence install matrix, the gallery-to-edit round trip
+  with BOTH r46 APKs (the contract-fix field verification), the basic
+  APK's engine-UI-free walkthrough, and the engine-family consent flows.
+- **F-36 (open)** --- the gallery manifest `<queries>` element declares
+  the contract action with `image/*` only; add
+  `<package android:name="io.github.dukeoftoad.gallery.edit"/>` (+ the
+  specific/video mimes) so the resolver's probe is visibility-proof on
+  API 30+ regardless of query shape.
+- **F-37 (open)** --- the F-Droid metadata refresh: `fdroid/metadata/`
+  describes the single gallery build; r46's engine-family release APKs
+  now package the vendored AGPL engine (the r45-era "no distributed APK
+  contains the vendored AGPL engine" claim is superseded), so the
+  metadata + `docs/phase-11/fdroid-metadata.md` need the r46 truth before
+  any submission (F-29 stays human-only).
+- **Note** --- `progress.json` at merge-time truth with this window:
+  p11 evidence gains the r46 rounds, `updatedAt` filled with a real
+  timestamp (the `{{R42_MERGE_TS}}` template placeholder finally
+  replaced), the percent STAYS 92 (p11 was already done; weights
+  validated = 100). The entePort scope is untouched (the e9 dogfood rows
+  stay human-only; that scope's percent stays 95). The
+  `v0.4.5-alpha-r46` tag is cut FROM this truth commit so the shipped
+  APKs' embedded progress snapshot reports the r46 truth.

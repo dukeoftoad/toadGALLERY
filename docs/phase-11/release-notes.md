@@ -1,13 +1,149 @@
-# Phase 11 --- the r45 release notes (tag `v0.4.5-alpha-r45`)
+# Phase 11 --- the r46 release notes (tag `v0.4.5-alpha-r46`)
 
-**Status:** the master release-notes document for the Phase 11 close-out
-testing pre-release. The GitHub release body points here. Authored in the
-r45 docs round (branch `tg-p11-release-docs`); the release itself is cut by
-the maintainer after this round merges.
+**Status:** the master release-notes document. The GitHub release body
+points here. Section 1 documents the CURRENT release (r46, the APK-matrix
+window); the r45 close-out notes are kept verbatim below as the history of
+the previous release.
 
 ---
 
-## What this release is
+## 1. What the r46 release is
+
+The **r46 extension window** (PRs #123/#124/#125, all merge-gate green)
+then cut as the tag `v0.4.5-alpha-r46`. Three rounds, one release:
+
+- **The gallery APK matrix (#124)** --- the maintainer's demand, delivered:
+  a **BASIC APK with the engine library AND the whole engine UI removed**,
+  plus **engine-library-included APKs that install separately on distinct
+  application IDs, like the edit app**. One flavor dimension ("engine"),
+  four flavors: `basic` / `engine` / `semantic` / `face`. The build-shape
+  flags ride `BuildConfig` through the pure `BuildShape` source of truth,
+  the UI gates are build-time (the basic APK never renders a People card,
+  a Magic-Search mode, or the Settings AI section), and the packaging is
+  CONTRACT-ENFORCED: `release.yml` builds the basic flavor in a
+  property-less gradle invocation and the engine family with
+  `-PwithEngine`, then runs the **negative gate** (basic carries NEITHER
+  native library; engine/semantic/face carry BOTH) before anything is
+  staged. Gallery versionCode 38, versionName `0.4.5-alpha` (all four
+  flavors share it); per-flavor launcher labels distinguish the icons.
+- **The contract-discovery hardening (#123)** --- the field bug where BOTH
+  r45 APKs were installed and the gallery's Edit button still refused with
+  the "outdated for this gallery contract" narration is fixed at its
+  roots: the resolver query now carries `GET_META_DATA`, the declared
+  version reads through a precedence chain (activity-level marker ->
+  re-fetched activity bundle -> the editor's NEW application-level
+  marker), a zero-hit wildcard-mime query retries the editor's concrete
+  mime filters (an `image/*` intent never matches a specific-mime filter),
+  and a package-probe fallback resolves from `getPackageInfo` when the
+  intent query cannot. The editor app declares the application-level
+  marker (`value 2`) as the fallback. **If you saw "toadGALLERY Edit is
+  outdated for this gallery's contract" with both apps installed ---
+  updating BOTH apps to r46 closes it.** Edit versionCode 16,
+  versionName `0.4.11-edit-alpha`.
+- **The Roborazzi screenshot pipeline (#125)** --- Robolectric 4.17 +
+  Roborazzi 1.77.0, NATIVE graphics, three deterministic captures of the
+  shared screen-state cards (ErrorState / LoadingState /
+  UnsupportedFileState) recorded by a dedicated `screenshots.yml` workflow
+  (its first run is GREEN --- the `roborazzi-screenshots` artifact is the
+  baseline source; the verify gate activates in a follow-up once the PNGs
+  are committed, F-34). Seven merge-gate catches across the window were
+  recorded honestly in the follow-up register; the gradle plugin is
+  deliberately absent (the record flow needs none).
+
+It remains a **testing pre-release** (`prerelease: true`,
+`make_latest: false` per ADR-0018): the v1.0 stable cut is still the human
+decision it was at r45.
+
+## 2. The r46 APK files (what to download)
+
+**FIVE APKs**, each with its `.sha256` checksum beside it, and **FIVE
+per-APK `mapping.txt` files** (every release build is R8-minified, so every
+mapping is needed for crash symbolication --- each name carries its app +
+version + round for better finding). All five are signed by the same
+pinned toadGALLERY release key and all five coexist on one device.
+
+| APK | applicationId | versionCode | engine library | face index | semantic index |
+|---|---|---|---|---|---|
+| `toadGALLERY-0.4.5-alpha-r46.apk` | `io.github.dukeoftoad.gallery` | 38 | NO | no | no |
+| `toadGALLERY-engine-0.4.5-alpha-r46.apk` | `io.github.dukeoftoad.gallery.engine` | 38 | YES | yes | yes |
+| `toadGALLERY-semantic-0.4.5-alpha-r46.apk` | `io.github.dukeoftoad.gallery.semantic` | 38 | YES | no | yes |
+| `toadGALLERY-face-0.4.5-alpha-r46.apk` | `io.github.dukeoftoad.gallery.face` | 38 | YES | yes | no |
+| `toadGALLERY-edit-0.4.11-edit-alpha-r46.apk` | `io.github.dukeoftoad.gallery.edit` | 16 | n/a (no engine) | --- | --- |
+
+- **`toadGALLERY-0.4.5-alpha-r46.apk` --- the BASIC gallery**: everything
+  the r45 gallery shipped MINUS the engine surfaces --- no People section,
+  no Things section, no Search content mode, no Settings AI section, no
+  engine/ML UI of any kind, and (enforced by the release negative gate) no
+  engine native library. The canonical app ID, so it updates IN PLACE over
+  every previous toadGALLERY install.
+- **`toadGALLERY-engine-0.4.5-alpha-r46.apk`** --- the full engine build:
+  everything above PLUS the opt-in on-device AI (semantic Magic Search +
+  Things collections, People clustering + the face index), the engine
+  native libraries packaged (both `libtoad_ml_jni.so` and
+  `libonnxruntime.so` verified present by the release gate), the model
+  provisioning still consent-gated and off by default (ADR-0010/ADR-0020).
+  Installs SEPARATELY from basic (`.engine` app ID) --- like the edit app.
+- **`toadGALLERY-semantic-0.4.5-alpha-r46.apk`** --- the engine build with
+  ONLY the semantic index (Magic Search + Things); the face pipeline's UI
+  is build-gated out. Installs separately (`.semantic`).
+- **`toadGALLERY-face-0.4.5-alpha-r46.apk`** --- the engine build with
+  ONLY the face index (People); the semantic pipeline's UI is build-gated
+  out. Installs separately (`.face`).
+- **`toadGALLERY-edit-0.4.11-edit-alpha-r46.apk`** --- the companion
+  editor, now with the r46 discovery hardening (the application-level
+  contract marker; no editor behavior change otherwise). Updates in place
+  over the r45 editor (same app ID, same key).
+
+**Distribution-honesty correction vs r45:** the r45 notes stated "no
+distributed APK contains the vendored AGPL engine" --- true for r45's
+single gallery artifact, SUPERSEDED by r46: the engine-family release
+APKs (engine/semantic/face) DO package the vendored AGPL engine (the
+project's own build of the pinned ente source, per ADR-0020). The
+F-Droid metadata in `fdroid/metadata/` describes the BASIC build and
+needs an r46 refresh before any submission (tracked as F-37).
+
+## 3. r46 install + verification (delta)
+
+- All five APKs install side by side; the BASIC gallery keeps the
+  canonical app ID and updates in place over every previous pre-release.
+  The engine/semantic/face APKs are FIRST installs (new app IDs).
+- Verification commands mirror the r45 ones with the new names, e.g.
+  `sha256sum -c toadGALLERY-engine-0.4.5-alpha-r46.apk.sha256` and
+  `apksigner verify --print-certs toadGALLERY-0.4.5-alpha-r46.apk` (the
+  pinned signer digest below is unchanged --- one release key, every APK).
+- Mappings: `toadGALLERY-0.4.5-alpha-r46-mapping.txt`,
+  `toadGALLERY-engine-0.4.5-alpha-r46-mapping.txt`,
+  `toadGALLERY-semantic-0.4.5-alpha-r46-mapping.txt`,
+  `toadGALLERY-face-0.4.5-alpha-r46-mapping.txt`,
+  `toadGALLERY-edit-0.4.11-edit-alpha-r46-mapping.txt`.
+
+## 4. r46 version history row
+
+| Tag | Gallery family | Editor | What it contains |
+|---|---|---|---|
+| `v0.4.5-alpha-r46` | 0.4.5-alpha (versionCode 38; FOUR flavors: basic/engine/semantic/face) | 0.4.11-edit-alpha (versionCode 16) | the APK matrix + the contract-discovery fix + the Roborazzi pipeline (see section 1) |
+
+## 5. r46 honesty section (what it does NOT claim)
+
+- The **device-verification matrix stays human-only** (the standing
+  directive): no device-verified number exists for the four-flavor
+  install matrix, the contract fix on a real device, or anything else.
+  The five-APK install + the gallery-to-edit round trip on real hardware
+  are tracked as F-35 for a human.
+- The **engine-family AI features remain consent-gated and off by
+  default**; shipping the library changes the DISTRIBUTION story, not the
+  privacy one (no network beyond the single allowlisted models host,
+  ADR-0020).
+- The **F-Droid metadata is now stale for the engine family** (F-37) and
+  the submission MR (F-29) remains unopened --- both human/follow-up.
+- Roborazzi **records** screenshots; no visual-verification GATE exists
+  yet (F-34).
+
+---
+
+# The r45 release notes (tag `v0.4.5-alpha-r45`) --- the previous release, kept verbatim
+
+## What this release is (r45)
 
 This is the **Phase 11 close-out testing pre-release** --- and the first
 release in which **both toadGALLERY apps ship together in one GitHub

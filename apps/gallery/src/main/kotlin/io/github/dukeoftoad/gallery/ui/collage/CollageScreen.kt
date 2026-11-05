@@ -62,6 +62,7 @@ import io.github.dukeoftoad.gallery.data.collage.CollageTemplate
 import io.github.dukeoftoad.gallery.data.collage.PixelRect
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
+import io.github.dukeoftoad.gallery.ui.theme.ToadShapes
 
 /**
  * The collage creator screen (r27, the MI-style organisational UX round):
@@ -274,6 +275,11 @@ private fun CollagePreview(
     // ImageBitmap conversions cached per bitmap identity (asImageBitmap
     // wraps, but the wrap is still per-call allocation).
     val imageBitmaps = remember(bitmaps) { bitmaps.map { it?.asImageBitmap() } }
+    // r47 ux fix: the pending-slot plate reads the theme's tonal surface
+    // instead of a hardcoded light-gray literal --- the literal (0xFFDDDDE2)
+    // flashed bright against the dark scheme's near-black canvas. Read
+    // outside the draw scope: Color is a composable-context lookup.
+    val placeholder = MaterialTheme.colorScheme.surfaceVariant
     Canvas(modifier = modifier) {
         val edge = size.width.coerceAtMost(size.height)
         val canvasTopLeft = Offset((size.width - edge) / 2f, (size.height - edge) / 2f)
@@ -312,7 +318,7 @@ private fun CollagePreview(
                 // Honest placeholder: the slot's decode has not landed (or
                 // failed); the Save action stays disabled meanwhile.
                 drawRect(
-                    color = Color(0xFFDDDDE2),
+                    color = placeholder,
                     topLeft = topLeft,
                     size = destinationSize,
                 )
@@ -339,13 +345,13 @@ private fun TemplateCard(
     Canvas(
         modifier = Modifier
             .size(72.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(ToadShapes.small))
             .then(
                 if (selected) {
                     Modifier.border(
                         width = 2.dp,
                         color = selection,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(ToadShapes.small),
                     )
                 } else {
                     Modifier

@@ -18,6 +18,12 @@ name: CI
 # flavor, and additionally runs the ENGINE flavor's JVM unit tests (no
 # -PwithEngine needed --- unit tests compile no native code) so the
 # engine-shaped BuildConfig suite stays compiled and green on every PR.
+# r49 (the workflow-organization round): the four opt-in APK test builders
+# (apk-build-engine.yml, engine-apk.yml, modelpack-apk.yml,
+# editor-apk-build.yml) consolidated into ONE dispatch surface ---
+# .github/workflows/apk-build.yml; this file stays the canonical gate and
+# gains the repo-wide least-privilege baseline (explicit contents: read ---
+# every non-release workflow now declares its permissions).
 
 on:
   push:
@@ -29,6 +35,11 @@ on:
   # every PR head stays verifiable on demand: dispatch this workflow at
   # the head's ref, then gate the merge on that run's conclusion.
   workflow_dispatch:
+
+# Least-privilege (r49): the canonical gate only reads the checkout and
+# uploads artifacts --- no release, no publish, no admin surfaces.
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}

@@ -1867,3 +1867,62 @@ output-dir discovery that r47's outputDir config already solved); the
 indexing fixes' device confirmation rides the next dogfood run's DiagLog
 ring.
  (r48: the README screenshots land (Roborazzi, the toadFILES pattern), the workflow-truth pass, and the 'indexing are failing' fixes)
+
+### Run #22 — 2026-11-06 (the r49 window: the workflow organization round)
+
+**Branch:** `tg-r49-workflow-consolidation` (PR pending against the r48
+main).
+
+**Directive:** "now fix the workflows into organised and better way than
+before by acting as expert" — after r48's workflow-truth pass (the
+labels) and the PR #128 merge, the set itself needed the organization
+pass: the maintainer had found the four parallel APK builders confusing,
+and the audit confirmed real drift between the copies, not just naming.
+
+**What landed:**
+1. **The audit first** (all eight workflow files read end-to-end): the
+   four opt-in APK builders (`apk-build-engine.yml`, `engine-apk.yml`,
+   `modelpack-apk.yml`, `editor-apk-build.yml`) replicate the same
+   engine build chain (toad-setup rust:android → assembleEngineDebug
+   -PwithEngine → native-libs gate → identity gate → staging → upload)
+   three times with drift: `modelpack-apk.yml` still staged under a
+   hardcoded `toadGALLERY-0.4.2-alpha-r28-...` name and gated
+   `versionCode >= 32` while the checkout sits at 0.4.5-alpha / 38+;
+   `engine-apk.yml` carried its own round-comment staging convention
+   from the 2026-11-03 isolated-work session; and only two of the six
+   pre-r49 workflows declared `permissions:`.
+2. **`apk-build.yml`** (the ONE consolidated builder): a `prepare` job
+   resolves `gallery-engine` / `gallery-modelpack` / `editor` + the
+   per-target variant inputs (dispatch), or infers the target from the
+   surviving `tg-engine-apk-*` / `tg-modelpack-*` branch-push convention
+   (unknown branch names fail-fast with the fix in the message); a
+   gallery job keeps the full engine-cross toolchain (release variant
+   fail-fasts on the ADR-0018 secrets BEFORE the toolchain spends
+   minutes); an editor matrix keeps the cheap pure-Android shape with
+   `fail-fast: false`. Every documented gate survives the move:
+   vendored-pin validation, native-library gate, model-pack assets
+   gate, aapt2 identity gates (gallery = first live assignment, editor
+   = last-wins, the r43 rule now written down per file), R8-mapping
+   staging, build-log-on-failure. The modelpack artifact name and
+   versionCode gate are checkout-derived now — no hardcode to rot.
+3. **The least-privilege baseline**: explicit `permissions:` on all five
+   workflows — `contents: read` everywhere except `release.yml` (the
+   only `contents: write`); `ci.yml` gains the block it silently
+   inherited from the repo default.
+4. **The living docs rewritten to the five-file truth**:
+   `docs/ci-workflows.md` (the r49 organization note, the consolidated
+   builder's full contract, the corrected inventory — the stale "no
+   composite actions" line dropped, false since F-2) and the README's
+   Debug-APK-builds section (one builder, not four files).
+5. **The ledger**: CHANGELOG's r49 section (r48's kept verbatim below),
+   follow-up.md's r49 window, and this run.
+
+**Honest limits:** actionlint 1.7.7 clean on all five workflows is the
+local proof; the sandbox has no dispatch capability and no Android SDK
+(ADR-0013), so the consolidated builder's three dispatch paths await
+their first real dispatch (the gallery-engine debug path's chain is
+byte-equivalent to the proven `apk-build-engine.yml` chain it replaced;
+the editor legs are the proven `editor-apk-build.yml` legs verbatim).
+The branch-scoped triggers are exercised the next time a dogfood branch
+is cut.
+ (r49: the workflow organization round --- four near-duplicate APK builders consolidated into one `apk-build.yml`, the least-privilege permissions baseline, and the living docs rewritten to the five-file truth)

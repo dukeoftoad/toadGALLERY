@@ -1263,3 +1263,19 @@ dashboard's page; the repo surfaces were unaffected).
   sticky footer). Sandbox-only; the repo untouched by it.
 * **CI cost**: the merge-gate on PR #116 (green 3/3) + the merge-gate
   on PR #117 + the main runs the two pushes trigger.
+
+* **The merge (2026-11-05)**: PR #116 squash `16a5001` (docs-only,
+  green 3/3 on the first execution); PR #117 squash `c3c21f7` ---
+  green run 41955524067 on the THIRD execution, the two catches both
+  real and fixed on the branch (the suspend-call-in-lambda compile
+  catch at `MediaScanDriver.kt:436` --- `currentCoroutineContext()`
+  cannot live in the non-suspend probe lambda, the context is captured
+  once in the suspend `rescanVolume` and the captured Job consulted
+  live; the conformance-suite cwd catch --- the sibling-module path
+  candidate resolved `apps/apps/edit/...` and never existed, now
+  `cwd.parent + <app>/...`, re-run locally under BOTH cwds). The
+  correction note joins the r40 delivery record. The merge-time truth
+  commit: `progress.json` p10 → in-progress (the r40 + contracts
+  evidence), the project percent 79 → 85 (weights validated = 100);
+  roadmap v2.13 at merged truth; tasks.md Phase 10 row + the
+  restructure bullet; follow-up.md's r40 section marked MERGED.

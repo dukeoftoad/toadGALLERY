@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-04T23:25:00.000Z",
-  "updatedBy": "r39 merge window (PR #115)",
+  "updatedAt": "2026-11-05T03:15:00.000Z",
+  "updatedBy": "r40 merge window (PR #117)",
   "statusFactors": {
     "done": 1,
     "in-progress": 0.5,
@@ -10,7 +10,7 @@
   "project": {
     "label": "toadGALLERY — overall app development",
     "sourceOfTruth": "roadmap.md Phases 0-11 + tasks.md milestone table (weights mirror planned effort share)",
-    "percent": 79,
+    "percent": 85,
     "phases": [
       {
         "id": "p0",
@@ -72,8 +72,8 @@
         "id": "p10",
         "label": "Phase 10 — hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9)",
         "weight": 12,
-        "status": "pending",
-        "evidence": "roadmap.md v2.12: the 2026-11-04 directive folds the SKIPPED Phases 8 (Edit v3 on-device AI, ADR-0010) and 9 (lightweight video editor, ADR-0012) in as explicitly-deferred sub-scopes; no code asset exists yet"
+        "status": "in-progress",
+        "evidence": "roadmap.md v2.13: the r40 hardening round MERGED (PR #117 squash c3c21f7, merge-gate run 41955524067 green after the two recorded catches: the suspend-call-in-lambda compile catch + the conformance-suite cwd catch) + the two deferred sub-scope design contracts MERGED (PR #116 squash 16a5001, docs-only); the sub-scope implementation rounds follow the merge order; every benchmark/device result cell human-only"
       },
       {
         "id": "p11",

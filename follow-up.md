@@ -238,7 +238,7 @@ completion, branch `tg-r39-ente-exit`)
   F-12 convention: it records MERGED truth; the p5 evidence + the
   p8/p9/p10 consolidation update at merge time).
 
-## 2026-11-05 — the Phase 10 hardening round r40 (branch `tg-p10-hardening`)
+## 2026-11-05 — the Phase 10 hardening round r40 (MERGED: PR #117 squash `c3c21f7`; the contracts PR #116 squash `16a5001`)
 
 - **The directive**: "Move to next phase works, use sub agents in
   parallel" --- Phase 10 begins (harden first), and the sandbox's live

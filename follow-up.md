@@ -329,3 +329,62 @@ completion, branch `tg-r39-ente-exit`)
   validated = 100); the r41 updates ride the SAME commit (the Run #16
   window closed early; the F-12 convention honored, just late). The
   entePort scope is untouched (the e9 dogfood rows stay human-only).
+
+## 2026-11-05 (latest) — the Phase 11 close-out campaign (r43+r44+r45,
+## MERGED: PR #121 squash `d27f3c1` / PR #120 squash `791d3a0` / PR #122
+## squash `4d797ff`; gates 41996006593 + 41996188270 + 41993838209 green)
+
+- **The directive**: "Do the finale phase 11 with parallel agents work.
+  Act as lead role and release tag with all versions and note for apk
+  files and release mapping.txt file for better finding of project" ---
+  three parallel sub-agent rounds (release engineering, F-Droid
+  metadata, release docs) with the lead gating, merging, and cutting
+  the close-out release.
+- **F-29 (new, open)** — the F-Droid submission itself is a HUMAN step:
+  the metadata is prepared and pinned (`fdroid/metadata/` for both
+  apps, vercode 37/15 at the `v0.4.5-alpha-r45` tag) but the fdroiddata
+  new-app merge request has not been opened; the submission process and
+  the verification loop (`fdroid checkupdates`/`lint`/`scanner`/`build`)
+  are documented in `docs/phase-11/fdroid-metadata.md`.
+- **F-30 (new, open)** — the reproducible-build verification is DESIGN
+  INTENT until the first measurement: `reproducible-build.yml` runs on
+  every `v*` tag push, and the `v0.4.5-alpha-r45` push is the first
+  real measurement; the honest status line in
+  `docs/phase-11/reproducible-builds.md` must be updated with the
+  measured verdict (byte-reproducible / content-reproducible /
+  not-reproducible) once the run lands.
+- **F-31 (new, open)** — the edit app's release variant is minified for
+  the FIRST time in r43 (`proguard-rules.pro` is deliberately minimal:
+  the ORT JNI keep + the two documented `-dontwarn` shims); any R8
+  catch from the release run (a runtime crash on a stripped class
+  would surface on a testing device, not in CI) gets recorded and fixed
+  per the merge-gate convention --- a rule lands only with the failure
+  that justifies it.
+- **F-32 (new, open)** — the v1.0 stable cut is a HUMAN decision: the
+  release workflow hard-codes `prerelease: true` + `make_latest: false`
+  per ADR-0018 ("until v1.0, no testing build is presented as the
+  repository's latest release"), and the flip to a stable release waits
+  on the human-only device rows (the standing directive), a superseding
+  ADR, and the versionName decision (0.4.x-alpha -> 1.0.0).
+- **The r43 riding catches (recorded)**: (1) `copyProgressJson` → the
+  `*LintVitalReportModel` dependency --- EVERY `assembleRelease` was
+  broken at main (the failed Release run 41991609209) while the
+  debug-only CI lint never had the copy in its graph, which is why
+  ci.yml stayed green as the release path rotted; (2)
+  editor-apk-build.yml's `-m1` version derivation vs the edit gradle's
+  last-wins convention (the failed editor run 41991485246). Both fixed
+  on the r43 branch before the merge.
+- **The r44 riding accuracy fix (recorded)**: the gallery's INTERNET
+  story in the F-Droid metadata said "no INTERNET permission at all" —
+  the r22/ADR-0020 truth is ONE allowlist-gated model-fetch grant from
+  models.ente.com; an F-Droid reviewer reads the merged manifest, so
+  the overclaim would fail the review. Corrected before the merge; the
+  edit app's no-INTERNET claim stays true (the r41 hard-strip).
+- **Note** — `progress.json` at merge-time truth with this window's
+  truth commit: p11 → done (the r43+r44+r45 evidence with every sha and
+  run), the project percent 91 → 92 (weights validated = 100). The
+  entePort scope is untouched (the e9 dogfood rows stay human-only;
+  that scope's percent stays 95). The close-out release tag
+  `v0.4.5-alpha-r45` is cut FROM this truth commit so the shipped
+  gallery APK's embedded progress snapshot (the copyProgressJson
+  mirror) reports the closed-out truth.

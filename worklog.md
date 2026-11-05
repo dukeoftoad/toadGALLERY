@@ -1560,3 +1560,80 @@ truth commit (p10 → done, the p7 precedent).
   sixth catch) + the catch-6 push's merge-gate run (`41988201250`,
   green) + the merge-triggered main run + this docs push's main run.
 
+
+### Run #18 — 2026-11-05 (the Phase 11 close-out campaign: r43+r44+r45 in
+parallel sub-agents, all three MERGED, the v0.4.5-alpha-r45 close-out
+release)
+
+- **The directive**: "Do the finale phase 11 with parallel agents work.
+  Act as lead role and release tag with all versions and note for apk
+  files and release mapping.txt file for better finding of project" ---
+  the lead (this run) split the Phase 11 remainder into three parallel
+  sub-agent rounds and gated/merged them in order:
+  - **r43 (the release-engineering round, sub-agent on
+    `tg-p11-release-eng`, MERGED as PR #121 squash `d27f3c1` after
+    gates 41996006593 + 41996006784 green at the `648d4ee` head)**:
+    the edit app's release variant (the env-injected TG_* signing per
+    ADR-0018's gallery convention + R8 minify + resource shrink over
+    the new `proguard-rules.pro`), the both-APK release pipeline
+    (release.yml builds both assembleRelease, per-app hard signature
+    gates on the same pinned digest, per-app named artifacts:
+    `toadGALLERY-<version>-r<round>.apk` +
+    `toadGALLERY-edit-<version>-r<round>.apk`, each with `.sha256` +
+    `-mapping.txt` --- the "for better finding" rename), the
+    reproducible-build verification workflow (the double clean
+    unsigned build + the honestly named verdicts), and the version
+    bumps 37/`0.4.5-alpha` (gallery) + 15/`0.4.10-edit-alpha` (edit).
+  - **r44 (the F-Droid metadata round, sub-agent on `tg-p11-fdroid`,
+    MERGED as PR #120 squash `791d3a0` after gates 41996188270 +
+    41996187119 green at the `0fd77e1` head)**: the fdroid metadata
+    templates for BOTH apps (vercode 37/15 pinned to the
+    `v0.4.5-alpha-r45` tag), the submission-package doc with the
+    no-proprietary-dependency audit, and the canonical-recipe
+    reproducible-builds doc. The sub-agent's session hit its context
+    deadline mid-flight AFTER its push + PR; the lead finished the
+    round (the accuracy fix below).
+  - **r45 (the release-docs round, sub-agent on
+    `tg-p11-release-docs`, MERGED as PR #122 squash `4d797ff` after
+    gate 41993838209 green at the `af98800` head)**: the master
+    release notes (both APKs, the full version-history table --- "for
+    better finding of the project"), the known-limitations record, the
+    permissions/privacy declaration package, the support/issue
+    templates, the FOSS review record, and the README releases-section
+    rewrite.
+- **The lead's riding catches/fixes on the sub-agent branches (the
+  recorded review pass)**: (1) on `tg-p11-release-eng` --- the
+  copyProgressJson lintVital dependency (EVERY assembleRelease was
+  broken at main; the failed Release run 41991609209 showed
+  `generateReleaseLintVitalReportModel` consuming the progressAssets
+  srcDir with no declared dependency on the copy --- the same explicit
+  `dependsOn` the merge*Assets tasks carry, extended to the
+  `*LintVitalReportModel` writers) and editor-apk-build.yml's `-m1`
+  version derivation (the failed editor run 41991485246; the edit
+  gradle's last-wins convention means `tail -1` at all three sites);
+  (2) on `tg-p11-fdroid` --- the gallery's INTERNET story corrected to
+  the r22/ADR-0020 truth (ONE allowlist-gated model-fetch grant; the
+  overclaim would fail an F-Droid review that reads the merged
+  manifest).
+- **The close-out release**: the `v0.4.5-alpha-r45` tag cut FROM this
+  truth commit --- the release workflow builds BOTH APKs from the
+  tagged SHA (the gallery `0.4.5-alpha` versionCode 37 + the edit app's
+  FIRST release artifact `0.4.10-edit-alpha` versionCode 15), and the
+  reproducible-build workflow takes its first real measurement on the
+  same push. Cutting the tag from the truth commit means the shipped
+  gallery APK's embedded progress snapshot (the copyProgressJson
+  mirror) reports the closed-out truth: 92, p11 done.
+- **The truth docs riding this commit** (the `f610860` pattern):
+  `progress.json` (p11 → done with the r43+r44+r45 evidence, the
+  project percent 91 → 92, weights validated = 100; the entePort scope
+  untouched, its percent stays 95), `roadmap.md` v2.15 (the changelog +
+  the Phase 11 Status paragraph + the deliverables annotation at
+  delivered truth), `tasks.md` (the Phase 11 milestone row → DONE),
+  `follow-up.md` (the campaign window + F-29..F-32), the README (the
+  status line at the closed-out truth + the stale INTERNET claims
+  fixed to the ADR-0020 reality --- the v2.2-era "no INTERNET in the
+  core manifest" line had been wrong since r22), and this Run #18.
+- **What stays human** (the standing directive): every device/benchmark
+  row, the v1.0 stable cut (F-32), the F-Droid submission MR (F-29),
+  and the reproducibility verdict update once the tag-push run lands
+  (F-30).

@@ -8,17 +8,23 @@ respects your data like Fossify --- **built from scratch in Kotlin + Jetpack Com
 > depth, collections), and Fossify Gallery (privacy posture, offline-first). **No code
 > is ported from any upstream** (ADR-0008) --- only features, UI/UX, and designs. No
 > Flutter. No accounts, no cloud, no ads, no analytics. Core functionality works fully
-> offline. The core app manifest does not declare `INTERNET`.
+> offline. The gallery's only `INTERNET` grant is the allowlist-gated, opt-in AI-model
+> download (ADR-0020); the editor declares none at all.
 
-**Status:** v2.2 revision (2026-10-29). Phase 0/1 complete. Phase 2 shell is
-**Compose-native + Material 3** (ADR-0009; the View-based + `org.fossify:commons`
-shell and dependency are gone, see
+**Status:** Phase 0--11 complete at the code + docs level (2026-11-05,
+`roadmap.md` v2.15): all phases done or code-side complete, the project
+percent at 92, and the Phase 11 close-out release `v0.4.5-alpha-r45`
+ships **both APKs** (the gallery and the companion editor, each with its
+`.sha256` and per-app `mapping.txt`). The UI is **Compose-native +
+Material 3** (ADR-0009; the View-based + `org.fossify:commons` shell and
+dependency are gone, see
 [`docs/architecture/compose-migration.md`](docs/architecture/compose-migration.md)).
 CI on GitHub Actions per ADR-0013, including a build-time **INTERNET-permission
 gate** and an instrumented **privacy egress suite** on an API 34 emulator
 ([`docs/phase-2/privacy-gate.md`](docs/phase-2/privacy-gate.md), issue #20):
-the app is offline by construction --- no INTERNET permission means the OS
-blocks every socket.
+the app is offline by construction --- the gallery's single allowlisted
+`INTERNET` grant (ADR-0020, the opt-in model download) is the only one the
+gate ever authorizes, and the editor's gate tolerates none at all.
 
 ---
 
@@ -34,7 +40,8 @@ blocks every socket.
 5. Ship **toadGALLERY Edit** as a separate APK, opened from the main Gallery via a
    versioned content-URI contract, updatable independently.
 6. Keep the product private and offline-first: no mandatory account, cloud service,
-   ads, analytics, or network access. No `INTERNET` permission in the core manifest.
+   ads, analytics, or network access. The gallery's only `INTERNET` grant is the
+   allowlist-gated, opt-in AI-model download (ADR-0020); the editor has none.
 7. Protect originals by default. Non-destructive editing pipeline; recycle bin;
    PIN/biometric hidden vault.
 8. Use **GitHub Actions as the canonical build and CI environment**.

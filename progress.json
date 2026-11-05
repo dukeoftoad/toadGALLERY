@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-05T07:43:02.000Z",
-  "updatedBy": "r41+r42 merge window (PRs #118/#119)",
+  "updatedAt": "2026-11-05T08:50:15.000Z",
+  "updatedBy": "the Phase 11 close-out merge window (PRs #121/#120/#122)",
   "statusFactors": {
     "done": 1,
     "in-progress": 0.5,
@@ -10,7 +10,7 @@
   "project": {
     "label": "toadGALLERY — overall app development",
     "sourceOfTruth": "roadmap.md Phases 0-11 + tasks.md milestone table (weights mirror planned effort share)",
-    "percent": 91,
+    "percent": 92,
     "phases": [
       {
         "id": "p0",
@@ -79,8 +79,8 @@
         "id": "p11",
         "label": "Phase 11 — release readiness",
         "weight": 2,
-        "status": "in-progress",
-        "evidence": "partially pulled forward: release.yml live (ADR-0018, issue #59); F-Droid/FOSS review pending"
+        "status": "done",
+        "evidence": "roadmap.md v2.15: Phase 11 DONE --- the r43 release-engineering round MERGED (PR #121 squash d27f3c1, merge-gate runs 41996006593/41996006784 green; the edit app's release variant (env-injected signing + R8 minify + mapping), the both-APK release pipeline with per-app named mapping.txt artifacts, the reproducible-build verification workflow; the two riding catches: the copyProgressJson lintVital dependency that had broken every assembleRelease at main + editor-apk-build's last-wins version derivation) + the r44 F-Droid metadata round MERGED (PR #120 squash 791d3a0, merge-gate runs 41996188270/41996187119 green; fdroid/metadata for BOTH apps + the submission-package doc + the canonical-recipe doc; the ADR-0020 INTERNET-truth accuracy fix riding) + the r45 release-docs round MERGED (PR #122 squash 4d797ff, merge-gate run 41993838209 green; the master release notes with the full version-history table, the known-limitations record, the permissions/privacy declaration package, the support/issue templates, the FOSS review record) + the v0.4.5-alpha-r45 close-out release cut from this commit (BOTH APKs + per-app .sha256 + per-app mapping.txt); the v1.0 stable cut, the F-Droid submission MR itself, and every device row stay human-only"
       }
     ]
   },

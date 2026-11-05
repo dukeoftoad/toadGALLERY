@@ -4,6 +4,49 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r49 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
+
+### Changed
+
+- **[ci] The workflow set reorganized: eight files → five, one concern
+  each.** The FOUR opt-in APK test builders (`apk-build-engine.yml`,
+  `engine-apk.yml`, `modelpack-apk.yml`, `editor-apk-build.yml`) whose
+  engine build chain was written out three times with drift between the
+  copies are consolidated into ONE dispatch surface,
+  [`apk-build.yml`](.github/workflows/apk-build.yml) ("APK builds (test
+  artifacts)"): the `gallery-engine` / `gallery-modelpack` / `editor`
+  targets behind one `target` input, a `prepare` job that resolves the
+  target + variants (dispatch inputs OR the surviving branch-scoped
+  `tg-engine-apk-*` / `tg-modelpack-*` push convention, inferred from the
+  branch name, unknown names fail-fasting) and two build jobs that keep
+  their own toolchain budgets (the gallery keeps the full engine-cross
+  Rust shape, the editor stays cheap pure-Android). The branch-scoped
+  dogfood triggers and every documented gate survive the move: the
+  vendored-pin validation, the native-library gate, the model-pack
+  assets gate, the aapt2 identity gates, the R8-mapping staging, the
+  fail-fast ADR-0018 secret checks (now BEFORE the toolchain setup
+  spends minutes), and the build-log-on-failure uploads.
+- **[ci] The rot the consolidation removed:** the model-pack build no
+  longer stages under a hardcoded `toadGALLERY-0.4.2-alpha-r28-...` name
+  nor gates `versionCode >= 32` — every gallery artifact is named and
+  identity-gated from the checkout's own derived version
+  (`toadGALLERY-<versionName>-<target>-engine-<variant>.apk`, exact
+  versionCode), so nothing hardcodes a version that the next round
+  invalidates. The derivation rules are documented per file (first live
+  assignment for the gallery, whose gradle keeps history as comments;
+  last for the editor, which appends live pairs — the r43 catch).
+- **[ci] Least-privilege baseline:** every workflow now declares an
+  explicit `permissions:` block — `contents: read` everywhere except
+  `release.yml` (the only `contents: write`, for tag cutting +
+  publishing). `ci.yml` gains the block it had silently inherited from
+  the repo default.
+- **[docs] The living references updated to the five-file truth:**
+  `docs/ci-workflows.md` rewritten (the r49 organization note, the
+  consolidated builder's contract, the corrected inventory — including
+  the stale "the repo has no composite actions" line, false since F-2
+  delivered `toad-setup`) and the README's Debug-APK-builds section now
+  points at the one builder instead of four files.
+
 ## [Unreleased] — the r48 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
 
 ### Added

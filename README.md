@@ -28,6 +28,33 @@ gate ever authorizes, and the editor's gate tolerates none at all.
 
 ---
 
+## Screenshots
+
+Real screenshots of the app — captured from the actual Compose UI running on
+the JVM via [Roborazzi](https://github.com/takahirom/roborazzi) (the same
+pipeline [toadFILES](https://github.com/dukeoftoad/toadFILES) uses), so they
+stay in sync with the code: the README suite hosts the real app shell over a
+seeded media library and walks the real bottom navigation.
+
+| Photos | Albums | Search |
+|:---:|:---:|:---:|
+| ![Photos](docs/screenshots/01-photos.png) | ![Albums](docs/screenshots/02-albums.png) | ![Search](docs/screenshots/03-search.png) |
+
+| Map | Settings | |
+|:---:|:---:|:---:|
+| ![Map](docs/screenshots/04-map.png) | ![Settings](docs/screenshots/05-settings.png) | |
+
+To regenerate them after UI changes (any machine with an Android SDK, or the
+CI artifact from the
+[`screenshots.yml`](.github/workflows/screenshots.yml) record run):
+
+```bash
+./gradlew :apps:gallery:recordRoborazziBasicDebug
+cp apps/gallery/roborazzi/0*.png docs/screenshots/
+```
+
+---
+
 ## Product goals
 
 1. Build **one coherent product** called toadGALLERY, not two competing gallery apps.
@@ -81,8 +108,13 @@ toadGALLERY/
 │   ├── feature-matrix.md        # capability origin & owner (v2.2)
 │   ├── integration-decisions.md # ADR-0001..0013
 │   └── licensing-and-attribution.md
-├── apps/                        # gallery/ (Kotlin + Compose); edit-extension/ (Phase 6)
-├── shared/                      # (Phase 2+) media-contract, metadata, editor-contract, design-system, ml-models
+├── apps/                        # gallery/ (the 4-flavor Kotlin + Compose app:
+│                                #   basic / engine / semantic / face, one "engine"
+│                                #   dimension, docs/phase-11/apk-matrix.md);
+│                                # edit/ (the toadGALLERY Edit companion app)
+├── shared/                      # editor-contract (the versioned Gallery <-> Edit
+│                                #   contract, ADR-0002/0007); video-edit (the
+│                                #   pure plan module, ADR-0012)
 └── gradle/                      # wrapper, libs.versions.toml
 ```
 
@@ -95,10 +127,16 @@ The canonical build is GitHub Actions (ADR-0013). To build locally you need:
 - Gradle 9.5.1 (project wrapper)
 
 ```bash
-./gradlew :apps:gallery:assembleDebug
-./gradlew :apps:gallery:lintDebug
-./gradlew :apps:gallery:testDebugUnitTest
+./gradlew :apps:gallery:assembleBasicDebug
+./gradlew :apps:gallery:lintBasicDebug
+./gradlew :apps:gallery:testBasicDebugUnitTest
 ```
+
+(The r46 flavor matrix split the gallery into basic / engine / semantic /
+face over one "engine" dimension, so the unflavored `assembleDebug`-family
+task names no longer exist for `:apps:gallery`; the canonical gate builds
+and tests the BASIC flavor and additionally runs the ENGINE flavor's JVM
+tests. `:apps:edit` has no flavors — its `assembleDebug` stands.)
 
 No Flutter SDK required. No Dart SDK required. The CI workflow at
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the source of truth for
@@ -106,15 +144,17 @@ No Flutter SDK required. No Dart SDK required. The CI workflow at
 
 ### Debug APK test builds
 
-Beyond the canonical gate, three opt-in builders produce device-testable
-debug APKs (all `workflow_dispatch`-only --- zero CI cost unless dispatched):
-[`engine-apk.yml`](.github/workflows/engine-apk.yml) (the branch-scoped
-engine test build), [`apk-build-engine.yml`](.github/workflows/apk-build-engine.yml)
+Beyond the canonical gate, four opt-in builders produce device-testable
+debug APKs: [`engine-apk.yml`](.github/workflows/engine-apk.yml) (the
+branch-scoped engine test build),
+[`apk-build-engine.yml`](.github/workflows/apk-build-engine.yml)
 ("APK build with engine" --- input-driven variant + pin validation, uploads the
-APK + R8 `mapping.txt`, fail-fast guards) and
-[`editor-apk-build.yml`](.github/workflows/editor-apk-build.yml) (all editor
-targets in one matrix: the `.debug` editor APK, the unsigned release-compile
-gate, and the `:shared:editor-contract` module). Triggers, inputs and
+APK + R8 `mapping.txt`, fail-fast guards),
+[`modelpack-apk.yml`](.github/workflows/modelpack-apk.yml) (the offline
+model-pack build, `-PwithBundledModels` with the sha256-verified FACE pack)
+and [`editor-apk-build.yml`](.github/workflows/editor-apk-build.yml) (all
+editor targets in one matrix: the `.debug` editor APK, the unsigned
+release-compile gate, and the `:shared:editor-contract` module). Triggers, inputs and
 required secrets are catalogued in [`docs/ci-workflows.md`](docs/ci-workflows.md);
 release signing stays exclusive to [`release.yml`](.github/workflows/release.yml)
 (ADR-0018). Overall progress is tracked in the committed

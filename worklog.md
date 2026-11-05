@@ -1812,3 +1812,58 @@ release)
   credential; the PR is the r47 window's review surface. The first CI
   runs also prove the Roborazzi plugin's script-classpath compile
   (F-39). No tag, no release cut this round (versionCode 38 unchanged).
+
+### Run #21 — 2026-11-06 (the r48 window: the README screenshots suite, the workflow-truth pass, and the "indexing are failing" root causes)
+
+**Branch:** `tg-r48-screenshots-workflows` (PR #128), rebased onto the r47
+main after the maintainer's own push landed the r47 round mid-flight (the
+rebase honestly resolves the overlap: r47's plugin-first parity, engine
+label, UI/UX sweeps and honesty catches stand; r48's unique scope below).
+
+**Directive:** add Roborazzi screenshots to README.md like toadFILES; fix
+the workflows still carrying Phase 6 "prototype" labels; fix the
+user-reported edit/rename same-icon flaw and the failing indexing; merge
+it all under one PR (the icon flaw was resolved by r47's overflow-menu
+sweep mid-flight; r48 keeps the indexing root causes and everything
+README/workflow).
+
+**What landed:**
+1. `ReadmeScreenshotsTest` (the toadFILES `TabScreenshotsTest` pattern):
+   the real app shell under Robolectric over a seeded fake MediaStore +
+   real JPEG bytes + a pre-seeded Room catalogue, five captures walking
+   the real bottom nav; the README's Screenshots section + regeneration
+   recipe; the committed `docs/screenshots/` PNGs from the record run's
+   artifact. Two first-round CI catches pinned in the test's comments:
+   JVM permission requests never resolve (the grant is delivered by hand
+   through the shadow-recorded request) and Coil decodes need a
+   wall-clock settle.
+2. `screenshots.yml` extended to BOTH capture locations (the r47
+   plugin-outputDir state cards + the README suite's CWD-relative
+   captures), with the F-34 closure riding this round's committed PNGs.
+3. The workflow-truth pass: ci.yml's "(Phase 6 prototype)" step name and
+   settings.gradle.kts's "Edit prototype APK" comment corrected; the
+   README's pre-flavor build commands, phantom layout-tree entries and
+   missing modelpack builder row fixed; `docs/ci-workflows.md`'s
+   inventory gains its missing screenshots.yml + reproducible-build.yml
+   rows.
+4. The "indexing are failing" root causes (a parallel static
+   investigation subagent with quoted evidence, on top of r47's honesty
+   catches): the process-global engine/store teardown removed from both
+   workers (the concurrent chains killed each other at every batch
+   boundary --- THE root cause), the `readBytes` seam
+   `runCatching{}.getOrNull()` (the throwing seam broke the tested
+   unreadable->skip contract), both schedulers `APPEND_OR_REPLACE`
+   (REPLACE cancelled the enqueuing run itself), and DiagLog ring lines
+   at every gate/retry/outcome. F-38/F-39 record the remaining halves.
+5. The ledger: CHANGELOG's r48 section (r47's kept verbatim below it),
+   follow-up.md's r48 window (F-34 closed; F-38/F-39 opened), the
+   roborazzi.md r48 addendum, and this run.
+
+**Honest limits:** no local Android SDK (ADR-0013) --- CI is the only
+build judge, and this round's four compile/test iterations are recorded
+in roborazzi.md's addendum (the plugin alias line, the extension-icon
+import, the permission-delivery + settle behaviors, the state-card
+output-dir discovery that r47's outputDir config already solved); the
+indexing fixes' device confirmation rides the next dogfood run's DiagLog
+ring.
+ (r48: the README screenshots land (Roborazzi, the toadFILES pattern), the workflow-truth pass, and the 'indexing are failing' fixes)

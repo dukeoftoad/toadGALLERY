@@ -131,8 +131,7 @@ class ClipIndexWorker(
         }
 
         val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
-        try {
-            // r47 honesty fix, part 2: the JNI store open THROWS
+        // r47 honesty fix, part 2: the JNI store open THROWS
             // IllegalStateException on a native failure --- it does not
             // only return false (the facade's contract propagates the
             // Rust message; `nativeStoreOpen` is documented as
@@ -236,6 +235,17 @@ class ClipIndexWorker(
                 // cancelled the pending self at every batch boundary).
                 ClipIndexScheduler.enqueue(applicationContext)
             }
+        // r48 (F1): the per-run teardown (closeFaceIndex + release) is
+        // REMOVED --- the mirror of the face queue's fix. The native engine
+        // and store are PROCESS-GLOBAL singletons, so the r47 shape's
+        // `finally { engine.closeFaceIndex(); engine.release() }` tore the
+        // engine out from under the CONCURRENT face chain mid-batch (and
+        // vice versa), failing BOTH queues with IllegalStateException ---
+        // the "indexing are failing" dogfood report (the r47 catch above
+        // surfaces that cause; this removes it). initSemantic /
+        // openFaceIndex are idempotent per half, so the next run reuses or
+        // re-opens the resident engine. The UI adapters' close() teardown
+        // while a queue runs is the remaining half (follow-up.md F-38).
             return Result.success(outcomeData(outcome))
         } catch (e: CancellationException) {
             throw e
@@ -251,18 +261,6 @@ class ClipIndexWorker(
                     .build(),
             )
         }
-        // r48 (F1): the per-run teardown (closeFaceIndex + release) is
-        // REMOVED --- the mirror of the face queue's fix. The native engine
-        // and store are PROCESS-GLOBAL singletons, so the r47 shape's
-        // `finally { engine.closeFaceIndex(); engine.release() }` tore the
-        // engine out from under the CONCURRENT face chain mid-batch (and
-        // vice versa), failing BOTH queues with IllegalStateException ---
-        // the "indexing are failing" dogfood report (the r47 catch above
-        // surfaces that cause; this removes it). initSemantic /
-        // openFaceIndex are idempotent per half, so the next run reuses or
-        // re-opens the resident engine. The UI adapters' close() teardown
-        // while a queue runs is the remaining half (follow-up.md F-38).
-    }
 
     /** The outcome as the terminal output the Settings card renders. */
     private fun outcomeData(outcome: ClipIndexQueueProcessor.BatchOutcome): Data = Data.Builder()

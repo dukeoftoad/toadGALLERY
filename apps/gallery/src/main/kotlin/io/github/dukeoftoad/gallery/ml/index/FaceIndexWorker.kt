@@ -120,8 +120,7 @@ class FaceIndexWorker(
         }
 
         val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
-        try {
-            // r47 honesty fix, part 2: the JNI store open THROWS
+        // r47 honesty fix, part 2: the JNI store open THROWS
             // IllegalStateException on a native failure --- it does not
             // only return false (the facade's contract propagates the
             // Rust message; `nativeStoreOpen` is documented as
@@ -218,22 +217,6 @@ class FaceIndexWorker(
                 // successor AFTER this run finishes instead.
                 FaceIndexScheduler.enqueue(applicationContext, threshold)
             }
-            return Result.success(outcomeData(outcome))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // r47's honesty fix (the uncaught-fault catch) + r48 (F5): the
-            // uncaught fault also lands in the diagnostics ring with the
-            // attempt count and cause, so the next dogfood report carries
-            // BOTH the card message and the ring line.
-            DiagLog.e(TAG, "face queue: uncaught ${e.javaClass.simpleName}: ${e.message} (attempt ${runAttemptCount + 1}/$MAX_RUN_ATTEMPTS)", e)
-            if (runAttemptCount < MAX_RUN_ATTEMPTS) return Result.retry()
-            return Result.failure(
-                Data.Builder()
-                    .putString(KEY_MESSAGE, "uncaught ${e.javaClass.simpleName}: ${e.message}")
-                    .build(),
-            )
-        }
         // r48 (F1): the per-run teardown (closeFaceIndex + release) is
         // REMOVED --- the r47 shape kept a `finally { engine.closeFaceIndex();
         // engine.release() }` here, but the native engine and store are
@@ -251,7 +234,22 @@ class FaceIndexWorker(
         // session --- reuses or re-opens the resident engine. The UI
         // adapters' close() teardown while a queue runs is the REMAINING
         // half of this fix (follow-up.md F-38).
-    }
+            return Result.success(outcomeData(outcome))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // r47's honesty fix (the uncaught-fault catch) + r48 (F5): the
+            // uncaught fault also lands in the diagnostics ring with the
+            // attempt count and cause, so the next dogfood report carries
+            // BOTH the card message and the ring line.
+            DiagLog.e(TAG, "face queue: uncaught ${e.javaClass.simpleName}: ${e.message} (attempt ${runAttemptCount + 1}/$MAX_RUN_ATTEMPTS)", e)
+            if (runAttemptCount < MAX_RUN_ATTEMPTS) return Result.retry()
+            return Result.failure(
+                Data.Builder()
+                    .putString(KEY_MESSAGE, "uncaught ${e.javaClass.simpleName}: ${e.message}")
+                    .build(),
+            )
+        }
 
     /** The outcome as the terminal output the Settings card renders. */
     private fun outcomeData(outcome: FaceIndexQueueProcessor.BatchOutcome): Data = Data.Builder()

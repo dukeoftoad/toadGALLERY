@@ -258,3 +258,74 @@ completion, branch `tg-r39-ente-exit`)
   Profiles decision is deferred until the S1/S2/S6 baselines exist.
 - **The r40 a11y device rows are human-only** and ride the checklist
   with the next docs/merge window (the §22--§27 pattern).
+
+## 2026-11-05 — the r41 Edit v3 AI round (MERGED: PR #118 squash `73cfb1b`; merge-gate run 41978641679 green)
+
+- **The directive**: "Complete the remaining stages under phase 10"
+  (the stated order: the Edit v3 AI round, then the video editor)
+  executed end to end on branch `tg-p10-ai`,
+  `docs/phase-10/edit-v3-ai.md` in full; the same window opened
+  the r42 video-editor round before the context deadline closed it
+  (the worklog's Run #16 records the close honestly).
+- **F-24 (new, open)** — the r41 fill-patch resolution bound: the
+  magic-erase inpaint patch is bounded by the session's working
+  resolution, so an erased region on a very large export is softer
+  than its surroundings. The full-resolution export-time re-inference
+  pass is the recorded follow-up (its cost named alongside in the
+  contract: a second full decode + minutes of inference); it rides a
+  later round with the device latency rows in hand.
+- **F-25 (new, open)** — the sky mask is the shared u2netp saliency's
+  above-the-subject region, not a portrait-grade sky segmentation; a
+  dedicated sky-segmentation model is the recorded follow-up if the
+  device rows show mask bleed on portrait subjects.
+- **F-26 (new, open)** — v1 retouch is ONE global selection over the
+  detected faces (the three task-named controls: smoothing, eye
+  brighten, face slim); per-face tuning is the recorded follow-up and
+  owes its own round (a UI + model decision, not a toggle).
+- **The r41 device rows are human-only** (the standing directive): the
+  per-feature end-to-end rows, the latency numbers against the
+  round-documented budget, the airplane-mode flow + the instrumented
+  egress probe, and the About-screen attribution surfacing; the yunet
+  per-tensor scaling is recorded UNVERIFIED against the FaceDetectorYN
+  C++ source and is flagged as the rows' first quality suspect.
+- **Note** — the r41 merge-time truth updates did NOT happen in the
+  authoring window (the context deadline closed it mid-r42); they ride
+  the r42 window's truth commit --- the F-12 convention
+  (`progress.json` records MERGED truth only) honored, just late.
+
+## 2026-11-05 — the r42 lightweight video editor round + the Phase 10 close-out (MERGED: PR #119 squash `f8583d3`; merge-gate run `41988201250` green)
+
+- **The directive**: "Complete the remaining stages under phase 10"
+  --- the fifth catch (commit `dcf553e`: the media3 ExperimentalApi
+  opt-in, lint's own message naming the marker class, taken verbatim)
+  and the sixth catch (commit `7744ea4`: the r41 privacy scan's
+  host-literal gate catches the KDoc `"0.50x"` speed-label example;
+  the scan's own documented protocol --- the dotted NON-host literal
+  joins the deliberate set with the reason recorded, and the scan
+  re-verified locally, all three tests green, BEFORE the push) fixed,
+  PR #119 merged, and the Phase 10 close-out (p10 → done, the p7
+  precedent); the truth docs were drafted in parallel by a read-only
+  sub-agent while the merge-gate ran.
+- **F-27 (new, open)** — video geometry (crop/rotate) is out of scope
+  for the video editor v1 (not in the Phase 9 task text, not in the
+  ADR-0012 set) and is the recorded follow-up; a later round owes the
+  family decision with its own pinned grids, mirroring the photo
+  editor's geometry round.
+- **F-28 (new, open)** — the video editor's session state is transient
+  by design: no persisted video recipe sidecar ships in v1 (the photo
+  sidecar machinery is deliberately not promised for video), so
+  re-editability across sessions is the recorded follow-up; the
+  non-destructive rule itself is fully in force (every export is a new
+  MediaStore entry; no replace-original path exists).
+- **The r42 device rows are human-only** (the standing directive): the
+  long-video (10+ min) / 4K / HDR / no-audio matrix, the measured APK
+  size delta for the media3 addition (the hosting decision's recorded
+  number), the Transformer-on-real-codecs behavior, the airplane-mode
+  row, and the TalkBack-over-video row; the long/4K/HDR performance
+  budget has NO number invented --- the rows own it.
+- **Note** — `progress.json` at merge-time truth with this window's
+  truth commit: p10 → done (the r40 + contracts + r41 + r42 evidence
+  with every sha and run), the project percent 85 → 91 (weights
+  validated = 100); the r41 updates ride the SAME commit (the Run #16
+  window closed early; the F-12 convention honored, just late). The
+  entePort scope is untouched (the e9 dogfood rows stay human-only).

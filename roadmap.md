@@ -13,6 +13,92 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
+### v2.14 (2026-11-05, latest) --- Phase 10 complete: the r41 Edit v3
+  AI round MERGED + the r42 lightweight video editor round MERGED;
+  p10 done
+
+- **The r41 Edit v3 AI round MERGED (PR #118 squash `73cfb1b`,
+  merge-gate run 41978641679 GREEN after the two recorded catches)**
+  --- the sub-scope A implementation, the deferred Phase 8 scope
+  delivered end to end: the four features as pixel stages between
+  sharpen and the regions (the tail grows once: erase -> sky -> bokeh
+  -> retouch -> the regions, which stay FINAL) --- magic erase (the
+  third exclusive paint mode: the painted seed -> u2netp refinement
+  -> MI-GAN fill, ONE artifact pair per layer), sky replacement (the
+  shared u2netp saliency + five PROJECT-AUTHORED parametric skies +
+  the import chip + the cover-crop blend at opacity), bokeh
+  (Depth-Anything-V2-Small int8 once, then the strength + focal
+  sliders re-render from the quantized depth artifact), and the
+  OPT-IN face retouch (YuNet localization + the smoothing/eye/slim
+  kernels, the first consent dialog, the settings kill-switch sheet,
+  the stage refusing under consent-off even with a restored sidecar).
+  The four ONNX graphs ship in `assets/models` (61,613,133 bytes ---
+  the provenance sheet's stated total carried a 500-byte slip, the
+  pinned literal is the true sum) through ONNX Runtime 1.31.1 as the
+  prebuilt-AAR seam (NNAPI-first, CPU fallback, no editor NDK
+  surface); layer types 6-9 under the verbatim tolerance contract;
+  the `edit-ai/` artifact store rides the sidecar discipline; the
+  privacy suite extended (no host literals, no network classes, the
+  ORT surface behind the facade). The two catches: the ORT AAR's own
+  manifest declares INTERNET (sample-convenience packaging) ---
+  hard-stripped via `tools:node="remove"`, never an allowlist, so the
+  merged manifest carries no INTERNET at all; and the ORT 1.31.1 Java
+  surface corrected (16 compile errors: `Result` is `Iterable` of
+  entries, `get(String)` returns `Optional` --- 12 sites + the u2netp
+  output-name sort --- plus two Kotlin local-visibility orderings;
+  the API from the upstream Java sources, not guessed). Editor
+  `versionCode 13` (`0.4.8-edit-alpha`). The r41 model latency and
+  quality rows are human-only and ride the checklist window.
+- **The r42 lightweight video editor round MERGED (PR #119 squash
+  `f8583d3`, merge-gate run `41988201250` GREEN after the six
+  recorded catches)** --- the sub-scope B implementation: the pure
+  `:shared:video-edit` module (the validated `VideoEditPlan` --- the
+  trim `TimeRange` matrix, the sorted non-overlapping 0.25x..2x speed
+  segments with the monotonicity rule + the derived output duration
+  `Σ length/factor`, the `audioTrackPresent` input fact where mute on
+  a no-audio clip is the recorded `RECORDED_NO_OP` ---
+  `FrameExtractPlan`, `AnimationExportPlan` with the deduplicated
+  frame count + the 32 MiB byte-budget preflight, the non-destructive
+  `VideoOutputPolicy` MediaStore policy, the PROJECT-AUTHORED
+  `GifEncoder` + `AnimatedWebpMuxer`, the `VideoExportRunner` seam),
+  the media3 1.11.1 surface (ExoPlayer preview + Transformer export
+  over the SAME shader/uniform struct; `Media3VideoExportRunner` the
+  only Transformer-touching file), the ADDITIVE editor-contract v2
+  launch path (the optional media-kind extra, absent = image so the
+  v1 wire stays byte-identical; `MediaKindLaunchTest`), and the
+  `VideoEditActivity` surface (trim/mute/slow-mo/frame-extract/
+  animation sheets, the nine adjustment sliders live-previewed
+  through the GL effect, honest progress + cancellation, the r32 a11y
+  conventions). The round-pinned caps documented not invented
+  (animation target width 64..1280 px, fps 2..30, the 32 MiB
+  preflight, MP4 output container, the v1 input set MP4/MOV/3GP
+  H.264/HEVC + AAC); the ADR-0012 answers recorded (Transformer at
+  1.11.1 supports the pipeline on minSdk 26; the hosting is the EDIT
+  APK). The six catches are the delivery record's (the
+  `build.gradle.kts` conflict-marker fragment, the nonexistent
+  `METADATA_KEY_FRAMERATE` constant, the `MediaExtractor`
+  `setDataSource` overload, the `WEBP_LOSSLESS` API-30 guard, the
+  media3 `ExperimentalApi` opt-in, and the r41 privacy scan's
+  host-literal catch on the KDoc `"0.50x"` speed-label example --- each
+  verified against the real SDK/AOSP surface or lint's own message,
+  never guessed). Editor
+  `versionCode 14`; 156 JVM tests green on the local pre-push
+  harness; `strings_r42.xml` in both apps (the 74-line edit file +
+  the 9-line gallery file). The device matrix rows (long/4K/HDR/
+  no-audio, the measured APK size delta, the airplane-mode row,
+  TalkBack-over-video) are human-only.
+- **Phase 10 is DONE (code-complete)**: all four PRs merged ---
+  hardening (#117 `c3c21f7`), the two sub-scope contracts (#116
+  `16a5001`), the Edit v3 AI (#118 `73cfb1b`), and the video editor
+  (#119 `f8583d3`). `progress.json` at merge-time truth: p10 →
+  done, the project percent 85 → 91 (the weights total 100; the
+  dashboard's `computeScopePercent` agrees). Every benchmark/device
+  result cell is human-only (the standing directive) --- the
+  skeletons' cells, the AI latency/quality rows, and the video matrix
+  alike ride the physical checklist. The r41 truth updates ride the
+  r42 window's truth commit (the Run #16 window closed at the context
+  deadline; the F-12 convention honored, just late).
+
 ### v2.13 (2026-11-05, latest) --- Phase 10 opens: the r40 hardening
   round MERGED + the two deferred sub-scope contracts MERGED
 
@@ -1668,15 +1754,20 @@ NLE. Bounded by ADR-0012.
 
 ### Phase 10 --- Hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9)
 
-**Status:** IN PROGRESS --- the hardening round r40 MERGED (PR #117
-squash `c3c21f7`, merge-gate 41955524067 green) and the two deferred
-sub-scopes' design contracts MERGED (PR #116 squash `16a5001`); the
-sub-scope implementation rounds are NEXT (in the stated order: Edit v3
-AI, then the video editor). Since the 2026-11-04 maintainer directive this
-phase ALSO carries the SKIPPED Phases 8 and 9 scopes as its two
-explicitly-deferred sub-scopes (below), so the post-Phase-7 work is
-ONE phase: harden first (the original tasks), then the deferred AI
-editing and video editor sub-scopes in that order.
+**Status:** DONE (code-complete) --- all three parts MERGED: the
+hardening round r40 (PR #117 squash `c3c21f7`, merge-gate 41955524067
+green after the two recorded catches, with the two sub-scope design
+contracts MERGED alongside as PR #116 squash `16a5001`, docs-only),
+the Edit v3 AI sub-scope r41 (PR #118 squash `73cfb1b`, merge-gate
+41978641679 green after the two recorded catches), and the lightweight
+video editor sub-scope r42 (PR #119 squash `f8583d3`, merge-gate
+`41988201250` green after the six recorded catches). Since the
+2026-11-04 maintainer directive this phase carried the SKIPPED Phases
+8 and 9 scopes as its two explicitly-deferred sub-scopes (below), and
+both are delivered in the stated order. Every benchmark/device result
+cell stays human-only (the standing directive): the skeletons' cells,
+the AI latency/quality rows, and the video long/4K/HDR matrix ride
+the physical device checklist.
 
 **Purpose:** Validate real-world behavior before release --- and, since
 the 2026-11-04 directive folded Phases 8–9 here, deliver the deferred

@@ -300,10 +300,49 @@ android {
         // media3 artifacts present.
         versionCode = 14
         versionName = "0.4.9-edit-alpha"
+
+        // versionCode 15 (r43, the Phase 11 release-engineering round): the
+        // release variant now exists --- env-injected signing per ADR-0018's
+        // gallery convention (the same four TG_* vars, the same secrets, the
+        // same unsigned fallback so local dev keeps working with no
+        // secrets), R8 minify + resource shrink over the new r43
+        // proguard-rules.pro so the release ships a mapping.txt like the
+        // gallery, and the release workflow builds both apps. This is the
+        // FIRST minified build of this APK --- R8 catches from the release
+        // run will be recorded and fixed per the merge-gate convention
+        // (the repo's standing honesty rule for first-time surfaces).
+        versionCode = 15
+        versionName = "0.4.10-edit-alpha"
     }
 
     buildFeatures {
         compose = true // ADR-0009
+    }
+
+    // --- Release signing (r43, the Phase 11 release-engineering round) ---
+    // The Phase 11 extension of the ADR-0018 convention to the edit app:
+    // the SAME four TG_* env vars, the SAME GitHub Encrypted Secrets
+    // (TG_RELEASE_KEYSTORE_BASE64 / TG_RELEASE_KEYSTORE_PASSWORD /
+    // TG_RELEASE_KEY_ALIAS / TG_RELEASE_KEY_PASSWORD), the SAME release
+    // key the gallery signs with --- one key, both APKs, so both update
+    // in place over their previous pre-releases. The keystore is NEVER
+    // committed (.gitignore excludes *.jks / *.keystore); when the
+    // variables are absent --- local dev or CI jobs without the release
+    // secrets --- the signing config is deliberately left unwired and
+    // assembleRelease falls back to the unsigned APK exactly as before
+    // (editor-apk-build.yml's unsigned QA leg keeps working unchanged).
+    // providers.environmentVariable keeps this configuration-cache
+    // friendly, mirroring the gallery block it copies.
+    val releaseKeystoreFile = providers.environmentVariable("TG_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystoreFile.isPresent) {
+            create("release") {
+                storeFile = file(releaseKeystoreFile.get())
+                storePassword = providers.environmentVariable("TG_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("TG_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("TG_KEY_PASSWORD").get()
+            }
+        }
     }
 
     buildTypes {
@@ -312,9 +351,20 @@ android {
             // accepts (the only suffix beyond the exact release ID).
             applicationIdSuffix = ".debug"
         }
-        // Release stays unsigned unless the same env-injected keystore
-        // convention the gallery uses (issue #59) is extended here; the
-        // prototype's CI path is debug-only.
+        // r43: the release variant now mirrors the gallery's --- R8 minify
+        // + resource shrink (the first minified build of this APK; the
+        // keeps live in the new proguard-rules.pro), so the release ships
+        // a mapping.txt for crash symbolication like the gallery does.
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Wire signing only when the keystore env is present; otherwise
+            // this variant stays unsigned by design (see signingConfigs above).
+            if (releaseKeystoreFile.isPresent) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     sourceSets {

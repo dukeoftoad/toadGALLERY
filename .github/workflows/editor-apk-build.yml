@@ -109,7 +109,14 @@ jobs:
           AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort | tail -1)"
           if [ -z "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
           APK="$(ls apps/edit/build/outputs/apk/debug/*.apk)"
-          EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/edit/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
+          # r43 (the catch from the failed editor-apk-build run 41991485246
+          # at f610860): the edit gradle carries its full version history as
+          # successive assignment pairs where the LAST pair is the effective
+          # one (last-wins, the file's own convention) --- grep -m1 grabbed the
+          # OLDEST pair, so the identity gate compared the APK's real
+          # versionCode against a stale expectation and failed. tail -1 reads
+          # the effective pair.
+          EXPECTED_VC="$(grep -oE 'versionCode = [0-9]+' apps/edit/build.gradle.kts | grep -oE '[0-9]+' | tail -1)"
           if [ -z "$EXPECTED_VC" ]; then echo "::error::could not derive versionCode from apps/edit/build.gradle.kts"; exit 1; fi
           BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
           echo "badging: $BADGE"
@@ -123,7 +130,7 @@ jobs:
         if: matrix.editor_target == 'edit-debug'
         run: |
           APK="$(ls apps/edit/build/outputs/apk/debug/*.apk)"
-          VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/edit/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
+          VERSION_NAME="$(grep -oE 'versionName = "[^"]+"' apps/edit/build.gradle.kts | tail -1 | sed -e 's/versionName = //' -e 's/"//g')"
           if [ -z "$VERSION_NAME" ]; then echo '::error::could not derive versionName from apps/edit/build.gradle.kts'; exit 1; fi
           STAGE="$RUNNER_TEMP/edit-apk-staging"
           mkdir -p "$STAGE"
@@ -163,7 +170,7 @@ jobs:
             *unsigned*) : ;; # the expected unsigned output
             *) echo "::warning::release APK does not carry the -unsigned suffix ($APK) --- verify no signing config leaked into :apps:edit" ;;
           esac
-          VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/edit/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
+          VERSION_NAME="$(grep -oE 'versionName = "[^"]+"' apps/edit/build.gradle.kts | tail -1 | sed -e 's/versionName = //' -e 's/"//g')"
           STAGE="$RUNNER_TEMP/edit-apk-staging"
           mkdir -p "$STAGE"
           APK_NAME="toadGALLERY-Edit-${VERSION_NAME}-release-UNSIGNED.apk"

@@ -4426,6 +4426,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     FilterChip(
                         selected = selectedBand == name,
                         onClick = { selectedBand = name },
+                        // r47 ux fix: the band chips stayed live during an
+                        // export while every other control disables --- one
+                        // consistent frozen state.
+                        enabled = !exporting,
                         label = { Text(stringResource(bandNameRes(name))) },
                         modifier = Modifier.padding(end = 8.dp),
                     )
@@ -4600,7 +4604,10 @@ private fun ColorSwatch(
     Box(
         modifier = Modifier
             .padding(end = 10.dp)
-            .size(36.dp)
+            // r47 ux fix: 36dp was under the 48dp touch-target floor
+            // (design-tokens.md section 2.5, WCAG 2.5.5); the swatch circle
+            // grows to meet it.
+            .size(48.dp)
             .clip(CircleShape)
             .background(Color(colorArgb.toInt()))
             .border(

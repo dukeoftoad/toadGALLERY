@@ -2,34 +2,47 @@ name: Screenshots (Roborazzi)
 
 # Phase 11 screenshot testing (docs/phase-11/roborazzi.md).
 #
-# RECORD-ONLY, AND HONEST ABOUT IT. This job runs the gallery's unit tests,
-# whose three Roborazzi tests (apps/gallery/src/test/.../ui/screenshot/)
-# capture the shared ui/media state cards as PNGs during a PLAIN test run ---
-# Roborazzi records by default when no verify flag is set, so no special
-# record task is needed.
+# PLUGIN-FIRST, TOADFILES PARITY (r47). The Roborazzi gradle plugin
+# (io.github.takahirom.roborazzi 1.77.0) is applied to apps/gallery, so this
+# workflow drives the plugin's flavor-qualified task pair:
 #
-# No baseline PNGs are committed to the repo yet: there is no local Android
-# SDK in this project's sandbox to have produced them from, so the honest
-# first step is record-only. This job's artifact IS the baseline source: once
-# its PNGs are downloaded and committed under the module (src/test/resources
-# or wherever Roborazzi's default output dir puts them for the pinned
-# version), a follow-up adds the verification step:
-#   ./gradlew :apps:gallery:verifyRoborazziBasicDebug --no-daemon --stacktrace
-# which is when the screenshots stop being documentation and start being a
-# gate. Until then nothing here fails on visual drift --- that limitation is
-# recorded in docs/phase-11/roborazzi.md rather than papered over.
+# - record mode (workflow_dispatch with mode=record): runs
+#   recordRoborazziBasicDebug, which runs the three capture tests with
+#   roborazzi.test.record=true and writes the PNGs into the plugin's
+#   configured output dir --- apps/gallery/src/test/resources/roborazzi (the
+#   committed-baseline location; the build-dir default can never hold
+#   committed goldens). The artifact IS the baseline source for F-34.
+# - verify mode (the default): runs verifyRoborazziBasicDebug, which re-renders
+#   the three state cards and FAILS on a pixel diff against the committed
+#   baselines. Resilient-but-honest until baselines exist: a repo-file
+#   existence check counts committed PNGs under
+#   apps/gallery/src/test/resources/roborazzi; with ZERO committed baselines
+#   the verify step is SKIPPED (an explicit conditional step with a loud log
+#   and a job summary --- NOT continue-on-error) and a record run still
+#   happens so the artifact stays available as the baseline source. The
+#   moment PNGs are committed at that path, the same job starts gating.
 #
-# FLAVOR NOTE (known red-until-flavors-merge): the gallery's product flavors
-# (basic/engine/semantic/face) land in a parallel PR. After that merge,
-# unit-test tasks are flavor-qualified (testDebugUnitTest ->
-# testBasicDebugUnitTest, and the Roborazzi plugin's task pairs become
-# recordRoborazziBasicDebug / verifyRoborazziBasicDebug / ...). This workflow
-# is written against the FINAL, flavor-qualified name --- until the flavor
-# PR merges, the gradle step below fails with "task not found". That is a
-# known, deliberate red, not a silent skip.
+# A PLAIN unit-test run does NOT record anymore: with the plugin applied,
+# captureRoboImage() is skipped unless a roborazzi task is in the graph
+# (roborazzi.test.record=false) --- exactly the toadFILES behavior.
+#
+# ONE-COMMAND FOLLOW-UP for the maintainer (F-34 step 2): download the
+# roborazzi-baselines artifact from a green record run and commit its PNGs:
+#   unzip roborazzi-baselines.zip -d .
+#   git add apps/gallery/src/test/resources/roborazzi && git commit
+# The verify gate then activates on the next run of this workflow.
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "record = capture fresh baselines (the F-34 source artifact); verify = gate against committed baselines"
+        required: false
+        default: verify
+        type: choice
+        options:
+          - verify
+          - record
   pull_request:
     paths:
       - 'apps/gallery/**'
@@ -45,7 +58,7 @@ concurrency:
 
 jobs:
   screenshots:
-    name: Record gallery state-card screenshots
+    name: Record / verify gallery state-card screenshots
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -60,28 +73,79 @@ jobs:
       - name: Set up the toolchain (Android)
         uses: ./.github/actions/toad-setup
 
-      # Flavor-qualified unit-test task (basic + debug). During the plain
-      # run the three captureRoborazzi() calls record PNGs (record-by-default
-      # when no roborazzi verify flag is set). NOTE for the future verify
-      # step: once baselines are committed, this same run turns into the
-      # verification --- the record-only artifact upload below is then only
-      # for diff review; the gate is verifyRoborazziBasicDebug.
-      - name: Run unit tests (Roborazzi records on plain runs)
-        run: ./gradlew :apps:gallery:testBasicDebugUnitTest --stacktrace --no-daemon
+      # The gate's honesty hinge: count the COMMITTED baselines (git ls-files,
+      # not the filesystem --- the working tree must match the repo, and a
+      # fresh checkout's filesystem equals HEAD anyway). Roborazzi 1.77.0
+      # writes flat fully-qualified-name PNGs under the configured output dir.
+      - name: Detect committed baselines
+        id: baselines
+        run: |
+          count=$(git ls-files 'apps/gallery/src/test/resources/roborazzi/*.png' | wc -l)
+          echo "Committed Roborazzi baselines: ${count}"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
 
-      # Both globs are probed because Roborazzi's default capture output
-      # directory moved between releases (src/test/resources in some lines,
-      # build/outputs/roborazzi in others); whichever the pinned 1.77.0 uses,
-      # the artifact carries it. if-no-files-found stays at the default
-      # 'warn' (never 'error'): an empty capture set must not mask the
-      # outcome of the test run itself.
-      - name: Upload recorded screenshots
+      # RECORD: the plugin's record task runs the unit tests with
+      # roborazzi.test.record=true and writes the PNGs into
+      # apps/gallery/src/test/resources/roborazzi (the plugin extension's
+      # outputDir --- see apps/gallery/build.gradle.kts). It runs (a) on an
+      # explicit mode=record dispatch, and (b) in verify mode whenever NO
+      # committed baselines exist --- so until F-34 step 2 lands, every run
+      # still produces the artifact that baselines come from, without ever
+      # pretending the verify gate is active.
+      - name: Record state-card screenshots
+        if: >
+          (github.event_name == 'workflow_dispatch' && inputs.mode == 'record')
+          || steps.baselines.outputs.count == 0
+        run: ./gradlew :apps:gallery:recordRoborazziBasicDebug --stacktrace --no-daemon
+
+      # VERIFY, gate half: the DEFAULT mode, whenever committed baselines
+      # exist. The task re-renders the three state cards and fails on a pixel
+      # diff --- from the first committed baseline set onward, this step is
+      # the gate.
+      - name: Verify state-card screenshots (the drift gate)
+        if: >
+          !(github.event_name == 'workflow_dispatch' && inputs.mode == 'record')
+          && steps.baselines.outputs.count > 0
+        run: ./gradlew :apps:gallery:verifyRoborazziBasicDebug --stacktrace --no-daemon
+
+      # VERIFY, honest-skip half: zero committed baselines in verify mode
+      # (the record step above has already produced the artifact). The job
+      # stays green but the skip is LOUD: step log + the run's job summary
+      # both state the reason and the exact follow-up. No continue-on-error
+      # anywhere --- the pipeline is never silently pretended to be a gate.
+      - name: Verify skipped --- no committed baselines yet (F-34 pending)
+        if: >
+          !(github.event_name == 'workflow_dispatch' && inputs.mode == 'record')
+          && steps.baselines.outputs.count == 0
+        run: |
+          {
+            echo "### Roborazzi verify skipped --- baselines not committed yet"
+            echo ""
+            echo "No PNGs exist under \`apps/gallery/src/test/resources/roborazzi/\`"
+            echo "in this ref, so verifyRoborazziBasicDebug has nothing to compare"
+            echo "against. The screenshots are still documentation (this run's"
+            echo "artifact is the baseline source), not a drift gate."
+            echo ""
+            echo "**Follow-up (F-34 step 2):** download the roborazzi-baselines"
+            echo "artifact from a green record run, unzip it at the repo root so"
+            echo "the PNGs land at apps/gallery/src/test/resources/roborazzi/, and"
+            echo "commit them. The verify gate then activates on the next run."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Roborazzi verify skipped: 0 committed baselines under apps/gallery/src/test/resources/roborazzi --- record + commit the artifact's PNGs to activate the gate (F-34)."
+
+      # Both globs are probed so the artifact is complete wherever the run
+      # wrote: the plugin-configured committed-baseline dir (record mode) and
+      # the plugin's diff/compare outputs (verify mode writes _actual/_compare
+      # siblings on drift). if-no-files-found stays at the default 'warn'
+      # (never 'error'): an empty capture set must not mask the outcome of the
+      # gradle step itself.
+      - name: Upload screenshots artifact (the baseline source)
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: roborazzi-screenshots
+          name: roborazzi-baselines
           path: |
-            apps/gallery/src/test/resources/**/*.png
+            apps/gallery/src/test/resources/roborazzi/**
             apps/gallery/build/outputs/roborazzi/**
           if-no-files-found: warn
           retention-days: 14

@@ -39,9 +39,12 @@ import org.robolectric.annotation.GraphicsMode
  *   fullyQualifiedName strategy the name becomes the file name, and the
  *   repo's backtick sentence-style names would put spaces in baseline paths).
  *
- * A plain unit-test run RECORDS this PNG (Roborazzi's record-by-default
- * behavior; no verify flag is set); once baselines are committed to the
- * repo, the plugin's `verifyRoborazziBasicDebug` task (flavor-qualified,
+ * The PNG is recorded by the plugin's `recordRoborazziBasicDebug` task
+ * (r47, toadFILES parity: since the gradle plugin is applied, a PLAIN
+ * unit-test run SKIPS the captures --- roborazzi.test.record is false
+ * unless a roborazzi task is in the graph); once baselines are committed
+ * to the repo under src/test/resources/roborazzi, the plugin's
+ * `verifyRoborazziBasicDebug` task (flavor-qualified,
  * docs/phase-11/roborazzi.md) compares fresh renders against them.
  */
 @RunWith(AndroidJUnit4::class)

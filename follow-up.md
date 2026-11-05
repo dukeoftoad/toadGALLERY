@@ -497,3 +497,46 @@ and Roborazzi lands.
   stay human-only; that scope's percent stays 95). The
   `v0.4.5-alpha-r46` tag is cut FROM this truth commit so the shipped
   APKs' embedded progress snapshot reports the r46 truth.
+
+## The r47 window (2026-11-06) --- the Roborazzi pipeline goes plugin-first (toadFILES parity)
+
+Branch `tg-r47-a-roborazzi`, task-1 of the r47 split. The r46-era
+"deliberately ABSENT" Roborazzi gradle plugin verdict was re-examined at
+the artifact level and did not survive: the published 1.77.0 plugin's
+runtime graph (POM + gradle module metadata) carries NO AGP at all, every
+AGP class its bytecode references exists in this repo's AGP 9.2.1
+gradle-api jar, and the sibling toadFILES repo runs this exact plugin
+version green on a newer AGP line (9.5.0 / Gradle 9.8.2). Landed:
+
+- `gradle/libs.versions.toml`: the `roborazzi` PLUGIN alias
+  (`io.github.takahirom.roborazzi`, version.ref `roborazzi` = 1.77.0) is
+  declared; `apps/gallery/build.gradle.kts` applies it and adds a
+  `roborazzi { }` extension block pointing the capture output dir at
+  `apps/gallery/src/test/resources/roborazzi` (the committed-baseline
+  location; the build-dir default can never hold committed goldens).
+- The three `srcDir` call sites in `apps/gallery/build.gradle.kts` (the
+  withEngine jniLibs dir, the copyProgressJson generated assets dir, the
+  withBundledModels assets dir) were re-audited and STAY on the explicit
+  plain-File form (`...get().asFile`) --- the form AGP 9.2.1 accepts at
+  RUNTIME; the audit comments at all three sites now record the r47
+  verification.
+- `.github/workflows/screenshots.yml`: mode input (record/verify, default
+  verify), a committed-baseline count probe (`git ls-files`), a record
+  step (`recordRoborazziBasicDebug`) that also fires whenever zero
+  baselines are committed, a verify gate step
+  (`verifyRoborazziBasicDebug`) that runs once baselines exist, a LOUD
+  honest-skip step (step log + `$GITHUB_STEP_SUMMARY` + `::notice::`,
+  never continue-on-error) while they do not, and the artifact renamed
+  `roborazzi-baselines`. A PLAIN unit-test run no longer records ---
+  plugin-first parity with toadFILES.
+- The three screenshot tests + `docs/phase-11/roborazzi.md` updated to
+  the plugin-first truth (r46 history kept honest in sections 2 and 7).
+
+- **F-34 (PROGRESSED, still open)** --- the r47 round wires the gate:
+  the verify step exists in the workflow and activates itself the moment
+  PNGs are committed under `apps/gallery/src/test/resources/roborazzi/`.
+  What remains is exactly the human step the original F-34 text called
+  for: download the (renamed) `roborazzi-baselines` artifact from a green
+  record run, unzip at the repo root, commit the PNGs (the recipe is
+  docs/phase-11/roborazzi.md section 5). No workflow edit is needed to
+  activate the gate.

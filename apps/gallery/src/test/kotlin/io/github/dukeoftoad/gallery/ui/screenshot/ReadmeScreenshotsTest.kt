@@ -12,7 +12,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTestTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -178,7 +178,7 @@ class ReadmeScreenshotsTest {
     }
 
     private fun hasTag(tag: String): Boolean =
-        compose.onAllNodesWithTestTag(tag).fetchSemanticsNodes().isNotEmpty()
+        compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
     /** Waits until ANY of [tags] is composed (each tag is screen-verified). */
     private fun waitForAnyTag(vararg tags: String) {
@@ -214,9 +214,11 @@ class ReadmeScreenshotsTest {
  * The outermost rule: grants the read-media permissions, writes the seed
  * JPEGs, registers the [FakeMediaProvider] under the `media` authority and
  * upserts the matching catalogue rows --- all BEFORE the compose rule
- * launches the activity.
+ * launches the activity. (NOT private: the @get:Rule property exposing it
+ * is public, and Kotlin rejects a public property exposing a
+ * private-in-file type.)
  */
-private class SeedMediaRule : TestRule {
+class SeedMediaRule : TestRule {
 
     override fun apply(base: Statement, description: Description): Statement =
         object : Statement() {

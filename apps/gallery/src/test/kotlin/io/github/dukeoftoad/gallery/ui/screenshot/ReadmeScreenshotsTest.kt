@@ -24,6 +24,8 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestRule
@@ -115,6 +117,23 @@ class ReadmeScreenshotsTest {
 
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
+
+    /**
+     * Screenshot tests run ONLY under roborazzi record/verify tasks (the
+     * plugin sets `roborazzi.output.dir` for both). In a PLAIN unit-test
+     * run (ci.yml's testBasicDebugUnitTest) the tests are SKIPPED: they
+     * are screenshot tests, not unit tests, and the process-wide state
+     * after 1228 other tests can corrupt the Settings ViewModel's factory
+     * (a flake the first CI round caught). The verify gate
+     * (verifyRoborazziBasicDebug) sets the same property and runs them.
+     */
+    @Before
+    fun onlyUnderRoborazziTask() {
+        assumeTrue(
+            "screenshot tests run only under roborazzi record/verify tasks",
+            System.getProperty("roborazzi.output.dir") != null,
+        )
+    }
 
     @Test
     fun readme01Photos() {

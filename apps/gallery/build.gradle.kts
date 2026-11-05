@@ -14,12 +14,13 @@ plugins {
     // KSP drives the Room schema compiler for the Phase 4 media catalogue
     // (ADR-0006 persistence layer); see the room-* entries in the catalog.
     alias(libs.plugins.ksp)
-    // Roborazzi screenshot-test task wiring (Phase 11, docs/phase-11/
-    // roborazzi.md): registers the record/verify/compare task pairs over the
-    // unit-test variants. The captures themselves ride plain unit-test runs
-    // (record by default); the plugin's verify tasks activate once baselines
-    // are committed.
-    alias(libs.plugins.roborazzi)
+    // NO Roborazzi gradle plugin (Phase 11, docs/phase-11/roborazzi.md
+    // section 7): the record flow rides plain unit-test runs and needs no
+    // plugin; the 1.77.0 plugin was tried and caught by the merge gate ---
+    // its classpath hard-errored this script's existing srcDir(Any) call
+    // sites --- so the plugin entry is deliberately absent. The
+    // verify/compare task pairs get their own round when an AGP-9-clean
+    // plugin story exists.
 }
 
 android {
@@ -409,8 +410,8 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             all {
-                it.systemProperty["robolectric.graphicsMode"] = "NATIVE"
-                it.systemProperty["roborazzi.record.namingStrategy"] = "fullyQualifiedName"
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+                it.systemProperty("roborazzi.record.namingStrategy", "fullyQualifiedName")
             }
         }
     }

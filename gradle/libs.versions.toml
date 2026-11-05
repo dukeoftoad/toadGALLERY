@@ -179,5 +179,4 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 # / compareRoborazziBasicDebug). A PLAIN unit-test run records by default
 # (captureRoborazzi() records when no verify flag is set), so the record
 # half works even before the verify tasks are ever invoked.
-roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 

@@ -48,10 +48,17 @@ load-bearing, not cosmetic.
   (io.github.takahirom.roborazzi:roborazzi), `roborazzi-compose`
   (io.github.takahirom.roborazzi:roborazzi-compose --- the Compose capture
   surface, `captureRoborazzi()` on `SemanticsNodeInteraction`).
-- **gradle/libs.versions.toml** (plugins): `roborazzi`
-  (`io.github.takahirom.roborazzi`), applied in apps/gallery's `plugins`
-  block. It registers the record/verify/compare task pairs over the
-  unit-test variants; the captures themselves ride plain test runs.
+- **gradle/libs.versions.toml (plugins): deliberately ABSENT.** The
+  `io.github.takahirom.roborazzi` plugin was wired first and caught by the
+  merge gate twice: 1.26.0 does not exist (resolution failure), and the
+  real 1.77.0 --- while it applies --- drags a newer AGP variant API onto
+  the script classpath that hard-errors this module's existing
+  `srcDir(Any)` call sites (script-compilation errors at the
+  withEngine/progress/bundled-models blocks that were green without the
+  plugin). The documented fallback activated: the plugin entry is removed;
+  the captures ride plain unit-test runs, which need no plugin. The
+  verify/compare task pairs get their own round when an AGP-9-clean
+  plugin story exists.
 - **apps/gallery/build.gradle.kts, testOptions** (new block, next to
   `buildFeatures`):
 
@@ -186,19 +193,25 @@ the flavor PR lands, the names resolve as written.
 
 ## 7. Compatibility risks, stated plainly
 
-- **Roborazzi gradle plugin 1.77.0 vs AGP 9.2.1.** The first attempt
-  (1.26.0) never resolved --- that version does not exist; the merge-gate
-  run failed at plugin resolution and the published line was re-verified
-  against Maven Central metadata (marker
+- **Roborazzi gradle plugin vs AGP 9.2.1 --- CAUGHT, fallback ACTIVATED.**
+  The first attempt (1.26.0) never resolved --- that version does not
+  exist; the merge-gate run failed at plugin resolution and the published
+  line was re-verified against Maven Central metadata (marker
   `io.github.takahirom.roborazzi:io.github.takahirom.roborazzi.gradle.
   plugin`, latest 1.77.0 --- the plugin id is the `io.github...` one, not
-  `com.github...`). The plugin mostly sits on AGP's public variant API
-  (`androidComponents.onVariants`), the reason to EXPECT it to apply
-  cleanly under AGP 9; the fallback if it misbehaves anyway: drop the
-  `alias(libs.plugins.roborazzi)` line (and the catalog plugin entry) ---
-  recording via plain test runs does NOT need the plugin; only the
-  verify/compare task pairs do, and section 5's flow is not activated yet
-  anyway.
+  `com.github...`). The second attempt (1.77.0) applied cleanly but broke
+  the BUILD SCRIPT itself: the plugin's classpath carried a newer AGP
+  variant API in which `srcDir(Any)` is gone (deprecated ->
+  `directories`), so the module's pre-existing withEngine /
+  copyProgressJson / withBundledModels srcDir call sites became script
+  COMPILATION ERRORS ("No 'set' operator..."-class failures alongside the
+  genuinely-wrong testOptions map syntax, itself fixed to
+  `systemProperty(key, value)` method calls). The documented fallback
+  activated exactly as written: the plugin alias and the catalog plugin
+  entry are removed; recording via plain test runs needs no plugin; only
+  the verify/compare task pairs do, and section 5's flow is not activated
+  yet anyway. A future round may pin an AGP-9-clean plugin version --- the
+  catalog comment marks the spot.
 - **Robolectric 4.17.0 and sdk 34.** The tests pin sdk 34 explicitly in
   `@Config`, so newer compileSdk/targetSdk values do not change what
   Robolectric renders. Robolectric downloads its android-all jars from

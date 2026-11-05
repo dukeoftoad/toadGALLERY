@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r46 (the APK-matrix round): the semantic-index-only flavor's
+     launcher label (applicationIdSuffix .semantic, installs separately
+     like the edit app). Flavor res overrides the main source set's
+     same-named resource (the main value stays the fallback for the
+     basic build). -->
+<resources>
+    <string name="app_launcher_name">toadGALLERY Semantic</string>
+</resources>

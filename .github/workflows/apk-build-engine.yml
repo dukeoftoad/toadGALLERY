@@ -9,6 +9,13 @@ name: APK build with engine
 # ci.yml's engine-android job and engine-apk.yml use, byte-for-byte the same
 # pins and cache keys, so main's warm caches apply).
 #
+# r46 (the APK-matrix round): the engine-enabled build is the ENGINE FLAVOR
+# (:apps:gallery:assembleEngineDebug / assembleEngineRelease ---
+# applicationIdSuffix .engine, the full-engine BuildShape; the unflavored
+# assembleDebug/assembleRelease task names no longer exist for :apps:gallery).
+# The output paths are flavor-qualified too: apk/engine/<variant>/ and
+# mapping/engine<Variant>/.
+#
 # Delta vs the existing engine-apk.yml (complement, NOT a duplicate):
 #   - ref-agnostic (engine-apk.yml is the branch-scoped tg-engine-apk-*
 #     test-build pipeline with the round-convention staging),
@@ -167,18 +174,19 @@ jobs:
         run: |
           set -o pipefail
           if [ "$BUILD_VARIANT" = "release" ]; then
-            TASK=":apps:gallery:assembleRelease"
+            TASK=":apps:gallery:assembleEngineRelease"
           else
-            TASK=":apps:gallery:assembleDebug"
+            TASK=":apps:gallery:assembleEngineDebug"
           fi
           echo "task: $TASK -PwithEngine"
           ./gradlew "$TASK" -PwithEngine --no-daemon --stacktrace 2>&1 | tee build-output.log
 
       # Gate (verbatim shape from ci.yml engine-android / engine-apk.yml):
       # the engine-enabled APK must carry BOTH native libraries.
+      # r46: the ENGINE flavor's output dir (apk/engine/<variant>/).
       - name: Verify the native libraries are packaged
         run: |
-          APK="$(ls "apps/gallery/build/outputs/apk/$BUILD_VARIANT/"*.apk)"
+          APK="$(ls "apps/gallery/build/outputs/apk/engine/$BUILD_VARIANT/"*.apk)"
           echo "APK: $APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
@@ -191,13 +199,16 @@ jobs:
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort | tail -1)"
           if [ -z "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
-          APK="$(ls "apps/gallery/build/outputs/apk/$BUILD_VARIANT/"*.apk)"
+          APK="$(ls "apps/gallery/build/outputs/apk/engine/$BUILD_VARIANT/"*.apk)"
           EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
           if [ -z "$EXPECTED_VC" ]; then echo "::error::could not derive versionCode from apps/gallery/build.gradle.kts"; exit 1; fi
+          # r46: the ENGINE flavor's applicationIdSuffix composes with the
+          # buildType's: .engine.release -> io.github.dukeoftoad.gallery.engine,
+          # .engine.debug -> io.github.dukeoftoad.gallery.engine.debug.
           if [ "$BUILD_VARIANT" = "release" ]; then
-            EXPECTED_ID="io.github.dukeoftoad.gallery"
+            EXPECTED_ID="io.github.dukeoftoad.gallery.engine"
           else
-            EXPECTED_ID="io.github.dukeoftoad.gallery.debug"
+            EXPECTED_ID="io.github.dukeoftoad.gallery.engine.debug"
           fi
           BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
           echo "badging: $BADGE"
@@ -209,7 +220,7 @@ jobs:
 
       - name: Stage the APK + R8 mapping
         run: |
-          APK="$(ls "apps/gallery/build/outputs/apk/$BUILD_VARIANT/"*.apk)"
+          APK="$(ls "apps/gallery/build/outputs/apk/engine/$BUILD_VARIANT/"*.apk)"
           VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/gallery/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
           if [ -z "$VERSION_NAME" ]; then echo '::error::could not derive versionName'; exit 1; fi
           STAGE="$RUNNER_TEMP/apk-staging"
@@ -217,10 +228,16 @@ jobs:
           APK_NAME="toadGALLERY-${VERSION_NAME}-engine-${BUILD_VARIANT}.apk"
           cp "$APK" "$STAGE/$APK_NAME"
           ( cd "$STAGE" && sha256sum "$APK_NAME" > "$APK_NAME.sha256" )
-          if [ -f "apps/gallery/build/outputs/mapping/$BUILD_VARIANT/mapping.txt" ]; then
-            cp "apps/gallery/build/outputs/mapping/$BUILD_VARIANT/mapping.txt" "$STAGE/"
+          # r46: flavor-qualified mapping dir (engineRelease / engineDebug).
+          if [ "$BUILD_VARIANT" = "release" ]; then
+            MAPPING="apps/gallery/build/outputs/mapping/engineRelease/mapping.txt"
           else
-            echo "::warning::no R8 mapping at apps/gallery/build/outputs/mapping/$BUILD_VARIANT/mapping.txt (debug builds are not minified --- expected; release builds MUST produce one)"
+            MAPPING="apps/gallery/build/outputs/mapping/engineDebug/mapping.txt"
+          fi
+          if [ -f "$MAPPING" ]; then
+            cp "$MAPPING" "$STAGE/"
+          else
+            echo "::warning::no R8 mapping at $MAPPING (debug builds are not minified --- expected; release builds MUST produce one)"
           fi
           ls -la "$STAGE"
           {

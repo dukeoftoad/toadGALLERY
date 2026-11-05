@@ -11,6 +11,13 @@ name: CI
 # also runs the vendored photos-side crates' test suites explicitly (the
 # workspace check/clippy gates cover them automatically --- no crate lists
 # anywhere --- but no workspace test step existed before).
+# Since r46 the gallery is a FOUR-FLAVOR matrix (one "engine" dimension:
+# basic / engine / semantic / face --- docs/phase-11/apk-matrix.md), so the
+# unflavored assembleDebug/lintDebug/testDebugUnitTest task names no longer
+# exist for :apps:gallery: the canonical gate builds+lints+tests the BASIC
+# flavor, and additionally runs the ENGINE flavor's JVM unit tests (no
+# -PwithEngine needed --- unit tests compile no native code) so the
+# engine-shaped BuildConfig suite stays compiled and green on every PR.
 
 on:
   push:
@@ -91,15 +98,24 @@ jobs:
       - name: Set up the toolchain (Android)
         uses: ./.github/actions/toad-setup
 
+      # r46: the gallery tasks are flavor-qualified (the four-way APK
+      # matrix over the single "engine" dimension) --- the canonical gate
+      # rides the BASIC flavor (the canonical applicationId, no engine
+      # library, no engine UI). The APK lands in apk/basic/debug/.
       - name: Build debug APK
-        run: ./gradlew :apps:gallery:assembleDebug --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:assembleBasicDebug --no-daemon --stacktrace
 
       - name: Run lint
-        run: ./gradlew :apps:gallery:lintDebug --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:lintBasicDebug --no-daemon --stacktrace
         # Hard gate since the NewApi cleanup (PR #52): lint errors fail CI.
 
-      - name: Run unit tests
-        run: ./gradlew :apps:gallery:testDebugUnitTest --no-daemon --stacktrace
+      # r46: unit tests run under BOTH the basic flavor (the default
+      # matrix shape: BuildShape all-off) AND the engine flavor (the full
+      # engine BuildConfig) --- the same JVM sources, two shapes, and the
+      # flavor algebra (BuildShapeTest) is exercised in both. No
+      # -PwithEngine anywhere: unit tests compile no native code.
+      - name: Run unit tests (basic + engine flavors)
+        run: ./gradlew :apps:gallery:testBasicDebugUnitTest :apps:gallery:testEngineDebugUnitTest --no-daemon --stacktrace
         # Binding since the issue #20 privacy policy tests landed; lint stays
         # non-binding until the Phase 2 cleanup pass.
 
@@ -121,7 +137,7 @@ jobs:
         if: always()
         with:
           name: gallery-debug-apk
-          path: apps/gallery/build/outputs/apk/debug/*.apk
+          path: apps/gallery/build/outputs/apk/basic/debug/*.apk
           if-no-files-found: warn
           retention-days: 14
 
@@ -174,16 +190,20 @@ jobs:
       # cargo-ndk builds libtoad_ml_jni.so + libonnxruntime.so (the vendored
       # ente-ml uses ort load-dynamic + copy-dylibs) for arm64-v8a into
       # apps/gallery/build/rust-jniLibs/, which the jniLibs srcDir packages.
-      # Lint and unit tests stay in the build job (property-less, unchanged).
+      # Lint and unit tests stay in the build job (property-less; r46: the
+      # ENGINE-flavor unit tests ride there too).
+      # r46: the engine-enabled assemble is flavor-qualified --- the ENGINE
+      # flavor (applicationIdSuffix .engine, the full BuildShape), not the
+      # unflavored task that no longer exists.
       - name: Engine-enabled debug assemble (arm64-v8a)
-        run: ./gradlew :apps:gallery:assembleDebug -PwithEngine --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:assembleEngineDebug -PwithEngine --no-daemon --stacktrace
 
       # Gate, not an upload: the engine-enabled APK must actually carry BOTH
       # native libraries (a silently broken jniLibs wiring would otherwise
       # pass the assemble step).
       - name: Verify the native libraries are packaged
         run: |
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           echo "APK: $APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"

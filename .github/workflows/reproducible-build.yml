@@ -19,6 +19,12 @@ name: Reproducible build
 # this workflow never touches the TG_* signing environment; with no
 # signing config wired, assembleRelease's output is the *-unsigned.apk.
 #
+# r46 (the APK-matrix round): the gallery's release build is
+# flavor-qualified, and the verified pair is the BASIC flavor + the edit
+# app (the canonical offline product). The engine-family flavors are NOT
+# added here --- a follow-up measurement round owns those (the basic
+# pair's property is what this workflow was cut to verify).
+#
 # Verdicts, honestly named:
 #   - BYTE-REPRODUCIBLE: every artifact compared byte-identical (cmp).
 #   - CONTENT-REPRODUCIBLE: APK bytes differ but the unzipped contents
@@ -62,15 +68,18 @@ jobs:
       - name: Set up the toolchain (Android)
         uses: ./.github/actions/toad-setup
 
-      # Pass 1: BOTH apps' release variants, unsigned by design (NO TG_*
-      # env is ever exported in this workflow). --no-build-cache is
+      # Pass 1: the BASIC gallery flavor + the edit app's release variants,
+      # unsigned by design (NO TG_* env is ever exported in this workflow;
+      # r46: the gallery task is flavor-qualified --- assembleBasicRelease
+      # is the canonical pair, and deliberately WITHOUT -PwithEngine so
+      # the basic APK stays engine-library-free). --no-build-cache is
       # deliberate: with the warm Gradle cache a post-clean rebuild could
       # replay cached task outputs (FROM-CACHE), which would make the
       # byte comparison trivially pass --- verification theater. Both
       # passes force real re-execution of every cacheable task; only the
       # dependency cache (inputs, not outputs) stays warm.
       - name: Build pass 1 (unsigned, both apps)
-        run: ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease --no-daemon --stacktrace --no-build-cache
+        run: ./gradlew :apps:gallery:assembleBasicRelease :apps:edit:assembleRelease --no-daemon --stacktrace --no-build-cache
 
       # Collect pass 1's four artifacts under canonical names (the APK
       # basenames AGP produces are stable, but the comparison keys on
@@ -88,20 +97,20 @@ jobs:
             local PASS_DIR="$1"
             mkdir -p "$PASS_DIR"
             local GALLERY_UNSIGNED EDIT_UNSIGNED
-            GALLERY_UNSIGNED="$(find apps/gallery/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+            GALLERY_UNSIGNED="$(find apps/gallery/build/outputs/apk/basic/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
             EDIT_UNSIGNED="$(find apps/edit/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
             if [[ -z "$GALLERY_UNSIGNED" || -z "$EDIT_UNSIGNED" ]]; then
               echo "::error::expected *-unsigned.apk outputs for both apps --- found:"
-              ls -l apps/gallery/build/outputs/apk/release apps/edit/build/outputs/apk/release || true
+              ls -l apps/gallery/build/outputs/apk/basic/release apps/edit/build/outputs/apk/release || true
               exit 1
             fi
-            if [[ ! -f apps/gallery/build/outputs/mapping/release/mapping.txt || ! -f apps/edit/build/outputs/mapping/release/mapping.txt ]]; then
+            if [[ ! -f apps/gallery/build/outputs/mapping/basicRelease/mapping.txt || ! -f apps/edit/build/outputs/mapping/release/mapping.txt ]]; then
               echo "::error::expected an R8 mapping.txt for both apps (both release variants are minified since r43)"
               exit 1
             fi
             cp "$GALLERY_UNSIGNED" "$PASS_DIR/gallery-release-unsigned.apk"
             cp "$EDIT_UNSIGNED" "$PASS_DIR/edit-release-unsigned.apk"
-            cp apps/gallery/build/outputs/mapping/release/mapping.txt "$PASS_DIR/gallery-mapping.txt"
+            cp apps/gallery/build/outputs/mapping/basicRelease/mapping.txt "$PASS_DIR/gallery-mapping.txt"
             cp apps/edit/build/outputs/mapping/release/mapping.txt "$PASS_DIR/edit-mapping.txt"
             ( cd "$PASS_DIR" && sha256sum gallery-release-unsigned.apk edit-release-unsigned.apk gallery-mapping.txt edit-mapping.txt > "$PASS_DIR/sha256.txt" )
             cat "$PASS_DIR/sha256.txt"
@@ -119,7 +128,7 @@ jobs:
 
       # Pass 2: the SAME command on the SAME checkout, from clean.
       - name: Build pass 2 (unsigned, both apps)
-        run: ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease --no-daemon --stacktrace --no-build-cache
+        run: ./gradlew :apps:gallery:assembleBasicRelease :apps:edit:assembleRelease --no-daemon --stacktrace --no-build-cache
 
       # Pass 2's collect step repeats pass 1's function verbatim: separate
       # YAML steps are separate shells, so the function cannot be shared
@@ -131,20 +140,20 @@ jobs:
             local PASS_DIR="$1"
             mkdir -p "$PASS_DIR"
             local GALLERY_UNSIGNED EDIT_UNSIGNED
-            GALLERY_UNSIGNED="$(find apps/gallery/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+            GALLERY_UNSIGNED="$(find apps/gallery/build/outputs/apk/basic/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
             EDIT_UNSIGNED="$(find apps/edit/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
             if [[ -z "$GALLERY_UNSIGNED" || -z "$EDIT_UNSIGNED" ]]; then
               echo "::error::expected *-unsigned.apk outputs for both apps --- found:"
-              ls -l apps/gallery/build/outputs/apk/release apps/edit/build/outputs/apk/release || true
+              ls -l apps/gallery/build/outputs/apk/basic/release apps/edit/build/outputs/apk/release || true
               exit 1
             fi
-            if [[ ! -f apps/gallery/build/outputs/mapping/release/mapping.txt || ! -f apps/edit/build/outputs/mapping/release/mapping.txt ]]; then
+            if [[ ! -f apps/gallery/build/outputs/mapping/basicRelease/mapping.txt || ! -f apps/edit/build/outputs/mapping/release/mapping.txt ]]; then
               echo "::error::expected an R8 mapping.txt for both apps (both release variants are minified since r43)"
               exit 1
             fi
             cp "$GALLERY_UNSIGNED" "$PASS_DIR/gallery-release-unsigned.apk"
             cp "$EDIT_UNSIGNED" "$PASS_DIR/edit-release-unsigned.apk"
-            cp apps/gallery/build/outputs/mapping/release/mapping.txt "$PASS_DIR/gallery-mapping.txt"
+            cp apps/gallery/build/outputs/mapping/basicRelease/mapping.txt "$PASS_DIR/gallery-mapping.txt"
             cp apps/edit/build/outputs/mapping/release/mapping.txt "$PASS_DIR/edit-mapping.txt"
             ( cd "$PASS_DIR" && sha256sum gallery-release-unsigned.apk edit-release-unsigned.apk gallery-mapping.txt edit-mapping.txt > "$PASS_DIR/sha256.txt" )
             cat "$PASS_DIR/sha256.txt"

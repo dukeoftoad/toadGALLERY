@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,6 +23,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -37,6 +40,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.buildshape.BuildShape
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.albums.AlbumDetailScreen
 import io.github.dukeoftoad.gallery.ui.albums.AlbumsScreen
@@ -444,6 +448,13 @@ fun ToadGalleryApp() {
                     // screen-scoped (per-collection state, the PersonDetail
                     // factory pattern); photo taps open the SAME
                     // shell-scoped viewer hand-off the grid screens use.
+                    // r46 build-shape gate: no SEMANTIC index in this build
+                    // --- the honest unavailable card instead of a
+                    // ThingsDetailScreen whose ViewModel cannot exist here.
+                    if (!BuildShape.semanticIndex) {
+                        BuildFeatureUnavailable()
+                        return@composable
+                    }
                     val collectionId = backStackEntry.arguments?.getString("collectionId")
                     if (!collectionId.isNullOrEmpty()) {
                         ThingsDetailScreen(
@@ -467,6 +478,14 @@ fun ToadGalleryApp() {
                     // action routes to the Settings tab with the same
                     // single-top-level-stack discipline a bottom-bar tap uses
                     // (the Map tab's consent copy wired it first).
+                    // r46 build-shape gate: no FACE index in this build --- the
+                    // honest unavailable card instead of a PeopleScreen whose
+                    // ViewModel cannot exist here (the Albums section that
+                    // navigates here is hidden by the same gate).
+                    if (!BuildShape.faceIndex) {
+                        BuildFeatureUnavailable()
+                        return@composable
+                    }
                     PeopleScreen(
                         onBack = { navController.popBackStack() },
                         onOpenPerson = { clusterId ->
@@ -491,6 +510,12 @@ fun ToadGalleryApp() {
                     // The ViewModel is screen-scoped (per-cluster state, the
                     // AlbumDetailScreen factory pattern); photo taps open the
                     // SAME shell-scoped viewer hand-off the grid screens use.
+                    // r46 build-shape gate: the same FACE-index rule as the
+                    // People route above.
+                    if (!BuildShape.faceIndex) {
+                        BuildFeatureUnavailable()
+                        return@composable
+                    }
                     val clusterId = backStackEntry.arguments?.getString("clusterId")
                     if (!clusterId.isNullOrEmpty()) {
                         PersonDetailScreen(
@@ -703,5 +728,45 @@ fun StateScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.padding(top = 24.dp),
         )
+    }
+}
+
+/**
+ * The r46 (APK-matrix round) build-shape fallback: the routed body of an
+ * engine feature the installed flavor does not carry (the People /
+ * Person-detail routes without the FACE index, the Things route without
+ * the SEMANTIC index --- the Albums sections that navigate there are
+ * hidden by the same [BuildShape] gates). A small honest centered card
+ * --- the feature is not "broken", it simply is not part of this build
+ * (the engine-family builds install separately, like the edit app) ---
+ * instead of constructing a ViewModel whose engine cannot exist here.
+ * The route entries themselves stay (nav-graph stability); only the
+ * bodies are gated. The test tag pins the surface for the UI suites.
+ */
+@Composable
+private fun BuildFeatureUnavailable() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("build_feature_unavailable"),
+        ) {
+            Text(
+                text = stringResource(R.string.build_feature_unavailable),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+            )
+        }
     }
 }

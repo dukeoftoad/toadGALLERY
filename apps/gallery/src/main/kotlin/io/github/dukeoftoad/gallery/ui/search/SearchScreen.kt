@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.buildshape.BuildShape
 import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.data.SearchMediaType
 import io.github.dukeoftoad.gallery.data.SearchQuery
@@ -223,30 +224,36 @@ fun SearchScreen(
         // pipeline, untouched) vs Content (Magic Search). Switching the
         // mode flips BOTH pipelines' engagement through their own gates
         // --- exactly one query pipeline ever runs.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = ToadSpacing.md),
-            horizontalArrangement = Arrangement.spacedBy(ToadSpacing.md),
-        ) {
-            FilterChip(
-                selected = searchMode == SearchMode.NAME,
-                onClick = {
-                    viewModel.onSearchModeChange(SearchMode.NAME)
-                    magicViewModel.onActiveChanged(false)
-                },
-                label = { Text(stringResource(R.string.search_mode_name)) },
-                modifier = Modifier.testTag("search_mode_name"),
-            )
-            FilterChip(
-                selected = searchMode == SearchMode.CONTENT,
-                onClick = {
-                    viewModel.onSearchModeChange(SearchMode.CONTENT)
-                    magicViewModel.onActiveChanged(true)
-                },
-                label = { Text(stringResource(R.string.search_mode_content)) },
-                modifier = Modifier.testTag("search_mode_content"),
-            )
+        // r46 build-shape gate: without the SEMANTIC index there is no
+        // Content mode, so the row is pointless and is not rendered at
+        // all --- the screen is the plain Name pipeline (the ViewModel's
+        // mode stays its NAME default, unreachable otherwise).
+        if (BuildShape.semanticIndex) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = ToadSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(ToadSpacing.md),
+            ) {
+                FilterChip(
+                    selected = searchMode == SearchMode.NAME,
+                    onClick = {
+                        viewModel.onSearchModeChange(SearchMode.NAME)
+                        magicViewModel.onActiveChanged(false)
+                    },
+                    label = { Text(stringResource(R.string.search_mode_name)) },
+                    modifier = Modifier.testTag("search_mode_name"),
+                )
+                FilterChip(
+                    selected = searchMode == SearchMode.CONTENT,
+                    onClick = {
+                        viewModel.onSearchModeChange(SearchMode.CONTENT)
+                        magicViewModel.onActiveChanged(true)
+                    },
+                    label = { Text(stringResource(R.string.search_mode_content)) },
+                    modifier = Modifier.testTag("search_mode_content"),
+                )
+            }
         }
         if (searchMode == SearchMode.NAME) {
             // The type filters are the NAME pipeline's; the semantic index
@@ -281,7 +288,11 @@ fun SearchScreen(
                 .fillMaxWidth()
                 .padding(top = ToadSpacing.md),
         ) {
-            if (searchMode == SearchMode.CONTENT) {
+            // r46 build-shape gate: the Content state surface renders only
+            // where the SEMANTIC index exists; the mode row above is gone
+            // in those builds, so this is defense in depth (a gated build
+            // can never reach CONTENT mode through the UI).
+            if (searchMode == SearchMode.CONTENT && BuildShape.semanticIndex) {
                 MagicSearchStates(
                     state = magicState,
                     query = query,

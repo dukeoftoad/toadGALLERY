@@ -369,13 +369,24 @@ android {
         // pinned release key, the same unsigned local fallback). No product
         // change rides this bump beyond the round's build wiring; the
         // versionName moves to 0.4.5-alpha, the Phase 11 close-out cut.
-        versionCode = 37
+        // versionCode 38 (r46 round): the APK-matrix round --- four gallery
+        // build flavors over one "engine" dimension (basic / engine /
+        // semantic / face; the engine-library-included builds install
+        // separately on distinct applicationIds like the edit app),
+        // BuildConfig-driven build-shape gating (BuildShape) removing the
+        // whole engine UI surface from the basic APK; versionName stays
+        // 0.4.5-alpha. All four flavors share this one versionCode.
+        versionCode = 38
         versionName = "0.4.5-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 
     buildFeatures {
         compose = true     // ADR-0009
+        // r46 (the APK-matrix round): the BuildShape source of truth reads
+        // per-flavor WITH_ENGINE / INDEX_FACE / INDEX_SEMANTIC fields, so
+        // BuildConfig generation must stay on.
+        buildConfig = true
     }
 
     // --- Release signing (issue #59) ---
@@ -416,6 +427,68 @@ android {
             if (releaseKeystoreFile.isPresent) {
                 signingConfig = signingConfigs.getByName("release")
             }
+        }
+    }
+
+    // --- The r46 APK matrix (one flavor dimension: "engine") ---
+    // The maintainer's demand, verbatim: a BASIC APK with the engine
+    // library and ALL engine UI removed, PLUS engine-library-included APKs
+    // that install SEPARATELY (distinct applicationIds, like the edit
+    // app), so the matrix ships as four coexisting gallery builds:
+    //
+    //   flavor    applicationId (release)              engine .so  face  semantic
+    //   basic     io.github.dukeoftoad.gallery           NO          no    no
+    //   engine    io.github.dukeoftoad.gallery.engine    YES         yes   yes
+    //   semantic  io.github.dukeoftoad.gallery.semantic  YES         no    yes
+    //   face      io.github.dukeoftoad.gallery.face      YES         yes   no
+    //
+    // Each flavor's flags are consumed at runtime through BuildShape
+    // (ui-adjacent source of truth, buildshape/BuildShape.kt), which gates
+    // every engine UI surface out of the basic build --- the packaging
+    // half stays exactly where r22 put it: the -PwithEngine property
+    // below, which (alone) decides whether the native libraries exist to
+    // package at all. The release pipeline builds basic WITHOUT the
+    // property and the engine family WITH it (release.yml, two
+    // invocations) and enforces the split with an unzip negative gate.
+    // The launcher label rides per-flavor res source sets
+    // (src/<flavor>/res/values/strings.xml overriding app_launcher_name);
+    // icons are shared. The debug buildType's ".debug" suffix composes
+    // with the flavor suffixes as usual.
+    flavorDimensions += "engine"
+    productFlavors {
+        // The canonical gallery: no engine library, no engine UI, the
+        // unchanged applicationId --- the offline-first core app.
+        create("basic") {
+            dimension = "engine"
+            // No applicationIdSuffix: installs as io.github.dukeoftoad.gallery.
+            buildConfigField("boolean", "WITH_ENGINE", "false")
+            buildConfigField("boolean", "INDEX_FACE", "false")
+            buildConfigField("boolean", "INDEX_SEMANTIC", "false")
+        }
+        // The full engine build: everything the r22-r39 rounds shipped,
+        // installed SEPARATELY from basic (like the edit app).
+        create("engine") {
+            dimension = "engine"
+            applicationIdSuffix = ".engine"
+            buildConfigField("boolean", "WITH_ENGINE", "true")
+            buildConfigField("boolean", "INDEX_FACE", "true")
+            buildConfigField("boolean", "INDEX_SEMANTIC", "true")
+        }
+        // Semantic-index-only: Magic Search + Things, no People.
+        create("semantic") {
+            dimension = "engine"
+            applicationIdSuffix = ".semantic"
+            buildConfigField("boolean", "WITH_ENGINE", "true")
+            buildConfigField("boolean", "INDEX_FACE", "false")
+            buildConfigField("boolean", "INDEX_SEMANTIC", "true")
+        }
+        // Face-index-only: People, no Magic Search / Things.
+        create("face") {
+            dimension = "engine"
+            applicationIdSuffix = ".face"
+            buildConfigField("boolean", "WITH_ENGINE", "true")
+            buildConfigField("boolean", "INDEX_FACE", "true")
+            buildConfigField("boolean", "INDEX_SEMANTIC", "false")
         }
     }
 

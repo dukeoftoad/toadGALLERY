@@ -2054,6 +2054,15 @@ remote at the r49 main), and the maintainer restored the PAT to
 unblock the push. Local proofs are the lexer check on all touched
 Kotlin files, actionlint 1.7.7 clean, XML/YAML validation, and pin
 re-verification against ModelManifest + assets.rs + the real download.
-CI is the compile judge (ADR-0013); the Roborazzi goldens re-record
-follows the first campaign's recipe if this PR's verify leg drifts
-(its Settings-screen pixels changed again), and the maintainer merges.
+CI is the compile judge (ADR-0013), and it JUDGED: three catch rounds
+on the pushed branch --- (1) the guard's WorkManager.getInstance sat
+outside its fault tolerance and crashed every Roborazzi teardown
+(the README suite fell over 02→03→01 with poisoned shared state);
+(2) the pre-F-39 vault-exclusion assertion in VaultExclusionReadGateTest
+(its sibling was updated, this one missed); (3) the flavor guard's
+prefix filter caught AGP's test-classpath helpers
+(packageEngineDebugUnitTestForUnitTest, then
+bundleEngineDebugClassesToCompileJar) --- now an exact canonical
+task-name match. The 03-search golden re-recorded (the stale-promise
+removal IS basic-visible in the search empty state; the Settings
+deltas are engine-gated and did not drift). The maintainer merges.

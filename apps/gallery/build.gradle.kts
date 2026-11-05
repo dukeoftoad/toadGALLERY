@@ -716,25 +716,25 @@ if (withBundledModels) {
 // discipline only: `assembleBasicRelease -PwithEngine` silently packed
 // the .so files into basic, and `assembleEngineRelease` WITHOUT the
 // property built an honest-but-wrong LibraryMissing APK. This guard
-// fail-fasts at task-graph time --- ONLY for tasks that actually PACKAGE
-// a gallery APK (assemble*/package*/bundle*), so the test/lint/record
-// tasks CI runs across flavors stay property-free and untouched.
-// r50 catch: AGP's TEST-CLASSPATH packager (`packageXUnitTestForUnitTest`)
-// also starts with "package" --- the ci.yml unit-test step rides BOTH
-// flavor test tasks in ONE invocation (testBasicDebugUnitTest +
-// testEngineDebugUnitTest) and its graph contains the engine variant's
-// test packager, which tripped the guard on the first CI round. The
-// UnitTest packagers ship no APK and no native code; they are exempt.
+// fail-fasts at task-graph time --- ONLY for the tasks that actually
+// PACKAGE a gallery APK/AAB, so the test/lint/record tasks CI runs
+// across flavors stay property-free and untouched.
+// r50 catches (two CI rounds): AGP reuses the assemble/package/bundle
+// NAME PREFIXES for non-artifact tasks --- packageEngineDebugUnitTestForUnitTest
+// (the test-classpath packager) and bundleEngineDebugClassesToCompileJar
+// (the compile-classpath bundler) both ride ci.yml's two-flavor unit-test
+// invocation and tripped a prefix-based filter. The filter is now the
+// EXACT canonical task-name set (assemble|package|bundle + Flavor +
+// optional BuildType, nothing after) --- the APK/AAB/lifecycle tasks
+// every workflow actually invokes; every suffixed helper stays exempt.
 gradle.taskGraph.whenReady {
+    val packagingTaskPattern = Regex(
+        "^(assemble|package|bundle)(Basic|Engine|Semantic|Face)(Debug|Release)?$",
+    )
     val packagingTaskNames = allTasks
         .filter { it.project.path == ":apps:gallery" }
         .map { it.name }
-        .filter { name ->
-            (name.startsWith("assemble") || name.startsWith("package") || name.startsWith("bundle")) &&
-                // AGP's unit-test classpath packager (packageXUnitTestForUnitTest)
-                // is not an artifact build: no APK, no merged native libs.
-                !name.contains("UnitTest")
-        }
+        .filter { it.matches(packagingTaskPattern) }
     val engineFamilyPackaging = packagingTaskNames.any {
         it.contains("Engine") || it.contains("Semantic") || it.contains("Face")
     }

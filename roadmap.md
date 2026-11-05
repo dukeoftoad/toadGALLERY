@@ -14,9 +14,10 @@ designs. No Flutter. CI is GitHub Actions.**
 ## Change log
 
 ### v2.13 (2026-11-05, latest) --- Phase 10 opens: the r40 hardening
-  round authored + the two deferred sub-scope contracts
+  round MERGED + the two deferred sub-scope contracts MERGED
 
-- **The r40 hardening round AUTHORED on `tg-p10-hardening` (PR #117)**,
+- **The r40 hardening round MERGED (PR #117 squash `c3c21f7`,
+  merge-gate run 41955524067 GREEN after the two recorded catches)**,
   the harden-first order honored as the FIRST Phase 10 round: the
   accessibility hardening sweep (the one code-expressible hardening
   task --- 17 heading anchors where ZERO existed: the 15 `TopAppBar`
@@ -39,9 +40,11 @@ designs. No Flutter. CI is GitHub Actions.**
   Profiles decision deferred until the S1/S2/S6 baselines exist).
   Gallery `versionCode 36` (`0.4.4-alpha`), editor `versionCode 12`
   (`0.4.7-edit-alpha`). The r40 device rows are human-only and ride
-  the checklist window.
-- **The two deferred sub-scope contracts AUTHORED (PR #116,
-  docs-only)**: `docs/phase-10/edit-v3-ai.md` (the Phase 8 task text
+  the checklist window. The merge-gate's two catches are in the
+delivery record's correction note (a suspend call inside the probe
+  lambda; the conformance suite's sibling-module path candidate).
+- **The two deferred sub-scope contracts MERGED (PR #116 squash
+  `16a5001`, docs-only)**: `docs/phase-10/edit-v3-ai.md` (the Phase 8 task text
   verbatim decomposed: the AI features as pixel stages between sharpen
   and the regions with commit-time-only inference + the `edit-ai/`
   derived-artifact store, four additive recipe containers --- layer
@@ -56,8 +59,9 @@ designs. No Flutter. CI is GitHub Actions.**
   --- the stated order.
 - **The counts are executed numbers**: 11 new JVM tests; strings
   510/129 unchanged (zero new); versionCodes 35→36 / 11→12.
-  `progress.json` untouched (the F-12 convention; at merge time p10
-  gains the r40 evidence).
+  `progress.json` at merge-time truth: p10 → in-progress (the r40
+  evidence + the contracts), the project percent 79 → 85 (the weights
+  total 100; the dashboard's `computeScopePercent` agrees).
 
 ### v2.12 (2026-11-04) --- the r39 ente-port exit round + the
   Phase 8/9 restructure
@@ -1664,10 +1668,11 @@ NLE. Bounded by ADR-0012.
 
 ### Phase 10 --- Hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9)
 
-**Status:** IN PROGRESS --- the hardening round r40 AUTHORED (branch
-`tg-p10-hardening`, PR #117) and the two deferred sub-scopes' design
-contracts AUTHORED (PR #116, docs-only); the implementation rounds
-follow the merge order. Since the 2026-11-04 maintainer directive this
+**Status:** IN PROGRESS --- the hardening round r40 MERGED (PR #117
+squash `c3c21f7`, merge-gate 41955524067 green) and the two deferred
+sub-scopes' design contracts MERGED (PR #116 squash `16a5001`); the
+sub-scope implementation rounds are NEXT (in the stated order: Edit v3
+AI, then the video editor). Since the 2026-11-04 maintainer directive this
 phase ALSO carries the SKIPPED Phases 8 and 9 scopes as its two
 explicitly-deferred sub-scopes (below), so the post-Phase-7 work is
 ONE phase: harden first (the original tasks), then the deferred AI

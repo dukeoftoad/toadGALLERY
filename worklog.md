@@ -1642,3 +1642,57 @@ release)
   row, the v1.0 stable cut (F-32), the F-Droid submission MR (F-29),
   and the reproducibility verdict update once the tag-push run lands
   (F-30).
+
+### Run #19 — 2026-11-05 (the r46 extension window: the APK matrix + the
+  contract fix + Roborazzi, parallel agents + lead merge, the five-APK
+  v0.4.5-alpha-r46 release)
+
+- **The directive**: "Semantic index and face index need separate builds
+  to install separately like edit toadGALLERY app ... remove [the engine
+  UI] for basic apk but should build engine library included apk ...
+  current published app apk and edit apk got linking bugs: showing edit
+  apk is outdated for this gallery contract. Then implement roborazzi."
+- **The execution shape**: lead-led parallel implementation agents over
+  three scoped branches (4-a `tg-p11-apk-matrix`, 4-b
+  `tg-p11-contract-fix`, 4-c `tg-p11-roborazzi`), two recon agents first
+  (the engine-UI gating surface; the release/CI/versioning state), lead
+  review of every critical diff, then the merge order #123 -> #124 ->
+  #125 (rebase of the Roborazzi branch onto the merged matrix in a
+  worktree, one conflict resolved).
+- **The rounds, merged**: #123 `235b786` (the contract-discovery
+  hardening: GET_META_DATA + the EditorVersionMetadata precedence + the
+  concrete-mime retry + the package-probe fallback + the editor's
+  application-level marker; edit 16/0.4.11-edit-alpha), #124 `dcc85f0`
+  (the four-way gallery APK matrix: basic/engine/semantic/face over one
+  flavor dimension, BuildShape UI gates, per-flavor labels, gallery 38,
+  the flavor-qualified workflows, the two-invocation release build, the
+  five signature gates, the .so NEGATIVE gate, five per-APK mapping.txt
+  files), #125 `4b86a59` (Robolectric 4.17 + Roborazzi 1.77.0, three
+  deterministic state-card captures, the record-only screenshots
+  workflow, the plugin deliberately absent).
+- **The merge-gate catches (nine recorded, all honest)**: the nested-KDoc
+  wildcard marker (EditorLaunch, EOF unclosed comment); the triple-dash
+  XML comments in three flavor label files; the rebase stray brace; the
+  `systemProperty[key]` map-vs-method syntax; the plugin-classpath
+  `srcDir(Any)` script breakage; `roborazzi 1.26.0` not existing;
+  `robolectric 4.17.0` not existing (the line is `4.17`); the capture API
+  being `captureRoboImage()` under `com.github.takahirom.roborazzi`;
+  the `onRoot` extension import. Every fix its own commit with the
+  mechanism named.
+- **The truth docs riding this commit** (the established pattern):
+  `progress.json` (p11 evidence + the r46 rounds; `updatedAt` filled,
+  the `{{R42_MERGE_TS}}` template placeholder finally replaced; the
+  percent stays 92, weights validated = 100; the entePort scope
+  untouched), `roadmap.md` v2.16 (the three rounds + the release),
+  `tasks.md` (the Phase 11 row gains the r46 evidence),
+  `follow-up.md` (the r46 window + F-33..F-37), the release-notes
+  restructure (r46 sections on top, r45 verbatim below), and this
+  Run #19.
+- **The release**: `v0.4.5-alpha-r46` cut from this truth commit --- the
+  release workflow builds and signs FIVE APKs (basic / engine / semantic
+  / face galleries + the edit app), stages five `.sha256` files and five
+  per-APK `mapping.txt` files, enforces the engine-library negative gate
+  before staging, and the reproducible-build workflow takes its basic+edit
+  measurement on the same push. The engine-family reproducibility
+  measurement is F-33; the Roborazzi baseline commit + verify activation
+  is F-34; the device rows are F-35 (human-only, the standing directive).

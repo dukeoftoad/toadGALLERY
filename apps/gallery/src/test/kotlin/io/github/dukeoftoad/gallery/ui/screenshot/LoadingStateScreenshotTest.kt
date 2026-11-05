@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.ui.screenshot
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import com.github.takahirom.roborazzi.captureRoboImage

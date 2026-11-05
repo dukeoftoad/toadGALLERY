@@ -1452,6 +1452,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         Triple(pipelined.pixels, pipelined.width, pipelined.height)
     }
 
+    // The composable's own scope, declared BEFORE the first use: the AI
+    // commit runner below launches on it (the r41 CI catch --- Kotlin
+    // locals are visible only below their declaration point).
+    val uiScope = rememberCoroutineScope()
+
     /**
      * ONE runner for the four AI commits: off the UI thread (the coroutine
      * scope is Main; the work blocks hop to Default), cancellable through
@@ -1528,15 +1533,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    /** Ensures a resolvable sky mask exists: the committed one, else a fresh detection. */
-    suspend fun ensureSkyMaskKey(): String? {
-        val committedKey = committed.sky?.maskRef?.takeIf { it.isNotEmpty() }
-        if (committedKey != null && activity.aiStore.readSkyMask(committedKey) != null) {
-            return committedKey
-        }
-        return detectSkyMaskKey()
-    }
-
     /** Runs the sky detection against the CURRENT working grid and persists the mask artifact. */
     suspend fun detectSkyMaskKey(): String? {
         val grid = aiWorkingGrid() ?: run {
@@ -1558,6 +1554,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 if (activity.aiStore.writeSkyMask(key, result.value)) key else null
             }
         }
+    }
+
+    /** Ensures a resolvable sky mask exists: the committed one, else a fresh detection. */
+    suspend fun ensureSkyMaskKey(): String? {
+        val committedKey = committed.sky?.maskRef?.takeIf { it.isNotEmpty() }
+        if (committedKey != null && activity.aiStore.readSkyMask(committedKey) != null) {
+            return committedKey
+        }
+        return detectSkyMaskKey()
     }
 
     /**
@@ -1863,7 +1868,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // The r33 import flow: SAF-pick a .cube, read it off-main, hand the
     // BYTES to the store (parse-before-write); an import selects the new
     // look at the current intensity, a rejection surfaces the reason.
-    val uiScope = rememberCoroutineScope()
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->

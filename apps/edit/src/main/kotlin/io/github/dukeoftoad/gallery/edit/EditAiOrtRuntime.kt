@@ -134,15 +134,17 @@ class OrtEditAiInference(
             OnnxTensor.createTensor(env, FloatBuffer.wrap(tensorData), shape).use { input ->
                 session.run(mapOf(EditAiModels.SALIENCY_INPUT_NAME to input)).use { result ->
                     progress.report(70)
-                    // The committed graph declares 7 outputs ('1959'..'1965'
-                    // in the pinned conversion; the name sort equals the graph
-                    // order); the LAST is the fused d6 map --- the contract's
-                    // SALIENCY_OUTPUT_INDEX 6.
-                    val outputs = result.keys.sorted()
+                    // Result is Iterable<Map.Entry<String, OnnxValue>> (NOT a Map:
+                    // the ORT 1.31.1 Java surface); collect the output names,
+                    // sort, take the LAST as the fused d6 map (the graph's
+                    // numeric output names sort in graph order).
+                    val outputs = ArrayList<String>()
+                    for (entry in result) outputs.add(entry.key)
+                    outputs.sort()
                     if (outputs.size <= EditAiModels.SALIENCY_OUTPUT_INDEX) {
                         return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
                     }
-                    val fused = result.get(outputs[EditAiModels.SALIENCY_OUTPUT_INDEX])
+                    val fused = result.get(outputs[EditAiModels.SALIENCY_OUTPUT_INDEX]).orElse(null)
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
                     val flat = flattenFloats(fused.getValue()) ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
                     if (flat.size < size * size) {
@@ -201,7 +203,7 @@ class OrtEditAiInference(
                         ),
                     ).use { result ->
                         progress.report(70)
-                        val outTensor = result.get(EditAiModels.INPAINT_RESULT_NAME)
+                        val outTensor = result.get(EditAiModels.INPAINT_RESULT_NAME).orElse(null)
                             ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
                         val ints = flattenInts(outTensor.getValue())
                             ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
@@ -243,7 +245,7 @@ class OrtEditAiInference(
             OnnxTensor.createTensor(env, FloatBuffer.wrap(tensorData), shape).use { input ->
                 session.run(mapOf(EditAiModels.DEPTH_INPUT_NAME to input)).use { result ->
                     progress.report(70)
-                    val outTensor = result.get(EditAiModels.DEPTH_OUTPUT_NAME)
+                    val outTensor = result.get(EditAiModels.DEPTH_OUTPUT_NAME).orElse(null)
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
                     val flat = flattenFloats(outTensor.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
@@ -277,23 +279,23 @@ class OrtEditAiInference(
             OnnxTensor.createTensor(env, FloatBuffer.wrap(tensorData), shape).use { input ->
                 session.run(mapOf(EditAiModels.FACES_INPUT_NAME to input)).use { result ->
                     progress.report(70)
-                    val cls8 = flattenFloats(result.get("cls_8")?.getValue())
+                    val cls8 = flattenFloats(result.get("cls_8").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val cls16 = flattenFloats(result.get("cls_16")?.getValue())
+                    val cls16 = flattenFloats(result.get("cls_16").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val cls32 = flattenFloats(result.get("cls_32")?.getValue())
+                    val cls32 = flattenFloats(result.get("cls_32").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val obj8 = flattenFloats(result.get("obj_8")?.getValue())
+                    val obj8 = flattenFloats(result.get("obj_8").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val obj16 = flattenFloats(result.get("obj_16")?.getValue())
+                    val obj16 = flattenFloats(result.get("obj_16").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val obj32 = flattenFloats(result.get("obj_32")?.getValue())
+                    val obj32 = flattenFloats(result.get("obj_32").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val bbox8 = flattenFloats(result.get("bbox_8")?.getValue())
+                    val bbox8 = flattenFloats(result.get("bbox_8").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val bbox16 = flattenFloats(result.get("bbox_16")?.getValue())
+                    val bbox16 = flattenFloats(result.get("bbox_16").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
-                    val bbox32 = flattenFloats(result.get("bbox_32")?.getValue())
+                    val bbox32 = flattenFloats(result.get("bbox_32").orElse(null)?.getValue())
                         ?: return@use AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
                     val boxes = EditAiDerive.decodeFaces(
                         cls8, cls16, cls32, obj8, obj16, obj32, bbox8, bbox16, bbox32,

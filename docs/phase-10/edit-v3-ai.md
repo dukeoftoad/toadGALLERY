@@ -537,3 +537,20 @@ conformance suite's permission pins were rewritten to the new truth (the
 only real permission request stays the pre-Q capped legacy write; every
 dotted INTERNET mention in the source manifest is the strip directive
 itself). The instrumented egress probe stays the physical-device gate.
+
+**The second merge-gate catch (16 compile errors, recorded):** the same
+run's `:apps:edit:compileDebugKotlin` surfaced 16 unresolved references,
+both clusters real. (a) The ORT 1.31.1 Java surface is NOT Map-like the
+way the runtime file assumed: `OrtSession.Result` is
+`Iterable<Map.Entry<String, OnnxValue>>` with `get(String)` returning
+`Optional<OnnxValue>` --- the file's `result.keys` / `result.get(X) ?:`
+/ `.getValue()` shapes were written against a misremembered API and are
+now the entry-iteration + `orElse(null)` forms (12 sites + the output-name
+sort for u2netp's fused d6 map). (b) Two Kotlin local-visibility
+orderings in the composable: `uiScope` was declared below its first AI
+use (locals are visible only below their declaration point), and
+`ensureSkyMaskKey` referenced sibling `detectSkyMaskKey` declared after
+it --- both reordered, declarations above uses. The authoritative API was
+fetched from the upstream Java sources (OrtSession.java/OnnxValue.java)
+rather than guessed; the files stay android-bound in the sandbox, so the
+merge-gate CI remains their only compile gate, and it caught both.

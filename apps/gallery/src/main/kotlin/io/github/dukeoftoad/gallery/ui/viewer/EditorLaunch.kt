@@ -1,15 +1,19 @@
 package io.github.dukeoftoad.gallery.ui.viewer
 
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.net.Uri
+import android.os.Bundle
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
 import io.github.dukeoftoad.gallery.edit.contract.EditLaunchExtrasBuilder
 import io.github.dukeoftoad.gallery.edit.contract.EditRequest
 import io.github.dukeoftoad.gallery.edit.contract.EditResultParser
 import io.github.dukeoftoad.gallery.edit.contract.EditorIdentity
+import io.github.dukeoftoad.gallery.edit.contract.EditorVersionMetadata
 import io.github.dukeoftoad.gallery.edit.contract.EditorVersionNegotiator
 import io.github.dukeoftoad.gallery.edit.contract.LaunchDecision
 import io.github.dukeoftoad.gallery.edit.contract.MediaKind
@@ -33,6 +37,24 @@ import io.github.dukeoftoad.gallery.edit.contract.RawResult
  * not installed (offer the third-party-editor fallback), outdated (refuse
  * the launch, offer the update), disabled/quiet (explanatory message), and
  * ready (launch with a read-only grant scoped to the one source URI).
+ *
+ * The r46 discovery hardening (the field round where BOTH current APKs
+ * were installed and the gallery still narrated the outdated refusal):
+ * the query now carries `GET_META_DATA` (the documented meta-data
+ * population flag --- a query-result `ActivityInfo` without it can read
+ * as "no marker" and map to `Outdated(null)`, the exact field symptom);
+ * the declared version is resolved through the shared
+ * activity-then-application precedence ([EditorVersionMetadata.pick])
+ * with a direct `getActivityInfo` re-fetch when the query bundle came
+ * back unpopulated; a zero-hit wildcard query retries with the editor's
+ * own concrete mimes (a wildcard intent never matches a filter that
+ * declares only specific subtypes); and a final package-probe fallback
+ * bypasses intent-filter matching entirely --- identity is known exactly,
+ * so the resolver can always ask for the package directly, which kills
+ * the whole class of filter-shape-vs-query-shape mismatches and the
+ * meta-data population gap in one honest fallback.
+ * [EditorResolver.resolve] stays the pure, JVM-tested rule; only the
+ * Android adapters grew.
  */
 sealed interface EditorResolution {
     /** No contract editor installed; the caller offers the fallback path. */
@@ -101,54 +123,237 @@ internal const val EDITOR_IMAGE_MIME: String = "image/*"
 internal const val EDITOR_VIDEO_MIME: String = "video/*"
 
 /**
+ * The r46 concrete-mime retry lists, mirroring apps/edit's OWN manifest
+ * intent-filters exactly (apps/edit/src/main/AndroidManifest.xml): the
+ * image surface filters exactly the four image subtypes below, the video
+ * surface exactly the three video subtypes. PackageManager mime matching
+ * is asymmetric --- an intent carrying a WILDCARD image type does NOT
+ * match a filter that declares only specific subtypes (a filter's own
+ * wildcard covers the intent; the reverse never holds) --- so when a
+ * wildcard query returns zero contract hits the resolver retries with
+ * exactly these shapes before falling back to the package probe.
+ */
+internal val EDITOR_IMAGE_CONCRETE_MIMES: List<String> = listOf(
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+)
+
+internal val EDITOR_VIDEO_CONCRETE_MIMES: List<String> = listOf(
+    "video/mp4",
+    "video/quicktime",
+    "video/3gpp",
+)
+
+/**
+ * Reads the contract version out of one meta-data bundle: `null` when the
+ * bundle is absent or does not carry the marker key (an honest absence;
+ * `Bundle.getInt` alone would manufacture a lying 0).
+ */
+private fun bundleContractVersion(metaData: Bundle?): Int? =
+    metaData
+        ?.takeIf { it.containsKey(EditContract.METADATA_CONTRACT_VERSION) }
+        ?.getInt(EditContract.METADATA_CONTRACT_VERSION)
+
+/**
+ * The application-level contract marker read: `getApplicationInfo` with
+ * the documented `GET_META_DATA` flag reliably populates the application
+ * bundle even where the query path did not. Every failure (a package
+ * truly absent, an unreadable bundle) is the honest null --- never a
+ * guessed value.
+ */
+private fun applicationContractVersion(pm: PackageManager, packageName: String): Int? =
+    try {
+        bundleContractVersion(
+            pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA).metaData,
+        )
+    } catch (_: Exception) {
+        null
+    }
+
+/**
+ * The r46 declared-version read for one query candidate, via the shared
+ * precedence rule: the ACTIVITY-level marker wins (the r29 declaration,
+ * the only marker older editors carry); when the query-result bundle is
+ * unpopulated --- not guaranteed across Android versions and query flags
+ * --- the ONE activity is re-fetched directly with `GET_META_DATA`, the
+ * documented population flag the query omitted; when even that reads
+ * null, the r46 APPLICATION-level marker answers. `null` only when both
+ * levels are honestly absent, which the negotiator refuses as before.
+ */
+private fun declaredContractVersion(
+    pm: PackageManager,
+    info: ResolveInfo,
+    packageName: String,
+    activityClassName: String,
+): Int? {
+    val activityLevel = bundleContractVersion(info.activityInfo.metaData)
+        ?: try {
+            bundleContractVersion(
+                pm.getActivityInfo(
+                    ComponentName(packageName, activityClassName),
+                    PackageManager.GET_META_DATA,
+                ).metaData,
+            )
+        } catch (_: Exception) {
+            // Unreadable is unreadable: the honest null, never a guess.
+            null
+        }
+    if (activityLevel != null) {
+        return EditorVersionMetadata.pick(activityLevel = activityLevel, applicationLevel = null)
+    }
+    return EditorVersionMetadata.pick(
+        activityLevel = null,
+        applicationLevel = applicationContractVersion(pm, packageName),
+    )
+}
+
+/**
+ * One contract query: the contract action + the given mime type, with
+ * `MATCH_DEFAULT_ONLY or GET_META_DATA` --- the r46 round adds the
+ * documented meta-data flag so the result activities' bundles are
+ * populated in the first place. Candidates are identity-filtered to the
+ * contract editor exactly as before; only the version read hardened.
+ */
+private fun queryEditorCandidates(pm: PackageManager, mimeType: String): List<EditorCandidate> =
+    pm.queryIntentActivities(
+        Intent(EditContract.ACTION_EDIT)
+            .addCategory(Intent.CATEGORY_DEFAULT)
+            .setType(mimeType),
+        PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_META_DATA,
+    ).mapNotNull { info ->
+        val packageName = info.activityInfo.packageName
+        if (!EditorIdentity.matches(packageName)) return@mapNotNull null
+        EditorCandidate(
+            packageName = packageName,
+            activityClassName = info.activityInfo.name,
+            declaredVersion = declaredContractVersion(
+                pm = pm,
+                info = info,
+                packageName = packageName,
+                activityClassName = info.activityInfo.name,
+            ),
+            enabled = pm.getApplicationEnabledSetting(packageName) !=
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        )
+    }
+
+/**
+ * The r46 package-probe fallback, the resolver's last resort: identity is
+ * known EXACTLY (release id + the `.debug` dogfood suffix), so instead of
+ * trusting intent-filter matching (whose shapes --- specific mimes vs the
+ * gallery's wildcard query, visibility, meta-data population --- caused
+ * the field bug) the resolver asks for the editor's package directly and
+ * synthesizes candidates from its own manifest. Only activities that
+ * carry the activity-level contract marker (the contract declaration per
+ * spec section 1) and are exported (a probe candidate must be launchable)
+ * become candidates; each version resolves through the SAME
+ * [EditorVersionMetadata.pick] precedence with the application-level
+ * marker as the fallback. An installed-but-disabled editor contributes no
+ * candidates here --- the Disabled refinement below narrates that state.
+ * The requested mime only biases the ORDER of the synthetic candidates:
+ * the r42 rule made the >= 2 declaration the video surface ("the
+ * gallery's video query negotiates v2 against exactly this activity"), so
+ * a video probe orders the higher declaration first; everything else
+ * keeps manifest order, where the v1 image surface declares first.
+ */
+private fun probeEditorCandidates(pm: PackageManager, mimeType: String): List<EditorCandidate> {
+    val candidates = mutableListOf<EditorCandidate>()
+    for (packageName in EditorIdentity.acceptedPackageNames()) {
+        val packageInfo = try {
+            pm.getPackageInfo(
+                packageName,
+                PackageManager.GET_ACTIVITIES or PackageManager.GET_META_DATA,
+            )
+        } catch (_: Exception) {
+            // Package not present (or invisible) --- keep looking.
+            continue
+        }
+        if (packageInfo.applicationInfo?.enabled == false) {
+            // Installed but app-disabled: not a launchable candidate.
+            continue
+        }
+        val applicationLevel = bundleContractVersion(packageInfo.applicationInfo?.metaData)
+        for (activity in packageInfo.activities.orEmpty()) {
+            val activityLevel = bundleContractVersion(activity.metaData) ?: continue
+            if (!activity.exported) continue
+            candidates.add(
+                EditorCandidate(
+                    packageName = packageName,
+                    activityClassName = activity.name,
+                    declaredVersion = EditorVersionMetadata.pick(
+                        activityLevel = activityLevel,
+                        applicationLevel = applicationLevel,
+                    ),
+                    enabled = true,
+                ),
+            )
+        }
+    }
+    return if (mimeType.startsWith("video/")) {
+        candidates.sortedByDescending { it.declaredVersion ?: Int.MIN_VALUE }
+    } else {
+        candidates
+    }
+}
+
+/**
  * The r42 media-kind-aware resolution: the SAME pure rule over a
  * kind-specific query (the image wildcard for the v1 surface, the video
  * wildcard for the v2 video surface) --- the candidate's own intent-filter
  * decides which activities answer, and the negotiator still governs the
  * version.
+ *
+ * The r46 hardening layers three fallbacks on the query (the pure
+ * [EditorResolver.resolve] rule is untouched):
+ * 1. the concrete-mime retry --- a zero-hit wildcard query retries with
+ *    the editor's known concrete mimes (a wildcard intent does not match
+ *    a filter declaring only specific subtypes);
+ * 2. the package-probe fallback --- still nothing, and the identity is
+ *    installed and enabled, the resolver synthesizes candidates straight
+ *    from the editor's package (killing the whole class of filter-shape
+ *    vs query-shape mismatches AND the meta-data population gap in one
+ *    honest fallback);
+ * 3. the pre-existing Disabled refinement, unchanged and last: an
+ *    installed-but-disabled editor is the Disabled state.
  */
 fun resolveEditor(context: Context, mimeType: String): EditorResolution {
     val pm = context.packageManager
-    // The query mirrors the editor's intent-filter shape: the contract
-    // action + the kind's mime type (the filter's data specs are mime-only).
-    val query = Intent(EditContract.ACTION_EDIT)
-        .addCategory(Intent.CATEGORY_DEFAULT)
-        .setType(mimeType)
-    val candidates = pm.queryIntentActivities(query, PackageManager.MATCH_DEFAULT_ONLY)
-        .mapNotNull { info ->
-            val packageName = info.activityInfo.packageName
-            if (!EditorIdentity.matches(packageName)) return@mapNotNull null
-            val metaData = info.activityInfo.metaData
-            val declaredVersion = if (metaData != null &&
-                metaData.containsKey(EditContract.METADATA_CONTRACT_VERSION)
-            ) {
-                metaData.getInt(EditContract.METADATA_CONTRACT_VERSION)
-            } else {
-                null
-            }
-            EditorCandidate(
-                packageName = packageName,
-                activityClassName = info.activityInfo.name,
-                declaredVersion = declaredVersion,
-                enabled = pm.getApplicationEnabledSetting(packageName) !=
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            )
+    val candidates = queryEditorCandidates(pm, mimeType)
+    val effective = if (candidates.isEmpty() && mimeType.endsWith("/*")) {
+        // The concrete-mime retry: exactly the shapes apps/edit's own
+        // manifest filters declare (see the constants' KDoc).
+        val concreteMimes = if (mimeType.startsWith("video/")) {
+            EDITOR_VIDEO_CONCRETE_MIMES
+        } else {
+            EDITOR_IMAGE_CONCRETE_MIMES
         }
-    val resolution = EditorResolver.resolve(candidates)
-    if (resolution is EditorResolution.NotInstalled) {
-        // A disabled app contributes no query hits, so "not installed" from
-        // the query must be refined: an installed-but-disabled editor is the
-        // Disabled state (the contract's explanatory-message path).
-        for (packageName in EditorIdentity.acceptedPackageNames()) {
-            try {
-                if (pm.getApplicationEnabledSetting(packageName) ==
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-                ) {
-                    return EditorResolution.Disabled
-                }
-            } catch (_: Exception) {
-                // Package not present --- keep looking.
+        var retried = candidates
+        for (concreteMime in concreteMimes) {
+            retried = queryEditorCandidates(pm, concreteMime)
+            if (retried.isNotEmpty()) break
+        }
+        retried
+    } else {
+        candidates
+    }
+    val resolution = EditorResolver.resolve(effective)
+    if (resolution !is EditorResolution.NotInstalled) return resolution
+    val probed = EditorResolver.resolve(probeEditorCandidates(pm, mimeType))
+    if (probed !is EditorResolution.NotInstalled) return probed
+    // A disabled app contributes no query hits, so "not installed" from
+    // the query must be refined: an installed-but-disabled editor is the
+    // Disabled state (the contract's explanatory-message path).
+    for (packageName in EditorIdentity.acceptedPackageNames()) {
+        try {
+            if (pm.getApplicationEnabledSetting(packageName) ==
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            ) {
+                return EditorResolution.Disabled
             }
+        } catch (_: Exception) {
+            // Package not present --- keep looking.
         }
     }
     return resolution

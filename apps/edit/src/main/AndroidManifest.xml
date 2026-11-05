@@ -42,6 +42,23 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Material3.DayNight.NoActionBar">
 
+        <!-- r46 (the contract-discovery hardening round): the
+             APPLICATION-level contract marker, the fallback the hardened
+             gallery resolver reads when the ACTIVITY-level meta-data is
+             unavailable on some PackageManager paths (a query-result
+             ActivityInfo bundle is not guaranteed populated across Android
+             versions and query flags; a direct getApplicationInfo call
+             reliably fills only this level). Precedence is
+             activity-first, application-second (EditorVersionMetadata.pick,
+             the shared pure rule), so this marker changes nothing when the
+             activity-level read is healthy and only rescues the
+             population-gap paths. The two activity-level markers below stay
+             exactly as they were: the image surface keeps declaring 1 (the
+             byte-identical v1 wire), the video surface 2. -->
+        <meta-data
+            android:name="org.toadgallery.contract.EDIT"
+            android:value="2" />
+
         <!-- The contract launch activity (spec section 1): exported, filtered
              on the contract action, and carrying the v1 contract-version
              meta-data the gallery's negotiator reads. The activity supports

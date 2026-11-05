@@ -313,6 +313,19 @@ android {
         // (the repo's standing honesty rule for first-time surfaces).
         versionCode = 15
         versionName = "0.4.10-edit-alpha"
+
+        // versionCode 16 (r46 round): the contract-discovery hardening
+        // round --- the application-level contract meta-data fallback
+        // (org.toadgallery.contract.EDIT = 2, the rescue marker the
+        // hardened gallery resolver reads when the activity-level bundle is
+        // unavailable on some PackageManager paths); no editor behavior
+        // change. The two activity-level markers stay byte-identical; the
+        // gallery-side half of the same fix (GET_META_DATA on the query,
+        // the activity-then-application marker precedence, the
+        // concrete-mime retry and the package-probe fallback) rides the
+        // shared EditorVersionMetadata rule and EditorLaunch.kt.
+        versionCode = 16
+        versionName = "0.4.11-edit-alpha"
     }
 
     buildFeatures {

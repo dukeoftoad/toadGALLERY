@@ -138,6 +138,48 @@ class EditManifestConformanceTest {
         )
     }
 
+    /**
+     * The r46 extension to the parsing approach: `contractVersionMetaValues`
+     * above collects the contract meta-data at EVERY level of the document
+     * and cannot tell WHERE a marker was declared. The application-level
+     * fallback marker is a DIRECT child of `<application>`, so this helper
+     * walks only that element's own child nodes (the same child-element
+     * walking style the intent-filter tests use) and returns the declared
+     * value, or null when the application carries no marker at all.
+     */
+    private fun applicationLevelContractVersion(): Int? {
+        val doc = manifest()
+        val application = doc.getElementsByTagName("application").item(0)
+        val children = application.childNodes
+        for (i in 0 until children.length) {
+            val node = children.item(i)
+            if (node !is org.w3c.dom.Element) continue
+            if (node.nodeName == "meta-data" &&
+                node.getAttribute("android:name") == EditContract.METADATA_CONTRACT_VERSION
+            ) {
+                return node.getAttribute("android:value").toInt()
+            }
+        }
+        return null
+    }
+
+    @Test
+    fun `the application element carries the r46 fallback contract marker (value 2)`() {
+        // r46 (the contract-discovery hardening round): the gallery's
+        // hardened resolver falls back to the APPLICATION-level marker when
+        // the activity-level bundle is unavailable on some PackageManager
+        // paths (EditorVersionMetadata.pick: activity-first, application-
+        // second). The fallback must declare a version the negotiator
+        // accepts (>= CONTRACT_VERSION_MIN); the editor declares the
+        // module's current version --- the fallback must never understate
+        // what the newest surface can do.
+        assertEquals(
+            "the application-level contract marker must declare the current contract version",
+            EditContract.CONTRACT_VERSION,
+            applicationLevelContractVersion(),
+        )
+    }
+
     // ---- The r42 video launch surface (the additive contract v2 half) ----
 
     @Test

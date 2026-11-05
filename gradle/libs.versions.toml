@@ -193,4 +193,5 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 # tasks --- plain unit-test runs (ci.yml's gates) skip captures entirely,
 # which is exactly the toadFILES behavior the README screenshot suite
 # (ReadmeScreenshotsTest) is written against.
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 

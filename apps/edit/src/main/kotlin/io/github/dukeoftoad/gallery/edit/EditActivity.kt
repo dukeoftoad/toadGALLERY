@@ -14,8 +14,10 @@ import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -390,6 +393,17 @@ class EditActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // r47 ux fix: targetSdk 36 enforces edge-to-edge on API 35+, so the
+        // chrome drew under the system bars AND the status-bar icons took
+        // the auto (theme-following) style --- dark icons on the editor's
+        // always-black canvas, i.e. invisible in light mode. The dark
+        // SystemBarStyle forces light icons; the layout inset follows below
+        // (root Column systemBarsPadding).
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
 
         // ---- Contract validation (pre-UI: invalid calls answer immediately) ----
         val sourceFromClip = intent?.clipData?.let { clip ->
@@ -2052,7 +2066,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            // r47 ux fix: pay the system-bar insets once, at the root, so
+            // the top bar and the control stack never sit under the
+            // status/navigation bars (edge-to-edge is enforced at
+            // targetSdk 36+); the black background still reaches the bars.
+            .systemBarsPadding(),
     ) {
         // ---- Top bar: close / undo / redo / save copy ----
         Row(

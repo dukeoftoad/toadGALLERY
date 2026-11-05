@@ -271,3 +271,59 @@ closed.
   merged (section 6); (c) Robolectric's android-all download hiccup on a
   fresh runner. None of these are silent: each fails loudly and is
   attributable.
+
+## 8. The r48 round: the README screenshot suite + the F-34 closure
+
+**Status: 2026-11-06, the r48 round (branch `tg-r48-screenshots-workflows`,
+PR #128, rebased onto the r47 plugin-first main mid-flight).** The r47
+round (this doc's rewritten sections above) landed the gradle plugin and
+the record/verify task pair; r48 builds the README half on top:
+
+- **The README screenshot suite lands**
+  (`ReadmeScreenshotsTest.kt`, the toadFILES `TabScreenshotsTest` pattern):
+  the REAL app shell (`MainActivity` + `ToadGalleryApp`) over a seeded
+  media world --- a `FakeMediaProvider` registered under the `media`
+  authority answering every `content://media/...` query with twelve fixed
+  rows, real JPEG bytes on the Robolectric filesystem (the app's own Coil
+  pipeline decodes them through `openFile`), and the same rows upserted
+  into the Room catalogue before the activity launches. Five captures
+  (`roborazzi/01-photos.png` .. `05-settings.png`) walk the real bottom
+  navigation by label; the committed copies render the README's
+  Screenshots section, and the regeneration recipe is documented there.
+- **A SECOND capture location, deliberately**: the README suite's
+  EXPLICIT `captureRoboImage("roborazzi/NN-name.png")` paths are
+  CWD-relative (the test JVM's working dir is the module dir), so they
+  write to `apps/gallery/roborazzi/` --- next to, not inside, the r47
+  plugin-outputDir location (`src/test/resources/roborazzi`) the no-path
+  state-card captures use. Both dirs are committable (.gitignore excludes
+  neither), both are verify baselines, and `screenshots.yml`'s baseline
+  detection, record pass and artifact cover both.
+- **`screenshots.yml` covers both locations**: the r47 mode dispatch
+  (record/verify) and honest-skip stand; the baseline count now sums BOTH
+  dirs, and the `roborazzi-baselines` artifact carries both.
+- **F-34 closes**: the green record run's PNGs commit BOTH as the verify
+  baselines (the state cards at their outputDir path, the README suite at
+  `apps/gallery/roborazzi/`) and as the README's `docs/screenshots/`
+  copies; from that commit the `verifyRoborazziBasicDebug` gate is live
+  on every PR touching the gallery.
+
+**r48 addendum --- the round's honest catches, as they happened:** the
+pre-rebase branch burned three CI iterations on compile faults (a missing
+catalog alias line, a missing extension-icon import) before the record
+run surfaced the two REAL Robolectric lessons this repo had never
+exercised: **runtime permission requests never resolve on the JVM**
+(Robolectric 4.17's ShadowActivity delegates `requestPermissions` to the
+REAL Activity code, whose `startActivityForResult` fires into a system
+UI that does not exist --- the test delivers the grant by hand through
+the shadow-recorded request, and `ComponentActivity`'s registry
+dispatches it to the `RequestMultiplePermissions` callback exactly as a
+real grant would), and **Coil's background decodes are not
+compose-idle-tracked** (the albums capture beat the decode and showed
+blank covers; every capture now settles for a bounded wall-clock loop
+first --- the toadFILES settle pattern). A fourth catch, resolved by the
+rebase rather than a fix: the pre-rebase branch had moved the state-card
+tests to explicit paths after observing no-path captures writing to the
+gitignored `build/outputs/roborazzi/` --- the r47 round solved the same
+problem at the CONFIG level (`roborazzi { outputDir.set(...) }` pins the
+no-path captures to `src/test/resources/roborazzi`), so the r48 rebase
+keeps r47's shape and the state-card tests stay no-path.

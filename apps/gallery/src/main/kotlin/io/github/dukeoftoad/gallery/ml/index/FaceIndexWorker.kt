@@ -11,6 +11,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkerParameters
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.identity.MediaIdentity
 import io.github.dukeoftoad.gallery.data.media.revision.MediaRevision
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
@@ -93,26 +94,33 @@ class FaceIndexWorker(
         // Session gates, honest order: models must be provisioned and the
         // engine initialized before the store can open; every failure is
         // permanent-with-message (no retry can fix a missing model pack).
+        // r48: every gate line mirrors to the diagnostics ring (F5) --- the
+        // "indexing failed, no logs" dogfood report is exactly what these
+        // lines prevent.
         if (provisioner.capabilityState(ModelManifest.Capability.FACE) != ModelProvisioner.CapabilityState.Ready) {
+            DiagLog.e(TAG, "face queue: FACE models not installed; failing run #$runAttemptCount")
             return Result.failure(
                 Data.Builder().putString(KEY_MESSAGE, "FACE models are not installed; use the model download above").build(),
             )
         }
         when (val init = engine.initialize(provisioner.modelsDir.absolutePath)) {
             is MlEngine.State.Ready -> Unit
-            is MlEngine.State.Error ->
+            is MlEngine.State.Error -> {
+                DiagLog.e(TAG, "face queue: engine init failed: ${init.message}")
                 return Result.failure(
                     Data.Builder().putString(KEY_MESSAGE, "engine init failed: ${init.message}").build(),
                 )
-            else ->
+            }
+            else -> {
+                DiagLog.e(TAG, "face queue: engine init unexpected state: $init")
                 return Result.failure(
                     Data.Builder().putString(KEY_MESSAGE, "engine init: $init").build(),
                 )
+            }
         }
 
         val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
-        try {
-            // r47 honesty fix, part 2: the JNI store open THROWS
+        // r47 honesty fix, part 2: the JNI store open THROWS
             // IllegalStateException on a native failure --- it does not
             // only return false (the facade's contract propagates the
             // Rust message; `nativeStoreOpen` is documented as
@@ -124,6 +132,7 @@ class FaceIndexWorker(
             val storeOpened = try {
                 engine.openFaceIndex(faceIndexDir.absolutePath)
             } catch (e: IllegalStateException) {
+                DiagLog.e(TAG, "face queue: face index store threw: ${e.message}", e)
                 return Result.failure(
                     Data.Builder()
                         .putString(KEY_MESSAGE, "face index store did not open: ${e.message}")
@@ -131,6 +140,7 @@ class FaceIndexWorker(
                 )
             }
             if (!storeOpened) {
+                DiagLog.e(TAG, "face queue: face index store did not open at ${faceIndexDir.absolutePath}")
                 return Result.failure(
                     Data.Builder().putString(KEY_MESSAGE, "face index store did not open").build(),
                 )
@@ -149,8 +159,21 @@ class FaceIndexWorker(
                 processor.processBatch(
                     plan = plan,
                     stateStore = stateStore,
+                    // r48 (F2): the queue's tested contract is "unreadable
+                    // -> skip -> stays queued" (the JVM tests pin it with a
+                    // null-returning fake), but the PRODUCTION seam threw
+                    // instead: ContentResolver.openInputStream raises
+                    // FileNotFoundException for a row deleted between the
+                    // catalogue scan and the batch, SecurityException when a
+                    // grant is gone, IOException on truncated streams ---
+                    // and the candidates are processed NEWEST-FIRST, so a
+                    // just-deleted photo is the MOST likely first victim,
+                    // burning all retries and failing the whole queue. The
+                    // runCatching wrap restores the tested skip contract.
                     readBytes = { candidate ->
-                        resolver.openInputStream(Uri.parse(candidate.uri))?.use { it.readBytes() }
+                        runCatching {
+                            resolver.openInputStream(Uri.parse(candidate.uri))?.use { it.readBytes() }
+                        }.getOrNull()
                     },
                     distanceThreshold = threshold,
                     nowMillis = { System.currentTimeMillis() },
@@ -166,26 +189,60 @@ class FaceIndexWorker(
                     },
                 )
             } catch (e: Exception) {
+                // r48 (F5): every retry and the terminal failure land in the
+                // diagnostics ring with the attempt count and cause --- the
+                // report this fix answers was "indexing fails" with no logs.
+                DiagLog.e(TAG, "face queue: batch fault (attempt ${runAttemptCount + 1}/$MAX_RUN_ATTEMPTS): ${e.message ?: e.javaClass.simpleName}", e)
                 if (runAttemptCount < MAX_RUN_ATTEMPTS) return Result.retry()
                 return Result.failure(
                     Data.Builder().putString(KEY_MESSAGE, e.message ?: e.javaClass.simpleName).build(),
                 )
             }
 
+            DiagLog.i(
+                TAG,
+                "face queue: batch done (indexed=${outcome.indexedThisRun} faces=${outcome.facesWrittenThisRun} " +
+                    "depth=${outcome.queueDepth} unreadable=${outcome.unreadableThisRun} " +
+                    "clusters=${outcome.clusterSummary?.clusters ?: -1} more=${outcome.moreRemaining})",
+            )
+
             if (outcome.moreRemaining) {
                 // The plan outlived this batch: hand the same queue (and
-                // threshold) to the next run before succeeding. REPLACE
-                // keeps exactly one chain alive under the unique name.
+                // threshold) to the next run before succeeding. r48 (F3):
+                // APPEND_OR_REPLACE --- the old REPLACE cancelled and
+                // deleted the unique work named here, INCLUDING THE RUN
+                // DOING THE ENQUEUEING (WorkManager's policy deletes the
+                // pending self), turning every batch boundary into a
+                // cancel-vs-successor race; APPEND_OR_REPLACE chains the
+                // successor AFTER this run finishes instead.
                 FaceIndexScheduler.enqueue(applicationContext, threshold)
             }
+        // r48 (F1): the per-run teardown (closeFaceIndex + release) is
+        // REMOVED --- the r47 shape kept a `finally { engine.closeFaceIndex();
+        // engine.release() }` here, but the native engine and store are
+        // PROCESS-GLOBAL singletons (engine::ENGINE / store::STORE OnceLock
+        // statics), so that finally killed the OTHER queue's live session
+        // mid-batch: the face and clip chains run CONCURRENTLY on
+        // Dispatchers.Default, and whichever finished a batch first tore
+        // the engine out from under the other with
+        // IllegalStateException("engine is not initialized"), failing BOTH
+        // queues (the "indexing are failing" dogfood report --- exactly the
+        // class of uncaught faults the r47 catch above surfaces the CAUSE
+        // of; this removes the cause itself). Both init calls are
+        // idempotent per half (the Rust sides no-op on an already-open
+        // session), so the next run --- or the next People/Magic Search
+        // session --- reuses or re-opens the resident engine. The UI
+        // adapters' close() teardown while a queue runs is the REMAINING
+        // half of this fix (follow-up.md F-38).
             return Result.success(outcomeData(outcome))
-        } finally {
-            engine.closeFaceIndex()
-            engine.release()
-        }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // r47's honesty fix (the uncaught-fault catch) + r48 (F5): the
+            // uncaught fault also lands in the diagnostics ring with the
+            // attempt count and cause, so the next dogfood report carries
+            // BOTH the card message and the ring line.
+            DiagLog.e(TAG, "face queue: uncaught ${e.javaClass.simpleName}: ${e.message} (attempt ${runAttemptCount + 1}/$MAX_RUN_ATTEMPTS)", e)
             if (runAttemptCount < MAX_RUN_ATTEMPTS) return Result.retry()
             return Result.failure(
                 Data.Builder()
@@ -210,6 +267,9 @@ class FaceIndexWorker(
     private companion object {
         /** Mid-run engine faults retry (with WorkManager backoff) this often. */
         const val MAX_RUN_ATTEMPTS = 3
+
+        /** Diagnostics-ring tag (r48, F5). */
+        const val TAG = "FaceIndexWorker"
     }
 }
 
@@ -300,7 +360,16 @@ const val KEY_MESSAGE = "message"
  */
 object FaceIndexScheduler {
 
-    /** Enqueues one queue run under the unique name (REPLACE: one chain). */
+    /**
+     * Enqueues one queue run under the unique name. r48 (F3):
+     * APPEND_OR_REPLACE --- REPLACE deleted the pending unique work (which
+     * includes the RUN currently enqueueing its own successor at every
+     * batch boundary), racing cancel-vs-successor; APPEND_OR_REPLACE keeps
+     * the one-chain invariant (at most one live chain under the name)
+     * while never cancelling the running worker. A terminal (failed /
+     * cancelled) existing chain is replaced, so a fresh Start after a
+     * failure begins a new chain as before.
+     */
     fun enqueue(context: Context, distanceThreshold: Double) {
         val request = OneTimeWorkRequestBuilder<FaceIndexWorker>()
             .setInputData(
@@ -308,7 +377,7 @@ object FaceIndexScheduler {
             )
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniqueWork(FACE_INDEX_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+            .enqueueUniqueWork(FACE_INDEX_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
     /** Cancels the whole chain (current run + anything enqueued). */

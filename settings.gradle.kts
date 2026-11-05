@@ -26,6 +26,8 @@ include(":shared:editor-contract")
 // projection, the frame/animation plans, the export runner seam and the
 // non-destructive MediaStore policy (ADR-0012; docs/phase-10/video-editor.md).
 include(":shared:video-edit")
-// r29 (Issue #14 gate): the toadGALLERY Edit prototype APK --- the separate
-// installable editor app the contract launches (roadmap Phase 6, first slice).
+// r29 (Issue #14 gate): the toadGALLERY Edit app --- the separate
+// installable editor APK the contract launches (roadmap Phase 6, first
+// slice; a release deliverable since the v0.4.5-alpha-r45 both-APK
+// close-out, no longer a prototype).
 include(":apps:edit")

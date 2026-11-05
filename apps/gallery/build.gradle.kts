@@ -521,16 +521,21 @@ android {
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
     dependsOn(copyProgressJson)
 }
-// r43 (the release-engineering round; the catch from the failed Release
-// run 41991609209 at f610860): the release-only lintVital model writer
-// (generateReleaseLintVitalReportModel, LintModelWriterTask) consumes the
-// build/generated/progressAssets srcDir too, and unlike the merge*Assets
+// r43 (the release-engineering round; the catches from the failed release
+// runs 41991609209 at f610860 and 41997801764/41997801776 at cfaed66):
+// the release-only lintVital chain consumes the
+// build/generated/progressAssets srcDir, and unlike the merge*Assets
 // tasks above it carried NO declared dependency on the copy --- Gradle's
 // implicit-output validation fails assembleRelease on exactly that
 // (release builds run lintVital in-graph; a debug CI lint never has the
 // copy in its graph, which is why ci.yml stayed green while every
-// assembleRelease broke). The same explicit dependency closes it.
-tasks.matching { it.name.endsWith("LintVitalReportModel") }.configureEach {
+// assembleRelease broke). The first fix covered only the model writer
+// (generateReleaseLintVitalReportModel); the r45 tag-push release runs
+// caught the SECOND member of the family the same way
+// (lintVitalAnalyzeRelease, AndroidLintAnalysisTask) --- so the explicit
+// dependency now covers the WHOLE LintVital family, and any future
+// member is covered by construction.
+tasks.matching { it.name.contains("LintVital") }.configureEach {
     dependsOn(copyProgressJson)
 }
 

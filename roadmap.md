@@ -87,8 +87,13 @@ designs. No Flutter. CI is GitHub Actions.**
   binary-blob scan, the GPL-3.0 obligations --- four honest findings
   recorded), and the README's release-section rewrite to the both-APK
   shape.
-- **The close-out release**: the `v0.4.5-alpha-r45` tag cut from this
-  truth commit --- BOTH APKs (gallery `0.4.5-alpha` versionCode 37 +
+- **The close-out release**: the `v0.4.5-alpha-r45` tag cut from the
+  truth commit's release-run catch-fix successor (the first tag push at
+  the truth commit caught the SECOND member of the lintVital family ---
+  `lintVitalAnalyzeRelease` --- the same implicit-progressAssets
+  dependency the r43 riding fix had closed for the model writer only;
+  broadened to the whole LintVital family, tag re-cut) --- BOTH APKs
+  (gallery `0.4.5-alpha` versionCode 37 +
   edit `0.4.10-edit-alpha` versionCode 15, the editor's FIRST release
   artifact) published as a GitHub pre-release with per-app `.sha256` +
   per-app `mapping.txt`, per ADR-0018 (prerelease + make_latest false
@@ -1927,7 +1932,9 @@ squash `d27f3c1`, merge-gate runs 41996006593/41996006784 green after
 the two riding catches), the F-Droid metadata round r44 (PR #120 squash
 `791d3a0`, gates 41996188270/41996187119 green), and the release-docs
 round r45 (PR #122 squash `4d797ff`, gate 41993838209 green), with the
-`v0.4.5-alpha-r45` close-out release cut from the truth commit (BOTH
+`v0.4.5-alpha-r45` close-out release cut from the truth commit's
+catch-fix successor (the release-run lintVital-family catch, recorded
+in follow-up.md) (BOTH
 APKs --- the gallery `0.4.5-alpha` versionCode 37 and the edit app's
 FIRST release artifact `0.4.10-edit-alpha` versionCode 15 --- each with
 its `.sha256` and its per-app `mapping.txt`). What remains is

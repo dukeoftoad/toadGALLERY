@@ -388,3 +388,17 @@ completion, branch `tg-r39-ente-exit`)
   `v0.4.5-alpha-r45` is cut FROM this truth commit so the shipped
   gallery APK's embedded progress snapshot (the copyProgressJson
   mirror) reports the closed-out truth.
+
+- **The release-run catch (recorded, 2026-11-05)** --- the first
+  `v0.4.5-alpha-r45` tag push (at the truth commit `cfaed66`) failed
+  BOTH the Release run (41997801764) and the Reproducible build run
+  (41997801776) at `:apps:gallery:lintVitalAnalyzeRelease` --- the
+  SECOND member of the lintVital family carrying the same implicit
+  progressAssets dependency the r43 riding fix had closed for
+  `generateReleaseLintVitalReportModel` only (the first fix's suffix
+  match was too narrow; Gradle's validation caught the analyze task the
+  model writer hid behind). Fixed by broadening the explicit
+  `dependsOn(copyProgressJson)` to the whole `*LintVital*` family (any
+  future member covered by construction); nothing published from the
+  failed runs, so the tag was honestly re-cut at the fix commit ---
+  no release ever existed at the broken SHA.

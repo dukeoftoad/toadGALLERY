@@ -397,7 +397,7 @@ TalkBack-over-video row. The export-time full-quality behavior on
 device codecs is bounded by the pinned media3 version and is the
 device rows' to verify.
 
-**The r42 merge-gate catches (three, recorded):** (1) the first run failed
+**The r42 merge-gate catches (five, recorded):** (1) the first run failed
 at `:apps:edit:compileDebugKotlin` on a broken `apps/edit/build.gradle.kts`
 --- a dangling fragment of git's conflict-marker label left inside the
 file by the rebase resolution (the versionCode conflict r41/r42); the
@@ -425,3 +425,12 @@ animated-WebP frame encode now guards on the same SDK_INT >= R fact the
 preflight's webpLosslessSupported flag already carries, riding lossy WebP
 at quality 100 below R (the honest degradation, recorded in the code
 comment).
+
+The fifth iteration was caught by lintDebug again, on the runner seam:
+media3 1.11.1's speed surface --- `EditedMediaItem.Builder.setSpeed(SpeedParameters,
+boolean)` and the `SpeedParameters` constructor it takes --- carries media3's
+SEPARATE `@ExperimentalApi` opt-in marker, not (only) the `@UnstableApi`
+marker `Media3VideoExportRunner` already opts into at the class level. The
+class-level `@androidx.annotation.OptIn` now names BOTH markers explicitly;
+the lint message itself names the marker class, so the fix adds it verbatim
+--- nothing guessed.

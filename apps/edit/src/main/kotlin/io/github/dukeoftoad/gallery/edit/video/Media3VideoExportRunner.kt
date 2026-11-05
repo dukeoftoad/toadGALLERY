@@ -61,7 +61,15 @@ import java.io.File
  * in the caller's working directory; the MediaStore insert (the
  * non-destructive policy) stays with the activity.
  */
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+// The media3 1.11.1 speed surface carries TWO separate opt-in markers:
+// UnstableApi (the bulk of media3's API surface) and ExperimentalApi
+// (EditedMediaItem.Builder.setSpeed(SpeedParameters, boolean) and the
+// SpeedParameters constructor it takes --- the merge-gate's fifth catch;
+// lint names the marker class, the fix adds it verbatim).
+@androidx.annotation.OptIn(
+    androidx.media3.common.util.UnstableApi::class,
+    androidx.media3.common.util.ExperimentalApi::class,
+)
 class Media3VideoExportRunner(private val context: Context) : VideoExportRunner {
 
     private var transformer: Transformer? = null

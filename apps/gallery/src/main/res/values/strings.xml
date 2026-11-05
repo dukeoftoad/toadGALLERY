@@ -427,4 +427,11 @@
     <string name="settings_progress_status_pending">Pending</string>
     <string name="settings_progress_source">Source: %1$s</string>
     <string name="settings_progress_unavailable">Progress data is unavailable in this build.</string>
+
+    <!-- r46 (the APK-matrix round): the build-shape fallback card for a
+         routed engine feature the installed flavor does not carry (the
+         People / Person-detail routes without the FACE index, the Things
+         route without the SEMANTIC index). The honest answer instead of a
+         ViewModel the build cannot serve; tagged build_feature_unavailable. -->
+    <string name="build_feature_unavailable">This feature is not part of this build — install the engine build for on-device indexing.</string>
 </resources>

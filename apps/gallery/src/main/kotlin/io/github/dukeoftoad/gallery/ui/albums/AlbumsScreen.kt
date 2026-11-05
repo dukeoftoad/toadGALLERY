@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.buildshape.BuildShape
 import io.github.dukeoftoad.gallery.data.Album
 import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.filters.DerivedCollections
@@ -283,13 +284,19 @@ private fun AlbumGrid(
         // The People section (r25) spans the grid's full width as its FIRST
         // item, above the Places and Collections sections and the albums:
         // the people row scrolls with everything else (one scroll surface).
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            PeopleSection(
-                state = peopleState,
-                onOpenPeople = onOpenPeople,
-                onOpenPerson = onOpenPerson,
-                onRetryPeople = onRetryPeople,
-            )
+        // r46 build-shape gate: the whole section exists only where the
+        // build carries the FACE index (basic/semantic flavors render the
+        // grid without it; the routed surfaces answer with the honest
+        // unavailable card).
+        if (BuildShape.faceIndex) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                PeopleSection(
+                    state = peopleState,
+                    onOpenPeople = onOpenPeople,
+                    onOpenPerson = onOpenPerson,
+                    onRetryPeople = onRetryPeople,
+                )
+            }
         }
         // The Places section (r27): the People section's sibling, one
         // full-span item below it --- the MI-style auto-album grouping
@@ -304,15 +311,19 @@ private fun AlbumGrid(
         // The Things section (r39, the ente-port exit round): the third
         // full-span sibling --- the named semantic collections over the
         // SAME CLIP index Magic Search queries.
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            ThingsSection(
-                state = thingsState,
-                collections = thingsCollections,
-                onCreate = onCreateThing,
-                onRemove = onRemoveThing,
-                onOpen = onOpenThing,
-                onRetryThings = onRetryThings,
-            )
+        // r46 build-shape gate: exists only where the SEMANTIC index does
+        // (the People section's gate shape, its semantic sibling).
+        if (BuildShape.semanticIndex) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                ThingsSection(
+                    state = thingsState,
+                    collections = thingsCollections,
+                    onCreate = onCreateThing,
+                    onRemove = onRemoveThing,
+                    onOpen = onOpenThing,
+                    onRetryThings = onRetryThings,
+                )
+            }
         }
         // The Collections section (r17) spans the grid's full width, so it
         // scrolls with the albums (one scroll surface) and needs no extra

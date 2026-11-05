@@ -28,6 +28,11 @@ name: Model-pack APK (offline-provisioned test build)
 # runtime-downloaded until that round lands its own pack decision.
 #
 # Triggers: pushes to tg-modelpack-* branches and manual dispatch.
+#
+# r46 (the APK-matrix round): the engine-enabled build is the ENGINE FLAVOR
+# (:apps:gallery:assembleEngineDebug --- applicationIdSuffix .engine, so the
+# debug artifact installs as io.github.dukeoftoad.gallery.engine.debug), and
+# the output paths are flavor-qualified (apk/engine/debug/).
 
 on:
   push:
@@ -100,14 +105,15 @@ jobs:
       # assets srcDir. Both gates stay build-time properties: the default
       # build is byte-for-byte the ordinary one.
       - name: Engine + model-pack debug assemble (arm64-v8a)
-        run: ./gradlew :apps:gallery:assembleDebug -PwithEngine -PwithBundledModels --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:assembleEngineDebug -PwithEngine -PwithBundledModels --no-daemon --stacktrace
 
       # Gate 1 (from engine-apk.yml): the APK must carry BOTH native
       # libraries (a silently broken jniLibs wiring would otherwise pass
       # the assemble step).
+      # r46: the ENGINE flavor's output dir (apk/engine/debug/).
       - name: Verify the native libraries are packaged
         run: |
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           echo "APK: $APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
@@ -119,23 +125,24 @@ jobs:
       # from the network after all.
       - name: Verify the model pack is packaged under assets
         run: |
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           unzip -l "$APK" | grep "assets/models/yolov5s_face_640_640_static_b1.onnx"
           unzip -l "$APK" | grep "assets/models/mobilefacenet_portable_static_b1.onnx"
 
-      # Gate 3: the APK's identity --- the .debug variant, versionCode at
-      # least the r28 baseline (32). Tolerant on future bumps on purpose:
-      # branches cut from a later main carry a later code by design.
+      # Gate 3: the APK's identity --- the .engine.debug variant (r46: the
+      # ENGINE flavor), versionCode at least the r28 baseline (32).
+      # Tolerant on future bumps on purpose: branches cut from a later main
+      # carry a later code by design.
       - name: Verify APK identity (package + versionCode >= 32)
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
           [ -n "$AAPT2" ] || { echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; }
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
           echo "badging: $BADGE"
-          echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.debug'" \
-            || { echo "::error::unexpected application id (expected the .debug variant)"; exit 1; }
+          echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.engine.debug'" \
+            || { echo "::error::unexpected application id (expected the .engine.debug variant)"; exit 1; }
           VC="$(echo "$BADGE" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
           echo "versionCode: $VC"
           [ -n "$VC" ] && [ "$VC" -ge 32 ] \
@@ -146,7 +153,7 @@ jobs:
       # only, exactly like the r23/r25 device artifacts.
       - name: Stage the APK (r23-convention name)
         run: |
-          APK="$(ls apps/gallery/build/outputs/apk/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           mkdir -p modelpack-staging
           cp "$APK" "modelpack-staging/toadGALLERY-0.4.2-alpha-r28-modelpack-engine-debug.apk"
           ls -la modelpack-staging/

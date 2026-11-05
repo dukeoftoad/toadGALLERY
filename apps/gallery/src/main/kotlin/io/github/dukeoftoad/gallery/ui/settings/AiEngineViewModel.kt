@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
+import io.github.dukeoftoad.gallery.buildshape.BuildShape
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
@@ -273,11 +274,17 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Starts the semantic background queue (r26). */
     fun startSemanticIndex() {
+        // r46 defensive hardening: the UI card is already hidden on the
+        // flavors without the SEMANTIC index; the queue must equally
+        // refuse a direct start there (cheap, and it keeps the scheduler
+        // contract airtight if a future call site appears).
+        if (!BuildShape.semanticIndex) return
         ClipIndexScheduler.enqueue(getApplication())
     }
 
     /** Cancels the semantic background queue chain (r26). */
     fun cancelSemanticIndex() {
+        if (!BuildShape.semanticIndex) return
         ClipIndexScheduler.cancel(getApplication())
     }
 
@@ -295,6 +302,9 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
      * upsert, so no rows duplicate).
      */
     fun resetSemanticIndex() {
+        // r46 defensive hardening: no SEMANTIC index, no semantic reset
+        // (the UI card is hidden by the same gate).
+        if (!BuildShape.semanticIndex) return
         if (_state.value.busy) return
         _state.value = _state.value.copy(busy = true)
         viewModelScope.launch {
@@ -341,11 +351,17 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Starts the background queue at the current [threshold] (r24). */
     fun startBackgroundIndex() {
+        // r46 defensive hardening: the UI card is already hidden on the
+        // flavors without the FACE index; the queue must equally refuse a
+        // direct start there (cheap, and it keeps the scheduler contract
+        // airtight if a future call site appears).
+        if (!BuildShape.faceIndex) return
         FaceIndexScheduler.enqueue(getApplication(), threshold.value)
     }
 
     /** Cancels the background queue chain (r24). */
     fun cancelBackgroundIndex() {
+        if (!BuildShape.faceIndex) return
         FaceIndexScheduler.cancel(getApplication())
     }
 
@@ -368,6 +384,9 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
      * exist.
      */
     fun resetFaceIndex() {
+        // r46 defensive hardening: no FACE index, no face reset (the UI
+        // card is hidden by the same gate).
+        if (!BuildShape.faceIndex) return
         if (_state.value.busy) return
         _state.value = _state.value.copy(busy = true)
         viewModelScope.launch {

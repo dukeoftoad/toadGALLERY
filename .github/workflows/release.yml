@@ -35,6 +35,17 @@ name: Release
 #     dozens of releases --- the r43 rename is for better finding).
 #   - Still a pre-release per ADR-0018: prerelease + make_latest false,
 #     until the v1.0 cut (a human decision, never a workflow default).
+#   - r46 (the APK-matrix round): the gallery ships as FOUR flavors ---
+#     basic (canonical id, NO engine library, NO engine UI) plus the
+#     engine / semantic / face family (distinct applicationIds, installed
+#     SEPARATELY, like the edit app). The release builds basic + the edit
+#     app in one property-less gradle invocation and the engine family in
+#     a second, -PwithEngine one (the property is GLOBAL: one invocation
+#     for everything would register the engine jniLibs srcDir for every
+#     variant and package the native libraries into the basic APK), then a
+#     hard unzip negative gate enforces the split before anything is
+#     staged. Five APKs, five per-APK mappings, five signature gates.
+#     The matrix: docs/phase-11/apk-matrix.md.
 
 on:
   workflow_dispatch:
@@ -49,14 +60,17 @@ on:
 
 jobs:
   release:
-    name: Build + publish signed pre-release APKs (gallery + edit)
+    name: Build + publish signed pre-release APKs (the gallery matrix + edit)
     runs-on: ubuntu-latest
     # 30 was the Phase-0 budget; the r10 Room+KSP round makes the release
     # build longer (R8 now compiles the Room-generated code), and a resource
     # exhaustion hang must still leave room for gradle to print its failure
     # report instead of being killed mid-stack. Since r43 the job builds
-    # BOTH apps' release variants (two R8 passes), still inside 45.
-    timeout-minutes: 45
+    # BOTH apps' release variants (two R8 passes); since r46 the gallery is
+    # the four-flavor matrix --- FIVE R8 passes (basic/engine/semantic/face
+    # gallery + the edit app) AND one cargo-ndk engine build --- so the
+    # budget moves to 60.
+    timeout-minutes: 60
     # Creating the tag (dispatch path) and the GitHub release needs write
     # access to repo contents.
     permissions:
@@ -175,32 +189,47 @@ jobs:
           TG_KEY_PASSWORD=$KEY_PASSWORD
           EOF
 
-      # One gradle invocation, both apps' release variants (r43). Each
-      # assembleRelease runs its app's release-variant privacy gate
+      # TWO gradle invocations, deliberately (r46). -PwithEngine is a
+      # GLOBAL property: in one invocation it would register the engine
+      # jniLibs srcDir for EVERY variant, packaging the native libraries
+      # into the basic APK --- the exact failure class the maintainer
+      # reported ("current apk has not included engine library but showing
+      # in app"), here in its mirror-image direction. So:
+      #   1. the BASIC gallery flavor + the edit app, property-less;
+      #   2. the ENGINE family (engine / semantic / face flavors) with
+      #      -PwithEngine (cargo-ndk builds libtoad_ml_jni.so +
+      #      libonnxruntime.so into the build-dir jniLibs srcDir).
+      # Each assembleRelease runs its release-variant privacy gate
       # (ADR-0014, transitively via the assemble* anchors in both
       # apps/*/build.gradle.kts) plus R8 minify + resource shrink --- so
-      # both APKs are re-verified offline-by-construction AND minified
+      # all five APKs are re-verified offline-by-construction AND minified
       # (mapping.txt) before anything is published.
-      - name: Build signed release APKs (gallery + edit)
-        run: ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease --no-daemon --stacktrace
+      - name: Build signed release APKs (basic gallery + edit, property-less)
+        run: ./gradlew :apps:gallery:assembleBasicRelease :apps:edit:assembleRelease --no-daemon --stacktrace
+
+      - name: Build signed release APKs (engine / semantic / face galleries, -PwithEngine)
+        run: ./gradlew :apps:gallery:assembleEngineRelease :apps:gallery:assembleSemanticRelease :apps:gallery:assembleFaceRelease -PwithEngine --no-daemon --stacktrace
 
       # HARD SIGNATURE GATES (ADR-0018) --- the core invariant of this
-      # workflow, now for BOTH APKs: an unsigned or wrongly signed APK of
-      # EITHER app must NEVER be published. Per app:
+      # workflow, now for ALL FIVE APKs (r46: the four gallery flavors +
+      # the edit app): an unsigned or wrongly signed APK of ANY of them
+      # must NEVER be published. Per app:
       #   1. assembleRelease must have produced an APK, and it must not be a
       #      *-unsigned.apk (unsigned output means the TG_* signing env
       #      contract above is broken or the secrets are missing).
       #   2. apksigner must verify the APK's signature and print a signer.
       #   3. The signer certificate SHA-256 must equal the pinned release
-      #      identity below --- the SAME pinned digest for both apps, the
-      #      same single toadGALLERY release key (one key, both APKs, so
-      #      each updates in place over its previous pre-releases). A debug
-      #      key --- or any other keystore --- fails the job, so what gets
-      #      published is always signed by THE toadGALLERY release key.
+      #      identity below --- the SAME pinned digest for all five, the
+      #      same single toadGALLERY release key (one key, every APK, so
+      #      each updates in place over its previous pre-releases; the four
+      #      gallery flavors differ only in applicationId, not identity).
+      #      A debug key --- or any other keystore --- fails the job, so
+      #      what gets published is always signed by THE toadGALLERY
+      #      release key.
       # The logic is one app's worth of shell, factored into a function and
-      # called twice; both calls are equally hard (any failure exits the
-      # step and the publish never runs).
-      - name: Verify release signatures (hard gates, both APKs)
+      # called five times; all five calls are equally hard (any failure
+      # exits the step and the publish never runs).
+      - name: Verify release signatures (hard gates, all five APKs)
         run: |
           # Resolve apksigner robustly: the exact pinned build-tools dir
           # first, then a glob fallback in case the runner layout differs.
@@ -255,35 +284,106 @@ jobs:
           # VERIFIED_APK is the function's out-parameter (a plain global
           # assignment, NOT an echo captured by command substitution --- the
           # function's log lines must not leak into a path).
-          verify_release_signature "gallery" "apps/gallery/build/outputs/apk/release"
-          GALLERY_APK="$VERIFIED_APK"
+          # r46: five gates, one per matrix artifact (the gallery APK dirs
+          # are flavor-qualified since the four-way matrix landed).
+          verify_release_signature "gallery-basic" "apps/gallery/build/outputs/apk/basic/release"
+          BASIC_APK="$VERIFIED_APK"
+          verify_release_signature "gallery-engine" "apps/gallery/build/outputs/apk/engine/release"
+          ENGINE_APK="$VERIFIED_APK"
+          verify_release_signature "gallery-semantic" "apps/gallery/build/outputs/apk/semantic/release"
+          SEMANTIC_APK="$VERIFIED_APK"
+          verify_release_signature "gallery-face" "apps/gallery/build/outputs/apk/face/release"
+          FACE_APK="$VERIFIED_APK"
           verify_release_signature "edit" "apps/edit/build/outputs/apk/release"
           EDIT_APK="$VERIFIED_APK"
-          echo "BOTH signature gates OK --- the gallery and the edit APK are signed by the pinned ADR-0018 release key."
+          echo "ALL FIVE signature gates OK --- the four gallery flavors and the edit APK are signed by the pinned ADR-0018 release key."
           {
-            echo "GALLERY_APK=$GALLERY_APK"
+            echo "BASIC_APK=$BASIC_APK"
+            echo "ENGINE_APK=$ENGINE_APK"
+            echo "SEMANTIC_APK=$SEMANTIC_APK"
+            echo "FACE_APK=$FACE_APK"
             echo "EDIT_APK=$EDIT_APK"
           } >> "$GITHUB_ENV"
 
-      # Publishable set, per app (r43): the renamed APK, its sha256
-      # checksum, and the R8 mapping.txt --- BOTH release builds are
-      # minified, so both mappings are needed for crash symbolication, and
-      # every name carries the app + version + round (a generic mapping.txt
-      # is ambiguous across two apps and dozens of releases --- for better
-      # finding).
+      # r46 THE PACKAGING NEGATIVE GATE --- the maintainer's exact
+      # complaint, enforced ("current apk has not included engine library
+      # but showing in app"): the matrix contract
+      # (docs/phase-11/apk-matrix.md) is that the BASIC gallery APK carries
+      # NEITHER engine native library (it also hides every engine UI
+      # surface via BuildShape), and every engine-family APK (engine /
+      # semantic / face) carries BOTH. The positive direction was already
+      # routine (the ci.yml engine-android / apk-build-engine unzip gates);
+      # the NEGATIVE direction on basic is what a global -PwithEngine leak
+      # into the property-less invocation would break --- so it is checked
+      # here, after signing and before anything is staged. Same mechanism
+      # as the CI gates (unzip -l); any miss fails the run.
+      - name: Verify the matrix's engine-library packaging (negative gate)
+        run: |
+          for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
+            if unzip -l "$BASIC_APK" | grep -q "$LIB"; then
+              echo "::error::the BASIC gallery APK must NOT carry $LIB --- -PwithEngine leaked into the property-less basic invocation"
+              exit 1
+            fi
+          done
+          for APK in "$ENGINE_APK" "$SEMANTIC_APK" "$FACE_APK"; do
+            for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
+              if ! unzip -l "$APK" | grep -q "$LIB"; then
+                echo "::error::$APK must carry $LIB (the engine-family contract)"
+                exit 1
+              fi
+            done
+          done
+          echo "engine-library packaging gate OK --- basic carries NEITHER library; engine/semantic/face carry BOTH."
+
+      # Publishable set (r43 shape, r46 matrix): FIVE renamed APKs, each
+      # with its sha256 checksum, and FIVE clearly-named per-APK R8
+      # mapping.txt files --- every release build is minified, so every
+      # mapping is needed for crash symbolication, and every name carries
+      # the app/flavor + version + round (a generic mapping.txt is
+      # ambiguous across five APKs and dozens of releases --- for better
+      # finding). The four gallery flavors share versionName/versionCode;
+      # the flavor word in the name is what tells them apart.
       - name: Stage release artifacts
         run: |
           mkdir -p "$RELEASE_STAGE"
-          APK_NAME="toadGALLERY-${VERSION_NAME}-r${ROUND}.apk"
-          cp "$GALLERY_APK" "$RELEASE_STAGE/$APK_NAME"
-          ( cd "$RELEASE_STAGE" && sha256sum "$APK_NAME" > "$APK_NAME.sha256" )
+          BASIC_APK_NAME="toadGALLERY-${VERSION_NAME}-r${ROUND}.apk"
+          cp "$BASIC_APK" "$RELEASE_STAGE/$BASIC_APK_NAME"
+          ( cd "$RELEASE_STAGE" && sha256sum "$BASIC_APK_NAME" > "$BASIC_APK_NAME.sha256" )
+          ENGINE_APK_NAME="toadGALLERY-engine-${VERSION_NAME}-r${ROUND}.apk"
+          cp "$ENGINE_APK" "$RELEASE_STAGE/$ENGINE_APK_NAME"
+          ( cd "$RELEASE_STAGE" && sha256sum "$ENGINE_APK_NAME" > "$ENGINE_APK_NAME.sha256" )
+          SEMANTIC_APK_NAME="toadGALLERY-semantic-${VERSION_NAME}-r${ROUND}.apk"
+          cp "$SEMANTIC_APK" "$RELEASE_STAGE/$SEMANTIC_APK_NAME"
+          ( cd "$RELEASE_STAGE" && sha256sum "$SEMANTIC_APK_NAME" > "$SEMANTIC_APK_NAME.sha256" )
+          FACE_APK_NAME="toadGALLERY-face-${VERSION_NAME}-r${ROUND}.apk"
+          cp "$FACE_APK" "$RELEASE_STAGE/$FACE_APK_NAME"
+          ( cd "$RELEASE_STAGE" && sha256sum "$FACE_APK_NAME" > "$FACE_APK_NAME.sha256" )
           EDIT_APK_NAME="toadGALLERY-edit-${EDIT_VERSION_NAME}-r${ROUND}.apk"
           cp "$EDIT_APK" "$RELEASE_STAGE/$EDIT_APK_NAME"
           ( cd "$RELEASE_STAGE" && sha256sum "$EDIT_APK_NAME" > "$EDIT_APK_NAME.sha256" )
-          if [[ -f apps/gallery/build/outputs/mapping/release/mapping.txt ]]; then
-            cp apps/gallery/build/outputs/mapping/release/mapping.txt "$RELEASE_STAGE/toadGALLERY-${VERSION_NAME}-r${ROUND}-mapping.txt"
+          # r46: with flavors, AGP moves the gallery mappings to
+          # mapping/<flavor><type>/ (basicRelease/engineRelease/...); the
+          # edit app's directory is unchanged. Each mapping is named for
+          # ITS APK.
+          if [[ -f apps/gallery/build/outputs/mapping/basicRelease/mapping.txt ]]; then
+            cp apps/gallery/build/outputs/mapping/basicRelease/mapping.txt "$RELEASE_STAGE/toadGALLERY-${VERSION_NAME}-r${ROUND}-mapping.txt"
           else
-            echo "::warning::no gallery R8 mapping at apps/gallery/build/outputs/mapping/release/mapping.txt"
+            echo "::warning::no basic gallery R8 mapping at apps/gallery/build/outputs/mapping/basicRelease/mapping.txt"
+          fi
+          if [[ -f apps/gallery/build/outputs/mapping/engineRelease/mapping.txt ]]; then
+            cp apps/gallery/build/outputs/mapping/engineRelease/mapping.txt "$RELEASE_STAGE/toadGALLERY-engine-${VERSION_NAME}-r${ROUND}-mapping.txt"
+          else
+            echo "::warning::no engine gallery R8 mapping at apps/gallery/build/outputs/mapping/engineRelease/mapping.txt"
+          fi
+          if [[ -f apps/gallery/build/outputs/mapping/semanticRelease/mapping.txt ]]; then
+            cp apps/gallery/build/outputs/mapping/semanticRelease/mapping.txt "$RELEASE_STAGE/toadGALLERY-semantic-${VERSION_NAME}-r${ROUND}-mapping.txt"
+          else
+            echo "::warning::no semantic gallery R8 mapping at apps/gallery/build/outputs/mapping/semanticRelease/mapping.txt"
+          fi
+          if [[ -f apps/gallery/build/outputs/mapping/faceRelease/mapping.txt ]]; then
+            cp apps/gallery/build/outputs/mapping/faceRelease/mapping.txt "$RELEASE_STAGE/toadGALLERY-face-${VERSION_NAME}-r${ROUND}-mapping.txt"
+          else
+            echo "::warning::no face gallery R8 mapping at apps/gallery/build/outputs/mapping/faceRelease/mapping.txt"
           fi
           if [[ -f apps/edit/build/outputs/mapping/release/mapping.txt ]]; then
             cp apps/edit/build/outputs/mapping/release/mapping.txt "$RELEASE_STAGE/toadGALLERY-edit-${EDIT_VERSION_NAME}-r${ROUND}-mapping.txt"
@@ -291,7 +391,7 @@ jobs:
             echo "::warning::no edit R8 mapping at apps/edit/build/outputs/mapping/release/mapping.txt"
           fi
           ls -l "$RELEASE_STAGE"
-          cat "$RELEASE_STAGE/$APK_NAME.sha256" "$RELEASE_STAGE/$EDIT_APK_NAME.sha256"
+          cat "$RELEASE_STAGE"/*.sha256
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -314,46 +414,71 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG_NAME }}
-          name: toadGALLERY ${{ env.VERSION_NAME }} + Edit ${{ env.EDIT_VERSION_NAME }} — the Phase 11 close-out pre-release (r${{ env.ROUND }})
+          name: toadGALLERY ${{ env.VERSION_NAME }} + Edit ${{ env.EDIT_VERSION_NAME }} — the APK-matrix pre-release (r${{ env.ROUND }})
           prerelease: true
           make_latest: false
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: ${{ env.RELEASE_STAGE }}/*
           body: |
-            **TESTING pre-release --- the Phase 11 close-out.** This is the
-            final pre-v1.0 cut of toadGALLERY, the first release where BOTH
-            apps ship together from the same commit. It is not a stable
-            release; the device-verification matrix stays human-only (see
-            `docs/phase-11/known-limitations.md`).
+            **TESTING pre-release --- the r46 APK matrix.** The gallery now
+            ships as FOUR flavors and the companion editor as the fifth
+            artifact, all built and published from the same commit. Not a
+            stable release; the device-verification matrix stays human-only
+            (see `docs/phase-11/known-limitations.md`).
 
-            **The APK files:**
+            **The five APK files:**
 
-            - `toadGALLERY-<version>.apk` --- **the gallery, the main app.**
-              The photo/video timeline, albums, on-device smart search +
-              semantic search, metadata details + edit + offline maps,
-              trash, hidden vault, Moments/Things. Install this for the
-              gallery.
+            - `toadGALLERY-<version>.apk` --- **the gallery, BASIC flavor.**
+              The photo/video timeline, albums, name search, metadata
+              details + edit + offline maps, trash, hidden vault. NO engine
+              library and NO AI features --- the offline-first core, on the
+              canonical applicationId (this is the file that updates in
+              place over previous gallery pre-releases).
+            - `toadGALLERY-engine-<version>.apk` --- **the gallery, ENGINE
+              flavor.** Everything the basic flavor has PLUS the full
+              on-device AI stack: face clustering (People) AND semantic
+              search + Things, with the pinned models downloaded on demand
+              from the single allowlisted host (or bundled via the
+              model-pack workflow). Installs SEPARATELY from basic.
+            - `toadGALLERY-semantic-<version>.apk` --- **the gallery,
+              SEMANTIC flavor.** The engine build with ONLY the semantic
+              index: Magic Search + Things, no People.
+            - `toadGALLERY-face-<version>.apk` --- **the gallery, FACE
+              flavor.** The engine build with ONLY the face index:
+              People, no Magic Search / Things.
             - `toadGALLERY-edit-<version>.apk` --- **the companion editor.**
               Crop/rotate/perspective, adjustments, LUT filters, text,
               stickers, drawing, mosaic/blur, frames, magic erase, sky
               replacement, bokeh, opt-in face retouch, and the lightweight
               video editor (trim/mute/slow-mo/frame extraction/GIF/WebP).
               A separate app ID, opened from the gallery via the versioned
-              content-URI contract --- install BOTH for the full experience.
+              content-URI contract --- install it alongside ANY gallery
+              flavor.
 
-            - Requires Android 8.0+ (minSdk 26). Both APKs are signed with
-              the same toadGALLERY release key (ADR-0018), so updates
+            The four gallery flavors share versionCode and versionName and
+            differ ONLY in applicationId (`io.github.dukeoftoad.gallery` /
+            `.engine` / `.semantic` / `.face`) and the AI surfaces their
+            build shape compiles in --- any combination coexists on one
+            device, like the edit app. Matrix details:
+            `docs/phase-11/apk-matrix.md`.
+
+            - Requires Android 8.0+ (minSdk 26). All five APKs are signed
+              with the same toadGALLERY release key (ADR-0018), so updates
               install in place over previous toadGALLERY pre-releases.
             - Verify your download: `sha256sum -c toadGALLERY-*.apk.sha256`
               and/or `apksigner verify --print-certs <apk>` --- the signer
               certificate SHA-256 must be
               `8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494`
-              (CI pins this digest for BOTH APKs before anything is
+              (CI pins this digest for ALL FIVE APKs before anything is
               published; an unsigned or debug-signed build can never reach
               this page).
-            - The per-app `*-mapping.txt` files are the R8 mappings for
-              crash de-obfuscation, kept per app per release so traces from
+            - The packaging rule is hard-verified at release time: the
+              basic APK carries NEITHER engine native library, and the
+              engine/semantic/face APKs carry BOTH (`libtoad_ml_jni.so` +
+              `libonnxruntime.so`).
+            - The per-APK `*-mapping.txt` files are the R8 mappings for
+              crash de-obfuscation, kept per APK per release so traces from
               testing devices can always be symbolicated.
             - Built from commit `${{ github.sha }}`. Full notes:
               `docs/phase-11/release-notes.md`. Reproducibility: the

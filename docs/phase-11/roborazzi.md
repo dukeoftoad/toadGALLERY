@@ -324,3 +324,26 @@ self-consistent layout. The README suite's explicit `roborazzi/NN-*.png`
 paths deliberately ignore the `fullyQualifiedName` naming strategy (they
 are README assets first, baselines second); one flavor (basic) is
 recorded, because the names would collide across flavors.
+
+**r48 addendum, the first CI rounds' catches (three honest iterations):**
+(1) the catalog plugin alias was rewritten in comment form but the alias
+LINE itself never landed --- `alias(libs.plugins.roborazzi)` failed as an
+unresolved reference until the entry was restored; (2) the rename icon
+fix's `Icons.Filled.DriveFileRenameOutline` needed its explicit import
+(extended-set icons are extension properties, and the viewer imports its
+icons one by one); (3) the README suite's first run caught the two real
+Robolectric behaviors the toadFILES pattern implies but this repo had
+never exercised: **runtime permission requests never resolve on the JVM**
+(ShadowActivity delegates `requestPermissions` to the REAL Activity code,
+which `startActivityForResult`es into a system UI that does not exist ---
+the grant callback must be delivered by hand through the shadow-recorded
+request), and **Coil's background decodes need a wall-clock settle before
+capture** (compose idling does not track them; the albums capture beat
+the decode and showed blank covers). The state-card tests moved from the
+no-path (`fullyQualifiedName`) capture shape to EXPLICIT paths
+(`roborazzi/state-error.png` et al.) in the same round: the first record
+run proved no-path captures write to `build/outputs/roborazzi/` (a
+gitignored dir --- baselines there could never be committed), while
+explicit paths land in the module's committable `roborazzi/` dir. The
+naming-strategy system property stays for any future no-path capture;
+the three state-card baselines are now path-pinned like the README suite.

@@ -67,6 +67,6 @@ class ErrorStateScreenshotTest {
                 )
             }
         }
-        rule.onRoot().captureRoboImage()
+        rule.onRoot().captureRoboImage("roborazzi/state-error.png")
     }
 }

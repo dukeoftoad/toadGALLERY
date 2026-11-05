@@ -72,6 +72,6 @@ class LoadingStateScreenshotTest {
         // cycle, identical on every run and every machine.
         rule.mainClock.advanceTimeBy(16L)
         rule.waitForIdle()
-        rule.onRoot().captureRoboImage()
+        rule.onRoot().captureRoboImage("roborazzi/state-loading.png")
     }
 }

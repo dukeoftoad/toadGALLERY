@@ -3,7 +3,8 @@ package io.github.dukeoftoad.gallery.ui.screenshot
 import android.Manifest
 import android.content.ContentProvider
 import android.content.ContentValues
-import android.database.Cursor
+import android.content.Cursor
+import android.content.pm.PackageManager
 import android.database.MatrixCursor
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -117,12 +118,35 @@ class ReadmeScreenshotsTest {
 
     @Test
     fun readme01Photos() {
-        // The start destination: the filter-chip row lands with the screen,
-        // the timeline header lands with the seeded catalogue rows.
-        waitForAnyTag(TAG_PHOTOS_FILTER_CHIPS, TAG_TIMELINE_HEADER)
-        // Best effort, never fatal: give the catalogue-backed grid extra
-        // seconds to populate so the capture shows a real timeline rather
-        // than the loading state.
+        // The one test that needs the runtime-permission grant DELIVERED BY
+        // HAND. Robolectric 4.17's ShadowActivity.requestPermissions records
+        // the request and then calls the REAL Activity implementation, which
+        // startActivityForResult()es into a system permission UI that does
+        // not exist on the JVM --- the grant callback NEVER fires, the
+        // ViewModel stays in PhotosState.Loading, and no state tag ever
+        // composes (the first CI round caught exactly that: a 20s timeout
+        // with neither the chips row nor a timeline header on screen). The
+        // fix is the documented Robolectric pattern: read the shadow-recorded
+        // request and feed onRequestPermissionsResult back into the activity
+        // (ComponentActivity's registry dispatches it to the
+        // RequestMultiplePermissions callback, which routes to
+        // onPermissionGranted exactly as a real grant would).
+        compose.waitUntil(timeoutMillis = 10_000) {
+            Shadows.shadowOf(compose.activity).lastRequestedPermission != null
+        }
+        val request = Shadows.shadowOf(compose.activity).lastRequestedPermission
+        compose.activity.onRequestPermissionsResult(
+            request.requestCode,
+            request.permissions,
+            IntArray(request.permissions.size) { PackageManager.PERMISSION_GRANTED },
+        )
+        // The grid state tag (photos_state_grid) is the shell's documented
+        // state-tag scheme: it composes when the generation publishes Ready
+        // and the paged timeline has items.
+        waitForAnyTag(TAG_PHOTOS_GRID)
+        // Best effort, never fatal: give the paged grid extra seconds so the
+        // capture shows month headers + decoded thumbnails rather than the
+        // first screenful still settling.
         runCatching { compose.waitUntil(timeoutMillis = 10_000) { hasTag(TAG_TIMELINE_HEADER) } }
         capture("01-photos.png")
     }
@@ -167,6 +191,18 @@ class ReadmeScreenshotsTest {
 
     /** Captures the whole app shell to the explicit README path. */
     private fun capture(fileName: String) {
+        // Settle BEFORE capturing (the toadFILES settle pattern): Coil
+        // decodes thumbnails on background dispatchers that compose idling
+        // does not track, and the first CI round's albums capture beat the
+        // decode (real album tiles, blank covers). A bounded wall-clock
+        // loop of waitForIdle + short sleeps gives the decodes time to land
+        // without ever hanging a broken run.
+        val deadline = System.currentTimeMillis() + 2_500
+        while (System.currentTimeMillis() < deadline) {
+            runCatching { compose.waitForIdle() }
+            Thread.sleep(100)
+        }
+        runCatching { compose.waitForIdle() }
         compose.onRoot().captureRoboImage("roborazzi/$fileName")
     }
 
@@ -186,8 +222,9 @@ class ReadmeScreenshotsTest {
     }
 
     private companion object {
-        /** Photos: PhotosFilterChips.kt:124 / MediaPagingGrid.kt:218. */
-        const val TAG_PHOTOS_FILTER_CHIPS = "photos_filter_chips"
+        /** Photos: the shell's state-tag scheme (PhotosScreen KDoc); grid =
+         *  Ready + items (MediaPagingGrid.kt's timeline_header rides inside). */
+        const val TAG_PHOTOS_GRID = "photos_state_grid"
         const val TAG_TIMELINE_HEADER = "timeline_header"
 
         /** Albums: AlbumsScreen.kt:625 / :741 / :219. */

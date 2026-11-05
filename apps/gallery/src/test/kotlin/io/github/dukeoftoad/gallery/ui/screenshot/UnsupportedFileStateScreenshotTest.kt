@@ -64,6 +64,6 @@ class UnsupportedFileStateScreenshotTest {
                 UnsupportedFileState(fileName = "IMG_19700101_000000_HEIC.heic")
             }
         }
-        rule.onRoot().captureRoboImage()
+        rule.onRoot().captureRoboImage("roborazzi/state-unsupported.png")
     }
 }

@@ -3,12 +3,10 @@
      label (applicationIdSuffix .engine, installs separately like the
      edit app). Flavor res overrides the main source set's same-named
      resource (the main value stays the fallback for the basic build).
-     r48 (maintainer directive): the label is "toadGALLERY" --- the
-     engine flavor IS the flagship build in the maintainer's dogfood
-     set, so it carries the plain product name; the suffix-named
-     semantic/face builds keep their qualifier labels, and the
-     applicationIdSuffix .engine is UNTOUCHED so the four-way
-     coexistence install matrix is unaffected. -->
+     r47 (the maintainer's launcher-label directive): the user-visible
+     name is the canonical "toadGALLERY" for the engine build too.
+     The .engine applicationIdSuffix alone keeps it a separate
+     install, so the shared launcher name is unambiguous. -->
 <resources>
     <string name="app_launcher_name">toadGALLERY</string>
 </resources>

@@ -272,25 +272,13 @@ closed.
   fresh runner. None of these are silent: each fails loudly and is
   attributable.
 
-## 8. The r48 round: the plugin lands, the README suite, and the F-34 gate
+## 8. The r48 round: the README screenshot suite + the F-34 closure
 
 **Status: 2026-11-06, the r48 round (branch `tg-r48-screenshots-workflows`,
-the toadFILES-alignment directive).** Four changes, each closing a recorded
-limitation of the record-only era:
+PR #128, rebased onto the r47 plugin-first main mid-flight).** The r47
+round (this doc's rewritten sections above) landed the gradle plugin and
+the record/verify task pair; r48 builds the README half on top:
 
-- **The Roborazzi gradle plugin is re-applied** (`alias(libs.plugins.roborazzi)`
-  in `apps/gallery/build.gradle.kts`; the catalog plugin entry restored).
-  Section 7's blocker --- the plugin classpath hard-erroring the module's
-  then-existing `srcDir(Any)` call sites --- is gone as a matter of code
-  fact: the flavors round rewrote all three sites (the engine `jniLibs`,
-  `progressAssets` and `bundled-models` `assets` srcDirs) to the AGP-9
-  plain-File convention (`...srcDir(layout.buildDirectory.dir(...).get().asFile)`),
-  so the plugin's newer AGP variant API no longer meets a `srcDir(Any)`
-  anywhere in the script. With the plugin applied, `captureRoboImage()`
-  fires ONLY under the record/verify tasks: plain unit-test runs
-  (`ci.yml`'s `testBasicDebugUnitTest` / `testEngineDebugUnitTest`) skip
-  captures entirely, which is the toadFILES behavior and keeps the
-  canonical gate fast and tree-clean.
 - **The README screenshot suite lands**
   (`ReadmeScreenshotsTest.kt`, the toadFILES `TabScreenshotsTest` pattern):
   the REAL app shell (`MainActivity` + `ToadGalleryApp`) over a seeded
@@ -302,48 +290,40 @@ limitation of the record-only era:
   (`roborazzi/01-photos.png` .. `05-settings.png`) walk the real bottom
   navigation by label; the committed copies render the README's
   Screenshots section, and the regeneration recipe is documented there.
-- **`screenshots.yml` becomes verify-then-record**: the drift gate
-  (`verifyRoborazziBasicDebug`) runs FIRST, gated on committed baselines
-  (`hashFiles('apps/gallery/roborazzi/*.png')` inspects the checkout, so
-  the step is an honest skip before baselines exist and a hard gate
-  after); the record pass (`recordRoborazziBasicDebug`) runs always and
-  feeds the `roborazzi-screenshots` artifact. Ordering is load-bearing:
-  record overwrites the working-tree PNGs, so a record-then-verify
-  sequence would compare fresh renders against themselves.
-- **F-34 closes** along the doc's own section-5 recipe: the record run's
-  artifact is downloaded, the state-card PNGs are committed under
-  `apps/gallery/roborazzi/` (the plugin's record output dir is also its
-  verify input dir --- that is the whole trick), and from that commit on
-  the gate is live on every PR touching the gallery.
+- **A SECOND capture location, deliberately**: the README suite's
+  EXPLICIT `captureRoboImage("roborazzi/NN-name.png")` paths are
+  CWD-relative (the test JVM's working dir is the module dir), so they
+  write to `apps/gallery/roborazzi/` --- next to, not inside, the r47
+  plugin-outputDir location (`src/test/resources/roborazzi`) the no-path
+  state-card captures use. Both dirs are committable (.gitignore excludes
+  neither), both are verify baselines, and `screenshots.yml`'s baseline
+  detection, record pass and artifact cover both.
+- **`screenshots.yml` covers both locations**: the r47 mode dispatch
+  (record/verify) and honest-skip stand; the baseline count now sums BOTH
+  dirs, and the `roborazzi-baselines` artifact carries both.
+- **F-34 closes**: the green record run's PNGs commit BOTH as the verify
+  baselines (the state cards at their outputDir path, the README suite at
+  `apps/gallery/roborazzi/`) and as the README's `docs/screenshots/`
+  copies; from that commit the `verifyRoborazziBasicDebug` gate is live
+  on every PR touching the gallery.
 
-Known shape, recorded honestly: the baseline PNGs live in the MODULE's
-`roborazzi/` dir (not `src/test/resources` as section 5's first draft
-guessed) --- `.gitignore` does not exclude it, and the plugin's task pair
-reads and writes the same location, so committed-baselines-there is the
-self-consistent layout. The README suite's explicit `roborazzi/NN-*.png`
-paths deliberately ignore the `fullyQualifiedName` naming strategy (they
-are README assets first, baselines second); one flavor (basic) is
-recorded, because the names would collide across flavors.
-
-**r48 addendum, the first CI rounds' catches (three honest iterations):**
-(1) the catalog plugin alias was rewritten in comment form but the alias
-LINE itself never landed --- `alias(libs.plugins.roborazzi)` failed as an
-unresolved reference until the entry was restored; (2) the rename icon
-fix's `Icons.Filled.DriveFileRenameOutline` needed its explicit import
-(extended-set icons are extension properties, and the viewer imports its
-icons one by one); (3) the README suite's first run caught the two real
-Robolectric behaviors the toadFILES pattern implies but this repo had
-never exercised: **runtime permission requests never resolve on the JVM**
-(ShadowActivity delegates `requestPermissions` to the REAL Activity code,
-which `startActivityForResult`es into a system UI that does not exist ---
-the grant callback must be delivered by hand through the shadow-recorded
-request), and **Coil's background decodes need a wall-clock settle before
-capture** (compose idling does not track them; the albums capture beat
-the decode and showed blank covers). The state-card tests moved from the
-no-path (`fullyQualifiedName`) capture shape to EXPLICIT paths
-(`roborazzi/state-error.png` et al.) in the same round: the first record
-run proved no-path captures write to `build/outputs/roborazzi/` (a
-gitignored dir --- baselines there could never be committed), while
-explicit paths land in the module's committable `roborazzi/` dir. The
-naming-strategy system property stays for any future no-path capture;
-the three state-card baselines are now path-pinned like the README suite.
+**r48 addendum --- the round's honest catches, as they happened:** the
+pre-rebase branch burned three CI iterations on compile faults (a missing
+catalog alias line, a missing extension-icon import) before the record
+run surfaced the two REAL Robolectric lessons this repo had never
+exercised: **runtime permission requests never resolve on the JVM**
+(Robolectric 4.17's ShadowActivity delegates `requestPermissions` to the
+REAL Activity code, whose `startActivityForResult` fires into a system
+UI that does not exist --- the test delivers the grant by hand through
+the shadow-recorded request, and `ComponentActivity`'s registry
+dispatches it to the `RequestMultiplePermissions` callback exactly as a
+real grant would), and **Coil's background decodes are not
+compose-idle-tracked** (the albums capture beat the decode and showed
+blank covers; every capture now settles for a bounded wall-clock loop
+first --- the toadFILES settle pattern). A fourth catch, resolved by the
+rebase rather than a fix: the pre-rebase branch had moved the state-card
+tests to explicit paths after observing no-path captures writing to the
+gitignored `build/outputs/roborazzi/` --- the r47 round solved the same
+problem at the CONFIG level (`roborazzi { outputDir.set(...) }` pins the
+no-path captures to `src/test/resources/roborazzi`), so the r48 rebase
+keeps r47's shape and the state-card tests stay no-path.

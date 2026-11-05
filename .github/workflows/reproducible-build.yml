@@ -1,0 +1,252 @@
+name: Reproducible build
+
+# toadGALLERY reproducible-build verification --- the Phase 11 deliverable
+# ("verify the build is reproducible"; ADR-0013: the CI workflow is the
+# canonical recipe, so CI is also the canonical verifier of that recipe).
+#
+# The property verified here: the SAME source SHA, built twice from clean
+# with the same pinned toolchain, produces the SAME release artifacts.
+# This workflow triggers on `v*` tag pushes (the same tags release.yml
+# publishes --- the checkout is then the exact tag SHA, the same bits the
+# release workflow published from) plus workflow_dispatch (the selected
+# ref), and holds no signing secrets at all.
+#
+# The comparison target is the UNSIGNED release APK (both apps), BY
+# DESIGN: F-Droid and any third party builds unsigned artifacts from
+# source, so unsigned-artifact determinism is the property that matters
+# for outside verification. Signed-APK determinism is NOT claimed ---
+# signing is a separate step (and v1 JAR signing embeds timestamps), so
+# this workflow never touches the TG_* signing environment; with no
+# signing config wired, assembleRelease's output is the *-unsigned.apk.
+#
+# Verdicts, honestly named:
+#   - BYTE-REPRODUCIBLE: every artifact compared byte-identical (cmp).
+#   - CONTENT-REPRODUCIBLE: APK bytes differ but the unzipped contents
+#     are identical (zip metadata variance --- entry order/timestamps ---
+#     reported as a ::warning:, the run stays green); the mapping.txt
+#     files must still byte-match (R8 is deterministic, no zip layer).
+#   - NOT-REPRODUCIBLE: any APK differs in content, or any mapping.txt
+#     differs at all --- ::error:: + red run.
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+# A verification run is never torn down mid-compare: a queued run waits
+# for the current one to finish (the release.yml convention).
+concurrency:
+  group: reproducible-build
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify the unsigned release APKs are reproducible
+    runs-on: ubuntu-latest
+    # Two full clean release builds of BOTH apps (two R8 passes each) ---
+    # the same headroom the release job budgets for one.
+    timeout-minutes: 45
+    # Read-only: this workflow tags nothing, publishes nothing, and holds
+    # no signing secrets (unsigned by design --- see the header).
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # F-2 (follow-up 2026-11-04): the canonical toolchain setup
+      # (.github/actions/toad-setup) --- the pure-Android shape, exactly
+      # ci.yml's build job (JDK 17 + SDK platform 36/build-tools 36 + the
+      # Gradle cache + gradlew chmod; no Rust).
+      - name: Set up the toolchain (Android)
+        uses: ./.github/actions/toad-setup
+
+      # Pass 1: BOTH apps' release variants, unsigned by design (NO TG_*
+      # env is ever exported in this workflow). --no-build-cache is
+      # deliberate: with the warm Gradle cache a post-clean rebuild could
+      # replay cached task outputs (FROM-CACHE), which would make the
+      # byte comparison trivially pass --- verification theater. Both
+      # passes force real re-execution of every cacheable task; only the
+      # dependency cache (inputs, not outputs) stays warm.
+      - name: Build pass 1 (unsigned, both apps)
+        run: ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease --no-daemon --stacktrace --no-build-cache
+
+      # Collect pass 1's four artifacts under canonical names (the APK
+      # basenames AGP produces are stable, but the comparison keys on
+      # THESE names --- pass1/pass2 pairs are compared by construction).
+      # The *-unsigned.apk find is name-agnostic and refuses to continue
+      # if the output is somehow not unsigned (a signing config leaking
+      # into this workflow would be a bug, not a verdict). The sha256 list
+      # is written to a file and cat'd for the log --- NOT piped through
+      # tee: a pipeline segment is a subshell whose failure the pipeline's
+      # last command (tee) would swallow, and the ::error:: lines must
+      # reach the step's stdout unfiltered.
+      - name: Collect pass 1 artifacts
+        run: |
+          collect_pass_artifacts() {
+            local PASS_DIR="$1"
+            mkdir -p "$PASS_DIR"
+            local GALLERY_UNSIGNED EDIT_UNSIGNED
+            GALLERY_UNSIGNED="$(find apps/gallery/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+            EDIT_UNSIGNED="$(find apps/edit/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+            if [[ -z "$GALLERY_UNSIGNED" || -z "$EDIT_UNSIGNED" ]]; then
+              echo "::error::expected *-unsigned.apk outputs for both apps --- found:"
+              ls -l apps/gallery/build/outputs/apk/release apps/edit/build/outputs/apk/release || true
+              exit 1
+            fi
+            if [[ ! -f apps/gallery/build/outputs/mapping/release/mapping.txt || ! -f apps/edit/build/outputs/mapping/release/mapping.txt ]]; then
+              echo "::error::expected an R8 mapping.txt for both apps (both release variants are minified since r43)"
+              exit 1
+            fi
+            cp "$GALLERY_UNSIGNED" "$PASS_DIR/gallery-release-unsigned.apk"
+            cp "$EDIT_UNSIGNED" "$PASS_DIR/edit-release-unsigned.apk"
+            cp apps/gallery/build/outputs/mapping/release/mapping.txt "$PASS_DIR/gallery-mapping.txt"
+            cp apps/edit/build/outputs/mapping/release/mapping.txt "$PASS_DIR/edit-mapping.txt"
+            ( cd "$PASS_DIR" && sha256sum gallery-release-unsigned.apk edit-release-unsigned.apk gallery-mapping.txt edit-mapping.txt > "$PASS_DIR/sha256.txt" )
+            cat "$PASS_DIR/sha256.txt"
+          }
+          collect_pass_artifacts "$RUNNER_TEMP/pass1"
+
+      # The honest full-clean: `gradle clean` removes every module's
+      # build/ directory (the same task a fresh clone's first build starts
+      # from), so pass 2 is a real re-build of every artifact, not an
+      # incremental build over pass 1's intermediates. The Gradle caches
+      # under ~/.gradle stay (dependencies are inputs); the build cache is
+      # disabled per-pass instead (see the pass 1 note).
+      - name: Clean (full --- every module build dir)
+        run: ./gradlew clean --no-daemon
+
+      # Pass 2: the SAME command on the SAME checkout, from clean.
+      - name: Build pass 2 (unsigned, both apps)
+        run: ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease --no-daemon --stacktrace --no-build-cache
+
+      # Pass 2's collect step repeats pass 1's function verbatim: separate
+      # YAML steps are separate shells, so the function cannot be shared
+      # across them --- duplicating it is the honest shape (and the two
+      # copies must stay identical, by construction of this comment).
+      - name: Collect pass 2 artifacts
+        run: |
+          collect_pass_artifacts() {
+            local PASS_DIR="$1"
+            mkdir -p "$PASS_DIR"
+            local GALLERY_UNSIGNED EDIT_UNSIGNED
+            GALLERY_UNSIGNED="$(find apps/gallery/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+            EDIT_UNSIGNED="$(find apps/edit/build/outputs/apk/release -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+            if [[ -z "$GALLERY_UNSIGNED" || -z "$EDIT_UNSIGNED" ]]; then
+              echo "::error::expected *-unsigned.apk outputs for both apps --- found:"
+              ls -l apps/gallery/build/outputs/apk/release apps/edit/build/outputs/apk/release || true
+              exit 1
+            fi
+            if [[ ! -f apps/gallery/build/outputs/mapping/release/mapping.txt || ! -f apps/edit/build/outputs/mapping/release/mapping.txt ]]; then
+              echo "::error::expected an R8 mapping.txt for both apps (both release variants are minified since r43)"
+              exit 1
+            fi
+            cp "$GALLERY_UNSIGNED" "$PASS_DIR/gallery-release-unsigned.apk"
+            cp "$EDIT_UNSIGNED" "$PASS_DIR/edit-release-unsigned.apk"
+            cp apps/gallery/build/outputs/mapping/release/mapping.txt "$PASS_DIR/gallery-mapping.txt"
+            cp apps/edit/build/outputs/mapping/release/mapping.txt "$PASS_DIR/edit-mapping.txt"
+            ( cd "$PASS_DIR" && sha256sum gallery-release-unsigned.apk edit-release-unsigned.apk gallery-mapping.txt edit-mapping.txt > "$PASS_DIR/sha256.txt" )
+            cat "$PASS_DIR/sha256.txt"
+          }
+          collect_pass_artifacts "$RUNNER_TEMP/pass2"
+
+      # The comparison. Per pair of artifacts (four pairs):
+      #   - byte-identical (cmp) --- the happy path, recorded.
+      #   - APK byte mismatch --- unzip both into temp dirs and diff -r:
+      #     contents identical means zip-metadata variance (an honest
+      #     ::warning::, the run stays green --- CONTENT-REPRODUCIBLE);
+      #     contents differ means NOT reproducible (::error:: + exit 1).
+      #   - mapping.txt mismatch --- no tolerance at all: R8 is
+      #     deterministic, there is no zip layer, a differing mapping
+      #     fails the run outright.
+      # Failures are accumulated (every pair gets compared and recorded)
+      # so the report artifact always shows the full picture; the step
+      # exits 1 at the end if any pair failed.
+      - name: Compare the two passes
+        run: |
+          VERDICT="BYTE-REPRODUCIBLE"
+          RESULTS=""
+          FAILED=0
+
+          compare_pair() {
+            local NAME="$1"
+            local P1="$RUNNER_TEMP/pass1/$NAME"
+            local P2="$RUNNER_TEMP/pass2/$NAME"
+            if cmp -s "$P1" "$P2"; then
+              echo "byte-identical: $NAME"
+              RESULTS="${RESULTS}byte-identical: $NAME"$'\n'
+              return 0
+            fi
+            if [[ "$NAME" == *-mapping.txt ]]; then
+              echo "::error::$NAME differs between the two passes --- R8 mappings must be byte-identical (R8 is deterministic; there is no zip layer to forgive)"
+              RESULTS="${RESULTS}DIFFERS (hard fail): $NAME"$'\n'
+              return 1
+            fi
+            local Z1="$RUNNER_TEMP/zip-diff/pass1-$NAME"
+            local Z2="$RUNNER_TEMP/zip-diff/pass2-$NAME"
+            rm -rf "$Z1" "$Z2"
+            mkdir -p "$Z1" "$Z2"
+            if ! unzip -q "$P1" -d "$Z1" || ! unzip -q "$P2" -d "$Z2"; then
+              echo "::error::$NAME could not be unzipped for the content comparison"
+              RESULTS="${RESULTS}unzip failed (hard fail): $NAME"$'\n'
+              return 1
+            fi
+            if diff -r "$Z1" "$Z2" > "$RUNNER_TEMP/zip-diff/$NAME.diff" 2>&1; then
+              echo "::warning::$NAME differs only in zip metadata (byte mismatch, unzipped contents identical) --- content-reproducible"
+              RESULTS="${RESULTS}zip-metadata variance only (contents identical): $NAME"$'\n'
+              VERDICT="CONTENT-REPRODUCIBLE (zip metadata variance; unzipped APK contents identical)"
+              return 0
+            fi
+            echo "::error::$NAME differs in CONTENT between the two passes --- NOT reproducible"
+            cat "$RUNNER_TEMP/zip-diff/$NAME.diff"
+            RESULTS="${RESULTS}DIFFERS IN CONTENT (hard fail): $NAME"$'\n'
+            return 1
+          }
+
+          for f in gallery-release-unsigned.apk edit-release-unsigned.apk gallery-mapping.txt edit-mapping.txt; do
+            compare_pair "$f" || FAILED=1
+          done
+
+          # The verdict lands in the report artifact even on failure (the
+          # per-pair results above say exactly which pair and why) --- so a
+          # hard failure must NOT leave the default verdict standing.
+          if [[ "$FAILED" != 0 ]]; then
+            VERDICT="NOT-REPRODUCIBLE (at least one pair differs --- see the per-pair results below)"
+          fi
+          {
+            echo "toadGALLERY reproducible-build verification (Phase 11, r43)"
+            echo "commit: $GITHUB_SHA"
+            echo "verdict: $VERDICT"
+            echo ""
+            echo "$RESULTS"
+          } | tee "$RUNNER_TEMP/verdict.txt"
+
+          if [[ "$FAILED" != 0 ]]; then
+            echo "::error::NOT-REPRODUCIBLE --- at least one pair differs (see the verdict above)"
+            exit 1
+          fi
+          echo "VERDICT: $VERDICT"
+
+      # Always leave the evidence behind: both passes' sha256 lists + the
+      # compare verdict (whatever the run's outcome --- a red run's report
+      # is the more interesting one). Each copy is guarded so an early
+      # failure still uploads whatever evidence exists.
+      - name: Assemble the reproducibility report
+        if: always()
+        run: |
+          REPORT_DIR="$RUNNER_TEMP/reproducibility-report"
+          mkdir -p "$REPORT_DIR"
+          if [[ -f "$RUNNER_TEMP/pass1/sha256.txt" ]]; then cp "$RUNNER_TEMP/pass1/sha256.txt" "$REPORT_DIR/pass1.sha256"; fi
+          if [[ -f "$RUNNER_TEMP/pass2/sha256.txt" ]]; then cp "$RUNNER_TEMP/pass2/sha256.txt" "$REPORT_DIR/pass2.sha256"; fi
+          if [[ -f "$RUNNER_TEMP/verdict.txt" ]]; then cp "$RUNNER_TEMP/verdict.txt" "$REPORT_DIR/verdict.txt"; fi
+          ls -l "$REPORT_DIR" || true
+
+      - name: Upload reproducibility-report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reproducibility-report
+          path: ${{ runner.temp }}/reproducibility-report/*
+          if-no-files-found: warn
+          retention-days: 90

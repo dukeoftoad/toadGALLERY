@@ -361,8 +361,16 @@ android {
         // No new permissions; no new dependencies; no new strings (the
         // sweep reuses the existing cd_* copy --- all fixes are semantics
         // wiring on text that already exists).
-        versionCode = 36
-        versionName = "0.4.4-alpha"
+        // versionCode 37 (r43, the Phase 11 release-engineering round): the
+        // release pipeline now builds and publishes BOTH APKs --- the
+        // gallery and the edit app --- with clearly-named per-app
+        // mapping.txt artifacts, and the ADR-0018 signing convention is
+        // extended to the edit app (the same four TG_* env vars, the same
+        // pinned release key, the same unsigned local fallback). No product
+        // change rides this bump beyond the round's build wiring; the
+        // versionName moves to 0.4.5-alpha, the Phase 11 close-out cut.
+        versionCode = 37
+        versionName = "0.4.5-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 
@@ -511,6 +519,18 @@ android {
     }
 }
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+    dependsOn(copyProgressJson)
+}
+// r43 (the release-engineering round; the catch from the failed Release
+// run 41991609209 at f610860): the release-only lintVital model writer
+// (generateReleaseLintVitalReportModel, LintModelWriterTask) consumes the
+// build/generated/progressAssets srcDir too, and unlike the merge*Assets
+// tasks above it carried NO declared dependency on the copy --- Gradle's
+// implicit-output validation fails assembleRelease on exactly that
+// (release builds run lintVital in-graph; a debug CI lint never has the
+// copy in its graph, which is why ci.yml stayed green while every
+// assembleRelease broke). The same explicit dependency closes it.
+tasks.matching { it.name.endsWith("LintVitalReportModel") }.configureEach {
     dependsOn(copyProgressJson)
 }
 

@@ -13,7 +13,53 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.12 (2026-11-04, latest) --- the r39 ente-port exit round + the
+### v2.13 (2026-11-05, latest) --- Phase 10 opens: the r40 hardening
+  round authored + the two deferred sub-scope contracts
+
+- **The r40 hardening round AUTHORED on `tg-p10-hardening` (PR #117)**,
+  the harden-first order honored as the FIRST Phase 10 round: the
+  accessibility hardening sweep (the one code-expressible hardening
+  task --- 17 heading anchors where ZERO existed: the 15 `TopAppBar`
+  titles + the editor's top bar + the Albums/Settings section headers;
+  8 polite live regions on the dynamic surfaces: the three selection
+  app bars, the four batch/progress dialogs, the viewer counter; the
+  r39 Things-chip remove button restored to the 48dp floor; zero new
+  strings --- the existing `cd_*` copy reused everywhere), the
+  background-work boundedness audit B1--B9 (one fix: the blocking
+  Phase 4 provider walk gains the pure `ScanWalkPolicy` cooperative
+  cancellation probe every 500 rows --- a cancelled app-start scan
+  stops walking mid-volume instead of completing the whole pass
+  holding the scan mutex; B2--B8 verified bounded; B9 recorded as
+  follow-up F-23), the source-scan conformance suite pinning
+  presence/absence per the r37 lesson (11 new JVM tests, `OK (11
+  tests)` on the rebuilt `/tmp/ktool` harness --- kotlinc 2.3.10; all
+  23 touched `.kt` lex-checked), and the two planning deliverables as
+  skeletons (`docs/phase-10/benchmark-scenarios.md` +
+  `device-matrix.md` --- every result cell human-only; the Baseline
+  Profiles decision deferred until the S1/S2/S6 baselines exist).
+  Gallery `versionCode 36` (`0.4.4-alpha`), editor `versionCode 12`
+  (`0.4.7-edit-alpha`). The r40 device rows are human-only and ride
+  the checklist window.
+- **The two deferred sub-scope contracts AUTHORED (PR #116,
+  docs-only)**: `docs/phase-10/edit-v3-ai.md` (the Phase 8 task text
+  verbatim decomposed: the AI features as pixel stages between sharpen
+  and the regions with commit-time-only inference + the `edit-ai/`
+  derived-artifact store, four additive recipe containers --- layer
+  types 6-9 ---, bundled models under the unconditional editor
+  zero-INTERNET gate with ADR-0020's pin discipline as prior art, the
+  opt-in face-retouch consent machinery, the privacy suite extended
+  per ADR-0010 §7) and `docs/phase-10/video-editor.md` (the Phase 9
+  task text verbatim: the pure export-plan model over the media3 seam,
+  the ADR-0012 adjustment-boundary table, the never-modify export
+  discipline; selection criteria pinned instead of model names). The
+  implementation rounds follow AFTER the hardening round's PR is green
+  --- the stated order.
+- **The counts are executed numbers**: 11 new JVM tests; strings
+  510/129 unchanged (zero new); versionCodes 35→36 / 11→12.
+  `progress.json` untouched (the F-12 convention; at merge time p10
+  gains the r40 evidence).
+
+### v2.12 (2026-11-04) --- the r39 ente-port exit round + the
   Phase 8/9 restructure
 
 - **Phase 5, the ente port, is code-side COMPLETE** (r39, branch
@@ -1618,7 +1664,10 @@ NLE. Bounded by ADR-0012.
 
 ### Phase 10 --- Hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9)
 
-**Status:** Planned. Since the 2026-11-04 maintainer directive this
+**Status:** IN PROGRESS --- the hardening round r40 AUTHORED (branch
+`tg-p10-hardening`, PR #117) and the two deferred sub-scopes' design
+contracts AUTHORED (PR #116, docs-only); the implementation rounds
+follow the merge order. Since the 2026-11-04 maintainer directive this
 phase ALSO carries the SKIPPED Phases 8 and 9 scopes as its two
 explicitly-deferred sub-scopes (below), so the post-Phase-7 work is
 ONE phase: harden first (the original tasks), then the deferred AI

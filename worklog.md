@@ -1187,3 +1187,79 @@
 * **CI cost**: one merge-gate run + the merge-triggered main run (the
   branch's PR), plus this docs push's main run. The cancelled
   accidental dispatch (run 41926680224) is the recovery noted above.
+
+### Run #15 — 2026-11-05 (Phase 10 opens: the r40 hardening round + the two deferred sub-scope contracts + the sandbox dashboard recovery)
+
+**Directive:** "Move to next phase works, use sub agents in parallel"
++ the progress-dashboard recovery (the sandbox reset had wiped the
+dashboard's page; the repo surfaces were unaffected).
+
+* **The parallel structure**: three workstreams ran concurrently --- (a)
+  the r40 hardening round, (b) the two Phase 10 deferred sub-scope
+  design contracts (docs-only), (c) the sandbox dashboard restore. (a)
+  and (b) ran as sub-agents in this window; both lost their tails to a
+  context deadline and were finished by hand from the surviving trees
+  (the hardening code + contract survived UNCOMMITTED on the branch;
+  the contracts survived as one commit). The r37 lesson applied in
+  reverse: the delivery record claimed `benchmark-scenarios.md` +
+  `device-matrix.md`, but the agent died before writing them --- the
+  claiming docs would have shipped without the artifacts. Both were
+  written before the push, and the delivery record now matches the tree.
+* **r40 (branch `tg-p10-hardening`, PR #117) --- the Phase 10 hardening
+  round, the roadmap's harden-first order as the FIRST Phase 10 round**:
+  the a11y sweep (17 heading anchors where ZERO existed: the 15
+  TopAppBar titles + the editor's top bar + the Albums/Settings section
+  headers; 8 polite live regions on the three selection app bars, the
+  four batch/progress dialogs, the viewer counter; the r39 Things-chip
+  remove button's 48dp floor restored by removing the 32dp shrink; the
+  29 decorative `contentDescription = null` occurrences re-inspected
+  and left), the boundedness audit B1-B9 (one fix --- the blocking
+  Phase 4 provider walk gains the pure `ScanWalkPolicy` cooperative
+  cancellation probe every 500 rows; a cancelled app-start scan no
+  longer walks the full volume holding the scan mutex; B2-B8 verified
+  bounded, B9 the whole-catalogue-per-volume load filed as F-23), the
+  source-scan conformance suite (`AccessibilityWiringTest`, the
+  PrivacyPolicyTest moduleFile pattern) pinning presence/absence per
+  the r37 lesson, zero new strings (the sweep wired the existing
+  `cd_*` copy; no strings_r40.xml --- an empty per-round file would be
+  a lying artifact), the contract `docs/phase-10/hardening.md`, and the
+  two planning deliverables as skeletons (`benchmark-scenarios.md`,
+  `device-matrix.md` --- every result cell human-only; Baseline
+  Profiles deferred until measured).
+* **The pre-push harness rebuilt** (the Run #13 spirit; the old
+  /tmp/ktool was gone with the sandbox): kotlinc 2.3.10 (the JetBrains
+  release zip), junit 4.13.2 + hamcrest 1.3 from Maven Central
+  (SHA-256-verified; junit via the Google mirror after a repo1 429).
+  **11 JVM tests green locally** (`OK (11 tests)`): ScanWalkPolicyTest
+  (4) + AccessibilityWiringTest (7); all 23 touched `.kt` pass
+  `kotlin_lex_check.py`. The a11y wiring itself is android-bound
+  Compose --- CI compiles what is there.
+* **The contracts (branch `tg-p10-contracts`, PR #116, docs-only)**:
+  `docs/phase-10/edit-v3-ai.md` (the Phase 8 task text verbatim: the
+  AI features as pixel stages between sharpen and the regions with
+  commit-time-only inference, four additive recipe containers ---
+  layer types 6-9 ---, bundled models under the unconditional editor
+  zero-INTERNET gate, ADR-0020's pin discipline as prior art with the
+  ADR-0010 revision's bundling rule kept, the opt-in face-retouch
+  consent machinery, the privacy suite extended per ADR-0010 §7) and
+  `docs/phase-10/video-editor.md` (the Phase 9 task text verbatim: the
+  pure export-plan model over the media3 seam, the ADR-0012
+  adjustment-boundary table, the never-modify export discipline;
+  selection criteria pinned instead of model names). The
+  implementation rounds follow the merge order: hardening green first.
+* **The bookkeeping**: roadmap v2.13 + the Phase 10 status line
+  (IN PROGRESS), tasks.md (the Phase 10 row + the restructure bullet),
+  follow-up.md (the r40 window section + F-23), this Run #15.
+  `progress.json` untouched (the F-12 convention; p10 gains the r40
+  evidence at merge time). The r40 device rows are human-only and ride
+  the checklist window.
+* **The sandbox dashboard**: the reset had reverted the dashboard page
+  to the default scaffold (the root cause of the "not working"
+  report); the surviving lib/card/API/service files were restored,
+  two latent bugs fixed (the unknown-status NaN in
+  `computeScopePercent`, the `STATUS_META` crash on an unknown
+  status), and the transport re-verified end-to-end (the socket push,
+  the PATCH round-trip, the scope independence, the mobile grid, the
+  sticky footer). Sandbox-only; the repo untouched by it.
+* **CI cost**: the merge-gate on PR #116 (green 3/3) + the merge-gate
+  on PR #117 + the main runs the two pushes trigger.

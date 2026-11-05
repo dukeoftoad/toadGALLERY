@@ -50,6 +50,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -209,6 +211,9 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_title),
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            // r40 a11y: the screen title is the heading anchor for the
+            // whole settings page.
+            modifier = Modifier.semantics { heading() },
         )
 
         // ---- Appearance (Ente-inspired; first section, the screenshot's order) ----
@@ -217,6 +222,7 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_section_appearance),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         Text(
             text = stringResource(R.string.settings_layout_title),
@@ -329,6 +335,7 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_section_access),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         Row(
             modifier = Modifier
@@ -414,6 +421,7 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_location_title),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         Text(
             text = stringResource(R.string.settings_location_body),
@@ -466,6 +474,7 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_recycle_bin_title),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // Count + size from the entry-time snapshot; the Trash screen
@@ -514,6 +523,7 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_vault_title),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             Row(
@@ -586,7 +596,9 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_ai_section),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.testTag("settings_ai_section"),
+            modifier = Modifier
+                .testTag("settings_ai_section")
+                .semantics { heading() },
         )
         Text(
             text = stringResource(R.string.settings_ai_section_body),
@@ -1178,6 +1190,7 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_progress_title),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         Row(
             modifier = Modifier
@@ -1202,6 +1215,7 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_about_title),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
         )
         // The same row shape as the recycle-bin entry (no subtitle: there
         // is no live state to narrate --- the About page carries it all).

@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.MediaStore
 import io.github.dukeoftoad.gallery.data.Favorites
 import io.github.dukeoftoad.gallery.data.media.identity.MediaIdentity
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The scan driver's row supply: which volumes exist right now and the
@@ -33,8 +34,16 @@ interface MediaScanRowSource {
      * image/video row the provider reports, in no guaranteed order (the
      * reconciler treats the list as a set keyed by [MediaScanRow
      * .localMediaKey]).
+     *
+     * r40 hardening: [isCancelled] is the cooperative cancellation probe
+     * the walk consults every [ScanWalkPolicy.CANCELLATION_CHECK_ROWS]
+     * rows (see [ScanWalkPolicy] for why a blocking cursor loop needs one).
+     * A positive probe aborts the walk with
+     * [kotlin.coroutines.cancellation.CancellationException] --- no partial
+     * catalogue write, the driver rethrows it untouched. The default is the
+     * historic no-op so the interface change stays source-compatible.
      */
-    fun scanVolume(volumeName: String): List<MediaScanRow>
+    fun scanVolume(volumeName: String, isCancelled: () -> Boolean = { false }): List<MediaScanRow>
 }
 
 /**
@@ -114,7 +123,7 @@ class AndroidMediaScanRowSource(
             listOf(PRE_Q_VOLUME_EXTERNAL)
         }
 
-    override fun scanVolume(volumeName: String): List<MediaScanRow> {
+    override fun scanVolume(volumeName: String, isCancelled: () -> Boolean): List<MediaScanRow> {
         val out = ArrayList<MediaScanRow>(256)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // The walk must never surface a TRASHED row into the catalogue:
@@ -145,6 +154,7 @@ class AndroidMediaScanRowSource(
                 // the floor of this leg --- the favorite flag.
                 includeDuration = true,
                 includeFavorite = true,
+                isCancelled = isCancelled,
                 out = out,
             )
         } else {
@@ -161,6 +171,7 @@ class AndroidMediaScanRowSource(
                 // with durationMs = 0 / isFavorite = false.
                 includeDuration = false,
                 includeFavorite = false,
+                isCancelled = isCancelled,
                 out = out,
             )
             walk(
@@ -174,6 +185,7 @@ class AndroidMediaScanRowSource(
                 // favorite column below Q.
                 includeDuration = true,
                 includeFavorite = false,
+                isCancelled = isCancelled,
                 out = out,
             )
         }
@@ -207,6 +219,11 @@ class AndroidMediaScanRowSource(
      * Transport-thin by design (ADR-0016): no interpretation of any value
      * happens here --- widths/durations coerce through the cursor's typed
      * getters exactly as `MediaStoreSource` reads them for the UI today.
+     *
+     * r40 hardening: [isCancelled] is consulted every
+     * [ScanWalkPolicy.CANCELLATION_CHECK_ROWS] rows inside the cursor loop
+     * ([ScanWalkPolicy] carries the rationale); a positive probe aborts the
+     * walk before a single row is returned, let alone written.
      */
     private fun walk(
         collection: Uri,
@@ -217,6 +234,7 @@ class AndroidMediaScanRowSource(
         includePerRowGeneration: Boolean,
         includeDuration: Boolean,
         includeFavorite: Boolean,
+        isCancelled: () -> Boolean,
         out: ArrayList<MediaScanRow>,
     ) {
         val projection = buildList {
@@ -306,7 +324,21 @@ class AndroidMediaScanRowSource(
             val bucketCol = cursor.getColumnIndexOrNull(MediaStore.MediaColumns.BUCKET_ID)
             val bucketNameCol =
                 cursor.getColumnIndexOrNull(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+            var rowsRead = 0
             while (cursor.moveToNext()) {
+                // r40 hardening: the cooperative cancellation probe (the
+                // ScanWalkPolicy KDoc carries the full rationale --- a
+                // blocking cursor loop must poll or cancellation waits
+                // until the whole volume has walked). The probe result
+                // throws CancellationException, the one exception the
+                // driver's per-volume catch rethrows, so the walk dies
+                // before any catalogue write.
+                rowsRead++
+                if (ScanWalkPolicy.cancellationDue(rowsRead) && isCancelled()) {
+                    throw CancellationException(
+                        "scan walk cancelled volume=$volumeName rows=$rowsRead",
+                    )
+                }
                 val id = cursor.getLong(idCol)
                 // The access handle (ADR-0006 URI-first): the walked
                 // collection Uri plus the row id --- the same resolution

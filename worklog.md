@@ -1696,3 +1696,61 @@ release)
   measurement on the same push. The engine-family reproducibility
   measurement is F-33; the Roborazzi baseline commit + verify activation
   is F-34; the device rows are F-35 (human-only, the standing directive).
+
+### Run #20 — 2026-11-05 (the r47 round: the UI/UX flaw sweep + the Roborazzi
+  toadFILES parity + the engine label, parallel agents + lead merge)
+
+- **The directive**: "All flaws in ui/ux designs need to fix in this round
+  and roborazzi feat should be used as like toadFILES REPO - checkout on my
+  same account. For app 'toadgallery with engine' app name should be
+  'toadGALLERY' use parallel sub agents for faster implementing."
+- **The execution shape**: lead-set-up worktrees (one per agent, zero
+  working-tree contention), four parallel implementation agents (task-1
+  Roborazzi parity; task-2 the engine label; task-3 the gallery-core UX
+  sweep; task-4 the edit-app UX sweep), then the lead merge window
+  (four --no-ff merges in task order) + the lead integration commit (this
+  entry, the CHANGELOG consolidation, the stale basic-flavor comment
+  refresh).
+- **Task-1 (Roborazzi toadFILES parity, `8ec87c2` on
+  `tg-r47-a-roborazzi`)**: the `io.github.takahirom.roborazzi` plugin
+  (1.77.0) is applied to `:apps:gallery` exactly like toadFILES applies
+  it; the r46-era plugin absence was re-verified against the merged HEAD
+  --- the three `srcDir` call sites were already in the AGP-9-safe
+  plain-`File` form (r46 rewrote them), so the plugin lands with comment
+  rewrites only; the capture output is pinned to
+  `src/test/resources/roborazzi`; `screenshots.yml` gains the mode input
+  (record/verify, default verify) with the loud honest-skip while no
+  baselines are committed; docs/phase-11/roborazzi.md rewritten to the
+  plugin-first truth; F-34 progressed (append-only note).
+- **Task-2 (the engine label, `2bbe4d5` on `tg-r47-b-label`)**: the
+  engine flavor's launcher label reads "toadGALLERY" now (the directive's
+  exact words); `.engine` applicationIdSuffix untouched (still a separate
+  install); docs/phase-11/apk-matrix.md + release-notes.md superseded
+  honestly; semantic/face keep their suffixed labels (unifiable on
+  request).
+- **Task-3 (the gallery UX sweep, `aee0b28` + `37a0026` on
+  `tg-r47-c-uiux-gallery`)**: one BLOCKER fixed (the viewer top bar
+  pushed Rename/Delete off-screen on 360dp phones --- nine 48dp buttons
+  in a non-scrollable Row; Edit/Rename/Delete now live behind an overflow
+  menu with all test tags preserved), plus the counter wrap, the collage
+  hardcoded light-gray dark-mode flash, the blank-on-error album covers,
+  the vault IME overlap, the trash confirm color idiom, and the collage
+  shape token. The r40-era semantics/touch-target work held up --- the
+  remaining logged items need device verification or a product decision
+  (recorded in the round's CHANGELOG bullet).
+- **Task-4 (the edit-app UX sweep, `5c90c4e` + `2ca88dd` on
+  `tg-r47-d-uiux-edit`)**: both editor surfaces gain edge-to-edge insets +
+  light status-bar icons (targetSdk 36 enforced edge-to-edge on API 35+
+  and the chrome drew under the system bars), the 48dp color-swatch
+  floor, and the HSL chips' export freeze; the mid-export cancel and the
+  baseline color scheme are logged (needs plumbing, not a blind patch).
+- **The validation limits (honest)**: no Android SDK in the sandbox ---
+  CI remains the judge (ADR-0013); the Kotlin files pass
+  `tools/kotlin_lex_check.py` (the build.gradle.kts "unterminated string"
+  report is the pre-existing `"""` false positive present at HEAD), the
+  workflow YAML parses, and no XML comment carries a `--` sequence.
+- **Not pushed (no credentials in this sandbox --- the standing F-10
+  reality)**: the branch `tg-r47-uiux-roborazzi` carries all four agent
+  branches + the lead integration commit; the push/PR/CI-poll step is the
+  maintainer's. No tag, no release cut this round (versionCode 38
+  unchanged).

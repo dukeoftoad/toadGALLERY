@@ -4,6 +4,20 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r47 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
+
+### Changed
+
+- **[gallery] The engine flavor's launcher label now reads
+  "toadGALLERY"** (the r47 round, branch `tg-r47-b-label`): the
+  full-engine build drops the "toadGALLERY Engine" suffix — the
+  `.engine` applicationIdSuffix already keeps it a separate install
+  beside the basic/semantic/face builds, so the user-visible name is
+  the canonical "toadGALLERY" for the engine build too. The
+  semantic/face flavors keep their suffixed labels (unify the same
+  way on request); no applicationId, versionCode, or build-config
+  change.
+
 ## [0.4.3-alpha] — unreleased (versionCode 35; gallery `0.4.3-alpha`)
 
 ### Added

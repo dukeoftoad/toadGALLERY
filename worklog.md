@@ -1696,3 +1696,119 @@ release)
   measurement on the same push. The engine-family reproducibility
   measurement is F-33; the Roborazzi baseline commit + verify activation
   is F-34; the device rows are F-35 (human-only, the standing directive).
+
+### Run #20 — 2026-11-05 (the r47 round: the UI/UX flaw sweep + the Roborazzi
+  toadFILES parity + the engine label, parallel agents + lead merge)
+
+- **The directive**: "All flaws in ui/ux designs need to fix in this round
+  and roborazzi feat should be used as like toadFILES REPO - checkout on my
+  same account. For app 'toadgallery with engine' app name should be
+  'toadGALLERY' use parallel sub agents for faster implementing."
+- **The execution shape**: lead-set-up worktrees (one per agent, zero
+  working-tree contention), four parallel implementation agents (task-1
+  Roborazzi parity; task-2 the engine label; task-3 the gallery-core UX
+  sweep; task-4 the edit-app UX sweep), then the lead merge window
+  (four --no-ff merges in task order) + the lead integration commit (this
+  entry, the CHANGELOG consolidation, the stale basic-flavor comment
+  refresh).
+- **Task-1 (Roborazzi toadFILES parity, `8ec87c2` on
+  `tg-r47-a-roborazzi`)**: the `io.github.takahirom.roborazzi` plugin
+  (1.77.0) is applied to `:apps:gallery` exactly like toadFILES applies
+  it; the r46-era plugin absence was re-verified against the merged HEAD
+  --- the three `srcDir` call sites were already in the AGP-9-safe
+  plain-`File` form (r46 rewrote them), so the plugin lands with comment
+  rewrites only; the capture output is pinned to
+  `src/test/resources/roborazzi`; `screenshots.yml` gains the mode input
+  (record/verify, default verify) with the loud honest-skip while no
+  baselines are committed; docs/phase-11/roborazzi.md rewritten to the
+  plugin-first truth; F-34 progressed (append-only note).
+- **Task-2 (the engine label, `2bbe4d5` on `tg-r47-b-label`)**: the
+  engine flavor's launcher label reads "toadGALLERY" now (the directive's
+  exact words); `.engine` applicationIdSuffix untouched (still a separate
+  install); docs/phase-11/apk-matrix.md + release-notes.md superseded
+  honestly; semantic/face keep their suffixed labels (unifiable on
+  request).
+- **Task-3 (the gallery UX sweep, `aee0b28` + `37a0026` on
+  `tg-r47-c-uiux-gallery`)**: one BLOCKER fixed (the viewer top bar
+  pushed Rename/Delete off-screen on 360dp phones --- nine 48dp buttons
+  in a non-scrollable Row; Edit/Rename/Delete now live behind an overflow
+  menu with all test tags preserved), plus the counter wrap, the collage
+  hardcoded light-gray dark-mode flash, the blank-on-error album covers,
+  the vault IME overlap, the trash confirm color idiom, and the collage
+  shape token. The r40-era semantics/touch-target work held up --- the
+  remaining logged items need device verification or a product decision
+  (recorded in the round's CHANGELOG bullet).
+- **Task-4 (the edit-app UX sweep, `5c90c4e` + `2ca88dd` on
+  `tg-r47-d-uiux-edit`)**: both editor surfaces gain edge-to-edge insets +
+  light status-bar icons (targetSdk 36 enforced edge-to-edge on API 35+
+  and the chrome drew under the system bars), the 48dp color-swatch
+  floor, and the HSL chips' export freeze; the mid-export cancel and the
+  baseline color scheme are logged (needs plumbing, not a blind patch).
+- **The validation limits (honest)**: no Android SDK in the sandbox ---
+  CI remains the judge (ADR-0013); the Kotlin files pass
+  `tools/kotlin_lex_check.py` (the build.gradle.kts "unterminated string"
+  report is the pre-existing `"""` false positive present at HEAD), the
+  workflow YAML parses, and no XML comment carries a `--` sequence.
+- **Not pushed (no credentials in this sandbox --- the standing F-10
+  reality)**: the branch `tg-r47-uiux-roborazzi` carries all four agent
+  branches + the lead integration commit; the push/PR/CI-poll step is the
+  maintainer's. No tag, no release cut this round (versionCode 38
+  unchanged).
+
+### Run #20, part 2 — 2026-11-05 (the device-screenshot evidence round: the
+  editor theme + the indexing-failure honesty, the credential arrives for the
+  push)
+
+- **The directive**: the maintainer supplied a fresh credential ("ghp_..."
+  --- masked here per the F-10 lesson; it lives ONLY in the sandbox git
+  config for this push, never in any committed file) and re-attached the
+  four r46 `toadGALLERY Engine` device screenshots the first r47 pass
+  lacked: "Same icon for edit and rename. Indexing are failing."
+- **The screenshot decode** (VLM-assisted, four images): the viewer shot
+  shows the two-identical-pencil Edit/Rename pair + the "7 of 120"
+  character-per-line counter wrap (both already closed by the r47 task-3
+  round --- the labeled overflow menu and the single-line counter); the
+  video-editor shot shows the M3 baseline PURPLE leaking through every
+  accent role (the task-4 logged item, promoted to a fix here); the
+  Settings shot shows the real complaint --- both AI queues failed with
+  the CIRCULAR fallbacks "Indexing failed: indexing failed" and
+  "Semantic indexing failed: semantic indexing failed"; the Photos shot
+  is a healthy grid.
+- **The indexing-failure root-cause analysis** (code-level, no device
+  available): the circular text is the workers' FALLBACK literals, which
+  can only fire when a worker reaches a FAILED terminal state with EMPTY
+  output data --- i.e. an uncaught throw escaped doWork (WorkManager
+  records no output for a thrown worker). Two escape seams found: (a)
+  `MlEngine.openFaceIndex`'s JNI partner `nativeStoreOpen` THROWS
+  IllegalStateException with the Rust message on a native open failure
+  (the JNI contract is "failure throws", not "returns false") --- the
+  worker's false-return guard never saw it, and since BOTH queues open
+  the SAME `face-index/ml-index.sqlite`, one failing store breaks both
+  cards identically, exactly the field evidence; (b) the setup-phase
+  calls (catalogue read, state-file load, the r24 `indexedFaceFileIds`
+  / r26 `clipIndexedFileIds` JNI reads --- the facade's own contract
+  propagates IllegalStateException) had no catch at all.
+- **The fix** (`FaceIndexWorker` + `ClipIndexWorker`): a seam-named
+  catch on the store open (the honest card message now carries the
+  engine's own cause: "face index store did not open: <message>"), a
+  whole-body catch-all with the SAME retry-then-fail-with-cause shape
+  the mid-run processBatch guard already had ("uncaught <class>:
+  <message>" after MAX_RUN_ATTEMPTS retries; CancellationException
+  rethrown --- user Cancel/Reset is not a failure), and the fallback
+  literals rewritten to "worker ended without a message (uncaught
+  termination)" so the circular text can never render again. The real
+  native cause rides the NEXT dogfood report (F-38).
+- **The editor theme fix**: the new `EditorTheme` (apps/edit/.../
+  EditorTheme.kt) --- the gallery's toad-green issue-#11 dark palette,
+  deliberately duplicated (the edit app stays a zero-dependency sibling
+  under the r46 APK-matrix separation; a shared theme module would
+  re-couple the builds), deliberately NOT dynamic color (the editor is
+  fixed-dark over the photo canvas by design; a wallpaper-derived scheme
+  could re-introduce any hue, purple included) --- now wraps both
+  `setContent` surfaces, replacing the bare `MaterialTheme {}` whose
+  baseline purple leaked through every accent role.
+- **The push + PR**: the r47 branch `tg-r47-uiux-roborazzi` (all four
+  agent branches + both lead integration commits) pushed with the fresh
+  credential; the PR is the r47 window's review surface. The first CI
+  runs also prove the Roborazzi plugin's script-classpath compile
+  (F-39). No tag, no release cut this round (versionCode 38 unchanged).

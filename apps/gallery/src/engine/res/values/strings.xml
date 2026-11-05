@@ -2,7 +2,11 @@
 <!-- r46 (the APK-matrix round): the full-engine flavor's launcher
      label (applicationIdSuffix .engine, installs separately like the
      edit app). Flavor res overrides the main source set's same-named
-     resource (the main value stays the fallback for the basic build). -->
+     resource (the main value stays the fallback for the basic build).
+     r47 (the maintainer's launcher-label directive): the user-visible
+     name is the canonical "toadGALLERY" for the engine build too.
+     The .engine applicationIdSuffix alone keeps it a separate
+     install, so the shared launcher name is unambiguous. -->
 <resources>
-    <string name="app_launcher_name">toadGALLERY Engine</string>
+    <string name="app_launcher_name">toadGALLERY</string>
 </resources>

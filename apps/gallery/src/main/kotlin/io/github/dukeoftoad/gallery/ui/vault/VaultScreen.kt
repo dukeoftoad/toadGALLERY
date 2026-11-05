@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -304,6 +305,10 @@ private fun VaultSetupBody(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            // r47 ux fix: pay the IME inset --- the app is edge-to-edge, so
+            // without this the keyboard covers the PIN fields (and the
+            // Create button) instead of the column shrinking above it.
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 24.dp),
     ) {
@@ -363,6 +368,9 @@ private fun VaultUnlockBody(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            // r47 ux fix: pay the IME inset (the setup column's twin) so the
+            // keyboard never covers the unlock PIN field or its button.
+            .imePadding()
             .padding(horizontal = 16.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.Center,
     ) {

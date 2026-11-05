@@ -497,3 +497,99 @@ and Roborazzi lands.
   stay human-only; that scope's percent stays 95). The
   `v0.4.5-alpha-r46` tag is cut FROM this truth commit so the shipped
   APKs' embedded progress snapshot reports the r46 truth.
+
+## The r47 window (2026-11-06) --- the Roborazzi pipeline goes plugin-first (toadFILES parity)
+
+Branch `tg-r47-a-roborazzi`, task-1 of the r47 split. The r46-era
+"deliberately ABSENT" Roborazzi gradle plugin verdict was re-examined at
+the artifact level and did not survive: the published 1.77.0 plugin's
+runtime graph (POM + gradle module metadata) carries NO AGP at all, every
+AGP class its bytecode references exists in this repo's AGP 9.2.1
+gradle-api jar, and the sibling toadFILES repo runs this exact plugin
+version green on a newer AGP line (9.5.0 / Gradle 9.8.2). Landed:
+
+- `gradle/libs.versions.toml`: the `roborazzi` PLUGIN alias
+  (`io.github.takahirom.roborazzi`, version.ref `roborazzi` = 1.77.0) is
+  declared; `apps/gallery/build.gradle.kts` applies it and adds a
+  `roborazzi { }` extension block pointing the capture output dir at
+  `apps/gallery/src/test/resources/roborazzi` (the committed-baseline
+  location; the build-dir default can never hold committed goldens).
+- The three `srcDir` call sites in `apps/gallery/build.gradle.kts` (the
+  withEngine jniLibs dir, the copyProgressJson generated assets dir, the
+  withBundledModels assets dir) were re-audited and STAY on the explicit
+  plain-File form (`...get().asFile`) --- the form AGP 9.2.1 accepts at
+  RUNTIME; the audit comments at all three sites now record the r47
+  verification.
+- `.github/workflows/screenshots.yml`: mode input (record/verify, default
+  verify), a committed-baseline count probe (`git ls-files`), a record
+  step (`recordRoborazziBasicDebug`) that also fires whenever zero
+  baselines are committed, a verify gate step
+  (`verifyRoborazziBasicDebug`) that runs once baselines exist, a LOUD
+  honest-skip step (step log + `$GITHUB_STEP_SUMMARY` + `::notice::`,
+  never continue-on-error) while they do not, and the artifact renamed
+  `roborazzi-baselines`. A PLAIN unit-test run no longer records ---
+  plugin-first parity with toadFILES.
+- The three screenshot tests + `docs/phase-11/roborazzi.md` updated to
+  the plugin-first truth (r46 history kept honest in sections 2 and 7).
+
+- **F-34 (PROGRESSED, still open)** --- the r47 round wires the gate:
+  the verify step exists in the workflow and activates itself the moment
+  PNGs are committed under `apps/gallery/src/test/resources/roborazzi/`.
+  What remains is exactly the human step the original F-34 text called
+  for: download the (renamed) `roborazzi-baselines` artifact from a green
+  record run, unzip at the repo root, commit the PNGs (the recipe is
+  docs/phase-11/roborazzi.md section 5). No workflow edit is needed to
+  activate the gate.
+
+## The r47 window, part 2 (2026-11-05) --- the device-screenshot evidence round
+
+The maintainer re-attached the four field screenshots from the r46
+`toadGALLERY Engine` build (plus a fresh credential for the push/PR the
+r46-era sandbox lacked). What they decoded to, and what shipped:
+
+- **The viewer screenshot** (two identical pencil icons for Edit/Rename +
+  the "7 of 120" counter wrapped one character per line down the edge):
+  both are ALREADY closed by the r47 task-3 viewer round (the labeled
+  overflow menu disambiguates Edit/Rename/Delete by text; the counter is
+  single-line + ellipsis). No further action.
+- **The video-editor screenshot** (the M3 baseline PURPLE accents): the
+  r47 task-4 log item ("the edit app's baseline color scheme") was
+  promoted to a fix this round --- the new self-contained `EditorTheme`
+  (toad-green dark palette, deliberately duplicated from the gallery's
+  issue-#11 tokens; no shared module, the APK-matrix separation keeps
+  the edit app a zero-dependency sibling; deliberately NOT dynamic
+  color, the editor is fixed-dark over the canvas by design) now wraps
+  both `setContent` surfaces.
+- **The Settings screenshot** ("Indexing failed: indexing failed" +
+  "Semantic indexing failed: semantic indexing failed"): the circular
+  text is the workers' FALLBACK literals, which fire only when a worker
+  reaches FAILED with EMPTY output data --- an uncaught throw escaping
+  `doWork`. Two escape seams found and closed: (a) `openFaceIndex` does
+  not only return false, the JNI `nativeStoreOpen` THROWS
+  `IllegalStateException` with the Rust message past the worker's
+  false-guard (ONE failing `ml-index.sqlite` open breaks BOTH queues
+  --- exactly the field evidence of both cards failing identically);
+  (b) the setup-phase calls (catalogue read, state-file load, the
+  r24/r26 JNI indexed-list reads) had no catch at all. Both workers now
+  carry a seam-named store-open catch + a whole-body retry-then-fail-
+  with-cause catch-all (CancellationException rethrown), and the
+  fallback literals now say "worker ended without a message (uncaught
+  termination)".
+- **F-38 (new, open)** --- the REAL native cause of the device's store
+  failure is still unknown from here (no device, no SDK): the r47 build
+  surfaces it by name on the Settings card ("face index store did not
+  open: \<engine cause\>" or "uncaught \<class\>: \<message\>"). The
+  next dogfood run of the r47 APKs reports it; diagnose from that text
+  (leading candidate: the device's `ml-index.sqlite` left in a state
+  the vendored migrations reject --- possibly from an earlier r2x
+  engine build; the honest Reset path may also need a store-level
+  clear, which is a design call once the message is in hand).
+- **F-39 (new, open)** --- the r47 branch also carries the Roborazzi
+  plugin application whose script-classpath compile is proven only on
+  CI (the r46 catches documented in docs/phase-11/roborazzi.md); the
+  first `screenshots.yml` run on the PR is the verdict. If the AGP
+  variant-API clash resurfaces, the documented escape hatch
+  (`android.sourceset.disallowProvider=false`) is set only on evidence.
+- **The Photos screenshot** showed a healthy grid (the stray vertical
+  "1 2 0" tile is the user's own earlier viewer screenshot displayed as
+  content --- not an app flaw); no action.

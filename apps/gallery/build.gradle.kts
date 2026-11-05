@@ -14,13 +14,36 @@ plugins {
     // KSP drives the Room schema compiler for the Phase 4 media catalogue
     // (ADR-0006 persistence layer); see the room-* entries in the catalog.
     alias(libs.plugins.ksp)
-    // NO Roborazzi gradle plugin (Phase 11, docs/phase-11/roborazzi.md
-    // section 7): the record flow rides plain unit-test runs and needs no
-    // plugin; the 1.77.0 plugin was tried and caught by the merge gate ---
-    // its classpath hard-errored this script's existing srcDir(Any) call
-    // sites --- so the plugin entry is deliberately absent. The
-    // verify/compare task pairs get their own round when an AGP-9-clean
-    // plugin story exists.
+    // Roborazzi gradle plugin (r47, docs/phase-11/roborazzi.md): the record
+    // AND verify task pairs (recordRoborazziBasicDebug /
+    // verifyRoborazziBasicDebug / compareRoborazziBasicDebug) now exist, and
+    // the pipeline matches the toadFILES repo pattern exactly (plugin-first,
+    // captures driven by the record task --- a PLAIN unit-test run skips
+    // them, roborazzi.test.record is false unless a roborazzi task is in the
+    // graph). The r46-era "plugin hard-errors this script's srcDir(Any) call
+    // sites" verdict was re-examined at the artifact level before this alias
+    // went back in: the published 1.77.0 plugin's runtime graph (POM + gradle
+    // module metadata) carries NO AGP at all, every AGP class its bytecode
+    // references exists in AGP 9.2.1's gradle-api jar, and toadFILES runs
+    // this exact plugin version green on AGP 9.5.0 / Gradle 9.8.2. The three
+    // srcDir call sites below stay on the explicit plain-File form, which is
+    // the one AGP 9 accepts at RUNTIME (see each site's comment).
+    alias(libs.plugins.roborazzi)
+}
+
+// --- Roborazzi capture output location (r47, docs/phase-11/roborazzi.md) ----
+// The plugin's default output dir is build/outputs/roborazzi --- a BUILD
+// directory, which can never hold committed baselines (build/ is gitignored
+// and wiped by every clean). The F-34 verify gate needs the goldens committed
+// under the module, so the output dir is pointed at the test resources tree:
+// the recordRoborazziBasicDebug task writes the PNGs STRAIGHT into the
+// directory they are committed from, the verifyRoborazziBasicDebug task reads
+// them back from the same place, and no copy step ever exists between a
+// recorded artifact and the committed baseline. The plugin resolves this
+// Provider lazily and passes it to the tests as the roborazzi.output.dir
+// system property --- no eager .get() on the script classpath.
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/resources/roborazzi"))
 }
 
 android {
@@ -581,9 +604,18 @@ if (withEngine) {
     }
     android {
         sourceSets {
-            // AGP 9 forbids Provider instances on the sourceSet API; resolve
-            // to a plain File at configuration time (the directory is created
-            // by buildRustEngine before this srcDir is ever read).
+            // AGP 9 srcDir audit (r47, verified against AGP 9.2.1's bytecode):
+            // the runtime form is the PLAIN FILE --- DefaultAndroidSource-
+            // DirectorySet.srcDir(Object) throws
+            // "You cannot add Provider instances to the Android SourceSet API"
+            // for a Provider argument unless the
+            // android.sourceset.disallowProvider=false escape hatch is set
+            // (it is NOT set here, so the lazy-Provider form stays out), and
+            // the Roborazzi plugin adds no AGP to the script classpath that
+            // would remove the srcDir(Any) overload either. Resolve the build
+            // dir to an explicit File at configuration time (the directory is
+            // created by buildRustEngine before this srcDir is ever read ---
+            // the preBuild dependency below covers freshness).
             getByName("main").jniLibs.srcDir(
                 layout.buildDirectory.dir("rust-jniLibs").get().asFile
             )
@@ -613,8 +645,9 @@ val copyProgressJson = tasks.register<Copy>("copyProgressJson") {
 }
 android {
     sourceSets {
-        // Same AGP 9 plain-File srcDir convention as the engine jniLibs and
-        // model-pack srcDirs (the task dependency below covers freshness).
+        // Same AGP 9 plain-File srcDir form as the engine jniLibs srcDir
+        // above (the audit comment there applies verbatim; the task
+        // dependency below covers freshness for this generated dir).
         getByName("main").assets.srcDir(progressAssetsDir.get().asFile)
     }
 }
@@ -664,8 +697,9 @@ if (withBundledModels) {
     android {
         sourceSets {
             // Same AGP 9 plain-File resolution as the engine jniLibs
-            // srcDir above (the directory is created by the workflow
-            // before this srcDir is ever read).
+            // srcDir above (the audit comment there applies verbatim; the
+            // directory is created by the workflow before this srcDir is
+            // ever read).
             getByName("main").assets.srcDir(
                 layout.buildDirectory.dir("bundled-models").get().asFile
             )

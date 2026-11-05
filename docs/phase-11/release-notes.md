@@ -25,7 +25,11 @@ then cut as the tag `v0.4.5-alpha-r46`. Three rounds, one release:
   `-PwithEngine`, then runs the **negative gate** (basic carries NEITHER
   native library; engine/semantic/face carry BOTH) before anything is
   staged. Gallery versionCode 38, versionName `0.4.5-alpha` (all four
-  flavors share it); per-flavor launcher labels distinguish the icons.
+  flavors share it); per-flavor launcher labels distinguish the icons
+  (superseded by the r47 round: the engine flavor's launcher label now
+  reads the plain "toadGALLERY" --- the distinct applicationIds already
+  keep the installs separate; semantic/face keep their suffixed
+  labels).
 - **The contract-discovery hardening (#123)** --- the field bug where BOTH
   r45 APKs were installed and the gallery's Edit button still refused with
   the "outdated for this gallery contract" narration is fixed at its

@@ -47,13 +47,18 @@ class AccessibilityWiringTest {
      * Unit-test working dir is the module dir under Gradle (apps/gallery)
      * but is the repo root under the pre-push harness; be tolerant of both
      * (the PrivacyPolicyTest moduleFile pattern, generalized to both apps).
+     * The THIRD candidate is the sibling-module case --- the gallery test
+     * task locating the EDIT app's file (apps/gallery cwd -> apps/edit);
+     * the merge-gate's second catch: the first draft had
+     * `cwd.parent + apps/<app>/...`, which resolves `apps/apps/edit/...`
+     * and never exists.
      */
     private fun sourceFile(app: String, moduleRelative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         val candidates = listOf(
             File(cwd, moduleRelative),
             File(cwd, "apps/$app/$moduleRelative"),
-            File(cwd.parentFile, "apps/$app/$moduleRelative"),
+            File(cwd.parentFile, "$app/$moduleRelative"),
         )
         return candidates.firstOrNull { it.exists() }
             ?: error(

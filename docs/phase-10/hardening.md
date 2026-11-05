@@ -260,3 +260,30 @@ The round landed every decision above, with these executed facts:
 
 *The r40 device rows (§"Device checklist rows" above) are human-only.
 `progress.json` stays untouched until merge per the F-12 convention.*
+
+---
+
+## Correction note (the merge-gate's two catches, 2026-11-05)
+
+The first push failed the merge-gate twice, both catches real and both
+fixed before any merge:
+
+1. **The compile catch** (`MediaScanDriver.kt:436`): the probe lambda
+   called `currentCoroutineContext()` --- a SUSPEND function --- inside a
+   non-suspend lambda; the context is now captured once in the suspend
+   `rescanVolume` and the captured `Job` consulted live (`isActive`
+   flips false on cancellation, which is the whole probe). The r36
+   lesson again: the harness lex-checks android-bound files but cannot
+   compile them; CI is the compile gate.
+2. **The conformance-suite cwd catch**
+   (`AccessibilityWiringTest.sourceFile`): the third path candidate
+   resolved `apps/apps/edit/...` --- a path that never exists --- so the
+   suite's editor test threw under the Gradle module cwd (the CI test
+   task's cwd) while passing under the harness's repo-root cwd. The
+   candidate is now the sibling-module form (`cwd.parent +
+   <app>/<moduleRelative>`), and the suite was re-run under BOTH cwds
+   locally (module cwd: `OK (7 tests)`; repo-root harness: ALL GREEN)
+   before the re-push.
+
+Both fixes are in the round's commit history on `tg-p10-hardening`;
+the delivered counts (11 tests) are unchanged.

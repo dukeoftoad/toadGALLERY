@@ -346,13 +346,14 @@ completion, branch `tg-r39-ente-exit`)
   new-app merge request has not been opened; the submission process and
   the verification loop (`fdroid checkupdates`/`lint`/`scanner`/`build`)
   are documented in `docs/phase-11/fdroid-metadata.md`.
-- **F-30 (new, open)** — the reproducible-build verification is DESIGN
-  INTENT until the first measurement: `reproducible-build.yml` runs on
-  every `v*` tag push, and the `v0.4.5-alpha-r45` push is the first
-  real measurement; the honest status line in
-  `docs/phase-11/reproducible-builds.md` must be updated with the
-  measured verdict (byte-reproducible / content-reproducible /
-  not-reproducible) once the run lands.
+- **F-30 (CLOSED, 2026-11-05)** — the first measurement is IN and it
+  is the strongest verdict: the `v0.4.5-alpha-r45` tag push measured
+  **BYTE-REPRODUCIBLE** (run 42002437535; the identical-tree pre-flight
+  run 42000127417 at the same SHA measured the same) --- all four pairs
+  (both unsigned release APKs + both mapping.txt files) byte-identical
+  across two clean `--no-build-cache` builds. The honest status line in
+  `docs/phase-11/reproducible-builds.md` §4 now records the measured
+  fact; every future `v*` tag re-measures it.
 - **F-31 (new, open)** — the edit app's release variant is minified for
   the FIRST time in r43 (`proguard-rules.pro` is deliberately minimal:
   the ORT JNI keep + the two documented `-dontwarn` shims); any R8

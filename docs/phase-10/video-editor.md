@@ -397,7 +397,7 @@ TalkBack-over-video row. The export-time full-quality behavior on
 device codecs is bounded by the pinned media3 version and is the
 device rows' to verify.
 
-**The r42 merge-gate catches (five, recorded):** (1) the first run failed
+**The r42 merge-gate catches (six, recorded):** (1) the first run failed
 at `:apps:edit:compileDebugKotlin` on a broken `apps/edit/build.gradle.kts`
 --- a dangling fragment of git's conflict-marker label left inside the
 file by the rebase resolution (the versionCode conflict r41/r42); the
@@ -434,3 +434,14 @@ marker `Media3VideoExportRunner` already opts into at the class level. The
 class-level `@androidx.annotation.OptIn` now names BOTH markers explicitly;
 the lint message itself names the marker class, so the fix adds it verbatim
 --- nothing guessed.
+
+The sixth iteration peeled the next layer: with compile and lint green, the
+unit suite ran for the first time and the r41 `EditAiPrivacyScanTest`'s
+host-literal scan caught the video round --- the KDoc example `"0.50x"`
+(the `String.format "%.2fx"` speed-label shape) is a dot-joined quoted
+literal, and the scan's own documented protocol applies: a genuinely new
+dotted NON-host literal joins the deliberate set (alongside the asset file
+names and the u2netp `input.1`), with the reason recorded in the set's
+comment. A UI label, never a host; the scan re-verified locally against
+the whole main tree (the standalone kotlinc run, all three tests green)
+BEFORE the push this time.

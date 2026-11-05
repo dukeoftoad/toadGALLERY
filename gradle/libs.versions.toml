@@ -152,7 +152,7 @@ compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 # Screenshot testing (Phase 11, docs/phase-11/roborazzi.md): JVM unit-test
 # classpath ONLY --- zero runtime APK surface, the ADR-0014 gate is
 # unaffected. roborazzi-compose carries the Compose capture surface
-# (captureRoborazzi on SemanticsNodeInteraction); the bare roborazzi
+# (captureRoboImage on SemanticsNodeInteraction); the bare roborazzi
 # artifact carries the core image-diff/record engine the plugin's
 # record/verify/compare tasks drive.
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
@@ -177,6 +177,6 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 # record/verify/compare gradle task pairs for the unit-test variants (with
 # the flavor matrix: recordRoborazziBasicDebug / verifyRoborazziBasicDebug
 # / compareRoborazziBasicDebug). A PLAIN unit-test run records by default
-# (captureRoborazzi() records when no verify flag is set), so the record
+# (captureRoboImage() records when no verify flag is set), so the record
 # half works even before the verify tasks are ever invoked.
 

@@ -142,11 +142,19 @@ honestly), mapping.txt byte-identical".
   the F-Droid comparison target (§1).
 - **`mapping.txt` must byte-match** --- R8 is deterministic given the
   same commit + toolchain; a mapping mismatch is a finding, never noise.
-- At the time of this doc (r44, before the r45 release round cuts
-  `v0.4.5-alpha-r45`), the workflow has landed with the r43 round but has
-  **not yet run on a release tag** --- the first measurement is that
-  tag's push. Until then the claim is design intent backed by the pinned
-  toolchain, stated as such.
+- **The first measurement is IN (2026-11-05, the r45 close-out): the
+  `v0.4.5-alpha-r45` push measured BYTE-REPRODUCIBLE** --- run
+  `42002437535` on the tag (and the identical-tree pre-flight run
+  `42000127417` at the same SHA before the tag was cut): all four
+  pairs --- the gallery and edit unsigned release APKs AND both
+  `mapping.txt` files --- byte-identical across two clean
+  `--no-build-cache` builds. The claim is measured fact at this tag,
+  not design intent; every future `v*` tag re-measures it.
+- The historical note, kept honestly: the workflow landed with the r43
+  round and first ran red --- not on reproducibility but on the build
+  itself (the lintVital-family implicit-dependency catches, recorded in
+  `follow-up.md`'s Phase 11 window); the green path was restored by the
+  catch-fix commits before the tag was cut.
 
 ## 5. Local verification (the third-party recipe)
 

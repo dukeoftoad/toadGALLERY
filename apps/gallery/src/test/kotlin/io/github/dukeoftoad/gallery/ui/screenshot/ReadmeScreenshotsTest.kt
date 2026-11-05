@@ -3,7 +3,7 @@ package io.github.dukeoftoad.gallery.ui.screenshot
 import android.Manifest
 import android.content.ContentProvider
 import android.content.ContentValues
-import android.content.Cursor
+import android.database.Cursor
 import android.content.pm.PackageManager
 import android.database.MatrixCursor
 import android.graphics.Bitmap
@@ -137,8 +137,8 @@ class ReadmeScreenshotsTest {
         val request = Shadows.shadowOf(compose.activity).lastRequestedPermission
         compose.activity.onRequestPermissionsResult(
             request.requestCode,
-            request.permissions,
-            IntArray(request.permissions.size) { PackageManager.PERMISSION_GRANTED },
+            request.requestedPermissions,
+            IntArray(request.requestedPermissions.size) { PackageManager.PERMISSION_GRANTED },
         )
         // The grid state tag (photos_state_grid) is the shell's documented
         // state-tag scheme: it composes when the generation publishes Ready

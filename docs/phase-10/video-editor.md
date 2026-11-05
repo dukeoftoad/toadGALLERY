@@ -1,16 +1,14 @@
 # The Lightweight Video Editor — the Phase 10 sub-scope B design contract
 # (folded from Phase 9; trim, mute, slow-mo, frame extraction, GIF/WebP)
 
-**Status:** CONTRACT-ONLY (2026-11-05). This round delivers **the design
-only** — no code, no tests, no dependency changes ride it. The
-implementation rounds that consume this contract are the Phase 10 rounds
-after the hardening block and after sub-scope A (the Phase 10 ordering:
-harden first, then the AI editing sub-scope, then this one); their
-r-round naming and tasks.md wiring are a parallel track this doc does
-not touch. This contract decomposes the Phase 9 task text **verbatim**
-(carried unchanged under Phase 10's deferred sub-scope B) and is
-**bounded by ADR-0012** — it never shrinks the scope, and it never
-exceeds it.
+**Status:** CONTRACT DELIVERED (2026-11-05) + IMPLEMENTED by the r42
+round (the same day; the design's own delivery record stands unchanged
+below). The r42 delivery record — what shipped, the round-pinned caps,
+the recorded decisions, and the human-only rows left as-is — is the
+final section of this doc. The contract decomposed the Phase 9 task
+text **verbatim** (carried unchanged under Phase 10's deferred sub-scope
+B) and was **bounded by ADR-0012** — it never shrank the scope, and it
+never exceeded it.
 
 ---
 
@@ -249,6 +247,17 @@ performance numbers, and every device row below.
 - The provenance ledger §5 stays empty of new code-level adaptations
   (media3 is a dependency, not adapted code).
 
+**r42 record:** both artifacts landed at the pinned catalog version
+1.11.1 (`media3-transformer`, `media3-effect`), each with its catalog
+narration row (the exoplayer/ui precedent): Apache-2.0, verified against
+the Google Maven POM + the 1.11.1 release notes, minSdk 21 (the
+project's 26 sits above it), NO declared permissions at all --- so the
+edit app's stricter no-allowlist merged-manifest INTERNET gate stays
+green with these artifacts present. The GIF LZW encoder and the animated
+WebP muxer are PROJECT-AUTHORED pure Kotlin (media3 ships no such
+encoders); §5 stays empty (media3 is a dependency, not adapted code).
+The provenance ledger §5 stays empty of new code-level adaptations.
+
 ---
 
 ## Delivery record (this contract round): the design only
@@ -310,3 +319,129 @@ naming left to the roadmap wiring):**
 - **Documentation:** the ADR-0012 open questions' answers recorded; the
   adjustment-boundary table and the hosting/launch decisions land in
   the round's docs and, where they change them, the architecture docs.
+
+---
+
+## Delivery record (the r42 implementation round): the lightweight video editor
+
+Delivered in this round (the tree is the record; every claim below is in
+the diff):
+
+- **The pure `:shared:video-edit` module (the Phase 9 `shared/`
+  deliverable), the ExportPlan pattern video-shaped, all JVM-tested:**
+  the validated `VideoEditPlan` (the trim `TimeRange` matrix; the sorted
+  non-overlapping 0.25x..2x speed segments with the monotonicity rule +
+  the derived output duration `Σ length/factor`; the `audioTrackPresent`
+  input fact where mute on a no-audio clip is the recorded `RECORDED_NO_OP`),
+  `FrameExtractPlan`, `AnimationExportPlan` (the deduplicated frame count
+  + the byte-budget preflight refusing BEFORE any render), the nine-row
+  ADR-0012 `VideoAdjustProjection` (the table-conformance test pins
+  exactly the nine YES rows; HSL/sharpen/LUT/regions/geometry/AI each
+  cited off-video v1), the `VideoOutputPolicy` non-destructive
+  MediaStore policy (INSERT only, IS_PENDING on Q+, the failed-write
+  pending-row cancel, the per-format "-edit" naming rule; no
+  replace-original path exists), the PROJECT-AUTHORED GIF LZW encoder +
+  animated WebP muxer (media3 ships no such encoders; pure Kotlin, byte-
+  exact tests), and the `VideoExportRunner` seam + coordinator.
+- **The media3 surface at the pinned 1.11.1** (the hosting decision
+  below): `Media3VideoExportRunner` is the ONLY file whose export path
+  touches Transformer (the timeline runs chain as `EditedMediaItem`s;
+  `SpeedParameters` carries each run's factor; STRIP_AUDIO maps to
+  `setRemoveAudio`; progress polled via `getProgress`; cancellation
+  owns the no-ERROR_CODE_CANCELED mapping honestly) and
+  `VideoGlEffects`/`VideoAdjustEffect` feed the SAME shader/uniform
+  struct the ExoPlayer preview consumes (one model, two realizations,
+  no drift); a neutral parameter set attaches NO effect at all (an
+  exact identity, not a no-op pass).
+- **The launch path (open item 5, decided):** the ADDITIVE
+  editor-contract v2 extension (the optional media-kind extra; absent
+  = image so the v1 wire stays byte-identical for image launches; an
+  unknown value is a contract violation, never a silent fallback),
+  consumed by the gallery's kind-aware `resolveEditor` (an image-era
+  editor contributes no hit to the video query, so the caller narrates
+  the honest cannot-edit-video path instead of mis-launching) and the
+  edit app's second exported activity (`.video.VideoEditActivity`,
+  filtered on the contract action + video mimes, meta-data contract
+  version 2).
+- **The surface (edit APK, `VideoEditActivity`):** trim/mute/speed
+  controls (whole-clip factor previewed exactly via playback speed; the
+  optional region honestly noted as export-applied), the nine
+  adjustment sliders live-previewed through the GL effect, the
+  frame-extract + animation sheets (the preflight refusal shown
+  honestly BEFORE any render), the honest "no audio track" note instead
+  of a dead toggle, honest progress + cancellation, the r32 a11y
+  conventions throughout (TalkBack names + live values, 48dp targets,
+  the no-audio note announced). Strings: `strings_r42.xml` in BOTH apps.
+- **The round-pinned caps (open item 6), documented not invented:**
+  animation target width 64..1280 px, fps 2..30, the 32 MiB byte-budget
+  preflight, MP4 output container, the v1 input set MP4 / MOV / 3GP
+  (H.264/HEVC + AAC; what the media3 pipeline honestly re-encodes
+  on-device). The long/4K/HDR performance budget stays a human-only
+  device row (no number invented here).
+- **ADR-0012's open questions, answered and recorded (open items 1+2):**
+  Transformer at 1.11.1 supports the pipeline on minSdk 26 (minSdk 21+,
+  verified against the release notes before the export work leaned on
+  it); the hosting is the EDIT APK (the recorded lean; the measured APK
+  size delta rides the human-only device rows; the catalog/POM facts
+  are recorded in the rows above).
+- **The pre-push harness** (`/tmp/ktool/verify-r42.sh`, the Run #13
+  spirit): kotlinc 2.3.10 over the round's pure subset (the contract
+  module + the video-edit module + the conformance suite), JUnit green
+  **156 tests**, the lex check over every touched `.kt`, both strings
+  files parsed, zero new permission lines in the manifest diff.
+
+**Human-only rows left as-is (never CI-faked):** the long-video (10+
+min) / 4K / HDR / no-audio device matrix, the measured APK size delta,
+the Transformer-on-real-codecs behavior, the airplane-mode row, the
+TalkBack-over-video row. The export-time full-quality behavior on
+device codecs is bounded by the pinned media3 version and is the
+device rows' to verify.
+
+**The r42 merge-gate catches (six, recorded):** (1) the first run failed
+at `:apps:edit:compileDebugKotlin` on a broken `apps/edit/build.gradle.kts`
+--- a dangling fragment of git's conflict-marker label left inside the
+file by the rebase resolution (the versionCode conflict r41/r42); the
+fragment is gone and the real sequence stands (13 r41 / 14 r42). The
+local lex tool had flagged the file and the flag was initially dismissed
+--- the `.kts` files ride Gradle/CI, and CI caught it; the lesson (the
+r37 one, again) is recorded here. (2) The re-run then caught
+`MediaMetadataRetriever.METADATA_KEY_FRAMERATE` --- a constant that does
+NOT exist at any API level (the retriever has no frame-rate key at all);
+the frame-rate fact now rides the video track's MediaFormat read through
+MediaExtractor (`KEY_FRAME_RATE`, best-effort nullable --- the animation
+plan's effectiveFps rides the honest unknown when absent). The honest
+source was checked against the AOSP MediaMetadataRetriever key list, not
+guessed.
+
+The third iteration fixed the helper's own setDataSource call: MediaExtractor
+has no (Context, Uri) overload (that one belongs to the retriever) --- the
+content resolver now opens the read-only source's asset file descriptor and
+the extractor reads that descriptor. Every catch above was verified against
+the real SDK surface (AOSP lists + the API docs), not guessed.
+
+The fourth iteration passed compileDebugKotlin and was caught by lintDebug:
+`Bitmap.CompressFormat.WEBP_LOSSLESS` is API 30 (the min is 26) --- the
+animated-WebP frame encode now guards on the same SDK_INT >= R fact the
+preflight's webpLosslessSupported flag already carries, riding lossy WebP
+at quality 100 below R (the honest degradation, recorded in the code
+comment).
+
+The fifth iteration was caught by lintDebug again, on the runner seam:
+media3 1.11.1's speed surface --- `EditedMediaItem.Builder.setSpeed(SpeedParameters,
+boolean)` and the `SpeedParameters` constructor it takes --- carries media3's
+SEPARATE `@ExperimentalApi` opt-in marker, not (only) the `@UnstableApi`
+marker `Media3VideoExportRunner` already opts into at the class level. The
+class-level `@androidx.annotation.OptIn` now names BOTH markers explicitly;
+the lint message itself names the marker class, so the fix adds it verbatim
+--- nothing guessed.
+
+The sixth iteration peeled the next layer: with compile and lint green, the
+unit suite ran for the first time and the r41 `EditAiPrivacyScanTest`'s
+host-literal scan caught the video round --- the KDoc example `"0.50x"`
+(the `String.format "%.2fx"` speed-label shape) is a dot-joined quoted
+literal, and the scan's own documented protocol applies: a genuinely new
+dotted NON-host literal joins the deliberate set (alongside the asset file
+names and the u2netp `input.1`), with the reason recorded in the set's
+comment. A UI label, never a host; the scan re-verified locally against
+the whole main tree (the standalone kotlinc run, all three tests green)
+BEFORE the push this time.

@@ -96,7 +96,20 @@ object EngineSessionGuard {
 
     /** ENQUEUED/RUNNING work across [chains]; a query fault counts as live. */
     private fun liveChainCount(context: Context, chains: List<String>): Int {
-        val wm = WorkManager.getInstance(context)
+        val wm = try {
+            WorkManager.getInstance(context)
+        } catch (e: Exception) {
+            // WorkManager not initialized (the Roborazzi/JVM suites never
+            // install one) or the WM service faulted: assume EVERY chain
+            // live. The guard's only decisions are "skip this teardown"
+            // and "keep waiting" --- both are safe under a wrong "live"
+            // (a skipped close leaks nothing; every engine user re-opens
+            // lazily), and both are UNSAFE under a wrong "idle" (an
+            // unconditional close is exactly the mid-batch kill F-38
+            // exists to prevent).
+            DiagLog.e(TAG, "WorkManager unavailable; assuming all ${chains.size} chains live: ${e.message}")
+            return chains.size
+        }
         var live = 0
         for (name in chains) {
             try {

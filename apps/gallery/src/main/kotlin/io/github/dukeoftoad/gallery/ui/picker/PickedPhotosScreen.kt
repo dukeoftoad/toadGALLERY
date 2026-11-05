@@ -14,6 +14,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.ui.StateScreen
@@ -62,6 +64,7 @@ fun PickedPhotosScreen(
                         text = stringResource(R.string.picked_title),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
                     )
                 },
                 navigationIcon = {

@@ -74,6 +74,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -1575,7 +1576,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 text = stringResource(R.string.editor_app_name),
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
+                // r40 a11y: the editor's title is the heading anchor (the
+                // gallery screens' r40 heading convention, editor side).
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { heading() },
             )
             TextButton(
                 onClick = {

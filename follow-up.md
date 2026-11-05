@@ -237,3 +237,24 @@ completion, branch `tg-r39-ente-exit`)
 - **Note** — `progress.json` deliberately NOT updated for r39 (the
   F-12 convention: it records MERGED truth; the p5 evidence + the
   p8/p9/p10 consolidation update at merge time).
+
+## 2026-11-05 — the Phase 10 hardening round r40 (branch `tg-p10-hardening`)
+
+- **The directive**: "Move to next phase works, use sub agents in
+  parallel" --- Phase 10 begins (harden first), and the sandbox's live
+  progress dashboard was restored + fixed in the same window (a sandbox
+  reset had wiped its page; the repo surfaces are unaffected).
+- **F-23 (new, open)** — the boundedness audit's B9 watch item:
+  `MediaScanDriver.rescanVolume` loads the WHOLE catalogue
+  (`catalogue.recordsMap()`) into memory once per rescanned volume
+  before filtering by volume --- an accepted one-time cost on the
+  documented design, but a 50k-library memory-bounds watch item. The
+  fix shape (a per-volume read path) is a catalogue API change, not
+  hardening; it rides a later Phase 10 window with the benchmark
+  evidence in hand (`docs/phase-10/benchmark-scenarios.md` S1/S3).
+- **The two planning deliverables are skeletons**: `benchmark-scenarios.md`
+  and `device-matrix.md` carry structure + definitions only; every
+  result cell is human-only (the standing directive). The Baseline
+  Profiles decision is deferred until the S1/S2/S6 baselines exist.
+- **The r40 a11y device rows are human-only** and ride the checklist
+  with the next docs/merge window (the §22--§27 pattern).

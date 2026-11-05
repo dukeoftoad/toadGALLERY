@@ -1279,3 +1279,284 @@ dashboard's page; the repo surfaces were unaffected).
   evidence), the project percent 79 → 85 (weights validated = 100);
   roadmap v2.13 at merged truth; tasks.md Phase 10 row + the
   restructure bullet; follow-up.md's r40 section marked MERGED.
+
+### Run #16 — 2026-11-05 (the r41 Edit v3 AI round MERGED; the r42
+video-editor round opened and left mid-flight at the window's context
+deadline)
+
+**Directive:** "Complete the remaining stages under phase 10" --- the
+stated implementation order executed (the hardening was already
+merged; the Edit v3 AI round, then the video editor): the sub-scope A
+round merged in this window; the same window opened the r42 sub-scope
+B round and carried it to four-fixed-of-five merge-gate catches
+before the deadline closed it.
+
+* **r41 (branch `tg-p10-ai`, PR #118) --- the Phase 10 sub-scope A
+  round, the deferred Phase 8 scope (Edit v3 on-device AI) delivered
+  end to end**: the four features as PIXEL STAGES between sharpen and
+  the regions, the tail grown once (erase -> sky -> bokeh -> retouch ->
+  the regions, which stay FINAL --- a mosaic over a retouched face is
+  still a mosaic). Magic erase = the third exclusive paint mode (the
+  painted seed -> u2netp refinement -> MI-GAN fill, persisted as ONE
+  artifact pair per layer); sky replacement (the shared u2netp
+  saliency + five PROJECT-AUTHORED parametric skies --- no third-party
+  sky bitmaps, the round's budget decision against decision 6's
+  "bundled CC0 sky set" phrasing --- plus the ImportedFrameStore-
+  contract import chip and the cover-crop blend at opacity); bokeh
+  (Depth-Anything-V2-Small int8 ONCE at commit, then the strength +
+  focal sliders re-render from the quantized depth artifact, no
+  re-inference); the OPT-IN face retouch (YuNet localization + the
+  smoothing/eye/slim kernels, the first consent dialog, the settings
+  kill-switch sheet --- the editor's first Settings surface, one row
+  --- and the stage refusing under consent-off even with a restored
+  sidecar, the SemanticContentPolicy consent-off precedent). Inference
+  runs at COMMIT time only, never in the render loop; the `edit-ai/`
+  artifact store rides the sidecar discipline (atomic tmp-then-rename
+  writes, content-hash keys, append-only per session, the export
+  sweep); layer types 6-9 under the verbatim tolerance contract; the
+  four ONNX graphs ship in `assets/models` at **61,613,133 bytes**
+  (the provenance sheet's stated total carried a 500-byte arithmetic
+  slip --- the pinned literal is the TRUE sum, and `EditAiManifestTest`
+  asserts sum == literal so a slip cannot ride again) through ONNX
+  Runtime 1.31.1 as the prebuilt-AAR seam (NNAPI-first, CPU fallback,
+  no editor NDK/Rust build surface; the honest note that the int8
+  depth graph's DynamicQuantizeLinear/MatMulInteger ops largely
+  resolve to the CPU provider --- the fallback is EXPECTED there); the
+  privacy suite extended (`EditAiPrivacyScanTest`: no host literals,
+  no network classes, the ORT surface behind the facade; the gate
+  task's comment narrates the models fact, its logic unchanged). Ten
+  JVM test families land beside them (the containers, the kernels, the
+  seam over fakes, the manifest, the store, the skies, the imports,
+  the consent, the privacy scan, the nine-family undo/redo capstone).
+  On-host validation: all four graphs loaded and executed through ORT
+  1.31.1 on the CPU execution provider over zeros/constant inputs,
+  every output shape matching the pinned graph facts. The
+  preprocessing conventions were FETCHED AND CITED, never invented
+  (the dav2 preprocessor fetch was rate-limited at round time ---
+  recorded from the model card + README, unverified against the
+  processor source; the yunet per-tensor scaling is recorded
+  unverified against the FaceDetectorYN C++ source and flagged as the
+  device rows' first quality suspect). Editor `versionCode 13`
+  (`0.4.8-edit-alpha`). The device rows stay human-only.
+* **The two r41 merge-gate catches (both real, both fixed on the
+  branch)**: (1) run 41976386567 failed `gateDebugInternetPermission`
+  --- the merged manifest declared `android.permission.INTERNET`,
+  because the onnxruntime-android AAR's OWN manifest carries the
+  declaration (sample-convenience packaging) and the merge inherited
+  it; the round's "the runtime declares none" narration was WRONG. The
+  honest fix is a HARD STRIP, never an allowlist: the edit app's
+  manifest now carries `tools:node="remove"` on the INTERNET
+  permission, so the MERGED manifest the gate reads --- and the device
+  installs --- declares no INTERNET at all (the app cannot even open a
+  socket); the strip directive requests nothing and grants nothing,
+  the gate's logic is unchanged, and the conformance suite's
+  permission pins were rewritten to the new truth (the only real
+  permission request stays the pre-Q capped legacy write). (2) The
+  same run's `:apps:edit:compileDebugKotlin` surfaced 16 unresolved
+  references, both clusters real: the ORT 1.31.1 Java surface is NOT
+  Map-like the way the runtime file assumed --- `OrtSession.Result`
+  is `Iterable<Map.Entry<String, OnnxValue>>` with `get(String)`
+  returning `Optional<OnnxValue>` --- so the `result.keys` /
+  `result.get(X) ?:` / `.getValue()` shapes are now the entry-iteration
+  + `orElse(null)` forms (12 sites + the output-name sort for u2netp's
+  fused d6 map), plus two Kotlin local-visibility orderings in the
+  composable (`uiScope` declared below its first AI use;
+  `ensureSkyMaskKey` referencing sibling `detectSkyMaskKey` declared
+  after it --- both reordered, declarations above uses). The
+  authoritative API was fetched from the upstream Java sources
+  (OrtSession.java/OnnxValue.java) rather than guessed; the files stay
+  android-bound in this sandbox, so the merge-gate CI is their only
+  compile gate, and it caught both.
+* **The merge (2026-11-05)**: PR #118 squash `73cfb1b` (full
+  `73cfb1bff7a656dde68de34aef95966c2dc26d86`) --- merge-gate run
+  41978641679 GREEN. The two catches' correction notes are in the r41
+  delivery record (`docs/phase-10/edit-v3-ai.md`). The r41 merge-time
+  truth updates did NOT happen in this window --- see the close below;
+  they ride the next window's truth commit (the F-12 convention
+  honored, just late).
+* **r42 opened in the same window (branch `tg-p10-video`, PR #119) ---
+  the Phase 10 sub-scope B round authored, the deferred Phase 9
+  scope**: the pure `:shared:video-edit` module (the validated
+  `VideoEditPlan` --- the trim `TimeRange` matrix, the sorted
+  non-overlapping 0.25x..2x speed segments with the monotonicity rule
+  and the derived output duration `Σ length/factor`, the
+  `audioTrackPresent` input fact where mute on a no-audio clip is the
+  recorded `RECORDED_NO_OP` --- plus `FrameExtractPlan`,
+  `AnimationExportPlan` with the deduplicated frame count and the
+  byte-budget preflight, the nine-row ADR-0012 `VideoAdjustProjection`
+  pinned by the table-conformance test, the non-destructive
+  `VideoOutputPolicy` MediaStore policy, the PROJECT-AUTHORED
+  `GifEncoder` + `AnimatedWebpMuxer`, and the `VideoExportRunner`
+  seam), the media3 1.11.1 surface (ExoPlayer preview + Transformer
+  export over the SAME shader/uniform struct --- `VideoGlEffects`/
+  `VideoAdjustEffect`; `Media3VideoExportRunner` the only
+  Transformer-touching file), the ADDITIVE editor-contract v2 launch
+  path (the optional media-kind extra, absent = image so the v1 wire
+  stays byte-identical; `ContractEnums`/`EditContract`/`EditRequest`
+  + `MediaKindLaunchTest`; the gallery's kind-aware `resolveEditor`
+  via the additive `EditorLaunch.kt`/`ViewerScreen.kt` wiring), and
+  the `VideoEditActivity` surface (trim/mute/slow-mo/frame-extract/
+  animation sheets, the nine adjustment sliders live-previewed through
+  the GL effect, honest progress + cancellation, the r32 a11y
+  conventions; `strings_r42.xml` lands in BOTH apps --- the 74-line
+  edit file + the 9-line gallery file, the nine colour sliders
+  reusing the photo surface's r30 labels + the r32 a11y names
+  verbatim). The round-pinned caps are documented not invented
+  (animation target width 64..1280 px, fps 2..30, the 32 MiB
+  byte-budget preflight, MP4 output container, the v1 input set
+  MP4/MOV/3GP H.264/HEVC + AAC); the ADR-0012 answers are recorded
+  (Transformer at 1.11.1 supports the pipeline on minSdk 26; the
+  hosting is the EDIT APK). The local pre-push harness
+  (`/tmp/ktool/verify-r42.sh`, the Run #13 spirit): kotlinc 2.3.10,
+  **156 JVM tests green**, the lex check over every touched `.kt`,
+  both strings files parsed, zero new permission lines in the manifest
+  diff. Editor `versionCode 14`.
+* **The r42 merge-gate iterations in this window (four catches, all
+  fixed on the branch before the push)**: (1) a dangling fragment of
+  git's conflict-marker label left inside `apps/edit/build.gradle.kts`
+  by the rebase resolution (the versionCode r41/r42 conflict) --- the
+  local lex tool had flagged the file and the flag was initially
+  dismissed (the `.kts` files ride Gradle/CI, and CI caught it; the
+  r37 lesson again); (2) `MediaMetadataRetriever.METADATA_KEY_FRAMERATE`
+  --- a constant that does NOT exist at any API level, the frame-rate
+  fact now riding the video track's MediaFormat read through
+  MediaExtractor (`KEY_FRAME_RATE`, best-effort nullable); (3)
+  MediaExtractor has no `(Context, Uri)` overload --- the content
+  resolver now opens the read-only source's asset file descriptor and
+  the extractor reads that; (4) `Bitmap.CompressFormat.WEBP_LOSSLESS`
+  is API 30 (the min is 26) --- the animated-WebP frame encode now
+  guards on the same SDK_INT >= R fact the preflight's
+  webpLosslessSupported flag already carries, riding lossy WebP at
+  quality 100 below R. Every catch was verified against the real SDK
+  surface (AOSP lists + the API docs), not guessed.
+* **The window CLOSED at the context deadline --- the honest
+  recording**: the deadline hit right after the r41 merge and mid-r42.
+  The r42 branch had been pushed with the four catches fixed; the
+  fifth catch --- media3 1.11.1's SEPARATE `@ExperimentalApi` opt-in
+  marker on `EditedMediaItem.Builder.setSpeed(SpeedParameters,
+  boolean)` and the `SpeedParameters` constructor --- was discovered
+  by the merge-gate run 41983734779 at 07:05 UTC and left UNFIXED
+  (the branch's delivery record at the deadline carried three counted
+  catches and a fourth iteration appended without the count fix ---
+  the correction rides the catch-5 commit). Consequences, stated
+  plainly: (a) the r41 merge-time truth updates (`progress.json` p10,
+  roadmap v2.14, tasks.md, follow-up.md, the README row, this Run #16
+  entry itself) did NOT happen in this window --- they ride the r42
+  window's truth commit, both rounds' truth in one; (b) PR #119 stayed
+  open with a red head. Nothing was faked: main carries the r41 squash
+  and nothing past it. This entry is written late, from the surviving
+  records (the branch, the commit messages, the delivery records, the
+  gate runs).
+* **CI cost**: the r41 gate iterations (41976386567 failing with both
+  catches -> 41978641679 green) + the merge-triggered main run; the
+  r42 gate iterations through run 41983734779 (the four catches fixed
+  + the fifth's discovery) in the same window.
+
+
+### Run #17 — 2026-11-05 (the r42 catch-five + catch-six fixes + the merge
++ the Phase 10 close-out: all three parts of Phase 10 code-complete)
+
+**Directive:** "Complete the remaining stages under phase 10" --- the
+fifth + sixth r42 catches fixed and merged, then the Phase 10 close-out
+truth commit (p10 → done, the p7 precedent).
+
+* **The parallel structure**: three workstreams ran concurrently --- (a)
+  the catch-5 + catch-6 fixes on `tg-p10-video` (the code), (b) the
+  merge-time truth documentation drafted by a read-only sub-agent into
+  a staging directory (`/home/z/toad-staging/`) WHILE the merge-gate
+  ran: the worklog Run #16 + Run #17 entries, the follow-up window
+  sections, roadmap v2.14, the tasks.md pairs, the README row, and the
+  complete new `progress.json` (the sub-agent reads the repos and
+  writes staging only; nothing touches main until the merge is real
+  --- the r40/r41 lesson: truth docs are applied by hand at the truth
+  commit, with the placeholders substituted to the real sha/run), and
+  (c) the merge-gate polls themselves.
+* **The catch-5 fix (commit `dcf553e`)**: media3 1.11.1's speed
+  surface --- `EditedMediaItem.Builder.setSpeed(SpeedParameters,
+  boolean)` and the `SpeedParameters` constructor it takes --- carries
+  media3's SEPARATE `@ExperimentalApi` opt-in marker, not (only) the
+  `@UnstableApi` marker `Media3VideoExportRunner` already opts into at
+  the class level. The class-level `@androidx.annotation.OptIn` now
+  names BOTH markers explicitly --- lint's own message names the
+  marker class, so the fix adds it verbatim, nothing guessed; the
+  delivery record's catch count is corrected three -> five (the fourth
+  iteration had been appended without the count fix) and the fifth
+  catch recorded. The gate run on that head (41986021273) peeled the
+  next layer and found the SIXTH catch --- see the next bullet.
+* **The catch-6 fix (commit `7744ea4`)**: with compile and lint green,
+  the unit suite ran for the first time and the r41
+  `EditAiPrivacyScanTest`'s host-literal scan caught the video round:
+  the KDoc example `"0.50x"` (the `String.format "%.2fx"` speed-label
+  shape) is a dot-joined quoted literal, and the scan's own documented
+  protocol applies --- a genuinely new dotted NON-host literal joins
+  the deliberate set (alongside the asset file names and the u2netp
+  `input.1`), with the reason recorded in the set's comment. A UI
+  label, never a host; and this time the scan was re-verified locally
+  against the whole main tree BEFORE the push (the standalone kotlinc
+  run of all three `EditAiPrivacyScanTest` tests, green from the
+  `apps/edit` cwd), applying the catch-5 lesson in the same window
+  that learned it. The delivery record's count corrected five -> six.
+* **The merge (2026-11-05)**: PR #119 squash `f8583d3` (full
+  `f8583d34bbf8ff9acde8370d0ba5cb5813a7be74`) --- merge-gate run `41988201250` GREEN. Editor
+  `versionCode 14` (the narrating comment block per the discipline).
+  The round's record is `docs/phase-10/video-editor.md`'s r42 delivery
+  record: the pure `:shared:video-edit` module (the validated
+  `VideoEditPlan` with the trim `TimeRange` matrix, the sorted
+  non-overlapping 0.25x..2x speed segments with the monotonicity rule
+  + the derived output duration `Σ length/factor`, the
+  `audioTrackPresent` fact where mute on a no-audio clip is the
+  recorded `RECORDED_NO_OP`; `FrameExtractPlan`; `AnimationExportPlan`
+  with the deduplicated frame count + the 32 MiB byte-budget preflight
+  refusing BEFORE any render; the nine-row ADR-0012
+  `VideoAdjustProjection`; the non-destructive `VideoOutputPolicy`
+  MediaStore policy --- INSERT only, IS_PENDING on Q+, the failed-write
+  pending-row cancel, the per-format "-edit" naming rule, no
+  replace-original path; the PROJECT-AUTHORED GIF LZW encoder +
+  animated WebP muxer; the `VideoExportRunner` seam), the media3 1.11.1
+  surface (ExoPlayer preview + Transformer export over the SAME
+  shader/uniform struct, one model two realizations no drift;
+  `Media3VideoExportRunner` the ONLY Transformer-touching file; a
+  neutral parameter set attaches NO effect at all), the ADDITIVE
+  editor-contract v2 launch path (the optional media-kind extra,
+  absent = image so the v1 wire stays byte-identical; the gallery's
+  kind-aware `resolveEditor` narrating the honest cannot-edit-video
+  path; the edit app's second exported activity
+  `.video.VideoEditActivity` at contract meta-data version 2), the
+  surface (trim/mute/speed controls, the nine adjustment sliders
+  live-previewed through the GL effect, the frame-extract + animation
+  sheets, the honest "no audio track" note, honest progress +
+  cancellation, the r32 a11y conventions; `strings_r42.xml` in BOTH
+  apps), the round-pinned caps documented not invented (animation
+  width 64..1280 px, fps 2..30, the 32 MiB preflight, MP4 output, the
+  v1 input set MP4/MOV/3GP H.264/HEVC + AAC), and the ADR-0012 answers
+  recorded (Transformer supports the pipeline on minSdk 26; the
+  hosting is the EDIT APK). The local pre-push harness
+  (`/tmp/ktool/verify-r42.sh`): kotlinc 2.3.10, 156 JVM tests green,
+  the lex check over every touched `.kt`, both strings files parsed,
+  zero new permission lines in the manifest diff. The six catches
+  are the delivery record's; the human-only rows stay open and
+  unclaimed (the long-video 10+ min / 4K / HDR / no-audio device
+  matrix, the measured APK size delta, the Transformer-on-real-codecs
+  behavior, the airplane-mode row, the TalkBack-over-video row).
+* **The Phase 10 close-out (the merge-time truth commit, the 2ae677e
+  pattern, six files)**: `progress.json` p10 → done (the evidence
+  carries r40 + the contracts + r41 + r42 with every sha and run) and
+  the project percent 85 → 91 (the weights: p0 4 done, p1 6 done,
+  p2 10 done, p3 16 done, p4 12 done, p5 16 in-progress → 8, p6 10
+  done, p7 12 done, p10 12 done, p11 2 in-progress → 1; the weights
+  total 100 and 4+6+10+16+12+8+10+12+12+1 = 91); roadmap v2.14 at the
+  top of the changelog + the Phase 10 status paragraph → the final
+  DONE truth; tasks.md (the Phase 10 milestone row → DONE; the
+  restructure bullet checked `[x]` at merged truth); follow-up.md (the
+  r41 + r42 window sections with F-24..F-28); the README roadmap row →
+  done; worklog Run #16 (written late, honestly) + this Run #17. **The
+  honest note**: the r41 truth updates ride this SAME commit --- the
+  Run #16 window closed at the context deadline before they could be
+  made, so this is the r41+r42 merge window's truth in one (the F-12
+  convention honored, just late). The entePort scope is UNTOUCHED
+  (the e9 dogfood rows stay human-only; that scope's percent stays
+  95).
+* **CI cost**: the catch-5 push's gate run (41986021273, red --- the
+  sixth catch) + the catch-6 push's merge-gate run (`41988201250`,
+  green) + the merge-triggered main run + this docs push's main run.
+

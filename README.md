@@ -152,7 +152,7 @@ unsigned.
 | 7 | toadGALLERY Edit v2: filters and annotations | **Done** — r33–r38 merged (#107, #109–#113); the §22–§27 device rows human-only |
 | 8 | toadGALLERY Edit v3: on-device AI features (magic erase, sky replace, bokeh, opt-in face retouch) | **Skipped (2026-11-04 directive) — folded into Phase 10** |
 | 9 | Lightweight video editor (trim, mute, slow-mo, frame extract, GIF/WebP) | **Skipped (2026-11-04 directive) — folded into Phase 10** |
-| 10 | Hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9) | **in progress** (r40 hardening merged #117 `c3c21f7`; the sub-scope contracts merged #116 `16a5001`; the implementation rounds next) |
+| 10 | Hardening + the deferred Edit v3 AI editing + the lightweight video editor (absorbing Phases 8–9) | **Done** — r40–r42 merged (#117 `c3c21f7`, #118 `73cfb1b`, #119 `f8583d3`); every benchmark/device result cell human-only |
 | 11 | Release readiness (F-Droid metadata, FOSS review, signing, v1.0 cut) | release.yml live (ADR-0018); the rest planned |
 
 Progress is tracked in the repository **milestones** (one per phase) and **issues**.

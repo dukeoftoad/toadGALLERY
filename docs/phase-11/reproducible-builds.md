@@ -90,26 +90,39 @@ exactly this shape (described as agreed across the parallel rounds; the
 workflow file itself is the r43 branch's deliverable, reviewed and merged
 by the lead):
 
-- **Triggers:** `v*` tag pushes + `workflow_dispatch` --- verification
-  happens at release time and can be re-run on demand at any ref.
-- **Two clean builds** of BOTH unsigned release APKs + both `mapping.txt`:
-  each build from a fresh checkout with no gradle build-state carry-over
-  (the honest clean-build requirement --- a warm build directory can hide
-  non-determinism), using the same `toad-setup` toolchain as release.yml.
-- **Byte compare:** `cmp` the two unsigned APKs per app, and the two
-  `mapping.txt` per app. All four byte-matches = reproducible.
-- **The honest content-compare fallback:** on any byte mismatch, unzip
-  both APKs and `diff -r` the contents, and say which level failed. The
-  zip-metadata warning is stated up front: APK/zip entries carry
-  timestamps and entry ordering, so a byte-level difference can be
-  metadata-only --- a **content-level match with a byte-level mismatch is
-  reported as "reproducible at content level, not byte level"**, an
-  honest partial result, never silently upgraded to a pass. A
-  content-level mismatch is a real finding and fails the run.
-- **Report artifact:** the comparison report (per-app verdicts, hashes of
-  all four artifacts from both builds) is uploaded as a workflow artifact
-  attached to the release run, and the r43 round extends `release.yml` to
-  build + publish both APKs with per-app `mapping.txt` so the published
+- **Triggers:** `v*` tag pushes + `workflow_dispatch`, checking out the
+  exact tag SHA --- it verifies the same bits release.yml publishes, from
+  the same commit, with no signing secrets involved at all (the workflow
+  never exports the `TG_*` environment; with no signing config wired,
+  `assembleRelease`'s output is the `*-unsigned.apk`).
+- **Two clean builds** of BOTH unsigned release APKs + both `mapping.txt`
+  (two R8 passes each), and the cleanliness is engineered, not assumed:
+  pass 1 runs with `--no-build-cache` --- with a warm build cache a
+  post-clean rebuild could replay cached task outputs (`FROM-CACHE`),
+  which would make the byte comparison trivially pass: verification
+  theater --- and between passes a full `gradle clean` removes every
+  module's `build/` directory, so pass 2 is a real re-build, not an
+  incremental one. Only the dependency cache (inputs, not outputs) stays
+  warm. The toolchain is the same `toad-setup` as ci.yml's build job.
+- **Byte compare:** the four artifacts are collected under canonical
+  names per pass (`gallery-release-unsigned.apk`, `edit-release-unsigned.apk`,
+  `gallery-mapping.txt`, `edit-mapping.txt`) with their sha256 list, and
+  the two passes are compared. The verdicts are honestly named:
+  - **BYTE-REPRODUCIBLE** --- every artifact compared byte-identical
+    (`cmp`); the claim of §1, fully met.
+  - **CONTENT-REPRODUCIBLE** --- APK bytes differ but the unzipped
+    contents are identical; the zip-metadata variance (entry
+    order/timestamps) is reported as a warning, the run stays green, and
+    the verdict is *named* content-reproducible --- an honest partial
+    result, never silently upgraded to a pass. Even in this verdict the
+    `mapping.txt` files must still byte-match (R8 is deterministic; there
+    is no zip layer in them).
+  - **NOT-REPRODUCIBLE** --- any APK differs in content, or any
+    `mapping.txt` differs at all: an error and a red run.
+- **Report artifact:** the comparison report (per-app verdicts, the
+  sha256 lists from both passes) is uploaded as a workflow artifact
+  attached to the run, and the r43 round extends `release.yml` to build +
+  publish both APKs with per-app `mapping.txt` so the published
   pre-release and the verified artifact set are the same commit by
   construction.
 

@@ -12,6 +12,7 @@ import io.github.dukeoftoad.gallery.edit.contract.EditResultParser
 import io.github.dukeoftoad.gallery.edit.contract.EditorIdentity
 import io.github.dukeoftoad.gallery.edit.contract.EditorVersionNegotiator
 import io.github.dukeoftoad.gallery.edit.contract.LaunchDecision
+import io.github.dukeoftoad.gallery.edit.contract.MediaKind
 import io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy
 import io.github.dukeoftoad.gallery.edit.contract.OperationHint
 import io.github.dukeoftoad.gallery.edit.contract.RawResult
@@ -85,13 +86,34 @@ object EditorResolver {
 }
 
 /** The package-visible resolution (the thin Android adapter over [EditorResolver]). */
-fun resolveEditor(context: Context): EditorResolution {
+fun resolveEditor(context: Context): EditorResolution =
+    resolveEditor(context, EDITOR_IMAGE_MIME)
+
+/** The v1 image query mime (the editor image surface's filter shape). */
+internal const val EDITOR_IMAGE_MIME: String = "image/*"
+
+/**
+ * The r42 video query mime: resolves only activities that ANSWER video
+ * (the additive contract v2 surface; the editor's video activity). An
+ * image-era editor contributes no hit here, so the caller narrates the
+ * honest "cannot edit video" path instead of mis-launching.
+ */
+internal const val EDITOR_VIDEO_MIME: String = "video/*"
+
+/**
+ * The r42 media-kind-aware resolution: the SAME pure rule over a
+ * kind-specific query (the image wildcard for the v1 surface, the video
+ * wildcard for the v2 video surface) --- the candidate's own intent-filter
+ * decides which activities answer, and the negotiator still governs the
+ * version.
+ */
+fun resolveEditor(context: Context, mimeType: String): EditorResolution {
     val pm = context.packageManager
     // The query mirrors the editor's intent-filter shape: the contract
-    // action + an image mime type (the filter's data specs are mime-only).
+    // action + the kind's mime type (the filter's data specs are mime-only).
     val query = Intent(EditContract.ACTION_EDIT)
         .addCategory(Intent.CATEGORY_DEFAULT)
-        .setType("image/*")
+        .setType(mimeType)
     val candidates = pm.queryIntentActivities(query, PackageManager.MATCH_DEFAULT_ONLY)
         .mapNotNull { info ->
             val packageName = info.activityInfo.packageName
@@ -143,12 +165,16 @@ internal val EDITOR_OPERATION_HINT: OperationHint = OperationHint.ADJUST
  * per the spec --- the version extra is an Int, the source URI rides as a
  * Parcelable Uri), the ClipData source item, and the read-only grant
  * scoped to that one URI. Absolute filesystem paths never appear anywhere.
+ * The r42 media kind rides through the shared builder: IMAGE launches stay
+ * byte-identical to v1 (no extra); VIDEO launches carry
+ * [EditContract.EXTRA_MEDIA_KIND] (the additive-versioning rule).
  */
 fun buildEditorIntent(
     source: Uri,
     ready: EditorResolution.Ready,
     metadataPolicy: MetadataPolicy = EDITOR_METADATA_POLICY,
     operationHint: OperationHint = EDITOR_OPERATION_HINT,
+    mediaKind: MediaKind = MediaKind.IMAGE,
 ): Intent {
     val request = EditRequest(
         sourceUri = source.toString(),
@@ -156,6 +182,7 @@ fun buildEditorIntent(
         exportMode = EditContract.EXPORT_MODE_SAVE_COPY,
         metadataPolicy = metadataPolicy,
         operationHint = operationHint,
+        mediaKind = mediaKind,
     )
     val intent = Intent(EditContract.ACTION_EDIT)
         .setClassName(ready.packageName, ready.activityClassName)
@@ -180,19 +207,21 @@ fun buildEditorIntent(
 /**
  * The fallback path for "editor not installed" (spec section 1): the plain
  * third-party ACTION_EDIT chooser with the same read-only grant. No editor
- * choice is made for the user --- the chooser does exactly that.
+ * choice is made for the user --- the chooser does exactly that. The r42
+ * kind parameter keeps the fallback honest (a video item offers video
+ * editors, an image item image editors).
  */
-fun buildFallbackEditIntent(source: Uri): Intent =
+fun buildFallbackEditIntent(source: Uri, mimeType: String = EDITOR_IMAGE_MIME): Intent =
     Intent(Intent.ACTION_EDIT).apply {
-        setDataAndType(source, "image/*")
+        setDataAndType(source, mimeType)
         clipData = android.content.ClipData.newRawUri(EditContract.EXTRA_SOURCE_URI, source)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
 /** Launches the chooser if any third-party editor exists; false when none answers. */
-fun launchFallbackEditor(context: Context, source: Uri): Boolean =
+fun launchFallbackEditor(context: Context, source: Uri, mimeType: String = EDITOR_IMAGE_MIME): Boolean =
     try {
-        context.startActivity(Intent.createChooser(buildFallbackEditIntent(source), null))
+        context.startActivity(Intent.createChooser(buildFallbackEditIntent(source, mimeType), null))
         true
     } catch (_: ActivityNotFoundException) {
         false

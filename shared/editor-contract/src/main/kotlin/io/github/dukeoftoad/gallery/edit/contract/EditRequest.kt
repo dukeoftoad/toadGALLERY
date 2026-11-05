@@ -16,6 +16,12 @@ data class EditRequest(
     val metadataPolicy: MetadataPolicy,
     /** Optional UI pre-selection hint; unknown values are rejected, not ignored. */
     val operationHint: OperationHint?,
+    /**
+     * The r42 additive media kind: image (the default, exactly the v1
+     * behavior) or video. Never null after validation; the builder omits
+     * the extra entirely for image launches so the v1 wire stays identical.
+     */
+    val mediaKind: MediaKind = MediaKind.IMAGE,
 )
 
 /** The raw, unvalidated extras as read off the wire (either direction). */
@@ -25,6 +31,7 @@ data class RawExtras(
     val operationHint: String?,
     val exportMode: String?,
     val metadataPolicy: String?,
+    val mediaKind: String? = null,
 )
 
 /** Why a raw extras bundle failed contract validation; [errorCode] is what the editor replies. */
@@ -136,6 +143,18 @@ object EditRequestValidator {
             )
         }
 
+        // Media kind (r42 additive): absent = image (the v1 default); an
+        // unknown value is a contract violation, never a silent fallback.
+        val mediaKind = MediaKind.fromWire(raw.mediaKind)
+        if (mediaKind == null && raw.mediaKind != null) {
+            return RequestValidation.Invalid(
+                RequestInvalid(
+                    "unknown $${EditContract.EXTRA_MEDIA_KIND} extra: '${raw.mediaKind}'",
+                    EditContract.ERROR_VERSION,
+                ),
+            )
+        }
+
         return RequestValidation.Valid(
             EditRequest(
                 sourceUri = source,
@@ -143,6 +162,7 @@ object EditRequestValidator {
                 exportMode = raw.exportMode,
                 metadataPolicy = policy,
                 operationHint = hint,
+                mediaKind = mediaKind ?: MediaKind.IMAGE,
             ),
         )
     }
@@ -151,7 +171,9 @@ object EditRequestValidator {
 /**
  * Builds the launch extras the gallery attaches to the contract intent.
  * Pure: the Android layer copies the entries into the Bundle verbatim
- * (`EXTRA_CONTRACT_VERSION` is an Int, every other value a String).
+ * (`EXTRA_CONTRACT_VERSION` is an Int, every other value a String). The
+ * r42 media-kind extra rides ONLY on video launches --- an image launch's
+ * extras are byte-identical to v1 (the additive-versioning rule).
  */
 object EditLaunchExtrasBuilder {
 
@@ -162,10 +184,15 @@ object EditLaunchExtrasBuilder {
         EditContract.EXTRA_EXPORT_MODE to request.exportMode,
         EditContract.EXTRA_METADATA_POLICY to request.metadataPolicy.wireName,
     ).let { base ->
-        if (request.operationHint != null) {
+        val withHint = if (request.operationHint != null) {
             base + (EditContract.EXTRA_OPERATION_HINT to request.operationHint.wireName)
         } else {
             base
+        }
+        if (request.mediaKind == MediaKind.VIDEO) {
+            withHint + (EditContract.EXTRA_MEDIA_KIND to request.mediaKind.wireName)
+        } else {
+            withHint
         }
     }
 }

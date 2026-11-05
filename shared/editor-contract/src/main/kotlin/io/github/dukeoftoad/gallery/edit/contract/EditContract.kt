@@ -9,6 +9,14 @@ package io.github.dukeoftoad.gallery.edit.contract
  * user's tap. v2 may only ADD optional fields or bump
  * [CONTRACT_VERSION_MIN] explicitly.
  *
+ * The r42 additive extension (v2, the lightweight video editor's launch
+ * path --- the EditorVersionNegotiator additive-versioning rule governs):
+ * the optional [EXTRA_MEDIA_KIND] (absent = image, the v1 default, so the
+ * v1 wire surface is byte-identical for image launches) and the video
+ * mime types on the editor's own video launch activity. A v1-era gallery
+ * keeps working against a v2 editor for images; a v2 gallery only sends
+ * video to an editor that answers the video mimes.
+ *
  * The module is pure JVM (see the module build file for why): no Android
  * types. Callers adapt `android.net.Uri` / `android.os.Bundle` onto the
  * String / Int primitives below.
@@ -30,8 +38,13 @@ object EditContract {
     /** The editor's release application ID. */
     const val EDITOR_APPLICATION_ID: String = "io.github.dukeoftoad.gallery.edit"
 
-    /** The contract version this module implements. */
-    const val CONTRACT_VERSION: Int = 1
+    /**
+     * The contract version this module implements: 2 since r42 (the
+     * additive video extension). Still-additive: a v2 editor must honour
+     * v1 image requests exactly (the only v2 additions are the optional
+     * [EXTRA_MEDIA_KIND] and the editor's own video launch surface).
+     */
+    const val CONTRACT_VERSION: Int = 2
 
     /** Gallery-side minimum accepted editor contract version. */
     const val CONTRACT_VERSION_MIN: Int = 1
@@ -43,6 +56,14 @@ object EditContract {
     const val EXTRA_OPERATION_HINT: String = "org.toadgallery.extra.OPERATION_HINT"
     const val EXTRA_EXPORT_MODE: String = "org.toadgallery.extra.EXPORT_MODE"
     const val EXTRA_METADATA_POLICY: String = "org.toadgallery.extra.METADATA_POLICY"
+
+    /**
+     * The r42 additive launch extra: `image` (the v1 default when absent)
+     * or `video`. The gallery only sends `video` to an editor that answers
+     * the video mimes; an editor that never reads it behaves exactly like
+     * a v1 editor (image), which is the additive-versioning rule.
+     */
+    const val EXTRA_MEDIA_KIND: String = "org.toadgallery.extra.MEDIA_KIND"
 
     // ---- Result extras (spec section 3) ----
 
@@ -100,6 +121,10 @@ object EditContract {
 
     /** Operation hints (spec section 2): requested entry tool, UI pre-selection only. */
     val OPERATION_HINTS: Set<String> = setOf("crop", "rotate", "resize", "draw", "adjust", "filter")
+
+    /** The media-kind wire names (r42 additive): the v1 default is `image`. */
+    const val MEDIA_KIND_IMAGE: String = "image"
+    const val MEDIA_KIND_VIDEO: String = "video"
 
     /** The URI scheme every contract-carried media URI must use. */
     const val CONTENT_SCHEME: String = "content"

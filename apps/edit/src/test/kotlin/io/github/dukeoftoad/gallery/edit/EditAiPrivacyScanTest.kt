@@ -50,10 +50,13 @@ class EditAiPrivacyScanTest {
         val hostLike = Regex(
             "\"[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+\"",
         )
-        // The committed asset file names (the fonts/looks/models pins) and
-        // the u2netp graph's input name. A genuinely new dotted NON-host
-        // literal must be added to this set deliberately; a new HOST is a
-        // contract amendment first --- the editor has no allowlist at all.
+        // The committed asset file names (the fonts/looks/models pins), the
+        // u2netp graph's input name, and the r42 video round's speed-label
+        // EXAMPLE ("0.50x" --- the String.format "%.2fx" shape quoted once
+        // in a KDoc; a UI label, never a host; nothing can open a
+        // connection to it). A genuinely new dotted NON-host literal must
+        // be added to this set deliberately; a new HOST is a contract
+        // amendment first --- the editor has no allowlist at all.
         val nonHostLiterals = setOf(
             "FiraSans-Regular.ttf",
             "SpaceMono-Regular.ttf",
@@ -67,6 +70,7 @@ class EditAiPrivacyScanTest {
             "bokeh-depth-dav2-small-int8.onnx",
             "retouch-faces-yunet.onnx",
             "input.1",
+            "0.50x",
         )
         val found = tree.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }

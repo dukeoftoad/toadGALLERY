@@ -46,7 +46,10 @@
              on the contract action, and carrying the v1 contract-version
              meta-data the gallery's negotiator reads. The activity supports
              exactly the formats the prototype decodes (JPEG / PNG / WebP /
-             HEIC); everything else returns ERROR_UNSUPPORTED per the spec. -->
+             HEIC); everything else returns ERROR_UNSUPPORTED per the spec.
+             The image surface declares contract v1: the v2 additions (the
+             optional media-kind extra, the video surface below) are purely
+             additive, so the image wire is byte-identical to v1. -->
         <activity
             android:name=".EditActivity"
             android:exported="true"
@@ -66,6 +69,32 @@
             <meta-data
                 android:name="org.toadgallery.contract.EDIT"
                 android:value="1" />
+        </activity>
+
+        <!-- The r42 video launch activity (the additive contract v2 surface;
+             ADR-0012; docs/phase-10/video-editor.md): the same contract
+             action filtered on VIDEO mimes. Its meta-data declares 2: the
+             video ability IS the v2 addition, so the gallery's video query
+             negotiates v2 against exactly this activity (an image query
+             resolves the v1 image surface above). The v1 input set is what
+             the media3 Transformer pipeline honestly re-encodes on-device:
+             MP4 / MOV / 3GP (H.264/HEVC video, AAC audio); the output is
+             always MP4. Zero network; zero new permissions. -->
+        <activity
+            android:name=".video.VideoEditActivity"
+            android:exported="true"
+            android:label="@string/editor_video_app_name">
+            <intent-filter>
+                <action android:name="org.toadgallery.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/mp4" />
+                <data android:mimeType="video/quicktime" />
+                <data android:mimeType="video/3gpp" />
+            </intent-filter>
+
+            <meta-data
+                android:name="org.toadgallery.contract.EDIT"
+                android:value="2" />
         </activity>
     </application>
 

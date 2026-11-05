@@ -108,6 +108,7 @@ import io.github.dukeoftoad.gallery.data.RenameCheck
 import io.github.dukeoftoad.gallery.data.baseNameOf
 import io.github.dukeoftoad.gallery.data.checkRenameInput
 import io.github.dukeoftoad.gallery.edit.contract.EditOutcome
+import io.github.dukeoftoad.gallery.edit.contract.MediaKind
 import io.github.dukeoftoad.gallery.edit.contract.removesLocation
 import io.github.dukeoftoad.gallery.edit.contract.stripsAllMetadata
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
@@ -310,17 +311,24 @@ fun ViewerScreen(
     }
 
     /**
-     * Edit (r29): launches the toadGALLERY Edit prototype on the current
-     * IMAGE (videos are out of the v1 editor scope), through the contract:
-     * not installed -> honest message + the third-party chooser fallback;
+     * Edit (r29; videos since r42): launches the toadGALLERY Edit
+     * prototype on the current item through the contract --- the additive
+     * v2 media-kind extension routes VIDEO items to the editor's video
+     * surface (an image-era editor contributes no video hit, so the honest
+     * "cannot edit video" narration + the third-party chooser fallback
+     * carry that case): not installed -> honest message + the fallback;
      * outdated -> refusal + update nudge; disabled -> explanatory message;
      * ready -> the launch intent with the read-only URI grant.
      */
     fun editItem(item: MediaItem) {
-        if (item.isVideo) return
-        when (val resolution = resolveEditor(context)) {
+        val isVideo = item.isVideo
+        when (val resolution = resolveEditor(context, if (isVideo) EDITOR_VIDEO_MIME else EDITOR_IMAGE_MIME)) {
             is EditorResolution.Ready -> editorLauncher.launch(
-                buildEditorIntent(item.uri, resolution),
+                buildEditorIntent(
+                    source = item.uri,
+                    ready = resolution,
+                    mediaKind = if (isVideo) MediaKind.VIDEO else MediaKind.IMAGE,
+                ),
             )
             is EditorResolution.Disabled -> scope.launch {
                 snackbarHostState.showSnackbar(
@@ -335,12 +343,18 @@ fun ViewerScreen(
             is EditorResolution.NotInstalled -> {
                 scope.launch {
                     snackbarHostState.showSnackbar(
-                        context.getString(R.string.viewer_edit_not_installed),
+                        context.getString(
+                            if (isVideo) {
+                                R.string.viewer_edit_video_not_installed
+                            } else {
+                                R.string.viewer_edit_not_installed
+                            },
+                        ),
                     )
                 }
                 // The contract's fallback: third-party editors, the user
                 // chooses. A device with no editor at all simply stays put.
-                launchFallbackEditor(context, item.uri)
+                launchFallbackEditor(context, item.uri, if (isVideo) EDITOR_VIDEO_MIME else EDITOR_IMAGE_MIME)
             }
         }
     }
@@ -631,7 +645,12 @@ fun ViewerScreen(
                 onBack = onBack,
                 onInfo = { infoTarget = window.items[pagerState.currentPage] },
                 onShare = { shareItem(window.items[pagerState.currentPage]) },
-                canEdit = !window.items[pagerState.currentPage].isVideo,
+                // r42: the edit affordance covers video too --- the additive
+                // contract v2 launch routes video items to the editor's
+                // video surface (the honest narration carries an image-era
+                // editor: the button is never a dead control, the launch
+                // resolves or narrates).
+                canEdit = true,
                 onEdit = { editItem(window.items[pagerState.currentPage]) },
                 onToggleFavorite = {
                     requestToggleFavorite(window.items[pagerState.currentPage])

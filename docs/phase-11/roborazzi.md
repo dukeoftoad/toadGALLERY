@@ -38,7 +38,7 @@ load-bearing, not cosmetic.
 
 ## 2. What was added
 
-- **gradle/libs.versions.toml** (versions): `robolectric = "4.17.0"` and
+- **gradle/libs.versions.toml** (versions): `robolectric = "4.17"` and
   `roborazzi = "1.77.0"` (the first merge-gate run caught `roborazzi
   1.26.0` not existing at all --- the plugin marker failed to resolve; the
   published line was re-verified against Maven Central metadata and both
@@ -212,12 +212,12 @@ the flavor PR lands, the names resolve as written.
   the verify/compare task pairs do, and section 5's flow is not activated
   yet anyway. A future round may pin an AGP-9-clean plugin version --- the
   catalog comment marks the spot.
-- **Robolectric 4.17.0 and sdk 34.** The tests pin sdk 34 explicitly in
+- **Robolectric 4.17 and sdk 34.** The tests pin sdk 34 explicitly in
   `@Config`, so newer compileSdk/targetSdk values do not change what
   Robolectric renders. Robolectric downloads its android-all jars from
   Maven Central at test runtime --- first CI runs pay that download, the
   Gradle cache retains it.
-- **Robolectric 4.17.0 needs JDK 17+** --- satisfied (the toolchain pins
+- **Robolectric 4.17 needs JDK 17+** --- satisfied (the toolchain pins
   temurin 17). Kotlin 2.3.10 / the Compose compiler are invisible to the
   JVM tests; the Compose test artifacts ride the pinned BOM 2024.12.01
   (compose ui-test 1.7.x), the same coordinates the instrumented suite

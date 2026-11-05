@@ -74,7 +74,7 @@ androidx-test-ext-junit = "1.2.1"
 # (1.26.0 does not exist --- the first merge-gate run caught the plugin
 # resolution failing), paired with robolectric 4.17.0, the latest stable
 # line; the tests pin sdk 34 explicitly so the pair renders it.
-robolectric = "4.17.0"
+robolectric = "4.17"
 roborazzi = "1.77.0"
 # build
 app-build-compileSDKVersion = "36"

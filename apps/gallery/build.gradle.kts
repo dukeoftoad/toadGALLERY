@@ -414,7 +414,6 @@ android {
             }
         }
     }
-    }
 
     // --- Release signing (issue #59) ---
     // The release keystore is NEVER committed --- .gitignore excludes

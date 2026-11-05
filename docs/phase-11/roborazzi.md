@@ -38,16 +38,18 @@ load-bearing, not cosmetic.
 
 ## 2. What was added
 
-- **gradle/libs.versions.toml** (versions): `robolectric = "4.14.1"` (the
-  release line with stable NATIVE-graphics support for the pinned sdk 34)
-  and `roborazzi = "1.26.0"`.
+- **gradle/libs.versions.toml** (versions): `robolectric = "4.17.0"` and
+  `roborazzi = "1.77.0"` (the first merge-gate run caught `roborazzi
+  1.26.0` not existing at all --- the plugin marker failed to resolve; the
+  published line was re-verified against Maven Central metadata and both
+  entries moved to the latest stable pair).
 - **gradle/libs.versions.toml** (libraries): `robolectric`
   (org.robolectric:robolectric), `roborazzi`
   (io.github.takahirom.roborazzi:roborazzi), `roborazzi-compose`
   (io.github.takahirom.roborazzi:roborazzi-compose --- the Compose capture
   surface, `captureRoborazzi()` on `SemanticsNodeInteraction`).
 - **gradle/libs.versions.toml** (plugins): `roborazzi`
-  (`com.github.takahirom.roborazzi`), applied in apps/gallery's `plugins`
+  (`io.github.takahirom.roborazzi`), applied in apps/gallery's `plugins`
   block. It registers the record/verify/compare task pairs over the
   unit-test variants; the captures themselves ride plain test runs.
 - **apps/gallery/build.gradle.kts, testOptions** (new block, next to
@@ -135,7 +137,7 @@ when no verify flag is set, so the capture calls fire on every test run:
   (retention 14 days), probing BOTH candidate locations ---
   `apps/gallery/src/test/resources/**/*.png` and
   `apps/gallery/build/outputs/roborazzi/**` --- because Roborazzi's default
-  capture output directory moved between releases and the pinned 1.26.0's
+  capture output directory moved between releases and the pinned 1.77.0's
   choice is not verified from the sandbox. `if-no-files-found` stays at the
   default `warn` (never `error`): an empty capture set must not mask the
   outcome of the test run itself.
@@ -184,22 +186,25 @@ the flavor PR lands, the names resolve as written.
 
 ## 7. Compatibility risks, stated plainly
 
-- **Roborazzi gradle plugin 1.26.0 vs AGP 9.2.1.** The plugin was built and
-  shipped in the AGP 8.x era; AGP 9 is far newer. The plugin mostly sits on
-  AGP's public variant API (`androidComponents.onVariants`), which is the
-  reason to EXPECT it to apply cleanly, but this repo's sandbox has no
-  Android SDK and no Gradle run can vouch for it. Fallback if the plugin
-  fails to apply or misbehaves under AGP 9: drop the `alias(libs.plugins.
-  roborazzi)` line (and the catalog plugin entry) --- recording via plain
-  test runs does NOT need the plugin; only the verify/compare task pairs
-  do, and section 5's flow is not activated yet anyway.
-- **Robolectric 4.14.1 and sdk 34.** 4.14.1's stable NATIVE-graphics
-  coverage tops out at SDK 34 (35 is experimental); the tests pin sdk 34
-  explicitly in `@Config`, so newer compileSdk/targetSdk values do not
-  change what Robolectric renders. Robolectric downloads its android-all
-  jars from Maven Central at test runtime --- first CI runs pay that
-  download, the Gradle cache retains it.
-- **Robolectric 4.14.1 needs JDK 17+** --- satisfied (the toolchain pins
+- **Roborazzi gradle plugin 1.77.0 vs AGP 9.2.1.** The first attempt
+  (1.26.0) never resolved --- that version does not exist; the merge-gate
+  run failed at plugin resolution and the published line was re-verified
+  against Maven Central metadata (marker
+  `io.github.takahirom.roborazzi:io.github.takahirom.roborazzi.gradle.
+  plugin`, latest 1.77.0 --- the plugin id is the `io.github...` one, not
+  `com.github...`). The plugin mostly sits on AGP's public variant API
+  (`androidComponents.onVariants`), the reason to EXPECT it to apply
+  cleanly under AGP 9; the fallback if it misbehaves anyway: drop the
+  `alias(libs.plugins.roborazzi)` line (and the catalog plugin entry) ---
+  recording via plain test runs does NOT need the plugin; only the
+  verify/compare task pairs do, and section 5's flow is not activated yet
+  anyway.
+- **Robolectric 4.17.0 and sdk 34.** The tests pin sdk 34 explicitly in
+  `@Config`, so newer compileSdk/targetSdk values do not change what
+  Robolectric renders. Robolectric downloads its android-all jars from
+  Maven Central at test runtime --- first CI runs pay that download, the
+  Gradle cache retains it.
+- **Robolectric 4.17.0 needs JDK 17+** --- satisfied (the toolchain pins
   temurin 17). Kotlin 2.3.10 / the Compose compiler are invisible to the
   JVM tests; the Compose test artifacts ride the pinned BOM 2024.12.01
   (compose ui-test 1.7.x), the same coordinates the instrumented suite

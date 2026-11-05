@@ -71,7 +71,7 @@ jobs:
 
       # Both globs are probed because Roborazzi's default capture output
       # directory moved between releases (src/test/resources in some lines,
-      # build/outputs/roborazzi in others); whichever the pinned 1.26.0 uses,
+      # build/outputs/roborazzi in others); whichever the pinned 1.77.0 uses,
       # the artifact carries it. if-no-files-found stays at the default
       # 'warn' (never 'error'): an empty capture set must not mask the
       # outcome of the test run itself.

@@ -69,10 +69,13 @@ androidx-test-ext-junit = "1.2.1"
 # Screenshot testing (Phase 11, docs/phase-11/roborazzi.md): Robolectric
 # renders the REAL Compose UI on the JVM (NATIVE graphics mode); Roborazzi
 # records those renders as PNGs and --- once baselines are committed to the
-# repo --- verifies fresh renders against them. 4.14.1 is the release line
-# with stable NATIVE-graphics support for the pinned sdk 34.
-robolectric = "4.14.1"
-roborazzi = "1.26.0"
+# repo --- verifies fresh renders against them. Versions verified against
+# Maven Central metadata at fix time: roborazzi's line tops out at 1.77.0
+# (1.26.0 does not exist --- the first merge-gate run caught the plugin
+# resolution failing), paired with robolectric 4.17.0, the latest stable
+# line; the tests pin sdk 34 explicitly so the pair renders it.
+robolectric = "4.17.0"
+roborazzi = "1.77.0"
 # build
 app-build-compileSDKVersion = "36"
 app-build-targetSDK = "36"
@@ -176,5 +179,5 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 # / compareRoborazziBasicDebug). A PLAIN unit-test run records by default
 # (captureRoborazzi() records when no verify flag is set), so the record
 # half works even before the verify tasks are ever invoked.
-roborazzi = { id = "com.github.takahirom.roborazzi", version.ref = "roborazzi" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 

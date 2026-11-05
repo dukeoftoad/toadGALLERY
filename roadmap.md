@@ -13,7 +13,89 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.14 (2026-11-05, latest) --- Phase 10 complete: the r41 Edit v3
+### v2.15 (2026-11-05, latest) --- Phase 11 complete: the release-engineering
+  round r43 MERGED + the F-Droid metadata round r44 MERGED + the
+  release-docs round r45 MERGED; p11 done (the project percent 91 -> 92)
+
+- **The r43 release-engineering round MERGED (PR #121 squash `d27f3c1`,
+  merge-gate runs 41996006593 + 41996006784 green at the `648d4ee`
+  head)** --- the release pipeline ships BOTH apps from one commit: the
+  edit app's release variant exists at last (the env-injected `TG_*`
+  signing per ADR-0018's gallery convention --- same release key, same
+  secrets, same unsigned fallback --- plus R8 minify + resource shrink
+  over the new `proguard-rules.pro`, so BOTH apps ship a mapping.txt),
+  `release.yml` builds both `assembleRelease`, hard-gates EACH APK's
+  signature against the same pinned digest, and stages per-app named
+  artifacts (`toadGALLERY-<version>-r<round>.apk` +
+  `toadGALLERY-edit-<version>-r<round>.apk`, each with `.sha256` +
+  `-mapping.txt` --- for better finding), with the Phase 11 close-out
+  release body; the new `reproducible-build.yml` verifies the canonical
+  recipe on every `v*` tag (two clean unsigned builds of both apps,
+  `--no-build-cache`, byte compare with the honestly named verdicts
+  byte-reproducible / content-reproducible / not-reproducible, report
+  artifact); versionCode 37 (gallery, `0.4.5-alpha`) + 15 (edit,
+  `0.4.10-edit-alpha`). The two riding catches from the failed sanity
+  dispatches at `f610860`: the copyProgressJson lintVital dependency
+  (EVERY `assembleRelease` was broken --- Release run 41991609209 ---
+  while the debug-only CI lint never had the copy in its graph; the
+  same explicit `dependsOn` the merge*Assets tasks carry, extended to
+  the `*LintVitalReportModel` writers, closes it) and
+  editor-apk-build.yml's `-m1` version derivation (the failed editor
+  run 41991485246: the edit gradle's append-per-round convention means
+  the LAST pair wins --- `tail -1` at all three derivation sites).
+- **The r44 F-Droid metadata round MERGED (PR #120 squash `791d3a0`,
+  merge-gate runs 41996188270 + 41996187119 green at the `0fd77e1`
+  head)** --- `fdroid/metadata/io.github.dukeoftoad.gallery.yml` +
+  `io.github.dukeoftoad.gallery.edit.yml` in the current fdroiddata
+  new-app shape (vercode 37 / 15 pinned to the `v0.4.5-alpha-r45` tag;
+  `Binaries: []` with the signed-determinism-not-claimed rationale;
+  `AntiFeatures: []` argued from the gate story; the gradle-wrapper
+  scanignore + the editor's ONNX-models data disposition;
+  MaintainerNotes carrying the canonical recipe environment and the
+  update conventions), `docs/phase-11/fdroid-metadata.md` (the
+  submission merge-request process, the build-environment requirements,
+  the dependency-license walk of the actual `libs.versions.toml`
+  closure --- every shipped dependency Apache-2.0/MIT and
+  GPL-3.0-compatible, the honest no-proprietary-dependencies
+  conclusion), and `docs/phase-11/reproducible-builds.md` (the
+  canonical-recipe doc; the honest status line --- the first
+  measurement is the `v0.4.5-alpha-r45` push). The riding accuracy
+  fix: the gallery's INTERNET story corrected to the r22/ADR-0020
+  truth (ONE allowlist-gated model-fetch grant from models.ente.com;
+  the edit app's no-INTERNET claim stays true via the r41 hard-strip)
+  --- an F-Droid reviewer reads the merged manifest, so the overclaim
+  would fail the review.
+- **The r45 release-docs round MERGED (PR #122 squash `4d797ff`,
+  merge-gate run 41993838209 green at the `af98800` head)** ---
+  `docs/phase-11/release-notes.md` (the master notes: the first
+  both-APKs release, per-APK sections with the exact artifact names +
+  versionCodes, install/update/verification notes, the complete
+  version-history table of every published tag plus the CI-only
+  versions, the NOT-claimed section), `known-limitations.md` (the
+  standing human-only directive, F-24..F-28 with citations, the
+  product scope lines, the release-engineering limits),
+  `permissions-and-privacy.md` (the ACTUAL manifest declarations ---
+  the gallery's pinned source set + the merged-injected trio + the
+  ADR-0020 model-fetch INTERNET truth, the edit app's ORT hard-strip
+  --- the data-safety answers, the store-policy notes), the
+  `.github/ISSUE_TEMPLATE` package (bug report with the R8-mapping
+  note, feature request with the roadmap defer-list check, support
+  with the inline verification steps + the vault no-recovery honesty),
+  `foss-review.md` (the self-conducted review: dependency screen, the
+  empty provenance ledger per ADR-0008, the AGPL engine's
+  not-in-any-APK posture, the four ONNX models' licenses, the
+  binary-blob scan, the GPL-3.0 obligations --- four honest findings
+  recorded), and the README's release-section rewrite to the both-APK
+  shape.
+- **The close-out release**: the `v0.4.5-alpha-r45` tag cut from this
+  truth commit --- BOTH APKs (gallery `0.4.5-alpha` versionCode 37 +
+  edit `0.4.10-edit-alpha` versionCode 15, the editor's FIRST release
+  artifact) published as a GitHub pre-release with per-app `.sha256` +
+  per-app `mapping.txt`, per ADR-0018 (prerelease + make_latest false
+  until the v1.0 cut --- a human decision that waits on the
+  human-only device rows, never a workflow default).
+
+### v2.14 (2026-11-05) --- Phase 10 complete: the r41 Edit v3
   AI round MERGED + the r42 lightweight video editor round MERGED;
   p10 done
 
@@ -1839,6 +1921,21 @@ rule).
 
 ### Phase 11 --- Release readiness
 
+**Status:** DONE (code-side + docs-side) --- the Phase 11 campaign closed
+in three merged rounds: the release-engineering round r43 (PR #121
+squash `d27f3c1`, merge-gate runs 41996006593/41996006784 green after
+the two riding catches), the F-Droid metadata round r44 (PR #120 squash
+`791d3a0`, gates 41996188270/41996187119 green), and the release-docs
+round r45 (PR #122 squash `4d797ff`, gate 41993838209 green), with the
+`v0.4.5-alpha-r45` close-out release cut from the truth commit (BOTH
+APKs --- the gallery `0.4.5-alpha` versionCode 37 and the edit app's
+FIRST release artifact `0.4.10-edit-alpha` versionCode 15 --- each with
+its `.sha256` and its per-app `mapping.txt`). What remains is
+deliberately human: the v1.0 stable cut (a maintainer decision that
+waits on the human-only device rows), the F-Droid submission merge
+request itself (the metadata is prepared and pinned, `fdroid/metadata/`),
+and every on-device verification row (the standing directive).
+
 **Purpose:** Prepare the two apps for maintainable distribution.
 
 #### Tasks
@@ -1874,9 +1971,17 @@ rule).
   ADR-0018):** the dedicated `Release` workflow signs testing APKs with
   the project release key and publishes GitHub pre-releases (APK +
   `.sha256` checksum + R8 `mapping.txt`), hard-gated by an
-  `apksigner verify` pin on the signer certificate digest. The Phase 11
-  remainder --- reproducible-build verification and F-Droid metadata ---
-  stays in Phase 11.
+  `apksigner verify` pin on the signer certificate digest. **The
+  Phase 11 remainder DELIVERED (r43-r45, 2026-11-05):** the
+  reproducible-build verification (`reproducible-build.yml`, the double
+  clean unsigned build + the honestly named verdicts, first measurement
+  on the `v0.4.5-alpha-r45` push) and the F-Droid metadata
+  (`fdroid/metadata/` for both apps + the submission package at
+  `docs/phase-11/fdroid-metadata.md`), plus the release-notes /
+  known-limitations / permissions-privacy / support-template / FOSS
+  review package (`docs/phase-11/` + `.github/ISSUE_TEMPLATE/`) and the
+  both-APK release pipeline extension (the edit app's release variant +
+  per-app mapping.txt artifacts).
 
 #### Exit criteria
 

@@ -18,10 +18,16 @@ package io.github.dukeoftoad.gallery.edit
  * 10. LUT filter (the `.cube` look at its intensity; r33)
  * 11. vignette
  * 12. sharpen (unsharp mask)
- * 13. mosaic/blur regions (r37: the painted regions censor the
+ * 13. the r41 AI pixel stages: erase -> sky -> bokeh -> retouch (the
+ *     semantic order, stated: erase first so later stages see the
+ *     restored surroundings; sky next so the new sky exists before the
+ *     depth-driven blur; bokeh over the replaced world; retouch polishes
+ *     the subject last among the AI stages)
+ * 14. mosaic/blur regions (r37: the painted regions censor the
  *     FULLY graded pixels; the FINAL pixel stage --- no downstream
  *     stage re-processes the censored output, so sharpening a mosaic
- *     edge cannot halo it)
+ *     edge cannot halo it, and a mosaic over a retouched face is still
+ *     a mosaic)
  *
  * The r34-r36 compositing passes (text over everything; stickers below
  * text; strokes between them) are NOT stages of this pixel pipeline:
@@ -45,7 +51,8 @@ object EditPipeline {
     const val STAGE_ORDER: String =
         "flip -> straighten -> perspective -> quarterTurns -> crop -> " +
             "tone LUT -> saturation -> temperature/tint -> HSL bands -> " +
-            "LUT filter -> vignette -> sharpen -> mosaic/blur regions"
+            "LUT filter -> vignette -> sharpen -> AI erase -> AI sky -> " +
+            "AI bokeh -> AI retouch -> mosaic/blur regions"
 
     /**
      * Applies [recipe] to the grid. [filter] is the caller-RESOLVED
@@ -55,6 +62,12 @@ object EditPipeline {
      * intensity is above zero. Anything else --- no selection, an
      * unresolvable id, a mismatched pairing --- degrades to no-look,
      * never to a crash (the r33 tolerance contract).
+     *
+     * [ai] is the caller-RESOLVED r41 artifact bundle (the same shape:
+     * the pipeline is pure --- no model ever runs here). The caller loads
+     * the recipe's artifact keys from `EditAiStore` and resolves the sky
+     * source; a missing entry degrades that stage to nothing, never a
+     * crash (the frame/sticker tolerance contract).
      */
     fun apply(
         pixels: IntArray,
@@ -62,6 +75,7 @@ object EditPipeline {
         height: Int,
         recipe: EditRecipe,
         filter: CubeLut? = null,
+        ai: EditAiStageInputs? = null,
     ): GeometryResult {
         if (recipe.isIdentity) return GeometryResult(pixels, width, height)
 
@@ -120,7 +134,19 @@ object EditPipeline {
         applyVignette(current, w, h, recipe.vignette)
         applySharpen(current, w, h, recipe.sharpness)
 
-        // ---- Regions (r37: the final pixel stage, after sharpen) ----
+        // ---- The r41 AI pixel stages (erase -> sky -> bokeh -> retouch) ----
+        // They replay over the artifacts the inference seam produced at
+        // COMMIT time; no model ever runs during render. The stages inherit
+        // the grid-relative honesty verbatim: exact in the export where the
+        // stage grid IS the output canvas; approximate in the preview under
+        // an active crop, exactly as the vignette's centre is. An absent
+        // bundle ([ai] null) or an absent container runs NOTHING; the
+        // identity fast path above already covers the all-absent case.
+        if (ai != null) {
+            AiStages.applyAll(current, w, h, recipe, ai)
+        }
+
+        // ---- Regions (r37: the final pixel stage, after the AI tail) ----
         // The painted regions censor the fully graded grid; the stage is
         // grid-relative (the vignette's honesty: exact in the export, where
         // the stage grid IS the output canvas; approximate in the preview

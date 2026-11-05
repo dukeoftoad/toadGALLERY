@@ -246,6 +246,13 @@ class RegionLayersTest {
 
     @Test
     fun `the stage order grew the regions tail`() {
-        assertTrue(EditPipeline.STAGE_ORDER.contains("vignette -> sharpen -> mosaic/blur regions"))
+        // r41: the AI pixel stages sit between sharpen and the regions ---
+        // the regions stay FINAL (a mosaic over a retouched face is still a
+        // mosaic); the assertion pins the new documented tail.
+        assertTrue(
+            EditPipeline.STAGE_ORDER.contains(
+                "vignette -> sharpen -> AI erase -> AI sky -> AI bokeh -> AI retouch -> mosaic/blur regions",
+            ),
+        )
     }
 }

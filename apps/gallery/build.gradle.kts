@@ -719,12 +719,21 @@ if (withBundledModels) {
 // fail-fasts at task-graph time --- ONLY for tasks that actually PACKAGE
 // a gallery APK (assemble*/package*/bundle*), so the test/lint/record
 // tasks CI runs across flavors stay property-free and untouched.
+// r50 catch: AGP's TEST-CLASSPATH packager (`packageXUnitTestForUnitTest`)
+// also starts with "package" --- the ci.yml unit-test step rides BOTH
+// flavor test tasks in ONE invocation (testBasicDebugUnitTest +
+// testEngineDebugUnitTest) and its graph contains the engine variant's
+// test packager, which tripped the guard on the first CI round. The
+// UnitTest packagers ship no APK and no native code; they are exempt.
 gradle.taskGraph.whenReady {
     val packagingTaskNames = allTasks
         .filter { it.project.path == ":apps:gallery" }
         .map { it.name }
         .filter { name ->
-            name.startsWith("assemble") || name.startsWith("package") || name.startsWith("bundle")
+            (name.startsWith("assemble") || name.startsWith("package") || name.startsWith("bundle")) &&
+                // AGP's unit-test classpath packager (packageXUnitTestForUnitTest)
+                // is not an artifact build: no APK, no merged native libs.
+                !name.contains("UnitTest")
         }
     val engineFamilyPackaging = packagingTaskNames.any {
         it.contains("Engine") || it.contains("Semantic") || it.contains("Face")

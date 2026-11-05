@@ -521,6 +521,18 @@ android {
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
     dependsOn(copyProgressJson)
 }
+// r43 (the release-engineering round; the catch from the failed Release
+// run 41991609209 at f610860): the release-only lintVital model writer
+// (generateReleaseLintVitalReportModel, LintModelWriterTask) consumes the
+// build/generated/progressAssets srcDir too, and unlike the merge*Assets
+// tasks above it carried NO declared dependency on the copy --- Gradle's
+// implicit-output validation fails assembleRelease on exactly that
+// (release builds run lintVital in-graph; a debug CI lint never has the
+// copy in its graph, which is why ci.yml stayed green while every
+// assembleRelease broke). The same explicit dependency closes it.
+tasks.matching { it.name.endsWith("LintVitalReportModel") }.configureEach {
+    dependsOn(copyProgressJson)
+}
 
 // --- Optional offline model-pack assets (r28, ADR-0020 offline pack) ---------
 // The OTHER half of ADR-0020's delivery decision ("CI retains the

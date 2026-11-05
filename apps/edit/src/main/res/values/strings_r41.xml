@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r41 (Phase 10 sub-scope A): the Edit v3 AI surfaces - magic erase,
+     sky replacement, bokeh and the OPT-IN face retouch. The copy is honest
+     per ADR-0010: every AI edit runs entirely on this device with compact
+     bundled models, so the quality is bounded - a small on-device model,
+     not a server-side diffusion service - and the strings say so plainly
+     without apologising. The five bundled skies are project-authored
+     parametric code; their display names (Day clear, Dusk, Night,
+     Overcast, Golden hour) are proper nouns in the BundledSkies registry,
+     not resources; an imported sky's chip label is its derived id. The
+     retouch consent dialog states the ADR-0010 section 5 trio: what the
+     model does, that it runs on-device only, and that no face data leaves
+     the device. -->
+<resources>
+    <!-- The sections -->
+    <string name="editor_section_ai_erase">Magic erase</string>
+    <string name="editor_section_ai_sky">Sky</string>
+    <string name="editor_section_ai_bokeh">Bokeh</string>
+    <string name="editor_section_ai_retouch">Face retouch</string>
+    <string name="editor_settings">Settings</string>
+
+    <!-- Magic erase: the third paint mode (the exclusive duality's third
+         member) + its honest bounds. -->
+    <string name="editor_ai_erase_mode">Erase</string>
+    <string name="editor_ai_erase_hint">Paint over what you want removed. Erasing runs once, on this device, when you lift your finger - with a compact on-device model, not a server service, so results are good but bounded.</string>
+    <string name="editor_ai_erase_layer">Erase %1$d</string>
+    <string name="editor_ai_erase_remove">Remove</string>
+    <string name="editor_ai_erase_too_small">The painted area was too small to erase; paint a larger area and try again.</string>
+    <string name="editor_ai_erase_models_missing">The magic-erase models are missing from this build; the feature is unavailable.</string>
+
+    <!-- Sky: detect once, then the registry (bundled parametric + user
+         imports) at an opacity. -->
+    <string name="editor_ai_sky_redetect">Re-detect</string>
+    <string name="editor_ai_sky_none">None</string>
+    <string name="editor_ai_sky_opacity">Sky opacity: %1$d%%</string>
+    <string name="editor_a11y_ai_sky_opacity">Sky opacity</string>
+    <string name="editor_ai_sky_import">Import sky</string>
+    <string name="editor_ai_sky_import_failed">Import failed: %1$s</string>
+    <string name="editor_ai_sky_models_missing">The sky detection model is missing from this build; the feature is unavailable.</string>
+    <string name="editor_ai_sky_note">An imported sky is scaled to cover the detected sky area.</string>
+
+    <!-- Bokeh: estimate the depth once, then the two pure re-render
+         controls (no model runs on a slider move). -->
+    <string name="editor_ai_bokeh_estimate">Estimate depth</string>
+    <string name="editor_ai_bokeh_reestimate">Re-estimate depth</string>
+    <string name="editor_ai_bokeh_none">None</string>
+    <string name="editor_ai_bokeh_strength">Blur strength: %1$d%%</string>
+    <string name="editor_a11y_ai_bokeh_strength">Bokeh blur strength</string>
+    <string name="editor_ai_bokeh_focal">Focal depth: %1$d%%</string>
+    <string name="editor_a11y_ai_bokeh_focal">Focal depth (higher brings the focus closer)</string>
+    <string name="editor_ai_bokeh_models_missing">The depth model is missing from this build; the feature is unavailable.</string>
+
+    <!-- Face retouch: opt-in per ADR-0010 section 5, default-off; the
+         consent dialog states what it does / on-device / nothing leaves. -->
+    <string name="editor_ai_retouch_enable">Enable face retouch</string>
+    <string name="editor_ai_retouch_consent_title">Use face retouch?</string>
+    <string name="editor_ai_retouch_consent_body">Face retouch finds the faces in this photo and, at the strengths you choose, smooths skin, brightens eyes and slims the face. Detection runs on this device only, and no face data ever leaves your device.</string>
+    <string name="editor_ai_retouch_consent_grant">Allow</string>
+    <string name="editor_ai_retouch_consent_deny">Not now</string>
+    <string name="editor_ai_retouch_detect">Detect faces</string>
+    <string name="editor_ai_retouch_none">None</string>
+    <string name="editor_ai_retouch_smoothing">Skin smoothing: %1$d%%</string>
+    <string name="editor_a11y_ai_retouch_smoothing">Skin smoothing</string>
+    <string name="editor_ai_retouch_eyes">Brighten eyes: %1$d%%</string>
+    <string name="editor_a11y_ai_retouch_eyes">Eye brighten</string>
+    <string name="editor_ai_retouch_slim">Slim face: %1$d%%</string>
+    <string name="editor_a11y_ai_retouch_slim">Face slim</string>
+    <string name="editor_ai_retouch_models_missing">The face detection model is missing from this build; the feature is unavailable.</string>
+
+    <!-- The settings sheet's one row: the permanent retouch kill-switch. -->
+    <string name="editor_settings_retouch_title">Face retouch</string>
+    <string name="editor_settings_retouch_disable">Turn off permanently</string>
+    <string name="editor_settings_retouch_disabled">Turned off permanently. Face retouch stays hidden and never runs, even for photos that carry retouch edits.</string>
+
+    <!-- The shared honest-boundary + degradation messages (each names the
+         recovery, the FACE_MODELS_NOT_INSTALLED precedent; never a generic
+         inference failure). -->
+    <string name="editor_ai_progress">Working on this device: %1$d%%</string>
+    <string name="editor_ai_cancel">Cancel</string>
+    <string name="editor_ai_cancelled">Cancelled.</string>
+    <string name="editor_ai_runtime_broken">The on-device AI runtime failed to start; relaunch the editor and try again.</string>
+    <string name="editor_ai_no_sky">No sky was found in this photo; sky replacement needs a visible sky.</string>
+    <string name="editor_ai_store_failed">The edit could not be saved to this device\'s private storage; try again.</string>
+    <string name="editor_ai_degraded_layer">This layer\'s saved data is missing, so it shows no change; re-apply the effect to restore it.</string>
+</resources>

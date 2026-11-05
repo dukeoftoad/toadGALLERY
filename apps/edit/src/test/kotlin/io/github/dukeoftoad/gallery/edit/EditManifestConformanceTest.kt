@@ -19,11 +19,18 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 class EditManifestConformanceTest {
 
-    /** Unit-test working dir is the module dir (apps/edit); be tolerant either way. */
+    /**
+     * Unit-test working dir is the module dir (apps/edit) under Gradle; the
+     * local r41 harness pins the WORKTREE ROOT as the cwd --- be tolerant
+     * of both (the repo-root candidate the round's harness runs from).
+     */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(File(cwd, relative), File(cwd.parentFile, "apps/edit/$relative"))
-            .firstOrNull { it.exists() }
+        return sequenceOf(
+            File(cwd, relative), // the Gradle module cwd (apps/edit)
+            File(cwd, "apps/edit/$relative"), // the repo/worktree-root cwd (the local harness)
+            File(cwd.parentFile, "apps/edit/$relative"), // any direct child of the root
+        ).firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
 

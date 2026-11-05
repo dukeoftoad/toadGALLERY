@@ -40,6 +40,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -245,6 +246,120 @@ class EditActivity : ComponentActivity() {
         importedFrameBitmaps.clear()
         importedFrameBitmaps.putAll(reloaded)
         return java.util.LinkedHashMap(reloaded)
+    }
+
+    // ---- r41: the Edit v3 AI seam (Phase 10 sub-scope A) ----
+
+    /**
+     * The derived-artifact store (r41): `edit-ai/` in the app-private
+     * storage, BESIDE the sidecar directory --- the artifacts the four
+     * inference commits persist (masks, fills, depth grids, face boxes);
+     * every render replays over them, no model ever runs at render time.
+     * Swept together with the sidecar when the edit resolves.
+     */
+    internal val aiStore: EditAiStore by lazy {
+        EditAiStore(File(filesDir, "edit-ai"), request.sourceUri)
+    }
+
+    /**
+     * The user-imported sky store (r41): the ImportedFrameStore contract
+     * VERBATIM, sky-shaped --- PNG/WebP magic-before-write, verbatim
+     * bytes, the size cap, collision-suffixed ids that can never shadow
+     * the bundled parametric set.
+     */
+    internal val importedSkyStore: ImportedSkyStore by lazy {
+        ImportedSkyStore(File(filesDir, "imported-skies"))
+    }
+
+    /**
+     * The imported-sky bitmaps (r41), decoded once per registry load and
+     * shared by the preview and every export (the frame bitmaps' pattern;
+     * a payload that fails to decode is absent, never thrown).
+     */
+    internal val importedSkyBitmaps: MutableMap<String, Bitmap> =
+        java.util.Collections.synchronizedMap(java.util.LinkedHashMap())
+
+    /** Re-decodes every imported sky (per import); broken files are absent. */
+    internal fun reloadImportedSkies(): Map<String, Bitmap> {
+        val reloaded = java.util.LinkedHashMap<String, Bitmap>()
+        for (sky in importedSkyStore.list()) {
+            val file = importedSkyStore.fileFor(sky.id) ?: continue
+            try {
+                BitmapFactory.decodeFile(file.path)?.let { reloaded[sky.id] = it }
+            } catch (_: OutOfMemoryError) {
+            } catch (_: RuntimeException) {
+            }
+        }
+        importedSkyBitmaps.clear()
+        importedSkyBitmaps.putAll(reloaded)
+        return java.util.LinkedHashMap(reloaded)
+    }
+
+    /**
+     * The inference seam (r41): the ORT facade, NNAPI-first with CPU
+     * fallback. Lazy --- the runtime loads when the first AI commit runs,
+     * never at launch; a missing/broken runtime degrades the affected
+     * feature with its dedicated message, never a crash.
+     */
+    internal val aiInference: EditAiInference by lazy {
+        OrtEditAiInference { path ->
+            try {
+                assets.open(path)
+            } catch (_: RuntimeException) {
+                null
+            }
+        }
+    }
+
+    /** The face-retouch consent store (r41, ADR-0010 section 5; default-off). */
+    internal val retouchConsentStore: RetouchConsentStore by lazy {
+        RetouchConsentStore(File(filesDir, "edit-settings"))
+    }
+
+    /**
+     * The caller-RESOLVED r41 artifact bundle for a recipe: the store's
+     * artifacts for the recipe's keys, the resolved sky source (the
+     * bundled parametric code, or an imported bitmap), and the retouch
+     * consent gate (the stage REFUSES under consent-off even with a
+     * restored sidecar --- the layer stays verbatim, the stage skips).
+     * ONE resolver shared by the preview and every export, so they agree
+     * by construction. A missing artifact degrades that stage to nothing
+     * --- the frame/sticker tolerance contract, never a crash.
+     */
+    internal fun resolveAiStageInputs(recipe: EditRecipe): EditAiStageInputs {
+        val eraseMasks = HashMap<String, FractionRleMask>()
+        val eraseFills = HashMap<String, FillPatch>()
+        recipe.aiErase?.layers?.forEach { layer ->
+            val ref = layer.artifactRef
+            if (ref.isEmpty()) return@forEach
+            aiStore.readEraseArtifact(ref)?.let { (mask, fill) ->
+                eraseMasks[layer.id] = mask
+                eraseFills[layer.id] = fill
+            }
+        }
+        val skyMask = recipe.sky?.maskRef?.takeIf { it.isNotEmpty() }?.let { aiStore.readSkyMask(it) }
+        val skySource = recipe.sky?.let { sel ->
+            if (BundledSkies.byId(sel.skyId) != null) {
+                SkySource.Parametric(sel.skyId)
+            } else {
+                importedSkyBitmaps[sel.skyId]?.let { bmp ->
+                    val px = IntArray(bmp.width * bmp.height)
+                    bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+                    SkySource.Pixels(px, bmp.width, bmp.height)
+                }
+            }
+        }
+        val depth = recipe.bokeh?.depthRef?.takeIf { it.isNotEmpty() }?.let { aiStore.readDepth(it) }
+        val boxes = recipe.retouch?.boxesRef?.takeIf { it.isNotEmpty() }?.let { aiStore.readBoxes(it) }
+        return EditAiStageInputs(
+            eraseMasks = eraseMasks,
+            eraseFills = eraseFills,
+            skyMask = skyMask,
+            skySource = skySource,
+            depth = depth,
+            faceBoxes = boxes,
+            retouchConsentGranted = retouchConsentStore.load().stageMayRun,
+        )
     }
 
     /**
@@ -509,7 +624,14 @@ class EditActivity : ComponentActivity() {
             val pixels = IntArray(width * height)
             source.getPixels(pixels, 0, width, 0, 0, width, height)
             val look = export.recipe.lut?.let { bundledLooks[it.lutId] }
-            val pipelined = EditPipeline.apply(pixels, width, height, export.recipe, look)
+            // r41: the AI stages replay over the SAME resolved artifact
+            // bundle the preview used (one resolver, one store) --- no
+            // model ever runs during export; the fill patch is bounded by
+            // the session's working resolution, so an erased region on a
+            // very large export is softer than its surroundings (the
+            // contract's stated honest limitation).
+            val ai = resolveAiStageInputs(export.recipe)
+            val pipelined = EditPipeline.apply(pixels, width, height, export.recipe, look, ai)
             val adjusted = Bitmap.createBitmap(
                 pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888,
             )
@@ -624,8 +746,12 @@ class EditActivity : ComponentActivity() {
             // 9. The sidecar's edit resolved into the copy: clear it BEFORE
             // reporting success (a failure here answers OK --- the export
             // itself succeeded; a leftover sidecar self-heals on next load).
+            // r41: the derived-artifact store sweeps TOGETHER with the
+            // sidecar (append-only until the edit resolves; this is the
+            // only delete).
             try {
                 sidecarStore.clear(sourceUri)
+                aiStore.sweep()
             } catch (_: RuntimeException) {
                 // Best-effort; never mask the export's success.
             }
@@ -884,6 +1010,28 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var importedFrames by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     var framesVersion by remember { mutableStateOf(0) }
     var frameImportError by remember { mutableStateOf<String?>(null) }
+    // r41 AI state: the Erase paint mode (the exclusive duality's THIRD
+    // member --- one paint mode at a time across Draw/Region/Erase,
+    // enforced at all three toggles) + its live point list; the commit
+    // machinery's honest progress (aiBusy + the fraction + the cancel
+    // flag the inference seam polls); the dedicated degradation message
+    // (a string resource, shown until the next attempt); the imported-sky
+    // registry snapshot + its version counter + the import rejection
+    // line; the retouch consent state (default-off, ADR-0010 section 5)
+    // + the first-use dialog + the settings sheet's open flag.
+    var eraseMode by remember { mutableStateOf(false) }
+    var erasePaintDraft by remember { mutableStateOf<List<AiEraseLayer.Point>?>(null) }
+    var selectedEraseLayerId by remember { mutableStateOf<String?>(null) }
+    var aiBusy by remember { mutableStateOf(false) }
+    var aiProgressPct by remember { mutableStateOf(0) }
+    var aiCancelRequested by remember { mutableStateOf(false) }
+    var aiNotice by remember { mutableStateOf<Int?>(null) }
+    var importedSkies by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
+    var skiesVersion by remember { mutableStateOf(0) }
+    var skyImportError by remember { mutableStateOf<String?>(null) }
+    var retouchConsent by remember { mutableStateOf(RetouchConsent.NOT_GRANTED) }
+    var retouchConsentDialog by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     val committed = uiState.recipe
 
@@ -1065,6 +1213,28 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         if (d != null && d.first == "frame-width" && effective.frame != null) {
             effective = effective.copy(frame = effective.frame!!.copy(widthPct = d.second))
         }
+        // r41: the AI single-selection sliders' live drafts (the frame
+        // width's shape verbatim --- one selection per family, no per-layer
+        // id in the key; each commits once on release).
+        if (d != null && d.first == "sky-opacity" && effective.sky != null) {
+            effective = effective.copy(sky = effective.sky!!.copy(opacityPct = d.second.coerceIn(0, 100)))
+        }
+        if (d != null && d.first == "bokeh-strength" && effective.bokeh != null) {
+            effective = effective.copy(bokeh = effective.bokeh!!.copy(blurStrengthPct = d.second.coerceIn(1, 100)))
+        }
+        if (d != null && d.first == "bokeh-focal" && effective.bokeh != null) {
+            effective = effective.copy(bokeh = effective.bokeh!!.copy(focalDepthNorm = d.second.coerceIn(0, 100) / 100.0))
+        }
+        if (d != null && effective.retouch != null && d.first.startsWith("retouch-")) {
+            val sel = effective.retouch!!
+            effective = effective.copy(
+                retouch = when (d.first) {
+                    "retouch-smoothing" -> sel.copy(smoothingPct = d.second.coerceIn(0, 100))
+                    "retouch-eyes" -> sel.copy(eyeBrightenPct = d.second.coerceIn(0, 100))
+                    else -> sel.copy(faceSlimPct = d.second.coerceIn(0, 100))
+                },
+            )
+        }
         return effective
     }
 
@@ -1237,6 +1407,267 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commit(current.copy(mosaicRegions = RegionLayers(existing + newLayer)))
     }
 
+    // ---- r41 AI helpers (the inference-at-COMMIT machinery) ----
+
+    /** The dedicated degradation message for a boundary kind + feature. */
+    fun aiDegradationRes(kind: EditAiDegradation, modelsMissingRes: Int): Int = when (kind) {
+        EditAiDegradation.MODELS_MISSING_FROM_BUILD -> modelsMissingRes
+        EditAiDegradation.RUNTIME_BROKEN -> R.string.editor_ai_runtime_broken
+        EditAiDegradation.NO_SKY_FOUND -> R.string.editor_ai_no_sky
+        EditAiDegradation.CANCELLED -> R.string.editor_ai_cancelled
+    }
+
+    /**
+     * The inference seam's honest progress + cancellation plumbing: the
+     * fraction feeds the UI line, the cancel flag is polled inside the
+     * model runs --- a cancel answers CANCELLED, never an error.
+     */
+    val aiProgress = object : AiProgress {
+        override fun report(fraction: Int) {
+            aiProgressPct = fraction.coerceIn(0, 100)
+        }
+
+        override fun isCancelled(): Boolean = aiCancelRequested
+    }
+
+    /**
+     * The WORKING GRID the models see: the preview's own fully-graded
+     * pixels (the pipeline output the user is looking at, at preview
+     * resolution) --- the same resolver and pipeline the render uses, so
+     * the inference input can never disagree with the preview. The
+     * artifact keys embed this grid's hash, so a changed adjustment
+     * derives a NEW key (the append-only rule).
+     */
+    suspend fun aiWorkingGrid(): Triple<IntArray, Int, Int>? = withContext(Dispatchers.Default) {
+        val base = previewBase ?: return@withContext null
+        val effective = effectiveRecipe()
+        val display = effective.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0))
+        val look = effective.lut?.let { looks[it.lutId] }
+        val w = base.width
+        val h = base.height
+        val px = IntArray(w * h)
+        base.getPixels(px, 0, w, 0, 0, w, h)
+        val aiNow = activity.resolveAiStageInputs(display)
+        val pipelined = EditPipeline.apply(px, w, h, display, look, aiNow)
+        Triple(pipelined.pixels, pipelined.width, pipelined.height)
+    }
+
+    /**
+     * ONE runner for the four AI commits: off the UI thread (the coroutine
+     * scope is Main; the work blocks hop to Default), cancellable through
+     * [aiProgress], one snapshot when the artifact lands. Refuses while a
+     * commit is already running or an export is in flight.
+     */
+    fun runAiCommit(work: suspend () -> Unit) {
+        if (aiBusy || exporting) return
+        aiBusy = true
+        aiCancelRequested = false
+        aiNotice = null
+        aiProgressPct = 0
+        uiScope.launch {
+            try {
+                work()
+            } finally {
+                aiBusy = false
+            }
+        }
+    }
+
+    /**
+     * Sweeps the in-progress erase gesture into its COMMIT: thin the live
+     * point list, then run the segmentation + inpainting ONCE (off the UI
+     * thread, cancellable, honest progress), persist the refined mask +
+     * fill pair as ONE artifact, and commit the erase layer referencing
+     * it. A tap under three samples drops honestly (the region commit
+     * rule). The undo snapshot lands when the artifact does --- inference
+     * IS the commit.
+     */
+    fun commitErasePaintDraftIfPending() {
+        val pending = erasePaintDraft ?: return
+        erasePaintDraft = null
+        if (pending.size < 3 || aiBusy || exporting) return
+        val thinned = AiEraseLayer.thin(pending, AiEraseLayer.MAX_POINTS)
+        runAiCommit {
+            val grid = aiWorkingGrid()
+            if (grid == null) {
+                aiNotice = R.string.editor_ai_runtime_broken
+                return@runAiCommit
+            }
+            val (working, width, height) = grid
+            val seed = thinned.joinToString(",") { "${it.x},${it.y}" }
+            when (val result = EditAiCommit.erase(activity.aiInference, working, width, height, thinned, aiProgress)) {
+                is AiRun.Unavailable ->
+                    aiNotice = aiDegradationRes(result.kind, R.string.editor_ai_erase_models_missing)
+                is AiRun.Ok -> {
+                    val (mask, patch) = result.value
+                    if (patch == null) {
+                        aiNotice = R.string.editor_ai_erase_too_small
+                        return@runAiCommit
+                    }
+                    val current = uiState.recipe
+                    val existing = current.aiErase?.layers ?: emptyList()
+                    val id = AiEraseLayer.newId(existing.map { it.id })
+                    val key = activity.aiStore.keyFor(
+                        id,
+                        EditAiCommit.pixelInputs(working, seed),
+                        EditAiModels.IDENTITY_SALIENCY,
+                    )
+                    if (!activity.aiStore.writeEraseArtifact(key, mask, patch)) {
+                        aiNotice = R.string.editor_ai_store_failed
+                        return@runAiCommit
+                    }
+                    commit(
+                        current.copy(
+                            aiErase = AiEraseLayers(
+                                existing + AiEraseLayer(id = id, points = thinned, artifactRef = key),
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Ensures a resolvable sky mask exists: the committed one, else a fresh detection. */
+    suspend fun ensureSkyMaskKey(): String? {
+        val committedKey = committed.sky?.maskRef?.takeIf { it.isNotEmpty() }
+        if (committedKey != null && activity.aiStore.readSkyMask(committedKey) != null) {
+            return committedKey
+        }
+        return detectSkyMaskKey()
+    }
+
+    /** Runs the sky detection against the CURRENT working grid and persists the mask artifact. */
+    suspend fun detectSkyMaskKey(): String? {
+        val grid = aiWorkingGrid() ?: run {
+            aiNotice = R.string.editor_ai_runtime_broken
+            return null
+        }
+        val (working, width, height) = grid
+        return when (val result = EditAiCommit.sky(activity.aiInference, working, width, height, aiProgress)) {
+            is AiRun.Unavailable -> {
+                aiNotice = aiDegradationRes(result.kind, R.string.editor_ai_sky_models_missing)
+                null
+            }
+            is AiRun.Ok -> {
+                val key = activity.aiStore.keyFor(
+                    "sky",
+                    EditAiCommit.pixelInputs(working, ""),
+                    EditAiModels.IDENTITY_SALIENCY,
+                )
+                if (activity.aiStore.writeSkyMask(key, result.value)) key else null
+            }
+        }
+    }
+
+    /**
+     * Selects a sky: instant when a resolvable mask artifact exists, else
+     * the detection runs first (once, cancellable); [freshDetection]
+     * forces the re-apply (a changed adjustment derives a NEW artifact
+     * key; the previous one stays for the undo stack).
+     */
+    fun selectSky(skyId: String, freshDetection: Boolean = false) {
+        if (aiBusy || exporting) return
+        fun commitSky(maskKey: String) {
+            commit(
+                committed.copy(
+                    sky = SkySelection(
+                        maskRef = maskKey,
+                        skyId = skyId,
+                        opacityPct = committed.sky?.opacityPct ?: SkySelection.DEFAULT_OPACITY_PCT,
+                    ),
+                ),
+            )
+        }
+        if (!freshDetection) {
+            val existingKey = committed.sky?.maskRef?.takeIf { it.isNotEmpty() }
+            if (existingKey != null && activity.aiStore.readSkyMask(existingKey) != null) {
+                commitSky(existingKey)
+                return
+            }
+        }
+        runAiCommit {
+            val key = if (freshDetection) detectSkyMaskKey() else ensureSkyMaskKey()
+            if (key != null) commitSky(key)
+        }
+    }
+
+    /** Runs the depth estimation once and commits the bokeh selection over the artifact. */
+    fun runBokehEstimate() {
+        runAiCommit {
+            val grid = aiWorkingGrid()
+            if (grid == null) {
+                aiNotice = R.string.editor_ai_runtime_broken
+                return@runAiCommit
+            }
+            val (working, width, height) = grid
+            when (val result = EditAiCommit.depth(activity.aiInference, working, width, height, aiProgress)) {
+                is AiRun.Unavailable ->
+                    aiNotice = aiDegradationRes(result.kind, R.string.editor_ai_bokeh_models_missing)
+                is AiRun.Ok -> {
+                    val key = activity.aiStore.keyFor(
+                        "bokeh",
+                        EditAiCommit.pixelInputs(working, ""),
+                        EditAiModels.IDENTITY_DEPTH,
+                    )
+                    if (!activity.aiStore.writeDepth(key, result.value)) {
+                        aiNotice = R.string.editor_ai_store_failed
+                        return@runAiCommit
+                    }
+                    commit(
+                        committed.copy(
+                            bokeh = BokehSelection(
+                                depthRef = key,
+                                blurStrengthPct = committed.bokeh?.blurStrengthPct
+                                    ?: BokehSelection.DEFAULT_BLUR_STRENGTH_PCT,
+                                focalDepthNorm = committed.bokeh?.focalDepthNorm
+                                    ?: BokehSelection.DEFAULT_FOCAL_DEPTH_NORM,
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Runs the face localization once (only ever under consent GRANTED) and commits the selection. */
+    fun runRetouchDetect() {
+        if (retouchConsent != RetouchConsent.GRANTED) return
+        runAiCommit {
+            val grid = aiWorkingGrid()
+            if (grid == null) {
+                aiNotice = R.string.editor_ai_runtime_broken
+                return@runAiCommit
+            }
+            val (working, width, height) = grid
+            when (val result = EditAiCommit.faces(activity.aiInference, working, width, height, aiProgress)) {
+                is AiRun.Unavailable ->
+                    aiNotice = aiDegradationRes(result.kind, R.string.editor_ai_retouch_models_missing)
+                is AiRun.Ok -> {
+                    val key = activity.aiStore.keyFor(
+                        "retouch",
+                        EditAiCommit.pixelInputs(working, ""),
+                        EditAiModels.IDENTITY_FACES,
+                    )
+                    if (!activity.aiStore.writeBoxes(key, result.value)) {
+                        aiNotice = R.string.editor_ai_store_failed
+                        return@runAiCommit
+                    }
+                    commit(
+                        committed.copy(
+                            retouch = RetouchSelection(
+                                boxesRef = key,
+                                smoothingPct = committed.retouch?.smoothingPct ?: 0,
+                                eyeBrightenPct = committed.retouch?.eyeBrightenPct ?: 0,
+                                faceSlimPct = committed.retouch?.faceSlimPct ?: 0,
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     /**
      * The ONE sweep point for every pending draft across the families
      * (r36): each pending draft commits as its own snapshot, exactly as
@@ -1249,6 +1680,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitStickerPosDraftIfPending()
         commitPaintDraftIfPending()
         commitRegionPaintDraftIfPending()
+        // r41: the erase gesture sweeps into its own ASYNC commit (the
+        // inference IS the commit); it refuses while another AI commit or
+        // an export runs --- the honest drop, same as a gesture released
+        // exactly at an export boundary.
+        commitErasePaintDraftIfPending()
     }
 
 
@@ -1282,7 +1718,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         previewBase, committed, draft, textDraft, posDraft, stickerPosDraft,
         paintDraft, brushColor, brushWidth, brushOpacity, brushSmoothing,
         regionPaintDraft, regionKind, regionStrength,
-        looks, importedStickers, importedFrames,
+        looks, importedStickers, importedFrames, importedSkies, retouchConsent,
     ) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
@@ -1293,7 +1729,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             val height = base.height
             val pixels = IntArray(width * height)
             base.getPixels(pixels, 0, width, 0, 0, width, height)
-            val pipelined = EditPipeline.apply(pixels, width, height, displayRecipe, look)
+            // r41: the AI stages replay over the SAME resolved artifact
+            // bundle the export uses (one resolver, one store) --- no
+            // model ever runs during a render; re-keyed on the imported
+            // skies and the consent state so a kill-switch or an import
+            // re-renders immediately.
+            val ai = activity.resolveAiStageInputs(displayRecipe)
+            val pipelined = EditPipeline.apply(pixels, width, height, displayRecipe, look, ai)
             val out = Bitmap.createBitmap(pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888)
             out.setPixels(pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height)
             // The crop overlay rect rides the POST-geometry frame of the
@@ -1383,6 +1825,22 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     LaunchedEffect(framesVersion) {
         importedFrames = withContext(Dispatchers.IO) {
             activity.reloadImportedFrames()
+        }
+    }
+
+    // The imported-sky registry (r41): the frame machinery, sky-shaped.
+    LaunchedEffect(skiesVersion) {
+        importedSkies = withContext(Dispatchers.IO) {
+            activity.reloadImportedSkies()
+        }
+    }
+
+    // The retouch consent state (r41): loaded once per composition from
+    // the per-install store (default-off; the dialog and the settings
+    // kill-switch write through it).
+    LaunchedEffect(Unit) {
+        retouchConsent = withContext(Dispatchers.IO) {
+            activity.retouchConsentStore.load()
         }
     }
 
@@ -1517,6 +1975,40 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
+    // The r41 sky import flow: the frame import flow, sky-shaped (the
+    // ImportedFrameStore contract verbatim through ImportedSkyStore).
+    val skyImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            uiScope.launch {
+                skyImportError = null
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        val bytes = activity.contentResolver
+                            .openInputStream(uri)
+                            ?.use { it.readBytes() }
+                        if (bytes == null) {
+                            null
+                        } else {
+                            activity.importedSkyStore.import(
+                                bytes,
+                                activity.sourceDisplayName(uri.toString()),
+                            )
+                        }
+                    } catch (_: IOException) {
+                        null
+                    }
+                }
+                when (result) {
+                    is ImportedSkyStore.ImportResult.Imported -> skiesVersion++
+                    is ImportedSkyStore.ImportResult.Rejected -> skyImportError = result.reason
+                    null -> skyImportError = "the file could not be read"
+                }
+            }
+        }
+    }
+
     LaunchedEffect(exporting) {
         if (exporting) {
             val choice = exportChoice ?: ExportChoice()
@@ -1582,6 +2074,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     .weight(1f)
                     .semantics { heading() },
             )
+            // r41: the editor's FIRST settings entry --- a one-row sheet
+            // (the retouch kill-switch lives there; ADR-0010 section 5).
+            TextButton(
+                onClick = { settingsOpen = !settingsOpen },
+                enabled = !exporting,
+            ) {
+                Text(stringResource(R.string.editor_settings))
+            }
             TextButton(
                 onClick = {
                     sweepPendingDrafts()
@@ -1643,7 +2143,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 .pointerInput(
                     selectedTextLayerId, selectedStickerLayerId,
                     selectedDrawLayerId, selectedRegionLayerId,
-                    drawMode, regionMode,
+                    drawMode, regionMode, eraseMode,
                 ) {
                     val grabRadiusPx = 48.dp.toPx()
 
@@ -1727,14 +2227,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     var dragging = false
                     var painting = false
                     var paintingRegion = false
+                    var paintingErase = false
                     detectDragGestures(
                         onDragStart = { start ->
-                            painting = drawMode || regionMode
+                            painting = drawMode || regionMode || eraseMode
                             paintingRegion = painting && regionMode
+                            paintingErase = painting && eraseMode
                             if (painting) {
                                 mapToFraction(start)?.let { (fx, fy) ->
                                     if (paintingRegion) {
                                         regionPaintDraft = listOf(RegionLayer.Point(fx, fy))
+                                    } else if (paintingErase) {
+                                        erasePaintDraft = listOf(AiEraseLayer.Point(fx, fy))
                                     } else {
                                         paintDraft = listOf(DrawLayer.Point(fx, fy))
                                     }
@@ -1754,6 +2258,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                     if (paintingRegion) {
                                         regionPaintDraft =
                                             (regionPaintDraft ?: emptyList()) + RegionLayer.Point(fx, fy)
+                                    } else if (paintingErase) {
+                                        erasePaintDraft =
+                                            (erasePaintDraft ?: emptyList()) + AiEraseLayer.Point(fx, fy)
                                     } else {
                                         paintDraft = (paintDraft ?: emptyList()) + DrawLayer.Point(fx, fy)
                                     }
@@ -1768,19 +2275,23 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         },
                         onDragEnd = {
                             if (paintingRegion) commitRegionPaintDraftIfPending()
-                            if (painting && !paintingRegion) commitPaintDraftIfPending()
+                            if (paintingErase) commitErasePaintDraftIfPending()
+                            if (painting && !paintingRegion && !paintingErase) commitPaintDraftIfPending()
                             if (dragging) sweepPendingDrafts()
                             dragging = false
                             painting = false
                             paintingRegion = false
+                            paintingErase = false
                         },
                         onDragCancel = {
                             if (paintingRegion) commitRegionPaintDraftIfPending()
-                            if (painting && !paintingRegion) commitPaintDraftIfPending()
+                            if (paintingErase) commitErasePaintDraftIfPending()
+                            if (painting && !paintingRegion && !paintingErase) commitPaintDraftIfPending()
                             if (dragging) sweepPendingDrafts()
                             dragging = false
                             painting = false
                             paintingRegion = false
+                            paintingErase = false
                         },
                     )
                 },
@@ -1830,6 +2341,51 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 }
             } else {
                 CircularProgressIndicator(color = Color.White)
+            }
+        }
+
+        // ---- The r41 settings sheet (the editor's FIRST, one row) ----
+        // The retouch kill-switch lives here (ADR-0010 section 5): a
+        // permanent disable hides the entry AND the stage refuses even
+        // with a restored sidecar (the layer stays verbatim, the stage
+        // skips --- pinned in RetouchConsentTest + AiRenderTest).
+        if (settingsOpen && !exporting) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xEE101010))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.editor_settings),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    text = stringResource(R.string.editor_settings_retouch_title),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (retouchConsent == RetouchConsent.PERMANENTLY_DISABLED) {
+                    Text(
+                        text = stringResource(R.string.editor_settings_retouch_disabled),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                } else {
+                    TextButton(
+                        onClick = {
+                            val next = RetouchConsentMachine.onPermanentlyDisable(retouchConsent)
+                            if (activity.retouchConsentStore.save(next)) {
+                                retouchConsent = next
+                            }
+                        },
+                        enabled = !exporting && !aiBusy,
+                    ) {
+                        Text(stringResource(R.string.editor_settings_retouch_disable))
+                    }
+                }
             }
         }
 
@@ -2714,9 +3270,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         if (drawMode) {
                             // Entering paint mode drops every selection ---
                             // painting owns the gesture; the user keeps
-                            // painting across strokes. The r37 twin: the two
-                            // paint modes are mutually exclusive.
+                            // painting across strokes. The r37 twin grew to
+                            // THREE paint modes in r41 (Draw/Region/Erase):
+                            // mutually exclusive, enforced at every toggle.
                             regionMode = false
+                            eraseMode = false
                             selectedTextLayerId = null
                             selectedStickerLayerId = null
                             selectedDrawLayerId = null
@@ -2736,6 +3294,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 selectedDrawLayerId = layer.id
                                 drawMode = false // the duality is exclusive
                                 regionMode = false // and so are the paint modes
+                                eraseMode = false // all three of them (r41)
                                 selectedTextLayerId = null
                                 selectedStickerLayerId = null
                                 selectedRegionLayerId = null
@@ -2970,9 +3529,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         regionMode = !regionMode
                         if (regionMode) {
                             // Entering region paint mode drops every
-                            // selection and exits the other paint mode;
+                            // selection and exits the other paint modes;
                             // the user keeps painting across regions.
                             drawMode = false
+                            eraseMode = false
                             selectedTextLayerId = null
                             selectedStickerLayerId = null
                             selectedDrawLayerId = null
@@ -2992,6 +3552,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 selectedRegionLayerId = layer.id
                                 regionMode = false
                                 drawMode = false
+                                eraseMode = false
                                 selectedTextLayerId = null
                                 selectedStickerLayerId = null
                                 selectedDrawLayerId = null
@@ -3261,6 +3822,574 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 // An unresolvable id (a version skew, a deleted import)
                 // selects NO chip --- the tolerance contract, shown
                 // honestly exactly like an unknown look id.
+            }
+
+            // ---- r41: the Edit v3 AI sections (Phase 10 sub-scope A) ----
+            // The shared honest progress + cancellation line: every AI
+            // commit runs ONCE, off the UI thread, when the user applies
+            // or re-applies a feature; the models never run during a
+            // render or an export. The quality note is honest per
+            // ADR-0010: compact on-device models, bounded results.
+            if (aiBusy) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                    )
+                    Text(
+                        text = stringResource(R.string.editor_ai_progress, aiProgressPct),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                    TextButton(
+                        onClick = { aiCancelRequested = true },
+                        enabled = !exporting,
+                    ) {
+                        Text(stringResource(R.string.editor_ai_cancel))
+                    }
+                }
+            }
+            aiNotice?.let { noticeRes ->
+                Text(
+                    text = stringResource(noticeRes),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+
+            // ---- Magic erase: the third paint mode ----
+            // The r37 region section's shape: the mode chip (ONE paint
+            // mode at a time across Draw/Region/Erase, enforced at all
+            // three toggles), the layer chips, and the controls under
+            // the mode. The erase gesture paints the seed; the inference
+            // (segmentation + inpainting) runs ONCE at gesture end ---
+            // off the UI thread, cancellable, honest progress --- and the
+            // refined mask + fill persist as ONE derived artifact.
+            Text(
+                text = stringResource(R.string.editor_section_ai_erase),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(
+                    selected = eraseMode,
+                    onClick = {
+                        sweepPendingDrafts()
+                        eraseMode = !eraseMode
+                        if (eraseMode) {
+                            // The duality's rule, third member: entering
+                            // Erase paint mode exits the other two and
+                            // drops every selection.
+                            drawMode = false
+                            regionMode = false
+                            selectedTextLayerId = null
+                            selectedStickerLayerId = null
+                            selectedDrawLayerId = null
+                            selectedRegionLayerId = null
+                        }
+                    },
+                    enabled = !exporting && !aiBusy,
+                    label = { Text(stringResource(R.string.editor_ai_erase_mode)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                committed.aiErase?.layers?.forEachIndexed { index, layer ->
+                    FilterChip(
+                        selected = selectedEraseLayerId == layer.id,
+                        onClick = {
+                            if (selectedEraseLayerId != layer.id) {
+                                sweepPendingDrafts()
+                                selectedEraseLayerId = layer.id
+                                drawMode = false
+                                regionMode = false
+                                eraseMode = false
+                                selectedTextLayerId = null
+                                selectedStickerLayerId = null
+                                selectedDrawLayerId = null
+                                selectedRegionLayerId = null
+                            }
+                        },
+                        enabled = !exporting && !aiBusy,
+                        label = { Text(stringResource(R.string.editor_ai_erase_layer, index + 1)) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+            }
+            if (eraseMode) {
+                // The honest bounds note (ADR-0010: on-device quality is
+                // bounded; the strings say so without apologising).
+                Text(
+                    text = stringResource(R.string.editor_ai_erase_hint),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            } else {
+                val selectedEraseLayer = committed.aiErase?.layers
+                    ?.firstOrNull { it.id == selectedEraseLayerId }
+                if (selectedEraseLayer != null) {
+                    val layerId = selectedEraseLayer.id
+                    if (selectedEraseLayer.artifactRef.isNotEmpty() &&
+                        !activity.aiStore.contains(
+                            EditAiStore.ArtifactKind.MASK,
+                            selectedEraseLayer.artifactRef,
+                        )
+                    ) {
+                        // The honest degraded note: the layer's artifact is
+                        // gone, it renders nothing (never dead controls).
+                        Text(
+                            text = stringResource(R.string.editor_ai_degraded_layer),
+                            color = Color.White.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            sweepPendingDrafts()
+                            val remaining = (committed.aiErase?.layers ?: emptyList())
+                                .filterNot { it.id == layerId }
+                            commit(
+                                committed.copy(
+                                    aiErase = if (remaining.isEmpty()) {
+                                        null
+                                    } else {
+                                        AiEraseLayers(remaining)
+                                    },
+                                ),
+                            )
+                            selectedEraseLayerId = remaining.lastOrNull()?.id
+                        },
+                        enabled = !exporting,
+                    ) {
+                        Text(stringResource(R.string.editor_ai_erase_remove))
+                    }
+                }
+            }
+
+            // ---- Sky replacement: detect once, then the registry ----
+            // The frames section's shape: None, the bundled five
+            // (PROJECT-AUTHORED parametric skies --- no third-party sky
+            // bitmaps ship in this APK), the imports (the
+            // ImportedFrameStore contract verbatim), the import chip. A
+            // sky chip that finds no resolvable mask runs the detection
+            // first (once, cancellable); a re-detect is a deliberate
+            // re-apply. The opacity slider re-renders from the stored
+            // mask --- no re-inference.
+            Text(
+                text = stringResource(R.string.editor_section_ai_sky),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(
+                    selected = committed.sky == null,
+                    onClick = { sweepPendingDrafts(); commit(committed.copy(sky = null)) },
+                    enabled = !exporting && !aiBusy,
+                    label = { Text(stringResource(R.string.editor_ai_sky_none)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                BundledSkies.ORDERED.forEach { entry ->
+                    FilterChip(
+                        selected = committed.sky?.skyId == entry.id,
+                        onClick = {
+                            sweepPendingDrafts()
+                            selectSky(entry.id)
+                        },
+                        enabled = !exporting && !aiBusy,
+                        label = { Text(entry.displayName) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                importedSkies.keys.sorted().forEach { id ->
+                    FilterChip(
+                        selected = committed.sky?.skyId == id,
+                        onClick = {
+                            sweepPendingDrafts()
+                            selectSky(id)
+                        },
+                        enabled = !exporting && !aiBusy,
+                        label = { Text(id) },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                AssistChip(
+                    onClick = { skyImportLauncher.launch(arrayOf("image/png", "image/webp")) },
+                    enabled = !exporting && !aiBusy,
+                    label = { Text(stringResource(R.string.editor_ai_sky_import)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            skyImportError?.let { reason ->
+                Text(
+                    text = stringResource(R.string.editor_ai_sky_import_failed, reason),
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            val skySelection = committed.sky
+            if (skySelection != null) {
+                val skyOpacityLive = draft?.takeIf { it.first == "sky-opacity" }?.second
+                    ?: skySelection.opacityPct
+                val skyOpacityName = stringResource(R.string.editor_a11y_ai_sky_opacity)
+                val skyOpacityLabel = stringResource(R.string.editor_ai_sky_opacity, skyOpacityLive)
+                Text(
+                    text = skyOpacityLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = skyOpacityLive.toFloat(),
+                    onValueChange = { draft = "sky-opacity" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "sky-opacity" && committed.sky != null) {
+                                commit(
+                                    committed.copy(
+                                        sky = committed.sky!!.copy(opacityPct = d.second.coerceIn(0, 100)),
+                                    ),
+                                )
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = skyOpacityName
+                        stateDescription = skyOpacityLabel
+                    },
+                )
+                if (BundledSkies.byId(skySelection.skyId) == null &&
+                    importedSkies.containsKey(skySelection.skyId)
+                ) {
+                    Text(
+                        text = stringResource(R.string.editor_ai_sky_note),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                if (skySelection.maskRef.isNotEmpty() &&
+                    !activity.aiStore.contains(EditAiStore.ArtifactKind.MASK, skySelection.maskRef)
+                ) {
+                    Text(
+                        text = stringResource(R.string.editor_ai_degraded_layer),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                // A deliberate re-apply: re-detect the sky against the
+                // CURRENT working grid (a changed adjustment means a new
+                // artifact key; the old one stays for the undo stack).
+                TextButton(
+                    onClick = { sweepPendingDrafts(); selectSky(skySelection.skyId, freshDetection = true) },
+                    enabled = !exporting && !aiBusy,
+                ) {
+                    Text(stringResource(R.string.editor_ai_sky_redetect))
+                }
+            }
+
+            // ---- Bokeh: estimate the depth once, then pure re-renders ----
+            Text(
+                text = stringResource(R.string.editor_section_ai_bokeh),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(
+                    selected = committed.bokeh == null,
+                    onClick = { sweepPendingDrafts(); commit(committed.copy(bokeh = null)) },
+                    enabled = !exporting && !aiBusy,
+                    label = { Text(stringResource(R.string.editor_ai_bokeh_none)) },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                AssistChip(
+                    onClick = { sweepPendingDrafts(); runBokehEstimate() },
+                    enabled = !exporting && !aiBusy,
+                    label = {
+                        Text(
+                            stringResource(
+                                if (committed.bokeh == null) {
+                                    R.string.editor_ai_bokeh_estimate
+                                } else {
+                                    R.string.editor_ai_bokeh_reestimate
+                                },
+                            ),
+                        )
+                    },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            val bokehSelection = committed.bokeh
+            if (bokehSelection != null) {
+                val strengthLive = draft?.takeIf { it.first == "bokeh-strength" }?.second
+                    ?: bokehSelection.blurStrengthPct
+                val strengthName = stringResource(R.string.editor_a11y_ai_bokeh_strength)
+                val strengthLabel = stringResource(R.string.editor_ai_bokeh_strength, strengthLive)
+                Text(
+                    text = strengthLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = strengthLive.toFloat(),
+                    onValueChange = { draft = "bokeh-strength" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "bokeh-strength" && committed.bokeh != null) {
+                                commit(
+                                    committed.copy(
+                                        bokeh = committed.bokeh!!.copy(
+                                            blurStrengthPct = d.second.coerceIn(1, 100),
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 1f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = strengthName
+                        stateDescription = strengthLabel
+                    },
+                )
+                val focalLive = draft?.takeIf { it.first == "bokeh-focal" }?.second
+                    ?: (bokehSelection.focalDepthNorm * 100).toInt()
+                val focalName = stringResource(R.string.editor_a11y_ai_bokeh_focal)
+                val focalLabel = stringResource(R.string.editor_ai_bokeh_focal, focalLive)
+                Text(
+                    text = focalLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = focalLive.toFloat(),
+                    onValueChange = { draft = "bokeh-focal" to it.toInt() },
+                    onValueChangeFinished = {
+                        draft?.let { d ->
+                            if (d.first == "bokeh-focal" && committed.bokeh != null) {
+                                commit(
+                                    committed.copy(
+                                        bokeh = committed.bokeh!!.copy(
+                                            focalDepthNorm = d.second.coerceIn(0, 100) / 100.0,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                        draft = null
+                    },
+                    valueRange = 0f..100f,
+                    enabled = !exporting,
+                    modifier = Modifier.semantics {
+                        contentDescription = focalName
+                        stateDescription = focalLabel
+                    },
+                )
+                if (bokehSelection.depthRef.isNotEmpty() &&
+                    !activity.aiStore.contains(EditAiStore.ArtifactKind.DEPTH, bokehSelection.depthRef)
+                ) {
+                    Text(
+                        text = stringResource(R.string.editor_ai_degraded_layer),
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+
+            // ---- Face retouch: OPT-IN (ADR-0010 section 5) ----
+            // Hidden entirely under the permanent kill-switch; before a
+            // grant the only entry is the enable chip that opens the
+            // first-use consent dialog (what it does / on-device only /
+            // no face data leaves the device). Under consent-off the
+            // STAGE refuses even with a restored sidecar --- the layer
+            // stays verbatim in the recipe, the stage skips.
+            if (retouchConsent != RetouchConsent.PERMANENTLY_DISABLED) {
+                Text(
+                    text = stringResource(R.string.editor_section_ai_retouch),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                if (retouchConsent == RetouchConsent.GRANTED) {
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        FilterChip(
+                            selected = committed.retouch == null,
+                            onClick = { sweepPendingDrafts(); commit(committed.copy(retouch = null)) },
+                            enabled = !exporting && !aiBusy,
+                            label = { Text(stringResource(R.string.editor_ai_retouch_none)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        AssistChip(
+                            onClick = { sweepPendingDrafts(); runRetouchDetect() },
+                            enabled = !exporting && !aiBusy,
+                            label = { Text(stringResource(R.string.editor_ai_retouch_detect)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    val retouchSelection = committed.retouch
+                    if (retouchSelection != null) {
+                        val smoothingLive = draft?.takeIf { it.first == "retouch-smoothing" }?.second
+                            ?: retouchSelection.smoothingPct
+                        val smoothingName = stringResource(R.string.editor_a11y_ai_retouch_smoothing)
+                        val smoothingLabel = stringResource(
+                            R.string.editor_ai_retouch_smoothing,
+                            smoothingLive,
+                        )
+                        Text(
+                            text = smoothingLabel,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = smoothingLive.toFloat(),
+                            onValueChange = { draft = "retouch-smoothing" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "retouch-smoothing" && committed.retouch != null) {
+                                        commit(
+                                            committed.copy(
+                                                retouch = committed.retouch!!.copy(
+                                                    smoothingPct = d.second.coerceIn(0, 100),
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = smoothingName
+                                stateDescription = smoothingLabel
+                            },
+                        )
+                        val eyesLive = draft?.takeIf { it.first == "retouch-eyes" }?.second
+                            ?: retouchSelection.eyeBrightenPct
+                        val eyesName = stringResource(R.string.editor_a11y_ai_retouch_eyes)
+                        val eyesLabel = stringResource(R.string.editor_ai_retouch_eyes, eyesLive)
+                        Text(
+                            text = eyesLabel,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = eyesLive.toFloat(),
+                            onValueChange = { draft = "retouch-eyes" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "retouch-eyes" && committed.retouch != null) {
+                                        commit(
+                                            committed.copy(
+                                                retouch = committed.retouch!!.copy(
+                                                    eyeBrightenPct = d.second.coerceIn(0, 100),
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = eyesName
+                                stateDescription = eyesLabel
+                            },
+                        )
+                        val slimLive = draft?.takeIf { it.first == "retouch-slim" }?.second
+                            ?: retouchSelection.faceSlimPct
+                        val slimName = stringResource(R.string.editor_a11y_ai_retouch_slim)
+                        val slimLabel = stringResource(R.string.editor_ai_retouch_slim, slimLive)
+                        Text(
+                            text = slimLabel,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = slimLive.toFloat(),
+                            onValueChange = { draft = "retouch-slim" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "retouch-slim" && committed.retouch != null) {
+                                        commit(
+                                            committed.copy(
+                                                retouch = committed.retouch!!.copy(
+                                                    faceSlimPct = d.second.coerceIn(0, 100),
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = slimName
+                                stateDescription = slimLabel
+                            },
+                        )
+                        if (retouchSelection.boxesRef.isNotEmpty() &&
+                            !activity.aiStore.contains(
+                                EditAiStore.ArtifactKind.BOXES,
+                                retouchSelection.boxesRef,
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(R.string.editor_ai_degraded_layer),
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                } else {
+                    // Default-off: the single opt-in entry. A deny keeps
+                    // it (the next use re-asks); the never is the
+                    // Settings kill-switch.
+                    AssistChip(
+                        onClick = { retouchConsentDialog = true },
+                        enabled = !exporting,
+                        label = { Text(stringResource(R.string.editor_ai_retouch_enable)) },
+                    )
+                }
+
+                // The first-use consent dialog (ADR-0010 section 5): the
+                // text states what the model does, that it runs on-device
+                // only, and that no face data leaves the device. A grant
+                // persists per install; a deny re-asks on the next use.
+                if (retouchConsentDialog && retouchConsent == RetouchConsent.NOT_GRANTED) {
+                    AlertDialog(
+                        onDismissRequest = { retouchConsentDialog = false },
+                        title = { Text(stringResource(R.string.editor_ai_retouch_consent_title)) },
+                        text = { Text(stringResource(R.string.editor_ai_retouch_consent_body)) },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val next = RetouchConsentMachine.onGrant(retouchConsent)
+                                    if (activity.retouchConsentStore.save(next)) {
+                                        retouchConsent = next
+                                    }
+                                    retouchConsentDialog = false
+                                },
+                            ) {
+                                Text(stringResource(R.string.editor_ai_retouch_consent_grant))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    // A deny stays NOT_GRANTED (the next
+                                    // use re-asks); nothing persists.
+                                    retouchConsent = RetouchConsentMachine.onDeny(retouchConsent)
+                                    retouchConsentDialog = false
+                                },
+                            ) {
+                                Text(stringResource(R.string.editor_ai_retouch_consent_deny))
+                            }
+                        },
+                    )
+                }
             }
 
             // ---- Per-channel HSL: band selector + three sliders ----

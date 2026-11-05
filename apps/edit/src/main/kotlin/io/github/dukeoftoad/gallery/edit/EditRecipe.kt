@@ -69,6 +69,18 @@ data class EditRecipe(
     // verbatim and degrades to NO FRAME at render time (the look's
     // tolerance contract; see Frames.kt).
     val frame: FrameSelection? = null,
+    // ---- The r41 AI containers (Phase 10 sub-scope A; layer types 6-9) ----
+    // Absent = a pre-r41 sidecar / a clean session; empty normalises to
+    // absent. The four are PIXEL STAGE families in the pipeline's tail
+    // (erase -> sky -> bokeh -> retouch -> the regions, which stay
+    // FINAL). Artifact keys resolve in the derived-artifact store
+    // (EditAiStore.kt); an unresolvable key round-trips verbatim and
+    // renders NOTHING (the frame/sticker tolerance contract; see
+    // AiLayers.kt).
+    val aiErase: AiEraseLayers? = null,
+    val sky: SkySelection? = null,
+    val bokeh: BokehSelection? = null,
+    val retouch: RetouchSelection? = null,
 ) {
 
     val isGeometryIdentity: Boolean
@@ -105,10 +117,30 @@ data class EditRecipe(
     val isFrameIdentity: Boolean
         get() = frame == null
 
+    /** No erase layers --- nothing for the erase stage to fill. */
+    val isAiEraseIdentity: Boolean
+        get() = aiErase == null || aiErase.isIdentity
+
+    /** No sky selection --- nothing for the sky stage to replace. */
+    val isSkyIdentity: Boolean
+        get() = sky == null
+
+    /** No bokeh selection --- nothing for the bokeh stage to blur. */
+    val isBokehIdentity: Boolean
+        get() = bokeh == null
+
+    /** No retouch selection --- nothing for the retouch stage to polish. */
+    val isRetouchIdentity: Boolean
+        get() = retouch == null
+
+    /** The r41 four: absent AI containers run nothing (the family rule). */
+    val isAiIdentity: Boolean
+        get() = isAiEraseIdentity && isSkyIdentity && isBokehIdentity && isRetouchIdentity
+
     val isIdentity: Boolean
         get() = isGeometryIdentity && isAdjustmentIdentity && isFilterIdentity &&
             isTextIdentity && isStickerIdentity && isDrawIdentity && isRegionIdentity &&
-            isFrameIdentity
+            isFrameIdentity && isAiIdentity
 
     init {
         require(quarterTurns in 0..3) { "quarterTurns must be in 0..3" }
@@ -299,6 +331,53 @@ object EditRecipeCodec {
                     .put("color", "%08X".format(it.colorArgb)),
             )
         }
+        // r41: the same rule for the AI containers --- the keys exist only
+        // for a non-empty state, so a pre-r41 sidecar and a clean session
+        // round-trip byte-clean.
+        recipe.aiErase?.takeIf { it.layers.isNotEmpty() }?.let { el ->
+            val arr = org.json.JSONArray()
+            for (layer in el.layers) {
+                val pts = org.json.JSONArray()
+                for (p in layer.points) {
+                    pts.put(org.json.JSONArray().put(p.x).put(p.y))
+                }
+                arr.put(
+                    org.json.JSONObject()
+                        .put("id", layer.id)
+                        .put("artifactRef", layer.artifactRef)
+                        .put("points", pts),
+                )
+            }
+            root.put("aiErase", arr)
+        }
+        recipe.sky?.let {
+            root.put(
+                "sky",
+                org.json.JSONObject()
+                    .put("maskRef", it.maskRef)
+                    .put("skyId", it.skyId)
+                    .put("opacityPct", it.opacityPct),
+            )
+        }
+        recipe.bokeh?.let {
+            root.put(
+                "bokeh",
+                org.json.JSONObject()
+                    .put("depthRef", it.depthRef)
+                    .put("blurStrengthPct", it.blurStrengthPct)
+                    .put("focalDepthNorm", it.focalDepthNorm),
+            )
+        }
+        recipe.retouch?.let {
+            root.put(
+                "retouch",
+                org.json.JSONObject()
+                    .put("boxesRef", it.boxesRef)
+                    .put("smoothingPct", it.smoothingPct)
+                    .put("eyeBrightenPct", it.eyeBrightenPct)
+                    .put("faceSlimPct", it.faceSlimPct),
+            )
+        }
         return root.toString()
     }
 
@@ -363,6 +442,10 @@ object EditRecipeCodec {
             drawLayers = readDrawLayers(root.optJSONArray("drawLayers")),
             mosaicRegions = readRegions(root.optJSONArray("mosaicRegions")),
             frame = readFrame(root.optJSONObject("frame")),
+            aiErase = readAiErase(root.optJSONArray("aiErase")),
+            sky = readSky(root.optJSONObject("sky")),
+            bokeh = readBokeh(root.optJSONObject("bokeh")),
+            retouch = readRetouch(root.optJSONObject("retouch")),
         )
         ParseResult.Valid(recipe)
     } catch (e: org.json.JSONException) {
@@ -585,6 +668,100 @@ object EditRecipeCodec {
     private fun readColorArgb(s: String): Long =
         if (s.length == 8 && s.all { it in "0123456789abcdefABCDEF" }) s.toLong(16)
         else TextLayer.DEFAULT_COLOR
+
+    /**
+     * The optional `aiErase` array (r41): absent or empty means NO erase
+     * (a pre-r41 sidecar loads clean). The tolerance set is the region
+     * family's: an entry that is not an object, or whose id is blank, is
+     * SKIPPED; a seed under three points is skipped (an erase needs an
+     * area, the region commit rule); an empty artifactRef is KEPT --- the
+     * layer round-trips verbatim and renders nothing at render time (the
+     * sticker family's unresolvable-id rule; there is no default fill to
+     * degrade to).
+     */
+    private fun readAiErase(arr: org.json.JSONArray?): AiEraseLayers? {
+        if (arr == null) return null
+        val layers = ArrayList<AiEraseLayer>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "").trim()
+            if (id.isEmpty()) continue
+            val ptsArr = o.optJSONArray("points") ?: continue
+            val pts = ArrayList<AiEraseLayer.Point>(ptsArr.length())
+            for (j in 0 until ptsArr.length()) {
+                val pair = ptsArr.optJSONArray(j) ?: continue
+                if (pair.length() != 2) continue
+                val x = pair.optDouble(0, Double.NaN)
+                val y = pair.optDouble(1, Double.NaN)
+                if (x.isNaN() || y.isNaN()) continue
+                pts.add(AiEraseLayer.Point(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0)))
+                if (pts.size >= AiEraseLayer.MAX_POINTS) break
+            }
+            if (pts.size < 3) continue
+            layers.add(
+                AiEraseLayer(
+                    id = id.take(AiEraseLayer.MAX_ID_LENGTH),
+                    points = pts,
+                    artifactRef = o.optString("artifactRef", "").trim()
+                        .take(SkySelection.MAX_REF_LENGTH),
+                ),
+            )
+        }
+        return if (layers.isEmpty()) null else AiEraseLayers(layers)
+    }
+
+    /**
+     * The optional `sky` object (r41), the `frame` object's tolerance
+     * shape: absent or carrying a blank skyId means NO sky; a blank
+     * maskRef is KEPT verbatim (renders nothing, the tolerance contract);
+     * the opacity coerces like every other Int slider (default 100).
+     */
+    private fun readSky(sky: org.json.JSONObject?): SkySelection? {
+        if (sky == null) return null
+        val id = sky.optString("skyId", "").trim()
+        if (id.isEmpty()) return null
+        return SkySelection(
+            maskRef = sky.optString("maskRef", "").trim().take(SkySelection.MAX_REF_LENGTH),
+            skyId = id.take(SkySelection.MAX_ID_LENGTH),
+            opacityPct = sky.optInt("opacityPct", SkySelection.DEFAULT_OPACITY_PCT).coerceIn(0, 100),
+        )
+    }
+
+    /**
+     * The optional `bokeh` object (r41): absent means NO bokeh; the depthRef
+     * is kept verbatim however it reads; the strength coerces 1..100
+     * (default 40); the focal depth is a 0..1 double (the r34 centre
+     * convention), default 0.5.
+     */
+    private fun readBokeh(bokeh: org.json.JSONObject?): BokehSelection? {
+        if (bokeh == null) return null
+        val focal = bokeh.optDouble("focalDepthNorm", BokehSelection.DEFAULT_FOCAL_DEPTH_NORM)
+        return BokehSelection(
+            depthRef = bokeh.optString("depthRef", "").trim().take(SkySelection.MAX_REF_LENGTH),
+            blurStrengthPct = bokeh.optInt("blurStrengthPct", BokehSelection.DEFAULT_BLUR_STRENGTH_PCT)
+                .coerceIn(1, 100),
+            focalDepthNorm = if (focal.isNaN()) {
+                BokehSelection.DEFAULT_FOCAL_DEPTH_NORM
+            } else {
+                focal.coerceIn(0.0, 1.0)
+            },
+        )
+    }
+
+    /**
+     * The optional `retouch` object (r41): absent means NO retouch; the
+     * boxesRef is kept verbatim however it reads; the three controls
+     * coerce 0..100 with family default 0 (no contribution).
+     */
+    private fun readRetouch(retouch: org.json.JSONObject?): RetouchSelection? {
+        if (retouch == null) return null
+        return RetouchSelection(
+            boxesRef = retouch.optString("boxesRef", "").trim().take(SkySelection.MAX_REF_LENGTH),
+            smoothingPct = retouch.optInt("smoothingPct", 0).coerceIn(0, 100),
+            eyeBrightenPct = retouch.optInt("eyeBrightenPct", 0).coerceIn(0, 100),
+            faceSlimPct = retouch.optInt("faceSlimPct", 0).coerceIn(0, 100),
+        )
+    }
 
     private fun bandJson(band: HslBandAdjust): org.json.JSONObject =
         org.json.JSONObject()

@@ -50,6 +50,13 @@ androidx-room = "2.8.5"
 ksp = "2.3.10"
 # Testing (issue #20 privacy suite)
 junit = "4.13.2"
+# ONNX Runtime for the editor's r41 on-device AI seam (Phase 10 sub-scope
+# A; docs/phase-10/edit-v3-ai.md open item 1): the PREBUILT Android AAR,
+# Apache-2.0, Maven Central --- NNAPI-first with CPU fallback per
+# ADR-0010 section 3, no editor NDK build surface. A local inference
+# library that declares no INTERNET permission: the edit module's
+# merged-manifest gate stays green with it aboard (no allowlist exists).
+onnxruntime-android = "1.31.1"
 # The real org.json implementation for JVM unit tests: android.jar ships a
 # stub whose methods throw "not mocked"; the facade's r23 cluster-summary
 # parser (and its malformed-shape tests) exercise the real parser on the JVM.
@@ -114,6 +121,8 @@ androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref =
 # NOTE: org.fossify:commons removed per ADR-0008 (no upstream code ports).
 # Testing (issue #20 privacy suite) --- compose test artifacts via compose-bom
 junit = { module = "junit:junit", version.ref = "junit" }
+# The editor's on-device AI runtime (r41; see the version note above).
+onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime-android" }
 # The real org.json for JVM unit tests only (see the version note above).
 org-json = { module = "org.json:json", version.ref = "org-json" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }

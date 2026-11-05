@@ -173,10 +173,19 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 # without kapt. Declared here and applied in apps/gallery alongside the
 # room-compiler artifact.
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-# Roborazzi screenshot-test task wiring (Phase 11): registers the
-# record/verify/compare gradle task pairs for the unit-test variants (with
-# the flavor matrix: recordRoborazziBasicDebug / verifyRoborazziBasicDebug
-# / compareRoborazziBasicDebug). A PLAIN unit-test run records by default
-# (captureRoboImage() records when no verify flag is set), so the record
-# half works even before the verify tasks are ever invoked.
+# Roborazzi screenshot-test task wiring (r47, docs/phase-11/roborazzi.md):
+# the gradle plugin is NOW APPLIED (apps/gallery) after the r46 verdict was
+# re-examined at the artifact level --- the published 1.77.0 plugin's runtime
+# graph (POM + gradle module metadata) carries NO AGP at all, and every AGP
+# class its bytecode references exists in this repo's AGP 9.2.1 gradle-api
+# jar; the sibling toadFILES repo runs this exact plugin version green on a
+# NEWER AGP line (9.5.0 / Gradle 9.8.2). The plugin registers the
+# record/verify/compare task pairs for the unit-test variants (with the
+# flavor matrix: recordRoborazziBasicDebug / verifyRoborazziBasicDebug /
+# compareRoborazziBasicDebug) and --- unlike the no-plugin r46 pipeline ---
+# makes PLAIN unit-test runs SKIP the captures (roborazzi.test.record is
+# false unless a roborazzi task is in the graph), exactly like toadFILES:
+# recording is the recordRoborazziBasicDebug task's job, not a side effect
+# of every test run.
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 

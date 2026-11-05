@@ -1,0 +1,136 @@
+# toadGALLERY --- the F-Droid build metadata for the MAIN GALLERY app
+# (package io.github.dukeoftoad.gallery).
+#
+# Prepared by the r44 round (Phase 11 release readiness; the roadmap's
+# "F-Droid metadata" task) for submission to fdroiddata as a new-app merge
+# request. The companion editor APK is its own package with its own file:
+# io.github.dukeoftoad.gallery.edit.yml. The two apps are versioned and
+# released independently through one shared release tag; the conventions
+# are recorded in MaintainerNotes below and in
+# docs/phase-11/fdroid-metadata.md (the submission-package doc).
+Categories:
+  - Multimedia
+License: GPL-3.0
+SourceCode: https://github.com/dukeoftoad/toadGALLERY
+IssueTracker: https://github.com/dukeoftoad/toadGALLERY/issues
+Changelog: https://github.com/dukeoftoad/toadGALLERY/releases
+
+AutoName: toadGALLERY
+Summary: A single, private, offline-first Android gallery
+Description: |-
+    toadGALLERY is a single, private, offline-first Android gallery: a
+    photo/video timeline, albums and collections, deep metadata details
+    (EXIF/IPTC/XMP) with offline on-device maps, smart search, safe file
+    operations, a recycle bin, and a PIN/biometric hidden vault. It is built
+    from scratch in Kotlin + Jetpack Compose.
+
+    The product ships as two APKs with separate package ids and independent
+    versioning. This package is the main gallery; the companion editor is
+    the separate "toadGALLERY Edit" package
+    (io.github.dukeoftoad.gallery.edit), opened from the gallery through a
+    versioned content-URI contract and usable standalone.
+
+    It is offline-first by construction: the app carries ONE narrow,
+    allowlist-gated INTERNET grant (ADR-0020) that exists solely for the
+    OPT-IN on-device-AI model download from models.ente.com --- every
+    other byte of the app works fully offline, and a build-time gate
+    (ADR-0014) fails the build if INTERNET ever appears in the merged
+    manifest without the allowlist's authorization. There are no
+    accounts, no cloud sync, no ads, no analytics.
+
+    The AI features run entirely on-device and are opt-in: semantic search
+    and people clustering (an explicit consent dialog; no face data leaves
+    the device). The AI editing features (magic erase, sky replacement,
+    bokeh, opt-in face retouch) live in the separate Edit app.
+
+    The UI/UX is inspired by Mi Gallery, Aves libre and Fossify Gallery as
+    references only --- no code is ported from any upstream. The app is
+    licensed GPL-3.0; the full source for every release is published on
+    GitHub and every release links the exact commit it was built from.
+
+RequiresRoot: false
+
+RepoType: git
+Repo: https://github.com/dukeoftoad/toadGALLERY.git
+
+# The repo does not publish binaries for F-Droid to verify against: the
+# GitHub pre-releases are release-SIGNED APKs (ADR-0018), and signed-APK
+# determinism is not claimed --- the unsigned artifact built from source is
+# the comparison target (see MaintainerNotes + the reproducible-builds doc).
+Binaries: []
+
+AntiFeatures: []
+
+Builds:
+  - versionName: 0.4.5-alpha
+    versionCode: 37
+    commit: v0.4.5-alpha-r45
+    gradle:
+      - yes
+    output: apps/gallery/build/outputs/apk/release/gallery-release-unsigned.apk
+    scanignore:
+      - gradle/wrapper/gradle-wrapper.jar
+
+MaintainerNotes: |-
+    build environment: the canonical recipe is the CI one (ADR-0013) --- JDK 17
+    (temurin) + Android SDK platform 36 + build-tools 36.0.0 + the gradle
+    wrapper (9.5.1, pinned in gradle/wrapper/gradle-wrapper.properties), which
+    is exactly what .github/actions/toad-setup installs in ci.yml/release.yml;
+    no sudo or ndk fields are needed for this package.
+
+    output name: verified against the ADR-0018 release workflow's unsigned glob
+    (it looks for '*unsigned*.apk' under apps/gallery/build/outputs/apk/release
+    after assembleRelease); if a first fdroid build disagrees with
+    gallery-release-unsigned.apk, adjust output: to the real glob.
+
+    reproducibility: the repo's reproducible-build workflow (landing with the
+    r43 round) double-builds both unsigned release APKs on every v* tag push
+    and compares them (byte-level with a content-level fallback) --- see
+    docs/phase-11/reproducible-builds.md. F-Droid builds unsigned from source;
+    the pinned signing key only governs the project's own GitHub pre-releases
+    (ADR-0018 --- F-Droid builds its own binaries and re-signs them), which is
+    why Binaries is empty: signed-APK determinism is not claimed, the unsigned
+    artifact is the comparison target.
+
+    AntiFeatures is empty because the app has none by construction: no ads, no
+    tracking, no nonfree network --- the only INTERNET permission is the
+    ADR-0020 model-fetch grant behind an explicit opt-in (the AI model
+    download from models.ente.com), and the ADR-0014 build-time gate fails
+    any build where INTERNET appears in the merged manifest without the
+    allowlist authorizing exactly that grant (docs/phase-2/privacy-gate.md
+    records the full three-layer story).
+
+    the optional vendored Rust ML engine (engine/, AGPL-3.0 per engine/NOTICE.md,
+    ADR-0020) is NOT packaged by this recipe: its native libraries only enter
+    the APK when gradle runs with -PwithEngine (Rust + cargo-ndk + NDK), and the
+    default recipe --- the same one ci.yml and release.yml use --- builds without
+    it. The Kotlin facade treats the missing native library as an unavailable
+    engine and the engine-dependent AI features degrade honestly; the repo's own
+    published pre-releases are built the same way, so the F-Droid artifact is the
+    same shape as the project's. Adding the engine to a future recipe is a
+    recorded follow-up, not a gap in this one (and it would change the effective
+    license offer --- see docs/phase-11/fdroid-metadata.md section 4).
+
+    scanignore carries only the standard gradle-wrapper jar entry; the vendored
+    engine/ tree is Rust source (no prebuilt blobs --- its ONNX Runtime supply
+    is fetched at build time by the engine script, never committed), and no
+    prebuilt binaries ship in this package.
+
+    versioning conventions: the gallery versionCode bumps once per release
+    round (vercode 37 = the r43 round); the release tag convention is
+    v<versionName>-r<round>, this entry's tag v0.4.5-alpha-r45 being the round
+    the release is cut in. AutoUpdateMode: Version derives the versionName from
+    the tag group and the versionCode from apps/gallery/build.gradle.kts ---
+    the gallery's code is the higher of the repo's two apps, so the reader picks
+    the right one; if the edit app ever overtakes it, switch this package to
+    AutoUpdateMode: None and curate by hand like the edit file.
+
+    the separate editor app is its own package
+    (io.github.dukeoftoad.gallery.edit) with its own metadata file; the two
+    are versioned independently off the same tag (contract meta-data version
+    2 --- docs/phase-11/fdroid-metadata.md).
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags v([0-9.]+-alpha)-r[0-9]+
+CurrentVersion: 0.4.5-alpha
+CurrentVersionCode: 37

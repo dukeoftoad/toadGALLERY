@@ -13,7 +13,9 @@
 
     <!-- Section header + one-line honest description (a developer
          section; no user-facing feature consumes the engine yet). -->
-    <string name="settings_ai_section">AI engine (r22 dogfood)</string>
+    <!-- r50 (the UI/UX polish round): the round-tag jargon is gone from the
+         USER-FACING section title. -->
+    <string name="settings_ai_section">AI engine</string>
     <string name="settings_ai_section_body">Developer section: downloads the pinned face models from the single allowlisted model host (size and SHA-256 verified before install) and exercises the on-device engine. No other network traffic exists.</string>
 
     <!-- Engine library presence: the .so ships only in engine builds. -->

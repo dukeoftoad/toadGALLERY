@@ -35,6 +35,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -76,11 +77,13 @@ import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_FILL_RESUMED
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_FILL_ROWS
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_FILL_SKIPPED
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_INDEXED
+import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_SKIPPED_UNREADABLE
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_SKIPPED_UP_TO_DATE
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_TOTAL_CLIPS
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_CLUSTERS
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_FACES
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_INDEXED
+import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_SKIPPED_UNREADABLE
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_SKIPPED_UP_TO_DATE
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_TOTAL_FACES
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
@@ -808,6 +811,21 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            // r50 (the engine-flavor audit): the engine's own identity
+            // line --- capability + model labels + the ORT bindings
+            // version (MlEngine.engineInfo() previously had ZERO call
+            // sites). Session-dependent: renders once a session has
+            // opened (the self-test, a queue run, a People screen visit).
+            aiState.engineInfoLine?.let { info ->
+                Text(
+                    text = info,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .testTag("settings_ai_engine_info"),
+                )
+            }
             // r46 build-shape gate: FACE-index surfaces exist only on
             // the engine and face flavors.
             if (BuildShape.faceIndex) {
@@ -847,12 +865,19 @@ fun SettingsScreen(
                 ) {
                     Text(stringResource(R.string.settings_ai_download))
                 }
-                // r50 ux fix: deleting the models re-downloads 100+ MB on the
-                // next install --- the destructive action now confirms, like
-                // every other removal in the app (the repo's own convention).
-                Button(
+                // r50 (the UI/UX polish round): destructive actions render
+                // as outlined error-toned buttons (the maintainer's device-
+                // screenshot audit: they previously carried the SAME filled
+                // style as the start actions) AND deleting the models
+                // re-downloads 100+ MB on the next install --- the action
+                // confirms too, like every other removal in the app (the
+                // repo's own convention).
+                OutlinedButton(
                     onClick = { faceDeleteConfirm = true },
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_delete"),
@@ -1024,11 +1049,15 @@ fun SettingsScreen(
                         )
                     )
                 }
-                // r50 ux fix: the semantic pack gets the same delete
-                // confirmation as the FACE pack above.
-                Button(
+                // r50 (the UI/UX polish round): the semantic pack gets the
+                // same outlined error-toned delete AND confirmation as the
+                // FACE pack above.
+                OutlinedButton(
                     onClick = { semanticDeleteConfirm = true },
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_semantic_delete"),
@@ -1150,9 +1179,14 @@ fun SettingsScreen(
                     }
                     else -> Unit
                 }
-                Button(
+                // r50 (the UI/UX polish round): the reset is destructive ---
+                // outlined + error-toned (see the models-delete note above).
+                OutlinedButton(
                     onClick = aiViewModel::resetFaceIndex,
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_index_delete"),
@@ -1184,6 +1218,8 @@ fun SettingsScreen(
                             // Two honest terminal shapes: the draining run that
                             // clustered (clusters >= 0) and the no-op drain that
                             // did not (empty plan --- no wasted recluster pass).
+                            // r50 (F-39): the unreadable (terminally skipped)
+                            // count joins both drained lines.
                             text = if (clusters >= 0) {
                                 stringResource(
                                     R.string.settings_ai_queue_done,
@@ -1192,6 +1228,7 @@ fun SettingsScreen(
                                     queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
                                     clusters,
                                     queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                                    queue.output.getInt(KEY_OUT_SKIPPED_UNREADABLE, 0),
                                 )
                             } else {
                                 stringResource(
@@ -1200,6 +1237,7 @@ fun SettingsScreen(
                                     queue.output.getInt(KEY_OUT_FACES, 0),
                                     queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
                                     queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                                    queue.output.getInt(KEY_OUT_SKIPPED_UNREADABLE, 0),
                                 )
                             },
                             style = MaterialTheme.typography.bodyMedium,
@@ -1284,9 +1322,14 @@ fun SettingsScreen(
                     }
                     else -> Unit
                 }
-                Button(
+                // r50 (the UI/UX polish round): outlined + error-toned
+                // (the destructive reset styling, semantic sibling).
+                OutlinedButton(
                     onClick = aiViewModel::resetSemanticIndex,
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_semantic_index_delete"),
@@ -1323,6 +1366,7 @@ fun SettingsScreen(
                                 clip.output.getInt(KEY_CLIP_OUT_INDEXED, 0),
                                 clip.output.getInt(KEY_CLIP_OUT_SKIPPED_UP_TO_DATE, 0),
                                 clip.output.getLong(KEY_CLIP_OUT_TOTAL_CLIPS, 0L),
+                                clip.output.getInt(KEY_CLIP_OUT_SKIPPED_UNREADABLE, 0),
                             ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

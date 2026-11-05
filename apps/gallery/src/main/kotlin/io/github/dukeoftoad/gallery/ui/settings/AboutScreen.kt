@@ -76,14 +76,18 @@ private const val REPO_URL = "https://github.com/dukeoftoad/toadGALLERY"
  * guard the pre-28 `versionCode` deprecation needs.
  *
  * ## Privacy / credits
- * ADR-0014 phrasing, stated plainly: offline by design, no INTERNET
- * permission, no accounts, vault bytes stay on device --- plus the honest
- * credits (Aves as the metadata reference, Ente as the appearance/on-device
- * AI inspiration, Compose/Coil/Media3 as the stack). "View source on
- * GitHub" fires a plain `ACTION_VIEW` intent wrapped in `runCatching`: the
- * system hands the URL to whatever browser the user has, and a browserless
- * device is silently ignored --- the app itself still holds no network
- * permission either way.
+ * ADR-0014 phrasing, stated plainly: offline by design, no accounts,
+ * vault bytes stay on device --- plus the honest credits (Aves as the
+ * metadata reference, Ente as the vendored on-device AI engine,
+ * Compose/Coil/Media3 as the stack). r50: the privacy line is FLAVOR
+ * HONEST now --- the basic build's overlay (src/basic/res) states the
+ * stronger no-network-permission-at-all truth, while the engine-family
+ * builds keep the main copy (their one network use is the ADR-0020
+ * model download, permission present, host pinned). "View source on
+ * GitHub" fires a plain `ACTION_VIEW` intent wrapped in `runCatching`:
+ * the system hands the URL to whatever browser the user has, and a
+ * browserless device is silently ignored --- the app itself never opens
+ * a socket for it either way.
  *
  * ## Diagnostics
  * The vault probe ([VaultViewModel.probeDiagnostics], the W1 diagnostics

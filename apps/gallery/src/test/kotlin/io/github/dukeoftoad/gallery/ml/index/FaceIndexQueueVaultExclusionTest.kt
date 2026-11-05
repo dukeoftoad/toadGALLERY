@@ -317,9 +317,17 @@ class FaceIndexQueueVaultExclusionTest {
         // detects none); photo 2 never reached the engine:
         assertEquals(listOf("content://media/external/images/1"), engine.detectCalls)
         assertEquals(0, engine.putCalls.size)
-        // No state record for the vault-moved photo (it stays retried
-        // in principle --- but the NEXT plan's candidate list drops it):
-        assertEquals(setOf("external_primary:1"), store.saved!!.map { it.localMediaKey }.toSet())
+        // r50 (F-39): the vault-moved photo now leaves a TERMINAL-SKIP
+        // record (unreadable = true, no faces) instead of no record ---
+        // the r24 shape kept unreadable rows retrying forever, which
+        // re-enqueued the chain endlessly. The skip record is bookkeeping
+        // ONLY: it holds the photo out of a future plan until its
+        // revision changes, and the NEXT plan's fresh candidate list
+        // (gate 1 below) drops it as stale state anyway.
+        val savedByKey = store.saved!!.associateBy { it.localMediaKey }
+        assertEquals(setOf("external_primary:1", "external_primary:2"), savedByKey.keys)
+        assertTrue("the vault-moved photo's record must mark the unreadable skip", savedByKey.getValue("external_primary:2").unreadable)
+        assertFalse(savedByKey.getValue("external_primary:1").unreadable)
 
         // And the next run (fresh candidates, vault move now visible):
         catalogue.tombstone(listOf("external_primary:2"), atMillis = 12_000L)

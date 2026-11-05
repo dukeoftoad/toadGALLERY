@@ -6,6 +6,7 @@ import androidx.annotation.AnyRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ml.index.EngineSessionGuard
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
 import io.github.dukeoftoad.gallery.ml.people.PeopleEngineAdapter
@@ -175,9 +176,14 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         // The adapter's engine session is process-global native state ---
-        // release it with the screen, exactly like FaceIndexWorker's
-        // finally does per run.
-        engineAdapter.close()
+        // release it with the screen. r50 (F-38): ONLY when neither index
+        // chain is live; a background queue shares that same native
+        // session, and the old unconditional close killed it mid-batch
+        // (the "indexing are failing" device report class). A skipped
+        // close leaks nothing --- the adapter re-opens lazily.
+        if (!EngineSessionGuard.anyIndexChainLive(getApplication())) {
+            engineAdapter.close()
+        }
         super.onCleared()
     }
 

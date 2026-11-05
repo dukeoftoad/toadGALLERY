@@ -159,8 +159,10 @@ class EnginePackagingPolicyTest {
             script.contains("ORT_AAR_SHA256="),
         )
         assertTrue(
-            "The NDK must stay pinned (r22 verification: 28.1.13356709).",
-            script.contains("ndk;28.1.13356709"),
+            "The NDK must stay pinned (r22 verification: 28.1.13356709). r50: the pin is " +
+                "single-sourced as PINNED_NDK_VERSION and PREFERRED over any newer NDK the " +
+                "runner image ships (the sdkmanager fallback and the discovery pass share it).",
+            script.contains("PINNED_NDK_VERSION=\"28.1.13356709\""),
         )
     }
 

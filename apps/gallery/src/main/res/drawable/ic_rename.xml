@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- toadGALLERY — the Rename action's leading icon (r50, the UI/UX
+     polish round). The viewer's overflow menu previously carried three
+     TEXT-ONLY rows, so "Edit" (open in the editor) and "Rename" (change
+     the file name) read as near-identical entries — the maintainer's
+     "Edit/Rename same icon" defect report. The pencil-with-underline
+     glyph is the Material "drive file rename outline" shape: the SAME
+     pencil path Compose's core Icons.Filled.Edit draws (so the pair
+     stays visually related — both are edit-family actions), plus the
+     baseline bar that marks "rename" specifically. Composed from the
+     Apache-2.0 Material iconography constants; no
+     material-icons-extended dependency is added (the repo deliberately
+     keeps to the core set — see ViewerScreen's ViewerTopBar KDoc). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <!-- The pencil: byte-identical path to Icons.Filled.Edit (core set). -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M3,17.25V21h3.75L17.81,9.94l-3.75,-3.75L3,17.25z" />
+    <!-- The baseline bar: the "applies to the name" half of the glyph. -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M13,19.25h8v1.5h-8z" />
+</vector>

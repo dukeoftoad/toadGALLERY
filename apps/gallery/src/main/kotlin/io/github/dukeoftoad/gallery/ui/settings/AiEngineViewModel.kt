@@ -10,11 +10,13 @@ import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
 import io.github.dukeoftoad.gallery.buildshape.BuildShape
 import io.github.dukeoftoad.gallery.data.MediaStoreSource
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 import io.github.dukeoftoad.gallery.ml.index.ClipIndexScheduler
 import io.github.dukeoftoad.gallery.ml.index.ClipIndexWorkState
+import io.github.dukeoftoad.gallery.ml.index.EngineSessionGuard
 import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
 import io.github.dukeoftoad.gallery.ml.index.CLIP_INDEX_STATE_FILE_NAME
 import io.github.dukeoftoad.gallery.ml.index.FaceIndexScheduler
@@ -53,6 +55,13 @@ data class AiDogfoodState(
     val semanticAssets: List<AssetStatus> = emptyList(),
     /** Whether `libtoad_ml_jni.so` is present in THIS build (per-process fixed). */
     val engineLibraryPresent: Boolean = false,
+    /**
+     * The engine's own one-line identity (capability + model labels +
+     * ORT bindings version), or null when no session has opened yet /
+     * the library is absent. r50: engineInfo() previously had zero call
+     * sites --- the Settings card is its surface now.
+     */
+    val engineInfoLine: String? = null,
     /** The last download/delete outcome, or null. */
     val note: Note? = null,
     /** The last self-test outcome, or null. */
@@ -162,11 +171,23 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(AiDogfoodState(engineLibraryPresent = engine.available))
     val state: StateFlow<AiDogfoodState> = _state.asStateFlow()
 
-    /** Re-derives presence from disk (entry refresh; preserves an in-flight action). */
+    /**
+     * Re-derives presence from disk (entry refresh; preserves an in-flight
+     * action AND the last outcome cards --- r50: the old rewrite-from-snapshot
+     * nulled [AiDogfoodState.note]/[AiDogfoodState.selfTest], so simply
+     * re-entering Settings erased the very failure diagnostics the r47/r48
+     * honesty rounds added).
+     */
     fun refresh() {
         viewModelScope.launch {
-            val busy = _state.value.busy
-            _state.value = withContext(Dispatchers.IO) { snapshot().copy(busy = busy) }
+            val current = _state.value
+            _state.value = withContext(Dispatchers.IO) {
+                snapshot().copy(
+                    busy = current.busy,
+                    note = current.note,
+                    selfTest = current.selfTest,
+                )
+            }
         }
     }
 
@@ -310,8 +331,23 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.value = withContext(Dispatchers.IO) {
                 ClipIndexScheduler.cancel(getApplication())
-                engine.closeFaceIndex()
+                // r50 (F-38, the UI half of the r48 teardown fix): the
+                // CLIP chain was cancelled, so wait for IT (never stall
+                // on a FACE run we did not ask to stop) before deleting
+                // the queue's bookkeeping. The shared native session
+                // close additionally requires the FACE chain idle too;
+                // when it is not, the close is SKIPPED (queue-safe; the
+                // session re-opens lazily) and mirrored to the ring.
+                val clipIdle = EngineSessionGuard.awaitClipChainIdle(getApplication())
+                if (!clipIdle) {
+                    DiagLog.e(TAG, "semantic reset: clip chain live after await; bookkeeping reset proceeds (r48 shape)")
+                }
                 File(faceIndexDir(), CLIP_INDEX_STATE_FILE_NAME).delete()
+                if (!EngineSessionGuard.anyIndexChainLive(getApplication())) {
+                    engine.closeFaceIndex()
+                } else {
+                    DiagLog.i(TAG, "semantic reset: face chain live; skipping session close (queue-safe)")
+                }
                 snapshot().copy(note = null)
             }
         }
@@ -392,6 +428,17 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.value = withContext(Dispatchers.IO) {
                 FaceIndexScheduler.cancel(getApplication())
+                // r50 (F-38): the delete below erases the whole face-index
+                // directory INCLUDING the shared ml-index.sqlite the CLIP
+                // chain writes through, so BOTH chains must be terminal ---
+                // the old shape cancelled (and raced) only the face chain.
+                // A timeout still proceeds (the r48 shape, now race-free in
+                // the common case) but is mirrored to the diagnostics ring.
+                ClipIndexScheduler.cancel(getApplication())
+                val idle = EngineSessionGuard.awaitIndexChainsIdle(getApplication())
+                if (!idle) {
+                    DiagLog.e(TAG, "face reset: chains live after await; deleting the index dir anyway (r48 shape)")
+                }
                 engine.closeFaceIndex()
                 faceIndexDir().deleteRecursively()
                 snapshot().copy(note = null)
@@ -438,7 +485,20 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
             // its message is the honest diagnostic, not a paraphrase.
             AiDogfoodState.SelfTestResult.Failed(e.message ?: "engine error")
         } finally {
-            engine.release() // frees the session; the next run re-initializes
+            // r50 (F-38, the UI half of the r48 teardown fix): release()
+            // frees the PROCESS-GLOBAL native session --- a live index
+            // chain would die with IllegalStateException on its next JNI
+            // call. Skipping the release when a queue runs leaks nothing:
+            // every later user (the next self-test, the queues, the
+            // People/Magic Search adapters) re-initializes lazily.
+            if (!EngineSessionGuard.anyIndexChainLive(getApplication())) {
+                engine.release() // frees the session; the next run re-initializes
+            } else {
+                DiagLog.i(
+                    TAG,
+                    "self-test: skipping session release --- an index chain is live (F-38)",
+                )
+            }
         }
     }
 
@@ -465,12 +525,18 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                 AiDogfoodState.AssetStatus(it.fileName, provisioner.installedFile(it) != null)
             },
             engineLibraryPresent = engine.available,
+            // r50: the engine's identity line, surfaced (already off the
+            // main thread --- snapshot() runs on Dispatchers.IO).
+            engineInfoLine = runCatching { engine.engineInfo() }.getOrNull(),
         )
     }
 
     private companion object {
         /** The SettingsViewModel house preferences file (`toad_settings`). */
         const val PREFS_FILE = "toad_settings"
+
+        /** Diagnostics-ring tag for the r50 teardown-guard notes. */
+        const val TAG = "AiEngineViewModel"
 
         /** The threshold's preferences key (r24). */
         const val KEY_THRESHOLD = "face_cluster_threshold"

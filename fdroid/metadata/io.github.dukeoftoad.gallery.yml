@@ -30,18 +30,19 @@ Description: |-
     (io.github.dukeoftoad.gallery.edit), opened from the gallery through a
     versioned content-URI contract and usable standalone.
 
-    It is offline-first by construction: the app carries ONE narrow,
-    allowlist-gated INTERNET grant (ADR-0020) that exists solely for the
-    OPT-IN on-device-AI model download from models.ente.com --- every
-    other byte of the app works fully offline, and a build-time gate
-    (ADR-0014) fails the build if INTERNET ever appears in the merged
-    manifest without the allowlist's authorization. There are no
-    accounts, no cloud sync, no ads, no analytics.
+    It is offline-first by construction: the F-Droid package is the BASIC
+    gallery flavor --- since r50 its manifest holds NO network permission
+    at all (the flavor overlay strips it and a build-time gate fails the
+    build if it ever reappears), so nothing in this build can open a
+    socket. There are no accounts, no cloud sync, no ads, no analytics.
 
-    The AI features run entirely on-device and are opt-in: semantic search
-    and people clustering (an explicit consent dialog; no face data leaves
-    the device). The AI editing features (magic erase, sky replacement,
-    bokeh, opt-in face retouch) live in the separate Edit app.
+    The AI engine builds (semantic search, people clustering --- entirely
+    on-device, opt-in, no face data leaves the device) are a SEPARATE
+    flavor family that this recipe does not package; the same source tree
+    builds them under -PwithEngine (see the repo's docs/phase-11/
+    apk-matrix.md). The AI editing features (magic erase, sky
+    replacement, bokeh, opt-in face retouch) live in the separate Edit
+    app.
 
     The UI/UX is inspired by Mi Gallery, Aves libre and Fossify Gallery as
     references only --- no code is ported from any upstream. The app is
@@ -99,6 +100,19 @@ MaintainerNotes: |-
     any build where INTERNET appears in the merged manifest without the
     allowlist authorizing exactly that grant (docs/phase-2/privacy-gate.md
     records the full three-layer story).
+
+    r46+ FLAVOR-WORLD RECIPE (for every Builds entry pinned at r46 or later):
+    the gallery grew a four-way flavor dimension (basic/engine/semantic/face),
+    so a flavorless `assembleRelease` no longer produces the output path below
+    (it also builds the engine-family APKs without their native libraries).
+    New entries must use:
+        gradle:
+          - assembleBasicRelease
+        output: apps/gallery/build/outputs/apk/basic/release/gallery-basic-release-unsigned.apk
+    with NO -P properties (the r50 build.gradle.kts guard fail-fasts a
+    basic packaging task invoked under -PwithEngine/-PwithBundledModels).
+    The r45 entry below predates the flavor matrix and keeps the flavorless
+    shape that was correct at its pinned commit.
 
     the optional vendored Rust ML engine (engine/, AGPL-3.0 per engine/NOTICE.md,
     ADR-0020) is NOT packaged by this recipe: its native libraries only enter

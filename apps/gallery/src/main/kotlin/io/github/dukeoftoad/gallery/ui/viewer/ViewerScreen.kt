@@ -33,6 +33,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
@@ -1575,12 +1577,28 @@ private fun ViewerTopBar(
                         // The editor launch (r29): image pages only --- the
                         // v1 editor scope is stills, so the entry is absent
                         // on video pages (honest scope, no inert affordance).
+                        // r50 (the UI/UX polish round): every overflow row
+                        // gains a DISTINCT leading icon --- the text-only
+                        // menu made Edit and Rename read as the same action
+                        // (the maintainer's "same icon" defect report). The
+                        // pencil stays Edit's glyph; Rename draws the
+                        // dedicated ic_rename (pencil + baseline bar);
+                        // Delete keeps the core trash in the error tint its
+                        // text already carried. All CORE-set + one small
+                        // vector drawable --- still no extended-icons
+                        // dependency.
                         if (canEdit) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.cd_viewer_action_edit)) },
                                 onClick = {
                                     overflowOpen = false
                                     onEdit()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = null, // the row text names it
+                                    )
                                 },
                                 modifier = Modifier.testTag("viewer_action_edit"),
                             )
@@ -1591,6 +1609,12 @@ private fun ViewerTopBar(
                                 onClick = {
                                     overflowOpen = false
                                     onRename()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_rename),
+                                        contentDescription = null, // the row text names it
+                                    )
                                 },
                                 modifier = Modifier.testTag("viewer_action_rename"),
                             )
@@ -1604,6 +1628,13 @@ private fun ViewerTopBar(
                                 onClick = {
                                     overflowOpen = false
                                     onDelete()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = null, // the row text names it
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
                                 },
                                 modifier = Modifier.testTag("viewer_action_delete"),
                             )

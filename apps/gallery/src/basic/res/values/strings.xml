@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- r46 (the APK-matrix round): the BASIC flavor's launcher label.
+<!-- r46 (the APK-matrix round): the BASIC flavor's resource overlay.
      The canonical id (no applicationIdSuffix) keeps the unchanged
-     "toadGALLERY" name; all four coexist on one launcher like the
-     separate edit app. r47 (the UI/UX round): the engine flavor's label
-     also reads the canonical "toadGALLERY" now (the .engine
-     applicationIdSuffix already keeps it a separate install); the
-     semantic/face flavors keep their suffixed labels. Flavor res
-     overrides the main source set's same-named resource (the main value
-     stays the fallback). -->
+     "toadGALLERY" launcher name via the MAIN source set's value (the
+     byte-identical launcher override that used to live here is gone —
+     a flavor res file exists to DIFFER, and r50 needs it to).
+     r50 (the dual-flavor audit): the BASIC flavor strips the INTERNET
+     permission entirely (see src/basic/AndroidManifest.xml), so the
+     About screen's privacy line must say the honest stronger thing:
+     this build holds NO network permission at all. The engine-family
+     flavors keep the main copy (their one network use is the ADR-0020
+     model download). Flavor res overrides the main source set's
+     same-named resource (the main value stays the engine-family
+     fallback). -->
 <resources>
-    <string name="app_launcher_name">toadGALLERY</string>
+    <string name="about_privacy_body">toadGALLERY is offline by design: it needs no account and keeps every photo and video — vault contents included — on this device. This build holds no network permission at all — it cannot open a single socket, so nothing you store can ever be sent anywhere.</string>
 </resources>

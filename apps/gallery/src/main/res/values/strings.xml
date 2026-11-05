@@ -12,7 +12,7 @@
     <string name="state_albums_empty_title">No albums yet</string>
     <string name="state_albums_empty_body">Albums group your media by folder. Grant access in the next step to see them.</string>
     <string name="state_search_empty_title">Search your library</string>
-    <string name="state_search_empty_body">Type at least 2 characters to find photos and videos by file name. Advanced filters by date, album and more arrive with the smart search (roadmap Phase 5).</string>
+    <string name="state_search_empty_body">Type at least 2 characters to find photos and videos by file name.</string>
     <string name="state_permission_title">Access needed</string>
     <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — nothing you store is ever sent anywhere.</string>
     <string name="state_action_grant">Grant access</string>
@@ -363,7 +363,7 @@
     <string name="about_privacy_title">Privacy</string>
     <string name="about_privacy_body">toadGALLERY is offline by design: it needs no account and keeps every photo and video — vault contents included — on this device. Its only network use is downloading optional AI model files, verified before install; nothing you store is ever sent anywhere.</string>
     <string name="about_credits_title">Credits</string>
-    <string name="about_credits_body">Inspired by Aves (metadata reference) and Ente (planned on-device AI). Built with Jetpack Compose, Coil and Media3.</string>
+    <string name="about_credits_body">Inspired by Aves (metadata reference) and Ente (the vendored on-device AI engine). Built with Jetpack Compose, Coil and Media3.</string>
     <string name="about_view_source">View source on GitHub</string>
     <string name="about_diagnostics_title">Diagnostics</string>
     <string name="about_diagnostics_copy">Copy diagnostics</string>

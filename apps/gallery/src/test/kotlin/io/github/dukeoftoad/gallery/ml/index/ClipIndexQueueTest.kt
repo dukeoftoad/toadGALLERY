@@ -361,7 +361,7 @@ class ClipIndexQueueTest {
     }
 
     @Test
-    fun `unreadable photos skip without a state record and stay queued`() = runBlocking {
+    fun `unreadable photos leave a terminal skip record and do not re-enter the queue`() = runBlocking {
         val engine = FakeEngine()
         val store = FakeStateStore()
         val plan = ClipIndexQueuePlanner.plan(
@@ -382,9 +382,37 @@ class ClipIndexQueueTest {
         assertEquals(1, outcome.indexedThisRun)
         // Only c was read, embedded and recorded:
         assertEquals(listOf("3"), engine.embedCalls.map { it.substringAfterLast('/') })
-        assertTrue(store.saved!!.none { it.localMediaKey == "b" })
-        // The queue drained per the plan (b stays retried next run):
+        // r50 (F-39): b leaves a TERMINAL-SKIP record (the face queue's
+        // mirror fix --- the r26 contract retried unreadable photos
+        // forever, so the chain never drained past a batch-sized set of
+        // permanently unreadable rows). The record carries no clip row
+        // (b never reached the engine) and marks the skip:
+        val skipped = store.saved!!.single { it.localMediaKey == "b" }
+        assertTrue(skipped.unreadable)
+        assertFalse(store.saved!!.single { it.localMediaKey == "c" }.unreadable)
+        // The queue drained per the plan:
         assertFalse(outcome.moreRemaining)
+
+        // The NEXT plan holds b out --- counted as skippedUnreadable, NOT
+        // up-to-date (the terminal card stays honest about what skipped):
+        val nextPlan = ClipIndexQueuePlanner.plan(
+            candidates = listOf(candidate("b", 2), candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = emptySet(),
+        )
+        assertTrue(nextPlan.toIndex.isEmpty())
+        assertEquals(1, nextPlan.skippedUnreadable)
+        assertEquals(1, nextPlan.skippedUpToDate)
+
+        // A revision change gives the photo a fresh read: the skip is a
+        // hold, not a ban (a genuinely changed file re-enters).
+        val changed = candidate("b", 2, size = 101L)
+        val replan = ClipIndexQueuePlanner.plan(
+            candidates = listOf(changed, candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = emptySet(),
+        )
+        assertEquals(listOf("b"), replan.toIndex.map { it.localMediaKey })
     }
 
     @Test
@@ -489,6 +517,9 @@ class ClipIndexQueueTest {
         val states = listOf(
             state("a", 1, generation = "g42", metadataWrites = 3, indexedAt = 10L),
             state("b", 2, generation = null, indexedAt = 20L),
+            // r50 (F-39): the terminal-skip flag rides the same round trip
+            // (an additive optional field on version 1).
+            state("c", 3, indexedAt = 30L).copy(unreadable = true),
         )
 
         runBlocking { file.save(states) }

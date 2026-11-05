@@ -31,12 +31,12 @@ build + the negative packaging gate).
   as usual (`io.github.dukeoftoad.gallery.engine.debug`, ...).
 - Launcher labels ride per-flavor res source sets
   (`src/<flavor>/res/values/strings.xml` overriding
-  `app_launcher_name`). As landed in r46: toadGALLERY / toadGALLERY
-  Engine / toadGALLERY Semantic / toadGALLERY Face. Since the r47
-  round the ENGINE flavor's label is the plain "toadGALLERY" too ---
-  the `.engine` applicationIdSuffix already makes it a separate
-  install, so the shared visible name is unambiguous (semantic /
-  face keep their suffixed labels; they can be unified the same way
+  `app_launcher_name`). Since r50: toadGALLERY (basic) / toadGALLERY
+  Engine / toadGALLERY Semantic / toadGALLERY Face --- the r47 plain
+  "toadGALLERY" on the engine flavor is reverted (the dual-flavor
+  audit: basic and engine install SIDE BY SIDE on the dogfood
+  devices, and two launcher entries with the same name AND the same
+  shared icon are indistinguishable; semantic / face keep their suffixed labels; they can be unified the same way
   on request). All five apps still coexist legibly on one launcher.
   Icons are shared.
 - The flavor flags are per-flavor `buildConfigField`s

@@ -34,16 +34,25 @@ build chain was written out three times with drift between the copies
 (the modelpack file staged under a hardcoded r28 artifact name and gated
 versionCode >= 32 while the checkout moved to 38+).
 
-- **Targets (dispatch input `target`):**
+- **Targets (dispatch input `target`):** the dispatch choices carry the
+  `gallery-*` prefix; the prepare job normalizes to the short target
+  names (`engine` / `modelpack` / `editor`) — the r49 shape passed the
+  input through unmapped, so every gallery dispatch (including the
+  default) failed the unknown-target check until r50 fixed it.
   - `gallery-engine` — the engine-enabled gallery APK (the ENGINE flavor,
     `-PwithEngine`: cargo-ndk `libtoad_ml_jni.so` + the sha256-pinned ORT
     1.31.0 `libonnxruntime.so`, arm64-v8a). Both `.so` files verified
     inside the APK before artifacts upload.
-  - `gallery-modelpack` — the same + the offline FACE model pack
-    (`-PwithBundledModels`: the pack is staged from models.ente.com and
-    size+sha256-verified BEFORE packaging; the APK's `assets/models/`
-    content is gated too). Debug variant only — an offline-provisioning
-    dogfood build, not a release (ADR-0020).
+  - `gallery-modelpack` — the same + the offline model pack, the WHOLE
+    pack since r50: FACE (detector + embedder) AND semantic CLIP (image +
+    text + vocab) (`-PwithBundledModels`: all five assets are staged from
+    models.ente.com and size+sha256-verified BEFORE packaging; the APK's
+    `assets/models/` content is gated for all five too — the engine
+    flavor enables the semantic index, so a FACE-only pack left CLIP
+    falling through to the network, which contradicted the artifact's
+    whole offline point). Debug variant only — an offline-provisioning
+    dogfood build, not a release (ADR-0020); ~213 MB larger than the
+    plain engine build.
   - `editor` — all editor targets in one `fail-fast: false` matrix:
     `edit-debug` (the `.debug` dogfood APK, identity-gated),
     `edit-release` (the R8/compile gate — **unsigned by design**), and
@@ -66,9 +75,11 @@ versionCode >= 32 while the checkout moved to 38+).
   (its gradle keeps history as comments), last for the editor (it
   appends live pairs, last-wins — the r43 catch). No hardcoded versions
   anywhere; nothing to rot when the version moves.
-- **Artifacts:** `toadGALLERY-<versionName>-<target>-engine-<variant>`
-  (+ `.sha256` + R8 `mapping.txt` when present — debug builds are not
-  minified, expected warning), `toadGALLERY-Edit-<version>-debug`,
+- **Artifacts:** `toadGALLERY-<versionName>-engine-<variant>` for the
+  engine target / `toadGALLERY-<versionName>-modelpack-engine-<variant>`
+  for the model pack (r50: no more `-engine-engine` doubling on the
+  engine target) (+ `.sha256` + R8 `mapping.txt` when present — debug
+  builds are not minified, expected warning), `toadGALLERY-Edit-<version>-debug`,
   `toadGALLERY-Edit-<version>-release-UNSIGNED` (QA only),
   `editor-contract-jar`; build log uploaded only on failure.
 - **Caching:** the same toad-setup cache keys as `ci.yml` (`gradle-*`,

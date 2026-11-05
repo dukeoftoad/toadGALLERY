@@ -41,12 +41,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import coil.compose.ColorPainter
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.catalogue.room.CatalogueLocationRow
 import io.github.dukeoftoad.gallery.data.places.PlaceMediaHandoff

@@ -872,7 +872,7 @@ fun SettingsScreen(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
                             ) {
-                                Text(stringResource(R.string.settings_ai_delete_confirm_yes))
+                                Text(stringResource(R.string.file_ops_action_delete))
                             }
                         },
                         dismissButton = {
@@ -1048,7 +1048,7 @@ fun SettingsScreen(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
                             ) {
-                                Text(stringResource(R.string.settings_ai_delete_confirm_yes))
+                                Text(stringResource(R.string.file_ops_action_delete))
                             }
                         },
                         dismissButton = {
@@ -1227,7 +1227,7 @@ fun SettingsScreen(
                                 .padding(top = 4.dp)
                                 .testTag("settings_ai_queue_retry"),
                         ) {
-                            Text(stringResource(R.string.settings_ai_queue_retry))
+                            Text(stringResource(R.string.state_action_retry))
                         }
                     }
                     FaceIndexWorkState.Cancelled -> Text(
@@ -1367,7 +1367,7 @@ fun SettingsScreen(
                                 .padding(top = 4.dp)
                                 .testTag("settings_ai_semantic_queue_retry"),
                         ) {
-                            Text(stringResource(R.string.settings_ai_semantic_queue_retry))
+                            Text(stringResource(R.string.state_action_retry))
                         }
                     }
                     ClipIndexWorkState.Cancelled -> Text(

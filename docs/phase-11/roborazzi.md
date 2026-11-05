@@ -25,7 +25,7 @@ pixels as PNG files. Its workflow is the standard two-phase one:
 
 - **Record**: a test run (or the plugin's `recordRoborazzi*` task) writes
   the current render to disk. With no verify flag set, Roborazzi's
-  `captureRoborazzi()` **records by default** during a plain unit-test run
+  `captureRoboImage()` **records by default** during a plain unit-test run
   --- which is why the record half of this pipeline needs no special task.
 - **Verify**: the plugin's `verifyRoborazzi*` task re-renders and fails on a
   pixel diff against the committed baseline (and `compareRoborazzi*` writes
@@ -47,7 +47,10 @@ load-bearing, not cosmetic.
   (org.robolectric:robolectric), `roborazzi`
   (io.github.takahirom.roborazzi:roborazzi), `roborazzi-compose`
   (io.github.takahirom.roborazzi:roborazzi-compose --- the Compose capture
-  surface, `captureRoborazzi()` on `SemanticsNodeInteraction`).
+  surface; the capture function is `captureRoboImage()` (package
+  com.github.takahirom.roborazzi --- the Kotlin API package predates the
+  maven-group rename to io.github.takahirom, so the IMPORT is the
+  com.github.takahirom.roborazzi one)).
 - **gradle/libs.versions.toml (plugins): deliberately ABSENT.** The
   `io.github.takahirom.roborazzi` plugin was wired first and caught by the
   merge gate twice: 1.26.0 does not exist (resolution failure), and the

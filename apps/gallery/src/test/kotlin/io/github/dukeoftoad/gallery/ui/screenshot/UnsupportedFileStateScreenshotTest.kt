@@ -5,7 +5,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.dukeoftoad.gallery.ui.media.UnsupportedFileState
-import io.github.takahirom.roborazzi.captureRoborazzi
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,6 +60,6 @@ class UnsupportedFileStateScreenshotTest {
                 UnsupportedFileState(fileName = "IMG_19700101_000000_HEIC.heic")
             }
         }
-        rule.onRoot().captureRoborazzi()
+        rule.onRoot().captureRoboImage()
     }
 }

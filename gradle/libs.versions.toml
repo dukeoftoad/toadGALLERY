@@ -72,7 +72,7 @@ androidx-test-ext-junit = "1.2.1"
 # repo --- verifies fresh renders against them. Versions verified against
 # Maven Central metadata at fix time: roborazzi's line tops out at 1.77.0
 # (1.26.0 does not exist --- the first merge-gate run caught the plugin
-# resolution failing), paired with robolectric 4.17.0, the latest stable
+# resolution failing), paired with robolectric 4.17, the latest stable
 # line; the tests pin sdk 34 explicitly so the pair renders it.
 robolectric = "4.17"
 roborazzi = "1.77.0"

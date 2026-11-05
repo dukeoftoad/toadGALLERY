@@ -6,7 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.ui.media.ErrorState
-import io.github.takahirom.roborazzi.captureRoborazzi
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +63,6 @@ class ErrorStateScreenshotTest {
                 )
             }
         }
-        rule.onRoot().captureRoborazzi()
+        rule.onRoot().captureRoboImage()
     }
 }

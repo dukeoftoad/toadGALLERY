@@ -26,6 +26,20 @@ name: Screenshots (Roborazzi)
 # captureRoboImage() is skipped unless a roborazzi task is in the graph
 # (roborazzi.test.record=false) --- exactly the toadFILES behavior.
 #
+# r48: THE README SCREENSHOT SUITE joins the record pass
+# (ReadmeScreenshotsTest, the toadFILES TabScreenshotsTest pattern): the
+# REAL app shell (MainActivity + ToadGalleryApp) over a seeded fake
+# MediaStore, walking the real bottom navigation for five README captures.
+# Its EXPLICIT captureRoboImage("roborazzi/NN-name.png") paths are
+# CWD-relative (the test JVM's working dir is the module dir), so the
+# README PNGs write to apps/gallery/roborazzi/ --- a SECOND capture
+# location next to the plugin-outputDir state cards, equally committable
+# (.gitignore excludes neither). Both locations are baselines for the
+# verify task AND the artifact; the README's Screenshots section renders
+# the copies committed at docs/screenshots/ (the regeneration recipe in
+# the README copies apps/gallery/roborazzi/0*.png there from this
+# artifact).
+#
 # ONE-COMMAND FOLLOW-UP for the maintainer (F-34 step 2): download the
 # roborazzi-baselines artifact from a green record run and commit its PNGs:
 #   unzip roborazzi-baselines.zip -d .
@@ -80,18 +94,20 @@ jobs:
       - name: Detect committed baselines
         id: baselines
         run: |
-          count=$(git ls-files 'apps/gallery/src/test/resources/roborazzi/*.png' | wc -l)
+          count=$(git ls-files 'apps/gallery/src/test/resources/roborazzi/*.png' 'apps/gallery/roborazzi/*.png' | wc -l)
           echo "Committed Roborazzi baselines: ${count}"
           echo "count=${count}" >> "$GITHUB_OUTPUT"
 
       # RECORD: the plugin's record task runs the unit tests with
-      # roborazzi.test.record=true and writes the PNGs into
-      # apps/gallery/src/test/resources/roborazzi (the plugin extension's
-      # outputDir --- see apps/gallery/build.gradle.kts). It runs (a) on an
-      # explicit mode=record dispatch, and (b) in verify mode whenever NO
-      # committed baselines exist --- so until F-34 step 2 lands, every run
-      # still produces the artifact that baselines come from, without ever
-      # pretending the verify gate is active.
+      # roborazzi.test.record=true and writes the PNGs into BOTH capture
+      # locations: the state cards into apps/gallery/src/test/resources/
+      # roborazzi (the plugin extension's outputDir --- see
+      # apps/gallery/build.gradle.kts) and the README suite (r48) into
+      # apps/gallery/roborazzi (explicit CWD-relative paths). It runs (a)
+      # on an explicit mode=record dispatch, and (b) in verify mode
+      # whenever NO committed baselines exist --- so until F-34 step 2
+      # lands, every run still produces the artifact that baselines come
+      # from, without ever pretending the verify gate is active.
       - name: Record state-card screenshots
         if: >
           (github.event_name == 'workflow_dispatch' && inputs.mode == 'record')
@@ -146,6 +162,7 @@ jobs:
           name: roborazzi-baselines
           path: |
             apps/gallery/src/test/resources/roborazzi/**
+            apps/gallery/roborazzi/**
             apps/gallery/build/outputs/roborazzi/**
           if-no-files-found: warn
           retention-days: 14

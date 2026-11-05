@@ -112,6 +112,12 @@ compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 # Back-arrow icon for the album detail top bar (BOM-pinned, issue #29)
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
+# r48: the viewer's rename action needs an icon DISTINCT from the edit
+# action (the user-reported same-icon flaw: edit = Create, rename = Edit,
+# two near-identical pencils). DriveFileRenameOutline lives in the extended
+# set only. Release builds minify (R8), so unused glyphs never ship; the
+# debug APKs grow but stay dogfood-honest.
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
 # Video frame decoding for thumbnails (issue #33)
 coil-video = { module = "io.coil-kt:coil-video", version.ref = "coil-compose" }
@@ -173,19 +179,18 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 # without kapt. Declared here and applied in apps/gallery alongside the
 # room-compiler artifact.
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-# Roborazzi screenshot-test task wiring (r47, docs/phase-11/roborazzi.md):
-# the gradle plugin is NOW APPLIED (apps/gallery) after the r46 verdict was
-# re-examined at the artifact level --- the published 1.77.0 plugin's runtime
-# graph (POM + gradle module metadata) carries NO AGP at all, and every AGP
-# class its bytecode references exists in this repo's AGP 9.2.1 gradle-api
-# jar; the sibling toadFILES repo runs this exact plugin version green on a
-# NEWER AGP line (9.5.0 / Gradle 9.8.2). The plugin registers the
-# record/verify/compare task pairs for the unit-test variants (with the
-# flavor matrix: recordRoborazziBasicDebug / verifyRoborazziBasicDebug /
-# compareRoborazziBasicDebug) and --- unlike the no-plugin r46 pipeline ---
-# makes PLAIN unit-test runs SKIP the captures (roborazzi.test.record is
-# false unless a roborazzi task is in the graph), exactly like toadFILES:
-# recording is the recordRoborazziBasicDebug task's job, not a side effect
-# of every test run.
-roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
+# Roborazzi screenshot-test task wiring (Phase 11): registers the
+# record/verify/compare gradle task pairs for the unit-test variants (with
+# the flavor matrix: recordRoborazziBasicDebug / verifyRoborazziBasicDebug
+# / compareRoborazziBasicDebug).
+#
+# r48 re-lands the plugin (the toadFILES alignment): the r46-era blocker
+# was the plugin classpath hard-erroring this module's then-existing
+# srcDir(Any) call sites; those sites are AGP-9 plain-File form since the
+# flavors round (jniLibs / progressAssets / bundled-models all resolve to
+# File at configuration time), so the plugin applies cleanly now. With the
+# plugin applied, captureRoboImage() fires ONLY under the record/verify
+# tasks --- plain unit-test runs (ci.yml's gates) skip captures entirely,
+# which is exactly the toadFILES behavior the README screenshot suite
+# (ReadmeScreenshotsTest) is written against.
 

@@ -4,6 +4,85 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r48 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
+
+### Added
+
+- **[gallery] The README screenshot suite (the toadFILES
+  `TabScreenshotsTest` pattern)**: `ReadmeScreenshotsTest` hosts the REAL
+  app shell (`MainActivity` + `ToadGalleryApp`) under Robolectric over a
+  seeded media world --- a `FakeMediaProvider` registered under the
+  `media` authority serving twelve fixed rows, real JPEG bytes on the
+  Robolectric filesystem decoded by the app's own Coil pipeline, and the
+  same rows pre-upserted into the Room catalogue --- and walks the REAL
+  bottom navigation for five captures (`01-photos` .. `05-settings`).
+  The README gains the Screenshots section (the toadFILES table layout)
+  with the regeneration recipe, and the committed PNGs under
+  `docs/screenshots/` come from this round's record run's artifact. Two
+  Robolectric behaviors the repo had never exercised are pinned in the
+  test's comments: runtime permission requests never resolve on the JVM
+  (ShadowActivity delegates to the REAL Activity code whose
+  `startActivityForResult` has no system UI to answer it --- the grant
+  is delivered by hand through the shadow-recorded request), and Coil's
+  background decodes need a wall-clock settle before capture (compose
+  idling does not track them).
+- **[gallery] `screenshots.yml` learns the second capture location**: the
+  baseline detection (now counting BOTH the r47 plugin-outputDir state
+  cards at `src/test/resources/roborazzi` AND the README suite's
+  CWD-relative explicit-path captures at `apps/gallery/roborazzi`), the
+  record pass and the `roborazzi-baselines` artifact all cover both
+  dirs --- both are verify baselines once committed, and F-34 closes
+  with this round's committed PNGs.
+- **[gallery] Indexing diagnostics (the ml ring finally speaks)**: both
+  queue workers mirror every session-gate failure, every retry (with
+  attempt count and cause) and every batch outcome into the
+  diagnostics ring (`DiagLog`), and the r47 uncaught-fault catches gain
+  the same ring lines --- the "indexing fails, no logs" dogfood shape is
+  no longer possible.
+- **[docs] `docs/ci-workflows.md`'s full-inventory table gains its
+  missing `screenshots.yml` and `reproducible-build.yml` rows.
+
+### Fixed
+
+- **[gallery] The concurrent-indexing engine teardown (the "indexing are
+  failing" root cause)**: the native ML engine and its store are
+  PROCESS-GLOBAL singletons, but both queue workers tore them down in a
+  `finally` at every batch boundary --- the face and semantic chains run
+  CONCURRENTLY, so whichever finished a batch first ripped the engine
+  out from under the other with `IllegalStateException("engine is not
+  initialized")`, failing BOTH queues within minutes (the r47 honesty
+  round surfaced this cause class; this round removes the cause). The
+  per-run teardown is removed (both init calls are idempotent per half,
+  so the next run reuses or re-opens the resident engine). The UI
+  adapters' close()-while-indexing teardown remains, recorded as F-38.
+- **[gallery] The unreadable-row queue kill**: the workers' `readBytes`
+  seam threw (`FileNotFoundException` / `SecurityException` /
+  `IOException`) for stale or locked MediaStore rows instead of
+  returning null as the queue's TESTED "unreadable -> skip -> stays
+  queued" contract promises --- and candidates run newest-first, so a
+  just-deleted photo was the likeliest FIRST victim, burning all
+  retries and failing the whole queue. The seam is now
+  `runCatching { ... }.getOrNull()`, restoring the tested contract.
+- **[gallery] The self-cancelling re-enqueue**: both queue schedulers
+  used `ExistingWorkPolicy.REPLACE` for the worker's own successor
+  enqueue --- REPLACE deletes the pending unique work, INCLUDING THE RUN
+  DOING THE ENQUEUEING, turning every batch boundary into a
+  cancel-vs-successor race. Both now use `APPEND_OR_REPLACE`.
+- **[docs] The stale "Phase 6 prototype" CI label**: `ci.yml`'s editor
+  build step carried "(Phase 6 prototype)" (and the settings.gradle.kts
+  comment "Edit prototype APK") since r29 --- the editor shipped as a
+  release deliverable in the both-APK close-out; the labels now say
+  what the gate builds. The README's build commands were equally stale
+  (the r46 flavor matrix removed the unflavored `assembleDebug`-family
+  task names --- now `assembleBasicDebug` et al., with the flavor
+  note), the repository-layout tree named a nonexistent
+  `edit-extension/` directory and phantom `shared/` modules, and the
+  opt-in-builder list was missing `modelpack-apk.yml`.
+
+(The r47 round --- the plugin-first Roborazzi parity, the engine label,
+the UI/UX sweeps, the indexing honesty catches --- is recorded verbatim
+in its own Unreleased section below; r48 builds on it.)
+
 ## [Unreleased] — the r47 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
 
 ### Added

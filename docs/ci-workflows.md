@@ -86,4 +86,6 @@ inventory at the bottom.
 | `modelpack-apk.yml` | push to `tg-modelpack-*`, dispatch | Offline model-pack engine APK (`-PwithBundledModels`, staged + sha256-verified FACE pack) |
 | `apk-build-engine.yml` | dispatch | **New:** generalized input-driven engine APK builder (see above) |
 | `editor-apk-build.yml` | dispatch | **New:** all editor targets in one matrix (see above) |
+| `screenshots.yml` | PR touching `apps/gallery/**` / the catalog / itself, dispatch | Roborazzi record/verify (r48: plugin-backed; drift gate activates once baseline PNGs are committed under `apps/gallery/roborazzi/`; the record pass is the README-screenshot regeneration source) |
+| `reproducible-build.yml` | dispatch | Byte-reproducibility measurement: two clean `--no-build-cache` release builds compared APK-pair + mapping-pair |
 | `release.yml` | push `v*` tags, dispatch | Signed pre-release publication (hard signature gate, ADR-0018) |

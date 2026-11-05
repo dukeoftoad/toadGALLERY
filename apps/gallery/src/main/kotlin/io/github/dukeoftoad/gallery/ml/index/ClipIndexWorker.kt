@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkInfo
 import androidx.work.WorkerParameters
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
@@ -108,20 +109,25 @@ class ClipIndexWorker(
         // call the r26 worker carried are gone (the round's documented
         // limitation, dropped; `docs/phase-5/ente-exit.md`).
         if (provisioner.capabilityState(ModelManifest.Capability.SEMANTIC) != ModelProvisioner.CapabilityState.Ready) {
+            DiagLog.e(TAG, "clip queue: SEMANTIC models not installed; failing run #$runAttemptCount")
             return Result.failure(
                 Data.Builder().putString(KEY_CLIP_MESSAGE, "SEMANTIC models are not installed; use the semantic model download above").build(),
             )
         }
         when (val semantic = engine.initSemantic(provisioner.modelsDir.absolutePath)) {
             is MlEngine.SemanticState.Ready -> Unit
-            is MlEngine.SemanticState.Error ->
+            is MlEngine.SemanticState.Error -> {
+                DiagLog.e(TAG, "clip queue: semantic init failed: ${semantic.message}")
                 return Result.failure(
                     Data.Builder().putString(KEY_CLIP_MESSAGE, "semantic init failed: ${semantic.message}").build(),
                 )
-            else ->
+            }
+            else -> {
+                DiagLog.e(TAG, "clip queue: semantic init unexpected state: $semantic")
                 return Result.failure(
                     Data.Builder().putString(KEY_CLIP_MESSAGE, "semantic init: $semantic").build(),
                 )
+            }
         }
 
         val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
@@ -142,6 +148,7 @@ class ClipIndexWorker(
             val storeOpened = try {
                 engine.openFaceIndex(faceIndexDir.absolutePath)
             } catch (e: IllegalStateException) {
+                DiagLog.e(TAG, "clip queue: face index store threw: ${e.message}", e)
                 return Result.failure(
                     Data.Builder()
                         .putString(KEY_CLIP_MESSAGE, "face index store did not open: ${e.message}")
@@ -149,6 +156,7 @@ class ClipIndexWorker(
                 )
             }
             if (!storeOpened) {
+                DiagLog.e(TAG, "clip queue: face index store did not open at ${faceIndexDir.absolutePath}")
                 return Result.failure(
                     Data.Builder().putString(KEY_CLIP_MESSAGE, "face index store did not open").build(),
                 )
@@ -180,8 +188,18 @@ class ClipIndexWorker(
                 processor.processBatch(
                     plan = plan,
                     stateStore = stateStore,
+                    // r48 (F2): the same production-seam fix the face
+                    // queue got --- the queue's TESTED contract is
+                    // "unreadable -> skip -> stays queued", but
+                    // openInputStream THROWS for stale rows (deleted between
+                    // scan and batch; the candidates run newest-first, so a
+                    // just-deleted photo is the likeliest first victim) and
+                    // one throwing row burned every retry and failed the
+                    // whole queue. runCatching restores the skip contract.
                     readBytes = { candidate ->
-                        resolver.openInputStream(Uri.parse(candidate.uri))?.use { it.readBytes() }
+                        runCatching {
+                            resolver.openInputStream(Uri.parse(candidate.uri))?.use { it.readBytes() }
+                        }.getOrNull()
                     },
                     nowMillis = { System.currentTimeMillis() },
                     onProgress = { progress ->
@@ -195,26 +213,37 @@ class ClipIndexWorker(
                     },
                 )
             } catch (e: Exception) {
+                // r48 (F5): the retry and the terminal failure mirror to
+                // the diagnostics ring with the attempt count and cause.
+                DiagLog.e(TAG, "clip queue: batch fault (attempt ${runAttemptCount + 1}/$MAX_RUN_ATTEMPTS): ${e.message ?: e.javaClass.simpleName}", e)
                 if (runAttemptCount < MAX_RUN_ATTEMPTS) return Result.retry()
                 return Result.failure(
                     Data.Builder().putString(KEY_CLIP_MESSAGE, e.message ?: e.javaClass.simpleName).build(),
                 )
             }
 
+            DiagLog.i(
+                TAG,
+                "clip queue: batch done (indexed=${outcome.indexedThisRun} depth=${outcome.queueDepth} " +
+                    "unreadable=${outcome.unreadableThisRun} fill=${outcome.fillReport?.outcome ?: "none"} " +
+                    "more=${outcome.moreRemaining})",
+            )
+
             if (outcome.moreRemaining) {
                 // The plan outlived this batch: hand the same queue to the
-                // next run before succeeding. REPLACE keeps exactly one
-                // chain alive under the unique name.
+                // next run before succeeding. r48 (F3): APPEND_OR_REPLACE
+                // (the face queue's comment applies verbatim: REPLACE
+                // cancelled the pending self at every batch boundary).
                 ClipIndexScheduler.enqueue(applicationContext)
             }
             return Result.success(outcomeData(outcome))
-        } finally {
-            engine.closeFaceIndex()
-            engine.release()
-        }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // r47's honesty fix (the uncaught-fault catch) + r48 (F5): the
+            // uncaught fault also lands in the diagnostics ring, mirroring
+            // the face queue's outer catch.
+            DiagLog.e(TAG, "clip queue: uncaught ${e.javaClass.simpleName}: ${e.message} (attempt ${runAttemptCount + 1}/$MAX_RUN_ATTEMPTS)", e)
             if (runAttemptCount < MAX_RUN_ATTEMPTS) return Result.retry()
             return Result.failure(
                 Data.Builder()
@@ -222,6 +251,18 @@ class ClipIndexWorker(
                     .build(),
             )
         }
+        // r48 (F1): the per-run teardown (closeFaceIndex + release) is
+        // REMOVED --- the mirror of the face queue's fix. The native engine
+        // and store are PROCESS-GLOBAL singletons, so the r47 shape's
+        // `finally { engine.closeFaceIndex(); engine.release() }` tore the
+        // engine out from under the CONCURRENT face chain mid-batch (and
+        // vice versa), failing BOTH queues with IllegalStateException ---
+        // the "indexing are failing" dogfood report (the r47 catch above
+        // surfaces that cause; this removes it). initSemantic /
+        // openFaceIndex are idempotent per half, so the next run reuses or
+        // re-opens the resident engine. The UI adapters' close() teardown
+        // while a queue runs is the remaining half (follow-up.md F-38).
+    }
 
     /** The outcome as the terminal output the Settings card renders. */
     private fun outcomeData(outcome: ClipIndexQueueProcessor.BatchOutcome): Data = Data.Builder()
@@ -242,6 +283,9 @@ class ClipIndexWorker(
     private companion object {
         /** Mid-run engine faults retry (with WorkManager backoff) this often. */
         const val MAX_RUN_ATTEMPTS = 3
+
+        /** Diagnostics-ring tag (r48, F5). */
+        const val TAG = "ClipIndexWorker"
     }
 }
 
@@ -300,12 +344,18 @@ const val KEY_CLIP_MESSAGE = "clipMessage"
  */
 object ClipIndexScheduler {
 
-    /** Enqueues one semantic queue run under the unique name (REPLACE: one chain). */
+    /**
+     * Enqueues one semantic queue run under the unique name. r48 (F3):
+     * APPEND_OR_REPLACE, the mirror of the face scheduler's fix --- REPLACE
+     * deleted the pending unique work (including the run enqueueing its own
+     * successor at every batch boundary); APPEND_OR_REPLACE chains the
+     * successor after the running work and replaces only terminal chains.
+     */
     fun enqueue(context: Context) {
         val request = OneTimeWorkRequestBuilder<ClipIndexWorker>()
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniqueWork(CLIP_INDEX_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+            .enqueueUniqueWork(CLIP_INDEX_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
     /** Cancels the whole chain (current run + anything enqueued). */

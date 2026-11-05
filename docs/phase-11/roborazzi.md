@@ -271,3 +271,56 @@ closed.
   merged (section 6); (c) Robolectric's android-all download hiccup on a
   fresh runner. None of these are silent: each fails loudly and is
   attributable.
+
+## 8. The r48 round: the plugin lands, the README suite, and the F-34 gate
+
+**Status: 2026-11-06, the r48 round (branch `tg-r48-screenshots-workflows`,
+the toadFILES-alignment directive).** Four changes, each closing a recorded
+limitation of the record-only era:
+
+- **The Roborazzi gradle plugin is re-applied** (`alias(libs.plugins.roborazzi)`
+  in `apps/gallery/build.gradle.kts`; the catalog plugin entry restored).
+  Section 7's blocker --- the plugin classpath hard-erroring the module's
+  then-existing `srcDir(Any)` call sites --- is gone as a matter of code
+  fact: the flavors round rewrote all three sites (the engine `jniLibs`,
+  `progressAssets` and `bundled-models` `assets` srcDirs) to the AGP-9
+  plain-File convention (`...srcDir(layout.buildDirectory.dir(...).get().asFile)`),
+  so the plugin's newer AGP variant API no longer meets a `srcDir(Any)`
+  anywhere in the script. With the plugin applied, `captureRoboImage()`
+  fires ONLY under the record/verify tasks: plain unit-test runs
+  (`ci.yml`'s `testBasicDebugUnitTest` / `testEngineDebugUnitTest`) skip
+  captures entirely, which is the toadFILES behavior and keeps the
+  canonical gate fast and tree-clean.
+- **The README screenshot suite lands**
+  (`ReadmeScreenshotsTest.kt`, the toadFILES `TabScreenshotsTest` pattern):
+  the REAL app shell (`MainActivity` + `ToadGalleryApp`) over a seeded
+  media world --- a `FakeMediaProvider` registered under the `media`
+  authority answering every `content://media/...` query with twelve fixed
+  rows, real JPEG bytes on the Robolectric filesystem (the app's own Coil
+  pipeline decodes them through `openFile`), and the same rows upserted
+  into the Room catalogue before the activity launches. Five captures
+  (`roborazzi/01-photos.png` .. `05-settings.png`) walk the real bottom
+  navigation by label; the committed copies render the README's
+  Screenshots section, and the regeneration recipe is documented there.
+- **`screenshots.yml` becomes verify-then-record**: the drift gate
+  (`verifyRoborazziBasicDebug`) runs FIRST, gated on committed baselines
+  (`hashFiles('apps/gallery/roborazzi/*.png')` inspects the checkout, so
+  the step is an honest skip before baselines exist and a hard gate
+  after); the record pass (`recordRoborazziBasicDebug`) runs always and
+  feeds the `roborazzi-screenshots` artifact. Ordering is load-bearing:
+  record overwrites the working-tree PNGs, so a record-then-verify
+  sequence would compare fresh renders against themselves.
+- **F-34 closes** along the doc's own section-5 recipe: the record run's
+  artifact is downloaded, the state-card PNGs are committed under
+  `apps/gallery/roborazzi/` (the plugin's record output dir is also its
+  verify input dir --- that is the whole trick), and from that commit on
+  the gate is live on every PR touching the gallery.
+
+Known shape, recorded honestly: the baseline PNGs live in the MODULE's
+`roborazzi/` dir (not `src/test/resources` as section 5's first draft
+guessed) --- `.gitignore` does not exclude it, and the plugin's task pair
+reads and writes the same location, so committed-baselines-there is the
+self-consistent layout. The README suite's explicit `roborazzi/NN-*.png`
+paths deliberately ignore the `fullyQualifiedName` naming strategy (they
+are README assets first, baselines second); one flavor (basic) is
+recorded, because the names would collide across flavors.

@@ -29,11 +29,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -80,7 +82,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -1252,20 +1253,11 @@ private fun VideoPage(item: MediaItem, isCurrentPage: Boolean) {
  * otherwise), keeping the bar's resting density unchanged for everyone
  * who never starts a slideshow.
  *
- * r47 ux fix: Edit / Rename / Delete render through a MoreVert overflow
- * menu instead of three more IconButtons. Every action is still narrated
- * by a `cd_viewer_action_*` string (the menu items carry it as their
- * text), and the 48dp touch floor holds --- the change is about
- * REACHABILITY: the bar's fixed chrome (back, slideshow, info, share,
- * favorite, overflow) now always fits the narrowest common viewport,
- * where nine inline buttons left the destructive trailing pair off-screen.
- *
- * Every action is an `IconButton` (or a labeled overflow menu item --- see
- * the r47 fix above) --- the 48dp touch floor DesignTokens
+ * Every action is an `IconButton` --- the 48dp touch floor DesignTokens
  * mandates --- with a `cd_viewer_action_*` content description, and all
  * icons come from the material-icons CORE set the repo already depends on
- * (Info, Share, Favorite, FavoriteBorder, PlayArrow, Clear, DateRange,
- * Check, MoreVert; no extended-icons dependency is added).
+ * (Info, Share, Edit, Delete, Favorite, FavoriteBorder, PlayArrow, Clear,
+ * DateRange, Check; no extended-icons dependency is added).
  */
 @Composable
 private fun ViewerTopBar(
@@ -1291,9 +1283,6 @@ private fun ViewerTopBar(
     // The interval menu's open flag, local to the bar (the menu closes on
     // any pick or outside tap; the CHOICE rides the callback up).
     var intervalMenuOpen by remember { mutableStateOf(false) }
-    // r47 ux fix: the modify-actions overflow's open flag (same one-tap
-    // lifecycle as the interval menu above).
-    var overflowOpen by remember { mutableStateOf(false) }
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(),
@@ -1319,11 +1308,6 @@ private fun ViewerTopBar(
                 style = MaterialTheme.typography.labelLarge,
                 color = Color.White,
                 textAlign = TextAlign.Center,
-                // r47 ux fix: single line + ellipsis --- a full actions row
-                // can shrink this counter to a few dp on narrow screens, and
-                // an unclamped Text would wrap into a vertical pile.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 // r40 a11y: the counter is a dynamic surface --- a polite
                 // live region so page swipes announce their position.
                 modifier = Modifier
@@ -1418,11 +1402,26 @@ private fun ViewerTopBar(
                     tint = Color.White,
                 )
             }
-            // Issue #66: the favorite toggle. Filled heart while the
-            // current page is a favorite, outlined otherwise; the
-            // content description flips with the state so TalkBack
-            // announces the action, not the glyph.
+            // The editor launch (r29): image pages only --- the v1 editor
+            // scope is stills, so the button is absent on video pages
+            // (honest scope, no inert affordance).
+            if (canEdit) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.testTag("viewer_action_edit"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Create,
+                        contentDescription = stringResource(R.string.cd_viewer_action_edit),
+                        tint = Color.White,
+                    )
+                }
+            }
             if (canModify) {
+                // Issue #66: the favorite toggle. Filled heart while the
+                // current page is a favorite, outlined otherwise; the
+                // content description flips with the state so TalkBack
+                // announces the action, not the glyph.
                 IconButton(
                     onClick = onToggleFavorite,
                     modifier = Modifier.testTag("viewer_action_favorite"),
@@ -1443,69 +1442,31 @@ private fun ViewerTopBar(
                         tint = Color.White,
                     )
                 }
-            }
-            // r47 ux fix: Edit / Rename / Delete move behind a MoreVert
-            // overflow. Nine 48dp IconButtons (back, slideshow, interval,
-            // info, share, edit, favorite, rename, delete) cannot fit a
-            // 360dp screen --- the trailing rename/delete were pushed
-            // off-screen and unreachable. Overflowing the rare/modify
-            // actions caps the bar at seven buttons (336dp), so every
-            // control stays inside the viewport on the narrowest phones.
-            if (canEdit || canModify) {
-                Box {
-                    IconButton(
-                        onClick = { overflowOpen = true },
-                        modifier = Modifier.testTag("viewer_action_overflow"),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(
-                                R.string.cd_viewer_action_overflow,
-                            ),
-                            tint = Color.White,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = overflowOpen,
-                        onDismissRequest = { overflowOpen = false },
-                    ) {
-                        // The editor launch (r29): image pages only --- the
-                        // v1 editor scope is stills, so the entry is absent
-                        // on video pages (honest scope, no inert affordance).
-                        if (canEdit) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.cd_viewer_action_edit)) },
-                                onClick = {
-                                    overflowOpen = false
-                                    onEdit()
-                                },
-                                modifier = Modifier.testTag("viewer_action_edit"),
-                            )
-                        }
-                        if (canModify) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.cd_viewer_action_rename)) },
-                                onClick = {
-                                    overflowOpen = false
-                                    onRename()
-                                },
-                                modifier = Modifier.testTag("viewer_action_rename"),
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        stringResource(R.string.cd_viewer_action_delete),
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                },
-                                onClick = {
-                                    overflowOpen = false
-                                    onDelete()
-                                },
-                                modifier = Modifier.testTag("viewer_action_delete"),
-                            )
-                        }
-                    }
+                IconButton(
+                    onClick = onRename,
+                    modifier = Modifier.testTag("viewer_action_rename"),
+                ) {
+                    Icon(
+                        // r48: the user-reported same-icon flaw --- rename
+                        // used Icons.Filled.Edit, visually identical to the
+                        // editor launch's Icons.Filled.Create two buttons
+                        // over (two pencils). DriveFileRenameOutline (the
+                        // pencil-over-document glyph, extended set) is the
+                        // distinct, conventional rename affordance.
+                        imageVector = Icons.Filled.DriveFileRenameOutline,
+                        contentDescription = stringResource(R.string.cd_viewer_action_rename),
+                        tint = Color.White,
+                    )
+                }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.testTag("viewer_action_delete"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.cd_viewer_action_delete),
+                        tint = Color.White,
+                    )
                 }
             }
         }

@@ -593,3 +593,40 @@ r46-era sandbox lacked). What they decoded to, and what shipped:
 - **The Photos screenshot** showed a healthy grid (the stray vertical
   "1 2 0" tile is the user's own earlier viewer screenshot displayed as
   content --- not an app flaw); no action.
+
+---
+
+## The r48 window (2026-11-06) --- the README screenshots + the workflow-truth pass + the indexing root causes (branch `tg-r48-screenshots-workflows`, PR #128)
+
+- **F-34 (CLOSED this window)** --- Roborazzi baselines + the verify gate,
+  the r47 half plus this round's: the README suite's explicit-path captures
+  land at `apps/gallery/roborazzi/` (CWD-relative; .gitignore excludes
+  neither dir), the workflow's baseline detection / record pass / artifact
+  now cover BOTH capture locations, and the PNGs from this round's green
+  record run commit as the baselines + the README's `docs/screenshots/`
+  copies --- from that commit the `verifyRoborazziBasicDebug` gate is live.
+- **F-38 (open)** --- the remaining half of the concurrent-session engine
+  fix: the UI adapters (`PeopleEngineAdapter.close()`,
+  `MagicSearchEngineAdapter.close()`) and the Settings self-test still call
+  `engine.closeFaceIndex()` + `engine.release()`, which tears down the
+  PROCESS-GLOBAL engine while an indexing queue may be mid-batch (r48
+  removed the WORKERS' half of the mutual kill; the r47 catches surface the
+  cause). Make the teardown conditional on no live queue chain
+  (`getWorkInfosForUniqueWork` state) or reference-counted.
+- **F-39 (open)** --- permanently-unreadable candidates (DRM rows, cloud
+  stubs) return null forever and "stay queued" by design, so clustering /
+  the fill pass only ever run at drain --- one such row keeps
+  `moreRemaining` true indefinitely: "indexing never finishes" with NO
+  failure message. Bounded retry or a terminal-skip state for repeat
+  offenders (both queues).
+- **Note (the indexing investigation's residual)** --- the r48 static review
+  (agent-verified: all 26 JNI symbols match; all five model pins verified
+  live against models.ente.com by content-length AND sha256; flavor gates
+  conjunctive and correct) fixed the three concrete defects (the
+  process-global teardown, the throwing readBytes seam, the REPLACE
+  self-cancel) on top of the r47 honesty catches, and added the diagnostics
+  ring lines. What it could NOT verify without a device: the Failed-card
+  message text after the colon (distinguishes the fixed defects from
+  "models not installed" / ABI absence --- arm64-v8a only). The first
+  dogfood run after this merge answers it from the DiagLog ring.
+ (r48: the README screenshots land (Roborazzi, the toadFILES pattern), the workflow-truth pass, and the 'indexing are failing' fixes)

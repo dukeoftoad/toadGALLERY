@@ -32,7 +32,10 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+// r48: DriveFileRenameOutline replaces Edit for the rename action (the
+// user-reported same-icon flaw); it is an EXTENSION property on Icons.Filled
+// from material-icons-extended, so the explicit import is load-bearing.
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info

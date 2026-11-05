@@ -127,12 +127,11 @@ internal const val EDITOR_VIDEO_MIME: String = "video/*"
  * intent-filters exactly (apps/edit/src/main/AndroidManifest.xml): the
  * image surface filters exactly the four image subtypes below, the video
  * surface exactly the three video subtypes. PackageManager mime matching
- * is asymmetric --- an intent carrying the WILDCARD type (`image/*`)
- * does NOT match a filter that declares only specific subtypes (a
- * filter's own wildcard covers the intent; the reverse never holds) ---
- * so when a wildcard query returns zero contract hits the resolver
- * retries with exactly these shapes before falling back to the
- * package probe.
+ * is asymmetric --- an intent carrying a WILDCARD image type does NOT
+ * match a filter that declares only specific subtypes (a filter's own
+ * wildcard covers the intent; the reverse never holds) --- so when a
+ * wildcard query returns zero contract hits the resolver retries with
+ * exactly these shapes before falling back to the package probe.
  */
 internal val EDITOR_IMAGE_CONCRETE_MIMES: List<String> = listOf(
     "image/jpeg",

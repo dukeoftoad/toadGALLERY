@@ -672,3 +672,46 @@ r46-era sandbox lacked). What they decoded to, and what shipped:
   limits note. The `tg-engine-apk-*` / `tg-modelpack-*` push triggers are
   exercised the next time a dogfood branch is cut.
  (r49: the workflows organized --- four near-duplicate APK builders become one `apk-build.yml` dispatch surface, the least-privilege permissions baseline, and the living docs rewritten to the five-file truth)
+
+---
+
+## The r50 window (2026-11-06) --- the UI/UX polish round (branch `tg-r50-uiux-polish`, PR pending)
+
+- **The audits first** --- three parallel read-only agents over the basic +
+  engine flavors: (1) the core screens (photos/albums/search/map/settings/
+  trash/places/picker/collage + the shared media components), (2) the
+  viewer + the engine-gated surfaces (People, Magic Search, the Settings
+  AI section, the queue state cards), (3) the cross-cutting sweep (strings,
+  theme, tokens, a11y, motion). ~45 verified findings, file:line each; the
+  batch above lands the high-value half, and the honest leftovers below.
+- **F-40 (new, open)** --- the viewer's remaining polish halves: no
+  chrome auto-hide timer (the top bar persists until tapped; gallery
+  conventions fade after ~3-4s), video position not persisted across
+  viewer exit (long videos restart at 0:00 on re-entry), and the zoom/pan
+  clamps give no overscroll feedback. All behavior changes; none a defect.
+- **F-41 (new, open)** --- the live indexing signal outside Settings:
+  the People/Magic-Search empty cards say "start it from Settings" but
+  cannot see a run in flight (the queue states live in the AI ViewModel);
+  an "indexing N photos now" line + a deep link to the AI section (not the
+  Settings root) is the designed shape. The r50 NotIndexed action button
+  is the first half.
+- **F-42 (new, open)** --- the identity remediation decision: 40
+  direct-to-main commits (2026-10-30 to 2026-11-05) are authored by the
+  sandbox identity (`Z User <z@container>`); every squash-merged round
+  (r46 onward) is correctly `dukeoftoad <indvilla097@gmail.com>`. A
+  history rewrite would orphan every release tag (the tags point INTO the
+  affected range) and invalidate every SHA the ledger records --- the
+  honest default is the recorded decision, not a rewrite; future commits
+  carry the correct identity. The maintainer decides if a rewrite is ever
+  worth the fallout.
+- **Not landed (deliberate)** --- the collage preview's white base (the
+  preview truthfully shows the export's white base; dimming it in dark
+  theme would lie about the output), the off-scale dp sweep (component-
+  internal sizes, low value vs churn), the duplicate-string consolidation
+  (English-only, zero drift risk), and the selection-chrome crossfade
+  (motion polish; recorded under F-40's spirit, not a defect).
+- **Honest limit** --- no local Android SDK (ADR-0013): CI is the only
+  compile judge, and the state-card Roborazzi baselines changed with the
+  badge removal (the verify gate re-locks only after this round's record
+  run + committed baselines, same flow as F-34).
+ (r50: the UI/UX polish round --- the viewer video-chrome trap, the honest engine-state combos, the a11y batch, and the four-badge consolidation; F-40/F-41/F-42 opened)

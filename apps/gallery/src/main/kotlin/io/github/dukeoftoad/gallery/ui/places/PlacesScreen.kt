@@ -46,6 +46,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.compose.ColorPainter
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.data.catalogue.room.CatalogueLocationRow
 import io.github.dukeoftoad.gallery.data.places.PlaceMediaHandoff
@@ -232,6 +233,10 @@ internal fun PlaceRegionCard(
         AsyncImage(
             model = cover?.canonicalUri,
             contentDescription = stringResource(R.string.cd_place_cover),
+            // r50 ux fix: the decode-failure plate (AlbumCard's r47 idiom) ---
+            // a corrupt region cover used to render as fully blank pixels,
+            // indistinguishable from loading, under the region's label.
+            error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)

@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -64,6 +67,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -79,6 +84,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -519,6 +525,13 @@ fun ViewerScreen(
     }
 
     var chromeVisible by remember { mutableStateOf(true) }
+    // r50 ux fix: the video mute state, hoisted here because the control
+    // lives in the chrome bar (ViewerTopBar renders it only while the
+    // settled page is a video) while the PLAYER it acts on lives inside
+    // [VideoPage]. One boolean threads through both seams: VideoPage
+    // applies it to player.volume, the bar flips the glyph. Videos start
+    // unmuted (the pre-r50 autoplay-with-audio behavior is unchanged).
+    var videoMuted by remember { mutableStateOf(false) }
     // True while the CURRENT page's photo is meaningfully zoomed
     // ([ZoomableState.isZoomed]): locks the pager's user scrolling, the
     // documented v1 trade-off in PhotoPage's KDoc. Because swiping is
@@ -610,6 +623,7 @@ fun ViewerScreen(
                             // audio-side mirror of PhotoPage's leave-resets-
                             // zoom. See VideoPage for the semantics.
                             isCurrentPage = pagerState.currentPage == page,
+                            muted = videoMuted,
                         )
                     } else {
                         PhotoPage(
@@ -621,10 +635,25 @@ fun ViewerScreen(
                     }
                 }
             }
+            // r50 ux fix (the video-chrome trap): video pages have NO
+            // tap-to-toggle seam --- the PlayerView owns their gestures
+            // (see VideoPage's KDoc) --- so a photo tap that hid the chrome
+            // used to leave the next video page with no reachable back /
+            // info / overflow at all, and no gesture to bring it back. The
+            // settled video page now forces the chrome back on: the bar is
+            // always reachable exactly where a tap cannot reach it.
+            LaunchedEffect(window.items[pagerState.currentPage].isVideo) {
+                if (window.items[pagerState.currentPage].isVideo) {
+                    chromeVisible = true
+                }
+            }
             ViewerTopBar(
                 visible = chromeVisible,
                 current = pagerState.currentPage,
                 total = window.items.size,
+                currentPageIsVideo = window.items[pagerState.currentPage].isVideo,
+                videoMuted = videoMuted,
+                onToggleMute = { videoMuted = !videoMuted },
                 // Read-only below Android 10 (the app holds no write
                 // consent protocol there): the favorite toggle appears only
                 // on Q+ alongside rename/delete, the lexically visible
@@ -785,11 +814,16 @@ private fun ViewerInfoRow(label: String, value: String) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.testTag("viewer_info_row"),
-        )
+        // r50 ux fix: the values are long, opaque strings (names, content
+        // URIs) the user may want elsewhere --- selectable text lets a
+        // long-press copy them without any new chrome.
+        SelectionContainer {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("viewer_info_row"),
+            )
+        }
     }
 }
 
@@ -813,6 +847,16 @@ private fun ViewerRenameDialog(
     // the confirm disabled.
     var text by remember(prefill) { mutableStateOf(prefill ?: "") }
     val check = remember(text) { checkRenameInput(text) }
+    // r50 ux fix: the field takes focus the moment the dialog opens (the
+    // house SearchScreen pattern) and the keyboard's action key is Done,
+    // submitting when the input is valid --- no stray tap on the field and
+    // no newline-capable default IME action.
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(prefill) {
+        if (prefill != null) {
+            focusRequester.requestFocus()
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -841,7 +885,17 @@ private fun ViewerRenameDialog(
                         Text(stringResource(R.string.file_ops_rename_invalid))
                     }
                 },
-                modifier = Modifier.testTag("viewer_dialog_rename_field"),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (check is RenameCheck.Valid) {
+                            onConfirm(text)
+                        }
+                    },
+                ),
+                modifier = Modifier
+                    .testTag("viewer_dialog_rename_field")
+                    .focusRequester(focusRequester),
             )
         },
         modifier = Modifier.testTag("viewer_dialog_rename"),
@@ -1117,7 +1171,7 @@ private fun PhotoPage(
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun VideoPage(item: MediaItem, isCurrentPage: Boolean) {
+private fun VideoPage(item: MediaItem, isCurrentPage: Boolean, muted: Boolean) {
     val context = LocalContext.current
     var playbackFailed by remember(item.uri) { mutableStateOf(false) }
     val player = remember(item.uri) {
@@ -1150,6 +1204,15 @@ private fun VideoPage(item: MediaItem, isCurrentPage: Boolean) {
         if (!isCurrentPage) {
             player.pause()
         }
+    }
+
+    // r50 ux fix: the chrome bar's mute control acts on this player through
+    // the hoisted [muted] boolean (the player instance itself is recreated
+    // per uri, so the state lives at screen level and re-applies here).
+    // player.volume (not playWhenReady) is the honest mute: playback keeps
+    // running silently, exactly what a mute button means.
+    LaunchedEffect(player, muted) {
+        player.volume = if (muted) 0f else 1f
     }
 
     // Lifecycle-aware playback: ON_STOP pauses, ON_START resumes only a
@@ -1240,8 +1303,9 @@ private fun VideoPage(item: MediaItem, isCurrentPage: Boolean) {
  * the first action: a filled heart while [isFavorite], an outlined heart
  * otherwise (both CORE-set icons). Fading in/out with [visible]; chrome
  * visibility is toggled by photo taps ([PhotoPage]); video pages keep the
- * PlayerView's own controls, so the top bar simply follows the last
- * toggled state there.
+ * PlayerView's own controls and have no tap seam of their own --- r50:
+ * the settled video page forces the chrome back on (the call-site
+ * LaunchedEffect above), so the bar is never unreachable there.
  *
  * r27 adds the slideshow controls after the counter: a toggle
  * (PlayArrow while stopped / an X while running, both CORE icons --- the
@@ -1251,6 +1315,12 @@ private fun VideoPage(item: MediaItem, isCurrentPage: Boolean) {
  * interval button appears only during a run (the default 5s applies
  * otherwise), keeping the bar's resting density unchanged for everyone
  * who never starts a slideshow.
+ *
+ * r50 ux fix: video pages render a mute toggle (the hoisted videoMuted
+ * state; drawable glyphs --- no extended-icons dependency, the same rule
+ * as the r47 fix below). It appears ONLY while the settled page is a
+ * video ([currentPageIsVideo]), so photo pages keep their exact
+ * pre-r50 resting density.
  *
  * r47 ux fix: Edit / Rename / Delete render through a MoreVert overflow
  * menu instead of three more IconButtons. Every action is still narrated
@@ -1272,6 +1342,9 @@ private fun ViewerTopBar(
     visible: Boolean,
     current: Int,
     total: Int,
+    currentPageIsVideo: Boolean,
+    videoMuted: Boolean,
+    onToggleMute: () -> Unit,
     canModify: Boolean,
     isFavorite: Boolean,
     slideshowActive: Boolean,
@@ -1396,6 +1469,36 @@ private fun ViewerTopBar(
                             )
                         }
                     }
+                }
+            }
+            // r50 ux fix: the video mute toggle (M-8 in the r50 audit) ---
+            // videos autoplay with audio and media3's stock controller has
+            // no mute button, so hardware volume was the only silencer.
+            // Drawable glyphs (ic_viewer_volume_on/off): the CORE icon set
+            // has no volume glyphs and no extended-icons dependency is
+            // added --- the same rule the r47 overflow fix documented.
+            if (currentPageIsVideo) {
+                IconButton(
+                    onClick = onToggleMute,
+                    modifier = Modifier.testTag("viewer_action_mute"),
+                ) {
+                    Icon(
+                        painter = painterResource(
+                            if (videoMuted) {
+                                R.drawable.ic_viewer_volume_off
+                            } else {
+                                R.drawable.ic_viewer_volume_on
+                            },
+                        ),
+                        contentDescription = stringResource(
+                            if (videoMuted) {
+                                R.string.cd_viewer_action_unmute
+                            } else {
+                                R.string.cd_viewer_action_mute
+                            },
+                        ),
+                        tint = Color.White,
+                    )
                 }
             }
             IconButton(

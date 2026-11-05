@@ -13,8 +13,6 @@
     <string name="state_albums_empty_body">Albums group your media by folder. Grant access in the next step to see them.</string>
     <string name="state_search_empty_title">Search your library</string>
     <string name="state_search_empty_body">Type at least 2 characters to find photos and videos by file name. Advanced filters by date, album and more arrive with the smart search (roadmap Phase 5).</string>
-    <string name="state_settings_empty_title">Settings</string>
-    <string name="state_settings_empty_body">Appearance, privacy and storage preferences land as the product grows.</string>
     <string name="state_permission_title">Access needed</string>
     <string name="state_permission_body">toadGALLERY needs photo &amp; video access to show your library. Media stays on device — nothing you store is ever sent anywhere.</string>
     <string name="state_action_grant">Grant access</string>
@@ -22,7 +20,13 @@
     <string name="state_photos_error_title">Couldn\'t load your library</string>
     <string name="state_photos_error_body">Something went wrong while reading on-device media. Nothing was changed — your photos are safe.</string>
     <string name="state_action_retry">Try again</string>
-    <string name="state_shell_badge">Phase 3 — on-device timeline</string>
+    <!-- r50 ux fix: the internal "Phase 3" milestone badge (state_shell_badge)
+         is deleted: it rendered under every shared state surface.
+         r50 a11y: the grid cells' TalkBack click labels (MediaPagingGrid and
+         its album-detail / person-detail / trash siblings). -->
+    <string name="a11y_grid_open">Open</string>
+    <string name="a11y_grid_toggle_select">Select or deselect</string>
+    <string name="a11y_grid_long_press_select">Double-tap and hold to select</string>
 
     <!-- Search tab v1 (issue #62): name query + photo/video filter. The
          idle state reuses state_search_empty_title/body above; the retry
@@ -164,6 +168,10 @@
     <string name="cd_viewer_action_delete">Delete</string>
     <!-- r47 ux fix: the MoreVert overflow that carries Edit / Rename / Delete -->
     <string name="cd_viewer_action_overflow">More actions</string>
+    <!-- r50 ux fix: the video mute toggle (the chrome bar renders it only
+         on video pages; the content description flips with the state). -->
+    <string name="cd_viewer_action_mute">Mute</string>
+    <string name="cd_viewer_action_unmute">Unmute</string>
     <string name="viewer_info_title">Details</string>
     <string name="viewer_info_name">Name</string>
     <string name="viewer_info_type">Type</string>

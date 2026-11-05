@@ -4,6 +4,49 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r50 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
+
+### Changed
+
+- **[gallery] The UI/UX polish round (three parallel audits over the basic
+  and engine flavors, then the fix batch):** the viewer's video-chrome trap
+  (a photo tap that hid the chrome left the next VIDEO page with no
+  reachable back/info/overflow at all --- the settled video page now forces
+  the chrome back on), a video mute toggle in the chrome bar (drawable
+  glyphs, no extended-icons dependency; rendered only on video pages), the
+  rename dialogs' missing keyboard focus + IME Done (viewer + person
+  detail), selectable info-sheet values, the Settings AI section's honest
+  state combos (Start gated on capability Ready + no live run; Failed
+  lines in the error color with an inline Retry; a busy spinner during
+  provisioning; delete-models confirmations), the People NotIndexed card's
+  missing action, the inert picked-photos grid (now opens the viewer), the
+  snackbar-over-selection-actions overlap on Photos + album detail (the
+  undo snackbar physically covered Rename/Copy/Move/Delete and ate their
+  taps), the internal "Phase 3" milestone badge deleted from every shared
+  state surface, the sort menu's misleading hamburger glyph swapped to the
+  overflow idiom, the search tab's keyboard no longer popping over returned
+  results, the Things collection chip's whole-chip tap target + ellipsis,
+  the place cards' decode-failure plate, the Albums tab's missing title,
+  the vault-move confirm's destructive color, and the model-pack's
+  hardcoded FACE size left as-is (the manifest-derived semantic size stays
+  the pattern to extend).
+- **[gallery] The a11y batch:** TalkBack click labels + long-press labels
+  on every media cell (the long-press selection entry was undiscoverable),
+  whole-row toggleable semantics on every Settings switch row, Role.Button
+  on the details screen's expandable/editable rows, the append footer's
+  silent spinner now narrates (`state_append_loading` was written for it
+  and never referenced), and the four byte-identical selection-check badge
+  copies consolidated into ONE shared composable (the trash copy had
+  drifted: no dim check while unselected and no `file_ops_cell_check` test
+  tag --- restored via the shared one).
+- **[housekeeping] 192 failed/cancelled workflow runs deleted from the
+  Actions history** (137 failed + 55 cancelled, 2026-11-02 → 2026-11-05);
+  the identity audit found the repo tree fully `dukeoftoad` (the other
+  GitHub URLs are upstream attributions) --- the 40 older direct-to-main
+  commits authored by the sandbox identity are recorded in follow-up.md
+  (a history rewrite would orphan every release tag and invalidate every
+  recorded SHA; future commits carry the correct identity).
+
 ## [Unreleased] — the r49 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
 
 ### Changed

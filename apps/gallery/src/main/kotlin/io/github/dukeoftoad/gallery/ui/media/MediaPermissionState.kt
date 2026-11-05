@@ -136,11 +136,7 @@ fun MediaPermissionState(
                 .fillMaxWidth()
                 .padding(top = ToadSpacing.md),
         )
-        Text(
-            text = stringResource(R.string.state_shell_badge),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = ToadSpacing.xxl),
-        )
+        // r50 ux fix: the internal "Phase 3" milestone badge is gone (see
+        // the shell's StateScreen for the rationale).
     }
 }

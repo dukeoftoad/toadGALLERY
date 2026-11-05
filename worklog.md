@@ -1926,3 +1926,52 @@ the editor legs are the proven `editor-apk-build.yml` legs verbatim).
 The branch-scoped triggers are exercised the next time a dogfood branch
 is cut.
  (r49: the workflow organization round --- four near-duplicate APK builders consolidated into one `apk-build.yml`, the least-privilege permissions baseline, and the living docs rewritten to the five-file truth)
+
+### Run #23 — 2026-11-06 (the r50 window: the UI/UX polish round + the CI-history cleanup + the identity audit)
+
+**Branch:** `tg-r50-uiux-polish` (PR pending against the r49 main; the
+maintainer takes the merge CI run).
+
+**Directive:** focus on UI/UX polish and refinements; the user is
+`dukeoftoad`, replace any other identity in the repo; audit for flaws in
+the basic gallery and the gallery-with-engine only; clean up failed CI
+runs.
+
+**What landed:**
+1. **The CI-history cleanup**: all 192 failed/cancelled workflow runs
+   (137 failed + 55 cancelled, 2026-11-02 → 2026-11-05) deleted via the
+   API — the Actions history now holds successes only.
+2. **The identity audit**: the repo TREE is fully `dukeoftoad` (449 files
+   reference it; the only other GitHub URLs are upstream attributions —
+   ente, deckerst/aves, FossifyOrg, coil-kt, takahirom — all legitimate,
+   all kept). The one real misattribution is GIT metadata: 40
+   direct-to-main commits carry the sandbox identity `Z User
+   <z@container>`; every squash-merged round (r46+) is correct. The
+   rewrite is declined with the reasoning recorded (F-42: tags point into
+   the range; every ledger SHA would invalidate); the local git config now
+   commits as `dukeoftoad <indvilla097@gmail.com>`.
+3. **The audits**: three parallel read-only agents (core screens /
+   viewer+engine surfaces / cross-cutting), ~45 verified findings.
+4. **The fix batch** (the high-value half; every edit verified against
+   the code first): the viewer's video-chrome trap (HIGH), the video mute
+   toggle, the rename-dialog keyboard focus (viewer + person detail), the
+   info sheet's selectable values, the Settings AI state combos (Start
+   gating, Failed retry + error color, the busy spinner, delete-models
+   confirmations), the People NotIndexed action, the inert picked grid
+   wired to the viewer, the snackbar-over-actions overlap (Photos +
+   album detail), the milestone badge deleted everywhere, the sort-menu
+   glyph, the search re-entry keyboard, the Things chip's tap target +
+   ellipsis, the place cards' error plate, the Albums title, the
+   vault-move destructive color, and the a11y batch (cell click labels,
+   whole-row switch semantics, Role.Button rows, the narrated append
+   footer, the ONE shared SelectionCheck with the trash drift closed).
+5. **The ledger**: CHANGELOG's r50 section, follow-up.md's r50 window
+   (F-40/F-41/F-42 opened), and this run.
+
+**Honest limits:** no local Android SDK (ADR-0013) — CI is the only
+compile judge; the brace/paren balance + XML well-formedness checks are
+the only local proof. The state-card Roborazzi baselines changed with the
+badge removal: the verify gate re-locks after this round's record run +
+committed baselines (the F-34 flow). The deliberately-not-landed list is
+in follow-up.md.
+ (r50: the UI/UX polish round + the CI-history cleanup + the identity audit; the viewer video-chrome trap fixed, the engine state combos made honest, and the a11y batch landed)

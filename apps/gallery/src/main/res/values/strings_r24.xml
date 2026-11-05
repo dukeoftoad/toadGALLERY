@@ -32,4 +32,10 @@
     <string name="settings_ai_queue_done_no_cluster">Queue drained: indexed %1$d photos · %2$d faces · %3$d skipped as up-to-date · %4$d faces in store</string>
     <string name="settings_ai_queue_failed">Indexing failed: %1$s</string>
     <string name="settings_ai_queue_cancelled">Indexing cancelled — finished photos stay indexed; start again to resume the queue.</string>
+    <!-- r50 ux fix: the provisioning busy line, the delete-models
+         confirmation, and the inline queue Retry (which reuses the shared
+         state_action_retry). -->
+    <string name="settings_ai_busy">Working on-device…</string>
+    <string name="settings_ai_delete_confirm_title">Delete the downloaded models?</string>
+    <string name="settings_ai_delete_confirm_body">The model files are removed from this device. Nothing is uploaded or changed in your library — but re-downloading may take several minutes on the next start.</string>
 </resources>

@@ -26,8 +26,7 @@ import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
  * The shared unsupported-file screen state (screen-state system: issue #13).
  *
  * Layout for a media item the app cannot decode or display — the standard
- * state column (72dp decorative icon, `headlineSmall` title, centered body,
- * `state_shell_badge` footer). Shows `state_unsupported_title` ("This file
+ * state column (72dp decorative icon, `headlineSmall` title, centered body). Shows `state_unsupported_title` ("This file
  * type isn't supported yet") plus [fileName] when known, middle-ellipsized so
  * long names stay readable. The icon is the Material `Icons.Filled.Clear`
  * vector (`material-icons-core`): "no preview available", deliberately less
@@ -93,11 +92,7 @@ fun UnsupportedFileState(
                     .padding(top = ToadSpacing.md),
             )
         }
-        Text(
-            text = stringResource(R.string.state_shell_badge),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = ToadSpacing.xxl),
-        )
+        // r50 ux fix: the internal "Phase 3" milestone badge is gone (see
+        // the shell's StateScreen for the rationale).
     }
 }

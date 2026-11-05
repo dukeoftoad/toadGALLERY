@@ -174,9 +174,15 @@ fun PeopleScreen(
                     )
 
                 is PeopleContentState.NotIndexed ->
+                    // r50 ux fix: the NotIndexed card was the ONLY people state
+                    // without an action --- the prose pointed at Settings and
+                    // the user walked there by hand. The ConsentOff card's own
+                    // "open Settings" affordance, same destination.
                     PeopleStateMessage(
                         titleRes = R.string.people_state_not_indexed_title,
                         bodyRes = R.string.people_state_not_indexed_body,
+                        actionRes = R.string.state_action_open_settings,
+                        onAction = onOpenSettings,
                         tag = "people_state_not_indexed",
                     )
 

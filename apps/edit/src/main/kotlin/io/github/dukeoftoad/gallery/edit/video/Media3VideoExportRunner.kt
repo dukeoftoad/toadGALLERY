@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.common.SpeedParameters
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.GainProcessor
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -44,12 +45,17 @@ import java.io.File
  *  - [MuteDecision.STRIP_AUDIO] maps to [EditedMediaItem.Builder
  *    .setRemoveAudio]; a no-audio clip's recorded no-op maps to false
  *    (there is no track to strip; the plan recorded the fact).
- *  - volume rides [EditedMediaItem.Builder.setVolume] (media3 1.11.1's
- *    audio gain --- no separate pass through the effects chain); it is
- *    skipped on the strip-audio path (mute wins by construction: no track
- *    is left to scale) and skipped at the exact 1f identity (the same
- *    neutral-adjustment rule as the effects: a no-op pass is never
- *    attached).
+ *  - volume rides [GainProcessor] (media3 1.11.1's constant-capable gain
+ *    AudioProcessor) in the effects chain's audio-processor slot --- the
+ *    r52 CI catch is recorded here honestly: `EditedMediaItem.Builder
+ *    .setVolume` does NOT exist at this pinned version (verified against
+ *    the 1.11.1 artifacts, not guessed), so the gain is a
+ *    [GainProcessor.GainProvider] returning the plan's constant factor.
+ *    It is skipped on the strip-audio path (mute wins by construction:
+ *    no track is left to scale) and skipped at the exact 1f identity
+ *    (the same neutral-adjustment rule as the effects: a no-op pass is
+ *    never attached). The PREVIEW realizes the same gain as
+ *    `player.volume` --- one model, two realizations, no drift.
  *  - progress: [Transformer.getProgress] polled on the main looper into
  *    the seam's hundredths-of-a-percent; honest stages (PREPARING before
  *    the start call, RENDERING while polling).
@@ -98,9 +104,31 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
         // strip-audio path has no track left to scale --- mute wins by
         // construction) nor the exact 1f identity (the same
         // neutral-adjustment rule the effects above follow: a no-op pass is
-        // never attached).
+        // never attached). The constant provider answers the SAM pair
+        // directly (isUnityUntil returns the CURRENT time --- unity ends
+        // now, so the processor stays active for a non-unity gain; the
+        // provider itself is only ever attached at non-unity gains).
         val volumeGain = plan.volume
         val applyVolumeGain = !stripAudio && volumeGain != 1f
+        val audioProcessors: List<AudioProcessor> = if (applyVolumeGain) {
+            listOf(
+                GainProcessor(
+                    object : GainProcessor.GainProvider {
+                        override fun getGainFactorAtSamplePosition(
+                            presentationTimeUs: Long,
+                            samplePosition: Int,
+                        ): Float = volumeGain
+
+                        override fun isUnityUntil(
+                            presentationTimeUs: Long,
+                            samplePosition: Int,
+                        ): Long = presentationTimeUs
+                    },
+                ),
+            )
+        } else {
+            emptyList()
+        }
         val items = VideoEditMath.timelineRuns(plan).map { run ->
             val mediaItem = MediaItem.Builder()
                 .setUri(request.sourceUri)
@@ -114,8 +142,7 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
             EditedMediaItem.Builder(mediaItem)
                 .setSpeed(SpeedParameters(ConstantSpeedProvider(run.speedFactor.toFloat()), /* shouldMaintainPitch= */ true))
                 .setRemoveAudio(stripAudio)
-                .apply { if (applyVolumeGain) setVolume(volumeGain) }
-                .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
+                .setEffects(Effects(audioProcessors, videoEffects))
                 .build()
         }
         val composition = Composition.Builder(

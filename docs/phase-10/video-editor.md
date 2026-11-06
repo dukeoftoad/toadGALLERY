@@ -467,9 +467,12 @@ LOCAL to the new file), and editor `versionCode 17`.
 says "no audio mixing, no gain, no replacement". The maintainer's
 approved mute+volume bundle (decision 2026-11-06) adds ONE gain —
 `VideoEditPlan.volume`, bounds [0..2], default 1f — realized as
-media3's `EditedMediaItem.Builder.setVolume` (skipped on the
+media3's `GainProcessor` in the export effects chain (skipped on the
 strip-audio path and at the 1f identity) and `player.volume` in the
-preview, with five JVM tests. Audio MIXING and audio REPLACEMENT stay
+preview, with five JVM tests. (The first attempt rode
+`EditedMediaItem.Builder.setVolume`, which does not exist at the pinned
+1.11.1 --- the CI compile judge caught it and the real surface was
+verified against the downloaded artifacts before the fix landed.) Audio MIXING and audio REPLACEMENT stay
 out of scope exactly as before; this note records the single approved
 extension so the contract and the code do not drift.
 

@@ -27,9 +27,11 @@ designs. No Flutter. CI is GitHub Actions.**
 - **Volume is the round's only new capability** ---
   `VideoEditPlan.volume` (default 1f keeps every pre-r52 plan/test
   byte-compatible) with structured validation (bounds [0..2] + the NaN
-  gate), realized as media3 `EditedMediaItem.Builder.setVolume` at
-  export (skipped on strip-audio --- mute wins --- and at the 1f
-  identity) and `player.volume` in the preview; five JVM tests pin it.
+  gate), realized as media3's `GainProcessor` in the export
+  effects chain (the first attempt rode `EditedMediaItem.Builder
+  .setVolume`, which the CI compile judge proved does not exist at the
+  pinned 1.11.1 --- corrected against the real artifacts) and
+  `player.volume` in the preview; five JVM tests pin it.
   This extends the ADR-0012 §5 "no gain" boundary BY MAINTAINER
   DECISION (2026-11-06); the phase-10 contract doc carries the record.
 - **The surface** --- one scaffold (header / preview+fit-zoom /

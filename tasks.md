@@ -217,8 +217,8 @@
   Effects tab) / speed capped at the real 0.25x–2x bounds / Mute+Volume.
 - [x] `VideoEditPlan.volume` + validator bounds [0..2] + NaN gate + five
   JVM tests (default/bounds/out-of-bounds/NaN/mute-coexist); runner
-  realizes it via `EditedMediaItem.Builder.setVolume` (skipped on
-  strip-audio and at the 1f identity); preview via `player.volume`.
+  realizes it via media3's `GainProcessor` (skipped on strip-audio and
+  at the 1f identity; the CI judge's setVolume catch is recorded); preview via `player.volume`.
 - [x] `VideoEditorScreen.kt`: one scaffold, committed/draft session model,
   six tool screens (draft Reset/Apply + ✓ confirm), two-handle trim
   filmstrip with live cut preview, big-value speed + presets, nine-real-

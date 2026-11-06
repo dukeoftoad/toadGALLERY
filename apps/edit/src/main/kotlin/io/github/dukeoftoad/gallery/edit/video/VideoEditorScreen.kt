@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import io.github.dukeoftoad.gallery.edit.R
 import java.util.Locale
@@ -1027,10 +1028,13 @@ private fun PreviewSurface(
                 val view = playerViewRef.value
                 if (view != null) {
                     zoomed = !zoomed
+                    // The resize-mode constants live on the content frame's
+                    // AspectRatioFrameLayout (CI's compile judge --- they are
+                    // NOT PlayerView members); the view's setter takes them.
                     view.resizeMode = if (zoomed) {
-                        PlayerView.RESIZE_MODE_ZOOM
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     } else {
-                        PlayerView.RESIZE_MODE_FIT
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
                 }
             },

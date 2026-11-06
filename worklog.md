@@ -2215,3 +2215,17 @@ with reasons, not silent gaps.
 (media3 OverlayEffect path exists if the maintainer expands ADR-0012);
 the video-session undo/redo design; the fdroid metadata vercode bump
 rides the next release-engineering pass, not this PR.
+
+   **The r52 merge-gate catch (recorded, the r42 convention):** the
+   first CI run failed `:apps:edit:compileDebugKotlin` with exactly
+   three errors: (1) `EditedMediaItem.Builder.setVolume` does not
+   exist at the pinned media3 1.11.1 --- the honest fix verified the
+   REAL surface against the downloaded Google Maven artifacts
+   (python-parsed class files, not strings guesses): `GainProcessor` +
+   `GainProvider` (`getGainFactorAtSamplePosition(J,I)F` /
+   `isUnityUntil(J,I)J`) is 1.11.1's gain path, and the constant gain
+   now rides the effects chain's audio-processor slot the runner
+   already builds; (2)+(3) the resize-mode constants live on
+   `AspectRatioFrameLayout`, not `PlayerView`. All three fixed in one
+   commit; the ledgers' setVolume mentions were corrected in the same
+   pass rather than left lying.

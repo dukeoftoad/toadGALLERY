@@ -22,10 +22,13 @@ unchanged; the only new capability is the audio gain. One PR
   byte-compatible) with structured validation: bounds [0..2] and a NaN
   gate (every comparison against NaN is false, so the bounds check
   alone would let it through). The export applies it via media3's
-  `EditedMediaItem.Builder.setVolume` — skipped on the strip-audio
-  path (mute wins by construction) and at the exact 1f identity (the
-  neutral-adjustment rule: a no-op pass is never attached); the preview
-  realizes it as `player.volume`. The Audio screen carries the 0–200%
+  `GainProcessor` in the effects chain's audio-processor slot — skipped on
+  the strip-audio path (mute wins by construction) and at the exact 1f identity (the
+  neutral-adjustment rule: a no-op pass is never attached) --- the CI
+  compile judge caught the first attempt (`EditedMediaItem.Builder
+  .setVolume` does not exist at the pinned 1.11.1; the real surface was
+  verified against the downloaded artifacts, not guessed again); the
+  preview realizes the same gain as `player.volume`. The Audio screen carries the 0–200%
   step-5 slider; five JVM tests pin the rules (PR: this round).
 
 ### Changed

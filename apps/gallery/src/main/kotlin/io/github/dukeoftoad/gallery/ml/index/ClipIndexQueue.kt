@@ -96,12 +96,19 @@ data class ClipIndexCandidate(
  * never recorded): the [revision] OBSERVED AT INDEX TIME is the half that
  * makes re-planning incremental --- a later [MediaRevision.diff] against
  * a fresh candidate decides skip vs re-index.
+ *
+ * r50 (F-39): [unreadable] marks the TERMINAL-SKIP record written when
+ * the photo's bytes could not be read --- the same fix the face queue's
+ * [io.github.dukeoftoad.gallery.ml.index.FaceIndexedState] carries (see
+ * its KDoc); it holds the photo out of the queue until its revision
+ * changes, and never produces clip rows.
  */
 data class ClipIndexedState(
     val localMediaKey: String,
     val fileId: Long,
     val revision: MediaRevision,
     val indexedAtMillis: Long,
+    val unreadable: Boolean = false,
 )
 
 /**
@@ -122,6 +129,8 @@ data class ClipIndexPlan(
     val staleStateKeys: Set<String>,
     val skippedUpToDate: Int,
     val skippedMetadataOnly: Int,
+    /** r50 (F-39): photos held out by a terminal unreadable-skip record. */
+    val skippedUnreadable: Int = 0,
 ) {
     /** True when the plan asks for no store work at all. */
     val isEmpty: Boolean get() = toIndex.isEmpty() && orphanFileIds.isEmpty()
@@ -158,6 +167,7 @@ object ClipIndexQueuePlanner {
         val reIndexKeys = HashSet<String>()
         var skippedUpToDate = 0
         var skippedMetadataOnly = 0
+        var skippedUnreadable = 0
 
         for (candidate in candidates) {
             candidateFileIds.add(candidate.fileId)
@@ -171,7 +181,9 @@ object ClipIndexQueuePlanner {
             }
             when (state.revision.diff(candidate.revision)) {
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.UNCHANGED ->
-                    skippedUpToDate++
+                    // r50 (F-39): an unreadable-skip record holds the photo
+                    // out until its revision changes (see FaceIndexedState).
+                    if (state.unreadable) skippedUnreadable++ else skippedUpToDate++
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.METADATA_CHANGED ->
                     skippedMetadataOnly++
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.CONTENT_CHANGED -> {
@@ -199,6 +211,7 @@ object ClipIndexQueuePlanner {
             staleStateKeys = staleStateKeys,
             skippedUpToDate = skippedUpToDate,
             skippedMetadataOnly = skippedMetadataOnly,
+            skippedUnreadable = skippedUnreadable,
         )
     }
 }
@@ -301,8 +314,10 @@ class ClipIndexQueueProcessor(
      * batch --- the worker re-enqueues itself then. [fillReport] is
      * non-null only on the draining run of a non-empty plan.
      * [unreadableThisRun] counts photos whose bytes could not be read;
-     * they stay in the queue (no state record) and are retried next run
-     * --- honest, bounded by the batch size, visible in the card.
+     * r50 (F-39): each now leaves a TERMINAL-SKIP state record (until its
+     * revision changes), so unreadable photos can no longer keep the
+     * chain re-enqueueing forever. [skippedUnreadable] mirrors the plan's
+     * count of photos held out by earlier skip records.
      */
     data class BatchOutcome(
         val queueDepth: Int,
@@ -311,6 +326,8 @@ class ClipIndexQueueProcessor(
         val skippedUpToDate: Int,
         val skippedMetadataOnly: Int,
         val unreadableThisRun: Int,
+        /** r50 (F-39): photos held out by earlier unreadable-skip records. */
+        val skippedUnreadable: Int = 0,
         val moreRemaining: Boolean,
         val fillReport: MlEngine.ClipFillReport?,
         val totalClipsInStore: Long,
@@ -351,6 +368,18 @@ class ClipIndexQueueProcessor(
                 val bytes = readBytes(candidate)
                 if (bytes == null) {
                     unreadable++
+                    // r50 (F-39): the TERMINAL-SKIP record (the same fix as
+                    // the face queue's --- see FaceIndexQueue's processor):
+                    // unreadable photos can no longer keep this chain
+                    // re-enqueueing forever. Holds the photo out until its
+                    // revision changes; carries no clip rows.
+                    statesByKey[candidate.localMediaKey] = ClipIndexedState(
+                        localMediaKey = candidate.localMediaKey,
+                        fileId = candidate.fileId,
+                        revision = candidate.revision,
+                        indexedAtMillis = nowMillis(),
+                        unreadable = true,
+                    )
                     continue
                 }
                 // Delete-first: putClip is an UPSERT so this is redundant
@@ -403,6 +432,7 @@ class ClipIndexQueueProcessor(
             skippedUpToDate = plan.skippedUpToDate,
             skippedMetadataOnly = plan.skippedMetadataOnly,
             unreadableThisRun = unreadable,
+            skippedUnreadable = plan.skippedUnreadable,
             moreRemaining = moreRemaining,
             fillReport = fillReport,
             totalClipsInStore = engine.clipCount(),
@@ -498,6 +528,10 @@ class ClipIndexStateFile(
         const val METADATA_WRITE_REVISION = "metadataWriteRevision"
         const val CONTENT_FINGERPRINT = "contentFingerprint"
 
+        // r50 (F-39): the terminal-skip flag. Additive OPTIONAL field on
+        // version 1 (old readers ignore it, new readers default false).
+        const val UNREADABLE = "unreadable"
+
         fun stateToJson(state: ClipIndexedState): JSONObject = JSONObject()
             .put(KEY, state.localMediaKey)
             .put(FILE_ID, state.fileId)
@@ -513,6 +547,7 @@ class ClipIndexStateFile(
                 CONTENT_FINGERPRINT,
                 state.revision.contentFingerprint ?: JSONObject.NULL,
             )
+            .put(UNREADABLE, state.unreadable)
 
         fun stateFromJson(obj: JSONObject): ClipIndexedState? {
             val key = obj.optString(KEY)
@@ -538,6 +573,7 @@ class ClipIndexStateFile(
                     },
                 ),
                 indexedAtMillis = obj.optLong(INDEXED_AT),
+                unreadable = obj.optBoolean(UNREADABLE, false),
             )
         }
     }

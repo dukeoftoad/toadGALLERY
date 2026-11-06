@@ -672,3 +672,108 @@ r46-era sandbox lacked). What they decoded to, and what shipped:
   limits note. The `tg-engine-apk-*` / `tg-modelpack-*` push triggers are
   exercised the next time a dogfood branch is cut.
  (r49: the workflows organized --- four near-duplicate APK builders become one `apk-build.yml` dispatch surface, the least-privilege permissions baseline, and the living docs rewritten to the five-file truth)
+
+---
+
+## The r50 window (2026-11-06) --- the UI/UX polish round (branch `tg-r50-uiux-polish`, PR #130)
+
+- **The audits first** --- three parallel read-only agents over the basic +
+  engine flavors: (1) the core screens (photos/albums/search/map/settings/
+  trash/places/picker/collage + the shared media components), (2) the
+  viewer + the engine-gated surfaces (People, Magic Search, the Settings
+  AI section, the queue state cards), (3) the cross-cutting sweep (strings,
+  theme, tokens, a11y, motion). ~45 verified findings, file:line each; the
+  batch above lands the high-value half, and the honest leftovers below.
+- **F-40 (new, open)** --- the viewer's remaining polish halves: no
+  chrome auto-hide timer (the top bar persists until tapped; gallery
+  conventions fade after ~3-4s), video position not persisted across
+  viewer exit (long videos restart at 0:00 on re-entry), and the zoom/pan
+  clamps give no overscroll feedback. All behavior changes; none a defect.
+- **F-41 (new, open)** --- the live indexing signal outside Settings:
+  the People/Magic-Search empty cards say "start it from Settings" but
+  cannot see a run in flight (the queue states live in the AI ViewModel);
+  an "indexing N photos now" line + a deep link to the AI section (not the
+  Settings root) is the designed shape. The r50 NotIndexed action button
+  is the first half.
+- **F-42 (new, open)** --- the identity remediation decision: 40
+  direct-to-main commits (2026-10-30 to 2026-11-05) are authored by the
+  sandbox identity (`Z User <z@container>`); every squash-merged round
+  (r46 onward) is correctly `dukeoftoad <indvilla097@gmail.com>`. A
+  history rewrite would orphan every release tag (the tags point INTO the
+  affected range) and invalidate every SHA the ledger records --- the
+  honest default is the recorded decision, not a rewrite; future commits
+  carry the correct identity. The maintainer decides if a rewrite is ever
+  wanted. (Both r50 campaigns reached this verdict independently; the
+  second campaign's F-numbered entry is folded into this one.)
+- **Honest limit** --- no local Android SDK (ADR-0013): CI is the only
+  compile judge; the polish batch's Kotlin proofs are the repo lexer
+  check + XML validation, and the Roborazzi goldens were re-recorded at
+  the fix tip (green record run 42087285759) before the verify gate
+  re-locked.
+
+## The r50 window, second campaign (2026-11-06) --- the dual-flavor audit + F-38/F-39 + the r49 dispatch-bug catch (branch `tg-r50-uiux-audit`, rebased onto `tg-r50-uiux-polish`)
+
+- **The recon** --- three more parallel audits (identity sweep, basic
+  flavor, engine flavor) plus a VLM pass over the maintainer's four
+  device screenshots. The identity sweep verdict matches F-42 above
+  (the working tree is 100% dukeoftoad, zero replacements needed). The
+  screenshot pass found the device build is PRE-r47, which focused the
+  polish on what remained live.
+- **F-43 (2026-11-06, open)** — Model-pin changes never re-index. The
+  queue planners skip any photo whose recorded revision diffs UNCHANGED,
+  and the state files carry no model-version token, so after a
+  ModelManifest re-pin + re-download every state record still matches
+  and the queue plans ZERO work — People/Magic Search keep serving
+  old-model embeddings (mixed-version if some files re-index via
+  CONTENT_CHANGED). Fix shape: stamp the state records with the engine's
+  current model version and treat a version mismatch as re-index; both
+  queues + a JVM test. (Deliberately deferred — correctness debt, not a
+  crash.)
+- **F-44 (2026-11-06, open)** — The ML queues are still manual-only:
+  nothing hooks `ScanIndexHook` to the face/clip schedulers, so photos
+  taken after a drain stay unindexed until the user re-opens Settings →
+  Start. The Application's KDoc now states this honestly. Wiring the
+  feed needs a battery/permission-timing pass (WorkManager constraints,
+  maybe a foreground service — see F-45) and is its own round.
+- **F-45 (2026-11-06, open)** — Long index chains run bare: no
+  foreground service, no ORT thread/arena config (XNNPACK+CPU defaults
+  on all big cores), so a full-library index (50/batch → 1000+ chained
+  WorkManager runs) is invisible and Doze-deferrable mid-chain. The
+  FOREGROUND_SERVICE permission removal is a documented decision;
+  revisit with F-44.
+- **F-46 (2026-11-06, open)** — `ci.yml` never compiles the
+  semantic/face flavors (basic + engine only); a flavor-specific break
+  surfaces only at release.yml tag time. A cheap
+  `compileSemanticDebugKotlin`/`compileFaceDebugKotlin` leg (no
+  packaging, no -PwithEngine needed) would close the gap.
+- **F-47 (2026-11-06, open)** — A pre-r46 install upgraded in place to
+  basic keeps orphaned engine data (`filesDir/models`, `face-index/`)
+  with no UI to remove it (every management card is BuildShape-gated
+  out), and persisted WorkManager chains re-run and fail terminally but
+  invisibly. Needs a product decision (auto-cleanup vs a one-time
+  "leftover data" notice) before any code.
+- **F-48 (2026-11-06, open)** — CI pins the NDK (r50: preferred, not
+  just fallback) but NOT the Rust toolchain (`dtolnay/rust-toolchain@stable`
+  in `.github/actions/toad-setup` — unpinned rustc under edition-2024 +
+  deny-level lints). A runner-image rustc bump breaks the engine job in
+  CI only. Pin like the NDK when a version is agreed.
+- **F-49 (2026-11-06, open)** — The edit app (apps/edit) has its own
+  inset/slider polish debt (the maintainer's editor screenshots: content
+  under the status bar, the trim sliders' mid-track divider reads
+  broken). Out of the r50 scope (basic/engine gallery audit only);
+  the edit app needs its own sweep.
+- **F-50 (2026-11-06, closed within the window)** — The second
+  campaign's sandbox was RECYCLED mid-round (the PAT and the local
+  clone were wiped; the work continued on a fresh public clone and the
+  push/PR/cleanup were blocked). RESOLVED: the maintainer restored the
+  PAT; the branch is pushed (rebased onto the first campaign's green
+  tip), and the remaining 34 failed + 9 cancelled Actions runs were
+  deleted (the Actions history now holds zero failed and zero
+  cancelled runs).
+- **Honest limits** — no Android SDK in the sandbox (ADR-0013): the
+  Kotlin proofs are the repo lexer check on all touched files +
+  actionlint 1.7.7 + XML/YAML validation; CI is the compile judge. The
+  four device screenshots analyzed for the polish pass are from a
+  PRE-r47 build — the counter stacking, the duplicate pencil buttons
+  and the "Indexing failed: indexing failed" tautology they show were
+  already fixed on main by r47/r48; this round fixed what remained.

@@ -45,7 +45,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -294,7 +296,12 @@ private fun SectionHeader(
             .fillMaxWidth()
             .then(
                 if (expandable) {
-                    Modifier.clickable(onClick = onToggle)
+                    // r50 a11y fix: Role.Button + the expanded state ---
+                    // TalkBack used to read the whole section header as
+                    // plain text with no affordance or state.
+                    Modifier
+                        .clickable(onClick = onToggle)
+                        .semantics { role = Role.Button }
                 } else {
                     Modifier
                 },
@@ -425,7 +432,16 @@ private fun EditableFieldRowItem(row: EditableFieldRow, onEdit: (MediaEditField)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (actionable) Modifier.clickable { onEdit(row.field) } else Modifier)
+            // r50 a11y fix: the editable row announces itself as a button.
+            .then(
+                if (actionable) {
+                    Modifier
+                        .clickable { onEdit(row.field) }
+                        .semantics { role = Role.Button }
+                } else {
+                    Modifier
+                }
+            )
             .padding(start = 16.dp, end = 16.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

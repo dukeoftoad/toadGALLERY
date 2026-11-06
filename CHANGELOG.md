@@ -4,6 +4,170 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r50 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
+
+### Fixed
+
+- **[engine] F-38 closed — the UI-side engine teardown can no longer kill
+  a running index queue.** r48 removed the WORKERS' half of the
+  process-global engine mutual-kill; r50 removes the remaining UI half:
+  the People / Person-Detail / Magic-Search / Albums `onCleared()`
+  adapter closes, the Settings self-test's `finally { release() }`, and
+  the two reset buttons all tore the shared native session out from
+  under a live face/clip chain (`IllegalStateException` → retry ×3 →
+  the terminal Failed card — the remaining "indexing are failing"
+  candidate). A new `EngineSessionGuard` (ml/index) checks both unique
+  WorkManager chains: teardown now runs only when neither is live, and
+  the resets first cancel BOTH chains and await their termination
+  (bounded, DiagLog-mirrored) before deleting the shared `face-index`
+  directory. A skipped teardown leaks nothing — every engine user
+  re-opens the session lazily.
+- **[engine] F-39 closed — permanently unreadable photos can no longer
+  keep the chains re-enqueueing forever.** A photo whose bytes cannot be
+  read (deleted row, revoked grant, DRM/cloud stub) used to stay
+  state-less, so it re-entered EVERY plan and the worker re-enqueued
+  itself at every batch boundary with zero progress — "indexing never
+  finishes" with no failure message, battery drain and log churn. Both
+  queues now write a TERMINAL-SKIP state record (`unreadable: true`, an
+  additive optional version-1 JSON field): the photo is held out until
+  its revision CHANGES (a genuinely changed file gets a fresh read), is
+  counted separately in the plan/outcome (`skippedUnreadable`, surfaced
+  in the drained card line and the diagnostics ring), and never
+  produces face/clip rows. The JVM suites pin the new contract.
+- **[engine] The ML read seam gains the 64 MiB refuse-don't-truncate
+  cap** (the `MediaReadHandle.DEFAULT_MAX_BYTES` posture,
+  docs/phase-5/hardening.md): one pathological multi-hundred-MB file was
+  an OOM vector on low-RAM devices; an over-cap item now joins the
+  terminal-skip path instead.
+- **[ci] The r49 `apk-build.yml` dispatch bug: every gallery dispatch
+  failed in `prepare`.** The dispatch choices carry the `gallery-*`
+  prefix (`gallery-engine` / `gallery-modelpack`) but the resolver
+  matched the SHORT names (`engine` / `modelpack`), so the DEFAULT
+  dispatch fell to the unknown-target error — only the branch-push
+  paths and the editor dispatch ever worked (the r49 honest-limits note
+  had flagged the unverified dispatch paths). The prepare job now
+  strips the prefix once, loudly.
+- **[ci] The model-pack build is now actually offline: the WHOLE pack.**
+  The r28-era step staged the FACE pair only, but the assembled
+  engine-flavor APK enables the SEMANTIC index too — its CLIP assets
+  (image + text + vocab, ~213 MB) fell through `BundledModelSource` to
+  the network, contradicting the artifact's "never opens a socket"
+  purpose. All five assets are now fetched, sha256-verified, staged and
+  gate-checked — and a transcription typo in the r49
+  `mobilefacenet_portable_static_b1.onnx` pin (which would have failed
+  the fetch gate) was caught by re-verifying every pin against
+  ModelManifest.kt, the vendored `assets.rs`, AND the real download.
+- **[ci] The engine target's artifact name loses the accidental
+  `-engine-engine` doubling** (`toadGALLERY-<version>-engine-debug.apk`;
+  the modelpack keeps its explicit `modelpack-engine` shape).
+
+### Changed
+
+- **[gallery] The UI/UX polish round (three parallel audits over the basic
+  and engine flavors, then the fix batch):** the viewer's video-chrome trap
+  (a photo tap that hid the chrome left the next VIDEO page with no
+  reachable back/info/overflow at all --- the settled video page now forces
+  the chrome back on), a video mute toggle in the chrome bar (drawable
+  glyphs, no extended-icons dependency; rendered only on video pages), the
+  rename dialogs' missing keyboard focus + IME Done (viewer + person
+  detail), selectable info-sheet values, the Settings AI section's honest
+  state combos (Start gated on capability Ready + no live run; Failed
+  lines in the error color with an inline Retry; a busy spinner during
+  provisioning; delete-models confirmations), the People NotIndexed card's
+  missing action, the inert picked-photos grid (now opens the viewer), the
+  snackbar-over-selection-actions overlap on Photos + album detail (the
+  undo snackbar physically covered Rename/Copy/Move/Delete and ate their
+  taps), the internal "Phase 3" milestone badge deleted from every shared
+  state surface, the sort menu's misleading hamburger glyph swapped to the
+  overflow idiom, the search tab's keyboard no longer popping over returned
+  results, the Things collection chip's whole-chip tap target + ellipsis,
+  the place cards' decode-failure plate, the Albums tab's missing title,
+  the vault-move confirm's destructive color, and the model-pack's
+  hardcoded FACE size left as-is (the manifest-derived semantic size stays
+  the pattern to extend).
+- **[gallery] The a11y batch:** TalkBack click labels + long-press labels
+  on every media cell (the long-press selection entry was undiscoverable),
+  whole-row toggleable semantics on every Settings switch row, Role.Button
+  on the details screen's expandable/editable rows, the append footer's
+  silent spinner now narrates (`state_append_loading` was written for it
+  and never referenced), and the four byte-identical selection-check badge
+  copies consolidated into ONE shared composable (the trash copy had
+  drifted: no dim check while unselected and no `file_ops_cell_check` test
+  tag --- restored via the shared one).
+- **[build] The flavor ↔ property binding is now enforced by Gradle, not
+  workflow discipline.** `assembleBasic* -PwithEngine` (which silently
+  packed the .so files into basic) and `assembleEngine*` WITHOUT the
+  property (an honest-but-wrong LibraryMissing APK) now fail fast at
+  task-graph time — only for tasks that actually PACKAGE a gallery APK,
+  so the cross-flavor test/lint/record tasks CI runs stay
+  property-free. `-PwithBundledModels` without `-PwithEngine` fails
+  too.
+- **[basic] The basic flavor now holds NO network permission at all.**
+  A flavor manifest overlay strips `INTERNET` (the only consumer — the
+  ADR-0020 model fetch — is unreachable in basic by BuildShape), and
+  the r50-hardened privacy gate FAILS any `basic*` merged manifest that
+  carries it, allowlist or not; the engine family keeps the r22
+  allowlisted posture. The basic About screen states the stronger
+  truth via its own flavor string; the F-Droid description copy follows.
+- **[ui] The viewer's overflow rows gain distinct leading icons** — the
+  text-only menu made Edit and Rename read as the same action (the
+  maintainer's device report): Edit keeps the pencil, Rename draws a
+  dedicated `ic_rename` (pencil + baseline bar, core-set only — no
+  extended-icons dependency), Delete pairs its error-tinted text with
+  the trash. Test tags unchanged.
+- **[ui] The Settings AI card polishes (the second campaign's pass, on
+  top of the honest-state combos above):** the destructive actions
+  (model deletes, both index resets) render as outlined error-toned
+  buttons instead of the same filled style as the start actions (the
+  delete confirmations ride them); the "r22/r24/r26 dogfood"
+  build-codename jargon is gone from the user-facing labels; the
+  drained lines report the unreadable (terminally skipped) count;
+  re-entering Settings no longer erases the last outcome/self-test
+  cards; and the engine's own identity line (capability + model labels
+  + ORT bindings version) is surfaced under the library status
+  (`engineInfo()` previously had zero call sites).
+- **[ui] The ENGINE flavor's launcher label returns to "toadGALLERY
+  Engine"** (the r46 shape; the r47 plain-label directive is superseded
+  by the dual-flavor audit finding: basic and engine install side by
+  side on the dogfood devices, and two launcher entries with the same
+  name AND the same shared icon are indistinguishable — semantic/face
+  keep their suffixed labels, so the four-flavor matrix is consistent
+  again).
+- **[build] The NDK pin is now PREFERRED over any newer NDK the runner
+  image ships** (single-sourced as `PINNED_NDK_VERSION` in
+  engine/scripts/build-android.sh), instead of the pin being only the
+  no-NDK-at-all fallback while every build silently rode the newest
+  runner NDK.
+- **[fdroid] The metadata describes the flavor world honestly:** the
+  F-Droid package is the BASIC build (no network permission, no AI
+  engine), and MaintainerNotes records the r46+ recipe
+  (`assembleBasicRelease` + the flavor-qualified output path) for every
+  future Builds entry — the r45 entry keeps the flavorless shape that
+  was correct at its pinned commit.
+
+### Removed
+
+- The stale `org.fossify.**` proguard keep rule (the dependency left per
+  ADR-0008; a keep rule for an absent dependency is a no-op that only
+  rots), stale KDoc claims (AboutScreen's "no INTERNET permission",
+  the Application's composite-hook wiring note), the Search empty
+  state's stale "smart search arrives in roadmap Phase 5" promise, and
+  the unused `state_settings_empty_*` pair.
+
+### Housekeeping
+
+- **235 failed/cancelled workflow runs deleted from the Actions history**
+  (the parallel campaign's 137 failed + 55 cancelled, then this pass's
+  34 failed + 9 cancelled stragglers; the history now holds ZERO failed
+  and ZERO cancelled runs). The identity audit (both campaigns,
+  independently): the repo tree is fully `dukeoftoad` — every
+  author/maintainer/email/copyright/namespace pattern swept clean (the
+  other GitHub URLs are upstream attributions); the 40 older
+  direct-to-main commits authored by the sandbox identity are recorded
+  in follow-up.md F-46 (a history rewrite would orphan every release
+  tag and invalidate every recorded SHA; commits from this round on
+  carry the correct identity).
+
 ## [Unreleased] — the r49 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
 
 ### Changed

@@ -87,6 +87,7 @@ import io.github.dukeoftoad.gallery.ui.vault.VaultEvent
 import io.github.dukeoftoad.gallery.ui.vault.VaultUiState
 import io.github.dukeoftoad.gallery.ui.vault.VaultViewModel
 import io.github.dukeoftoad.gallery.ui.vault.isConfigured
+import io.github.dukeoftoad.gallery.ui.theme.ToadElevation
 
 /**
  * Photos tab (Phase 3, issue #25; incremental paging since #28; review
@@ -644,7 +645,14 @@ private fun PhotosTimeline(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp),
+                // r50 ux fix: in selection mode the FileOpsSelectionActions
+                // row pins the bottom edge --- an unoffset snackbar (the
+                // undo narration!) physically covered Rename/Copy/Move/
+                // Delete and ate their taps. The host rides above the row
+                // exactly when the row is on screen (row height = the
+                // 48dp touch floor + the row's 2 x 6dp vertical padding;
+                // + the host's own 12dp gap in both shapes).
+                .padding(bottom = if (selection != null) 72.dp else 12.dp),
         )
     }
 
@@ -814,11 +822,25 @@ private fun PhotosGrid(
                 is LoadState.Loading -> Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 20.dp),
+                        // r50 ux fix: 12dp vertical --- the error footer's
+                        // value (the old 20dp was off the token grid and
+                        // made the two footer shapes jump on transition).
+                        .padding(vertical = 12.dp),
                     horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
+                    )
+                    // r50 ux fix: the spinner is silent --- TalkBack
+                    // announced nothing while further pages loaded, even
+                    // though state_append_loading was written FOR this
+                    // footer (the KDoc claimed it rendered; it never did).
+                    Text(
+                        text = stringResource(R.string.state_append_loading),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp),
                     )
                 }
                 is LoadState.Error -> Row(
@@ -929,7 +951,9 @@ private fun FileOpsSelectionActions(
     onDelete: () -> Unit,
 ) {
     Surface(
-        tonalElevation = 3.dp,
+        // r50 ux fix: the token, not the literal (the elevation scale's
+        // level1 IS 3dp --- zero visual change, one truth).
+        tonalElevation = ToadElevation.level1,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("file_ops_actions"),
@@ -1196,6 +1220,12 @@ private fun VaultMoveDialog(
         confirmButton = {
             TextButton(
                 onClick = onConfirm,
+                // r50 ux fix: moving originals into the vault is the
+                // irreversible-without-the-vault operation --- the confirm
+                // reads destructive, like every sibling removal dialog.
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
                 modifier = Modifier.testTag("vault_move_confirm_yes"),
             ) {
                 Text(stringResource(R.string.vault_move_confirm_yes))

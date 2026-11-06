@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -52,10 +54,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -72,6 +77,7 @@ import io.github.dukeoftoad.gallery.ml.people.PersonPhoto
 import io.github.dukeoftoad.gallery.ml.people.VisiblePerson
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaThumb
+import io.github.dukeoftoad.gallery.ui.media.SelectionCheck
 
 /**
  * The Person detail screen (r25, Workstream 6): one face cluster's photos
@@ -404,6 +410,16 @@ private fun PersonPhotoGrid(
             val picked = photo.fileId in selection.selectedFileIds
             Box(
                 modifier = Modifier.combinedClickable(
+                    // r50 a11y fix: click labels (the MediaPagingGrid cell's
+                    // fix, person-detail edition).
+                    onClickLabel = stringResource(
+                        if (selection.active) {
+                            R.string.a11y_grid_toggle_select
+                        } else {
+                            R.string.a11y_grid_open
+                        },
+                    ),
+                    onLongClickLabel = stringResource(R.string.a11y_grid_long_press_select),
                     onClick = {
                         if (selection.active) {
                             onPhotoTapped(photo.fileId)
@@ -428,7 +444,7 @@ private fun PersonPhotoGrid(
                                 ),
                         )
                     }
-                    PersonSelectionCheck(
+                    SelectionCheck(
                         selected = picked,
                         modifier = Modifier.align(Alignment.TopStart),
                     )
@@ -458,40 +474,6 @@ private fun PersonPhoto.toMediaItem(): MediaItem = MediaItem(
     width = width,
     height = height,
 )
-
-/**
- * The scrim-chip checkmark badge of the selection overlay (r25): the
- * same idiom as the Photos/album grids' badge (dark rounded chip, check
- * in the theme's primary when picked, dimmed white otherwise).
- * Decorative by design --- the selection count in the app bar carries
- * the state for accessibility.
- */
-@Composable
-private fun PersonSelectionCheck(
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .padding(4.dp)
-            .testTag("file_ops_cell_check")
-            .size(22.dp)
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.55f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.CheckCircle,
-            contentDescription = null, // decorative; the app-bar count is the state
-            tint = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                Color.White.copy(alpha = 0.7f)
-            },
-            modifier = Modifier.size(18.dp),
-        )
-    }
-}
 
 /**
  * Selection-mode top bar (r25): the live count (the shared
@@ -577,6 +559,11 @@ private fun PersonRenameDialog(
     onDismiss: () -> Unit,
 ) {
     var text by remember(prefill) { mutableStateOf(prefill) }
+    // r50 ux fix: the field takes focus the moment the dialog opens and
+    // the keyboard's action key is Done, submitting (a blank submit stays
+    // the honest remove-the-name action --- the KDoc's rule).
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -606,7 +593,11 @@ private fun PersonRenameDialog(
                         Text(stringResource(R.string.person_rename_blank_hint))
                     }
                 },
-                modifier = Modifier.testTag("person_dialog_rename_field"),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onConfirm(text) }),
+                modifier = Modifier
+                    .testTag("person_dialog_rename_field")
+                    .focusRequester(focusRequester),
             )
         },
         modifier = Modifier.testTag("person_dialog_rename"),

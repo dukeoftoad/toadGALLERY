@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -282,6 +283,22 @@ private fun AlbumGrid(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // r50 ux fix: the tab had NO title --- Photos opens under a titled
+        // top bar and Settings under a headline, but Albums jumped straight
+        // into the People/Places cards and thumbnails, unidentified on a
+        // fresh install. A full-span heading as the first item (the reuse
+        // of the nav label keeps one word for the tab everywhere).
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Text(
+                text = stringResource(R.string.nav_albums),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .semantics { heading() }
+                    .testTag("albums_title"),
+            )
+        }
         // The People section (r25) spans the grid's full width as its FIRST
         // item, above the Places and Collections sections and the albums:
         // the people row scrolls with everything else (one scroll surface).
@@ -416,11 +433,13 @@ private fun PlacesSection(
                             .testTag("albums_places_row"),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // Count-based items: the file already imports the
-                        // GRID items extension for the album cards below,
-                        // and the LazyList list-overload shares its name
-                        // (the same trick the People row above uses).
-                        items(regions.size) { index ->
+                        // r50 ux fix: stable keys on the count overload (the
+                        // grid items extension's import still owns the simple
+                        // `items` name, so the LIST overload stays unusable
+                        // here --- but the count overload takes a key lambda
+                        // too). Insertions/removals no longer re-compose the
+                        // whole row and per-item state recycles by identity.
+                        items(regions.size, key = { regions[it].regionKey }) { index ->
                             val region = regions[index]
                             PlaceRegionCard(
                                 region = region,
@@ -541,11 +560,9 @@ private fun PeopleSection(
                             .testTag("albums_people_row"),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // Count-based items: the file already imports the GRID
-                        // items extension for the album cards below, and the
-                        // LazyList list-overload shares its name (the same
-                        // trick the Collections row above uses).
-                        items(state.visible.size) { index ->
+                        // r50 ux fix: stable keys on the count overload (see
+                        // the Places row above).
+                        items(state.visible.size, key = { state.visible[it].clusterId }) { index ->
                             val person = state.visible[index]
                             PersonCard(
                                 person = person,
@@ -626,10 +643,9 @@ private fun CollectionsSection(
                 .testTag("albums_collections"),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Count-based items: the file already imports the GRID items
-            // extension (`lazy.grid.items`) for the album cards below, and
-            // the LazyList list-overload shares its name.
-            items(visible.size) { index ->
+            // r50 ux fix: stable keys on the count overload (see the Places
+            // row above).
+            items(visible.size, key = { visible[it].id }) { index ->
                 val collection = visible[index]
                 collectionLabelRes(collection.id)?.let { labelRes ->
                     CollectionCard(
@@ -964,13 +980,26 @@ private fun ThingsCollectionChip(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            // r50 ux fix: the WHOLE chip is the open target. Only the Text
+            // used to be clickable, and its ~44dp effective height sat under
+            // the app's 48dp touch floor (the IconButton met it; the primary
+            // action did not).
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable(onClick = onOpen)
+                .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         ) {
             Text(
                 text = collection.name,
                 style = MaterialTheme.typography.bodyMedium,
+                // r50 ux fix: long user-typed names wrapped to multiple lines
+                // and stretched the chip inside a fixed-height row --- every
+                // sibling label follows the one-line ellipsis discipline.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .clickable(onClick = onOpen)
+                    .weight(1f)
+                    .widthIn(max = 200.dp)
                     .padding(vertical = 12.dp),
             )
             IconButton(

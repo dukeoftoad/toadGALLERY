@@ -21,16 +21,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -39,6 +44,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -68,11 +77,13 @@ import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_FILL_RESUMED
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_FILL_ROWS
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_FILL_SKIPPED
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_INDEXED
+import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_SKIPPED_UNREADABLE
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_SKIPPED_UP_TO_DATE
 import io.github.dukeoftoad.gallery.ml.index.KEY_CLIP_OUT_TOTAL_CLIPS
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_CLUSTERS
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_FACES
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_INDEXED
+import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_SKIPPED_UNREADABLE
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_SKIPPED_UP_TO_DATE
 import io.github.dukeoftoad.gallery.ml.index.KEY_OUT_TOTAL_FACES
 import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
@@ -339,8 +350,17 @@ fun SettingsScreen(
             modifier = Modifier.semantics { heading() },
         )
         Row(
+            // r50 ux fix: the WHOLE row is the toggle target (the Material
+            // settings idiom) --- the label text merges into the Switch's
+            // semantics, so TalkBack announces a named switch and the full
+            // width taps, not just the 48dp Switch itself.
             modifier = Modifier
                 .fillMaxWidth()
+                .toggleable(
+                    value = usePhotoPicker,
+                    role = Role.Switch,
+                    onValueChange = { settingsViewModel.setUsePhotoPicker(it) },
+                )
                 .padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -352,7 +372,7 @@ fun SettingsScreen(
             )
             Switch(
                 checked = usePhotoPicker,
-                onCheckedChange = { settingsViewModel.setUsePhotoPicker(it) },
+                onCheckedChange = null,
                 modifier = Modifier
                     .padding(start = 16.dp)
                     .testTag("settings_toggle_photo_picker"),
@@ -626,8 +646,15 @@ fun SettingsScreen(
                 // there on the next visit.
                 val peopleAlbumsEnabled by settingsViewModel.peopleAlbumsEnabled.collectAsState()
                 Row(
+                    // r50 ux fix: whole-row toggle target (see the photo-picker
+                    // row above for the full rationale).
                     modifier = Modifier
                         .fillMaxWidth()
+                        .toggleable(
+                            value = peopleAlbumsEnabled,
+                            role = Role.Switch,
+                            onValueChange = { settingsViewModel.setPeopleAlbumsEnabled(it) },
+                        )
                         .padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -639,7 +666,7 @@ fun SettingsScreen(
                     )
                     Switch(
                         checked = peopleAlbumsEnabled,
-                        onCheckedChange = { settingsViewModel.setPeopleAlbumsEnabled(it) },
+                        onCheckedChange = null,
                         modifier = Modifier
                             .padding(start = 16.dp)
                             .testTag("settings_toggle_people_albums"),
@@ -665,8 +692,15 @@ fun SettingsScreen(
                 // lands there on the next query.
                 val magicSearchEnabled by settingsViewModel.magicSearchEnabled.collectAsState()
                 Row(
+                    // r50 ux fix: whole-row toggle target (see the photo-picker
+                    // row above for the full rationale).
                     modifier = Modifier
                         .fillMaxWidth()
+                        .toggleable(
+                            value = magicSearchEnabled,
+                            role = Role.Switch,
+                            onValueChange = { settingsViewModel.setMagicSearchEnabled(it) },
+                        )
                         .padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -678,7 +712,7 @@ fun SettingsScreen(
                     )
                     Switch(
                         checked = magicSearchEnabled,
-                        onCheckedChange = { settingsViewModel.setMagicSearchEnabled(it) },
+                        onCheckedChange = null,
                         modifier = Modifier
                             .padding(start = 16.dp)
                             .testTag("settings_toggle_magic_search"),
@@ -705,8 +739,15 @@ fun SettingsScreen(
                 // new queue; the body copy says so.
                 val thingsAlbumsEnabled by settingsViewModel.thingsAlbumsEnabled.collectAsState()
                 Row(
+                    // r50 ux fix: whole-row toggle target (see the photo-picker
+                    // row above for the full rationale).
                     modifier = Modifier
                         .fillMaxWidth()
+                        .toggleable(
+                            value = thingsAlbumsEnabled,
+                            role = Role.Switch,
+                            onValueChange = { settingsViewModel.setThingsAlbumsEnabled(it) },
+                        )
                         .padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -718,7 +759,7 @@ fun SettingsScreen(
                     )
                     Switch(
                         checked = thingsAlbumsEnabled,
-                        onCheckedChange = { settingsViewModel.setThingsAlbumsEnabled(it) },
+                        onCheckedChange = null,
                         modifier = Modifier
                             .padding(start = 16.dp)
                             .testTag("settings_toggle_things_albums"),
@@ -735,6 +776,29 @@ fun SettingsScreen(
             val aiViewModel: AiEngineViewModel = viewModel()
             val aiState by aiViewModel.state.collectAsState()
             LaunchedEffect(Unit) { aiViewModel.refresh() }
+            // r50 ux fix: the provisioning busy state used to disable every
+            // button while showing NO activity at all --- on a slow
+            // connection the card looked frozen for minutes. One indeterminate
+            // spinner + narration line (byte-level progress is deliberately
+            // out of the provisioner contract; this states the work, not
+            // fake percentages).
+            if (aiState.busy) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_ai_busy),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
             Text(
                 text = stringResource(
                     if (aiState.engineLibraryPresent) {
@@ -747,6 +811,21 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            // r50 (the engine-flavor audit): the engine's own identity
+            // line --- capability + model labels + the ORT bindings
+            // version (MlEngine.engineInfo() previously had ZERO call
+            // sites). Session-dependent: renders once a session has
+            // opened (the self-test, a queue run, a People screen visit).
+            aiState.engineInfoLine?.let { info ->
+                Text(
+                    text = info,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .testTag("settings_ai_engine_info"),
+                )
+            }
             // r46 build-shape gate: FACE-index surfaces exist only on
             // the engine and face flavors.
             if (BuildShape.faceIndex) {
@@ -776,6 +855,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
+                var faceDeleteConfirm by remember { mutableStateOf(false) }
                 Button(
                     onClick = aiViewModel::downloadFaceModels,
                     enabled = !aiState.busy,
@@ -785,14 +865,49 @@ fun SettingsScreen(
                 ) {
                     Text(stringResource(R.string.settings_ai_download))
                 }
-                Button(
-                    onClick = aiViewModel::deleteFaceModels,
+                // r50 (the UI/UX polish round): destructive actions render
+                // as outlined error-toned buttons (the maintainer's device-
+                // screenshot audit: they previously carried the SAME filled
+                // style as the start actions) AND deleting the models
+                // re-downloads 100+ MB on the next install --- the action
+                // confirms too, like every other removal in the app (the
+                // repo's own convention).
+                OutlinedButton(
+                    onClick = { faceDeleteConfirm = true },
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_delete"),
                 ) {
                     Text(stringResource(R.string.settings_ai_delete))
+                }
+                if (faceDeleteConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { faceDeleteConfirm = false },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    faceDeleteConfirm = false
+                                    aiViewModel.deleteFaceModels()
+                                },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Text(stringResource(R.string.file_ops_action_delete))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { faceDeleteConfirm = false }) {
+                                Text(stringResource(R.string.file_ops_action_cancel))
+                            }
+                        },
+                        title = { Text(stringResource(R.string.settings_ai_delete_confirm_title)) },
+                        text = { Text(stringResource(R.string.settings_ai_delete_confirm_body)) },
+                    )
                 }
                 Button(
                     onClick = aiViewModel::runSelfTest,
@@ -919,6 +1034,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
+                var semanticDeleteConfirm by remember { mutableStateOf(false) }
                 Button(
                     onClick = aiViewModel::downloadSemanticModels,
                     enabled = !aiState.busy,
@@ -933,14 +1049,45 @@ fun SettingsScreen(
                         )
                     )
                 }
-                Button(
-                    onClick = aiViewModel::deleteSemanticModels,
+                // r50 (the UI/UX polish round): the semantic pack gets the
+                // same outlined error-toned delete AND confirmation as the
+                // FACE pack above.
+                OutlinedButton(
+                    onClick = { semanticDeleteConfirm = true },
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_semantic_delete"),
                 ) {
                     Text(stringResource(R.string.settings_ai_semantic_delete))
+                }
+                if (semanticDeleteConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { semanticDeleteConfirm = false },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    semanticDeleteConfirm = false
+                                    aiViewModel.deleteSemanticModels()
+                                },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Text(stringResource(R.string.file_ops_action_delete))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { semanticDeleteConfirm = false }) {
+                                Text(stringResource(R.string.file_ops_action_cancel))
+                            }
+                        },
+                        title = { Text(stringResource(R.string.settings_ai_delete_confirm_title)) },
+                        text = { Text(stringResource(R.string.settings_ai_delete_confirm_body)) },
+                    )
                 }
                 when (val note = aiState.note) {
                     AiDogfoodState.Note.SemanticDownloaded -> Text(
@@ -1005,7 +1152,16 @@ fun SettingsScreen(
                 )
                 Button(
                     onClick = aiViewModel::startBackgroundIndex,
-                    enabled = aiState.engineLibraryPresent,
+                    // r50 ux fix: Start was tappable while a run was already
+                    // Enqueued/Running (a second tap re-enqueued with no
+                    // feedback) and while the FACE models were absent (a run
+                    // doomed to fail at engine init, reported only via the
+                    // Failed card). Gated: engine present + capability Ready
+                    // + no live run.
+                    enabled = aiState.engineLibraryPresent &&
+                        aiState.faceCapability == ModelProvisioner.CapabilityState.Ready &&
+                        queueState !is FaceIndexWorkState.Enqueued &&
+                        queueState !is FaceIndexWorkState.Running,
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_index_run"),
@@ -1023,9 +1179,14 @@ fun SettingsScreen(
                     }
                     else -> Unit
                 }
-                Button(
+                // r50 (the UI/UX polish round): the reset is destructive ---
+                // outlined + error-toned (see the models-delete note above).
+                OutlinedButton(
                     onClick = aiViewModel::resetFaceIndex,
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_index_delete"),
@@ -1057,6 +1218,8 @@ fun SettingsScreen(
                             // Two honest terminal shapes: the draining run that
                             // clustered (clusters >= 0) and the no-op drain that
                             // did not (empty plan --- no wasted recluster pass).
+                            // r50 (F-39): the unreadable (terminally skipped)
+                            // count joins both drained lines.
                             text = if (clusters >= 0) {
                                 stringResource(
                                     R.string.settings_ai_queue_done,
@@ -1065,6 +1228,7 @@ fun SettingsScreen(
                                     queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
                                     clusters,
                                     queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                                    queue.output.getInt(KEY_OUT_SKIPPED_UNREADABLE, 0),
                                 )
                             } else {
                                 stringResource(
@@ -1073,6 +1237,7 @@ fun SettingsScreen(
                                     queue.output.getInt(KEY_OUT_FACES, 0),
                                     queue.output.getInt(KEY_OUT_SKIPPED_UP_TO_DATE, 0),
                                     queue.output.getLong(KEY_OUT_TOTAL_FACES, 0L),
+                                    queue.output.getInt(KEY_OUT_SKIPPED_UNREADABLE, 0),
                                 )
                             },
                             style = MaterialTheme.typography.bodyMedium,
@@ -1080,12 +1245,29 @@ fun SettingsScreen(
                             modifier = Modifier.padding(top = 12.dp),
                         )
                     }
-                    is FaceIndexWorkState.Failed -> Text(
-                        text = stringResource(R.string.settings_ai_queue_failed, queue.message),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+                    is FaceIndexWorkState.Failed -> {
+                        // r50 ux fix: failure now READS as failure (error color,
+                        // not the same muted tone as the success line) and the
+                        // retry sits inline --- the old recovery was "scroll
+                        // three controls up and press Start again", which the
+                        // failure text never implied.
+                        Text(
+                            text = stringResource(R.string.settings_ai_queue_failed, queue.message),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        TextButton(
+                            onClick = aiViewModel::startBackgroundIndex,
+                            enabled = aiState.engineLibraryPresent &&
+                                aiState.faceCapability == ModelProvisioner.CapabilityState.Ready,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .testTag("settings_ai_queue_retry"),
+                        ) {
+                            Text(stringResource(R.string.state_action_retry))
+                        }
+                    }
                     FaceIndexWorkState.Cancelled -> Text(
                         text = stringResource(R.string.settings_ai_queue_cancelled),
                         style = MaterialTheme.typography.bodyMedium,
@@ -1117,7 +1299,12 @@ fun SettingsScreen(
                 val clipQueueState by aiViewModel.clipQueueState.collectAsState()
                 Button(
                     onClick = aiViewModel::startSemanticIndex,
-                    enabled = aiState.engineLibraryPresent,
+                    // r50 ux fix: the face queue's Start gating (see above),
+                    // semantic edition --- capability Ready + no live run.
+                    enabled = aiState.engineLibraryPresent &&
+                        aiState.semanticCapability == ModelProvisioner.CapabilityState.Ready &&
+                        clipQueueState !is ClipIndexWorkState.Enqueued &&
+                        clipQueueState !is ClipIndexWorkState.Running,
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_semantic_index_run"),
@@ -1135,9 +1322,14 @@ fun SettingsScreen(
                     }
                     else -> Unit
                 }
-                Button(
+                // r50 (the UI/UX polish round): outlined + error-toned
+                // (the destructive reset styling, semantic sibling).
+                OutlinedButton(
                     onClick = aiViewModel::resetSemanticIndex,
                     enabled = !aiState.busy,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag("settings_ai_semantic_index_delete"),
@@ -1174,6 +1366,7 @@ fun SettingsScreen(
                                 clip.output.getInt(KEY_CLIP_OUT_INDEXED, 0),
                                 clip.output.getInt(KEY_CLIP_OUT_SKIPPED_UP_TO_DATE, 0),
                                 clip.output.getLong(KEY_CLIP_OUT_TOTAL_CLIPS, 0L),
+                                clip.output.getInt(KEY_CLIP_OUT_SKIPPED_UNREADABLE, 0),
                             ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1201,12 +1394,26 @@ fun SettingsScreen(
                             )
                         }
                     }
-                    is ClipIndexWorkState.Failed -> Text(
-                        text = stringResource(R.string.settings_ai_semantic_queue_failed, clip.message),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+                    is ClipIndexWorkState.Failed -> {
+                        // r50 ux fix: the face queue's Failed affordance (see
+                        // above), semantic edition --- error color + inline retry.
+                        Text(
+                            text = stringResource(R.string.settings_ai_semantic_queue_failed, clip.message),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        TextButton(
+                            onClick = aiViewModel::startSemanticIndex,
+                            enabled = aiState.engineLibraryPresent &&
+                                aiState.semanticCapability == ModelProvisioner.CapabilityState.Ready,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .testTag("settings_ai_semantic_queue_retry"),
+                        ) {
+                            Text(stringResource(R.string.state_action_retry))
+                        }
+                    }
                     ClipIndexWorkState.Cancelled -> Text(
                         text = stringResource(R.string.settings_ai_semantic_queue_cancelled),
                         style = MaterialTheme.typography.bodyMedium,

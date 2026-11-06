@@ -598,6 +598,10 @@ fun ToadGalleryApp() {
                         pickedViewModel = pickedViewModel,
                         settingsViewModel = settingsViewModel,
                         onBack = { navController.popBackStack() },
+                        // r50 ux fix: the picked grid opens the shared viewer
+                        // (the same shell-scoped hand-off every other grid
+                        // surface uses).
+                        onOpenViewer = openViewer,
                     )
                 }
                 composable(Destinations.VIEWER) {
@@ -722,12 +726,10 @@ fun StateScreen(
                 Text(stringResource(actionRes))
             }
         }
-        Text(
-            text = stringResource(R.string.state_shell_badge),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = 24.dp),
-        )
+        // r50 ux fix: the "Phase 3 --- on-device timeline" milestone badge is
+        // GONE --- an internal roadmap label rendered under every shared
+        // state surface (empty/error/permission, all tabs) shipped a dev
+        // note to users on surfaces that have nothing to do with Phase 3.
     }
 }
 

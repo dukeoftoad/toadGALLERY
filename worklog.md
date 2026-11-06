@@ -1926,3 +1926,143 @@ the editor legs are the proven `editor-apk-build.yml` legs verbatim).
 The branch-scoped triggers are exercised the next time a dogfood branch
 is cut.
  (r49: the workflow organization round --- four near-duplicate APK builders consolidated into one `apk-build.yml`, the least-privilege permissions baseline, and the living docs rewritten to the five-file truth)
+
+### Run #23 — 2026-11-06 (the r50 window: the UI/UX polish round + the CI-history cleanup + the identity audit)
+
+**Branch:** `tg-r50-uiux-polish` (PR pending against the r49 main; the
+maintainer takes the merge CI run).
+
+**Directive:** focus on UI/UX polish and refinements; the user is
+`dukeoftoad`, replace any other identity in the repo; audit for flaws in
+the basic gallery and the gallery-with-engine only; clean up failed CI
+runs.
+
+**What landed:**
+1. **The CI-history cleanup**: all 192 failed/cancelled workflow runs
+   (137 failed + 55 cancelled, 2026-11-02 → 2026-11-05) deleted via the
+   API — the Actions history now holds successes only.
+2. **The identity audit**: the repo TREE is fully `dukeoftoad` (449 files
+   reference it; the only other GitHub URLs are upstream attributions —
+   ente, deckerst/aves, FossifyOrg, coil-kt, takahirom — all legitimate,
+   all kept). The one real misattribution is GIT metadata: 40
+   direct-to-main commits carry the sandbox identity `Z User
+   <z@container>`; every squash-merged round (r46+) is correct. The
+   rewrite is declined with the reasoning recorded (F-42: tags point into
+   the range; every ledger SHA would invalidate); the local git config now
+   commits as `dukeoftoad <indvilla097@gmail.com>`.
+3. **The audits**: three parallel read-only agents (core screens /
+   viewer+engine surfaces / cross-cutting), ~45 verified findings.
+4. **The fix batch** (the high-value half; every edit verified against
+   the code first): the viewer's video-chrome trap (HIGH), the video mute
+   toggle, the rename-dialog keyboard focus (viewer + person detail), the
+   info sheet's selectable values, the Settings AI state combos (Start
+   gating, Failed retry + error color, the busy spinner, delete-models
+   confirmations), the People NotIndexed action, the inert picked grid
+   wired to the viewer, the snackbar-over-actions overlap (Photos +
+   album detail), the milestone badge deleted everywhere, the sort-menu
+   glyph, the search re-entry keyboard, the Things chip's tap target +
+   ellipsis, the place cards' error plate, the Albums title, the
+   vault-move destructive color, and the a11y batch (cell click labels,
+   whole-row switch semantics, Role.Button rows, the narrated append
+   footer, the ONE shared SelectionCheck with the trash drift closed).
+5. **The ledger**: CHANGELOG's r50 section, follow-up.md's r50 window
+   (F-40/F-41/F-42 opened), and this run.
+
+**Honest limits:** no local Android SDK (ADR-0013) — CI is the only
+compile judge; the brace/paren balance + XML well-formedness checks are
+the only local proof. The state-card Roborazzi baselines changed with the
+badge removal: the verify gate re-locks after this round's record run +
+committed baselines (the F-34 flow). The deliberately-not-landed list is
+in follow-up.md.
+ (r50: the UI/UX polish round + the CI-history cleanup + the identity audit; the viewer video-chrome trap fixed, the engine state combos made honest, and the a11y batch landed)
+### Run #24 — 2026-11-06 (the r50 window, second campaign: the dual-flavor audit + F-38/F-39 + the r49 dispatch-bug catch + the integration)
+
+**Branch:** `tg-r50-uiux-audit` (cut from the r49 main `7e9114b`, then
+REBASED onto the first campaign's green tip `9368824` / PR #130 — the
+two parallel r50 campaigns land as one PR; merging it marks #130
+included).
+
+**Directive:** "i wil take care merge ci run/ now focus on ui/ux polish
+and refinements and adjustments and also the user is 'dukeoftoad'
+replace any if any other in whole repo. and then audit for flaws in
+basic gallery and gallery with engine only. and also clean up failed
+ci runs" — the maintainer takes over merging from this round on; this
+window is polish + audit + identity + CI hygiene.
+
+**What landed:**
+1. **The recon** — three parallel audits (identity sweep, basic flavor,
+   engine flavor) plus a VLM pass over the maintainer's four device
+   screenshots. The identity sweep verdict (independently matching the
+   first campaign's): the working tree is 100% dukeoftoad, zero
+   replacements (the residue is the 40 `Z User` commits in git history
+   — F-42, the maintainer's call). The screenshot pass found the
+   device build is PRE-r47 (counter stacking + duplicate pencils + the
+   tautological failure already fixed on main), which focused the
+   polish on what remains live.
+2. **F-38 closed (the UI-side teardown guard)** — the new
+   `EngineSessionGuard` + guards at all five UI teardown sites (four
+   ViewModel `onCleared()` closes, the self-test release) + both resets
+   now cancel BOTH chains and await termination before deleting the
+   shared index dir.
+3. **F-39 closed (the terminal-skip record)** — both queues write
+   `unreadable: true` state records (additive version-1 JSON field),
+   planners count `skippedUnreadable` separately, the drained card
+   lines + the diagnostics ring report it, and the JVM suites pin the
+   new contract (the three old-contract tests updated; the round-trip
+   tests extended with the flag). Plus the 64 MiB read cap on both ML
+   seams.
+4. **The polish set** — viewer overflow leading icons (Edit pencil /
+   dedicated `ic_rename` / error-tinted trash; test tags untouched),
+   Settings destructive outlined-error buttons + Failed error color +
+   the r22/r24/r26 dogfood jargon removed + outcome cards surviving
+   refresh() + `engineInfo()` surfaced, the stale Search/About/credits
+   copy, the ENGINE label back to "toadGALLERY Engine" (r47 directive
+   superseded — flagged for the maintainer's veto in the PR).
+5. **The flavor fixes** — basic's INTERNET removal (manifest overlay +
+   the gate's new basic-contract hard fail + allowlist/privacy-gate
+   docs + the basic About override + the F-Droid copy), the Gradle
+   flavor↔property guard (packaging tasks only), the F-Droid r46+
+   recipe notes, the NDK pin preferred in build-android.sh (policy test
+   assertion updated to the single-sourced form).
+6. **The r49 bug catch** — `apk-build.yml`'s dispatch targets never
+   matched (`gallery-engine` vs `engine`), the modelpack build staged
+   FACE only (CLIP fell to the network — now all five assets +
+   verified pins; a real sha typo in the r49 transcription was caught
+   by re-downloading the asset), and the `-engine-engine` artifact-name
+   doubling. docs/ci-workflows.md follows.
+7. **The ledger**: CHANGELOG's r50 section (unified with the first
+   campaign's — one r50 section, deduplicated), follow-up's r50
+   windows (the second campaign's findings renumbered F-43…F-50 to
+   follow the first campaign's F-40…F-42; the duplicate identity entry
+   folded into F-42; F-50 records the recycle→restore arc), and this
+   run.
+8. **The integration pass (this rebase)** — the five conflicted files
+   resolved by COMBINING intents, not picking sides: the delete-models
+   buttons are the first campaign's confirmation dialogs riding the
+   second campaign's outlined error-toned buttons; the Failed cards
+   keep the first campaign's inline Retry over the plain error Text;
+   the unused `state_settings_empty_*` pair stays deleted; the Search
+   empty-body keeps the stale-promise removal.
+9. **The CI-history cleanup, second half** — the first campaign
+   deleted 137 failed + 55 cancelled runs; this pass deleted the 34
+   failed + 9 cancelled stragglers (the Actions history now holds ZERO
+   failed and ZERO cancelled runs).
+
+**Honest limits:** the sandbox was RECYCLED at the window's start (the
+PAT and the clone were gone — the repo re-cloned from the public
+remote at the r49 main), and the maintainer restored the PAT to
+unblock the push. Local proofs are the lexer check on all touched
+Kotlin files, actionlint 1.7.7 clean, XML/YAML validation, and pin
+re-verification against ModelManifest + assets.rs + the real download.
+CI is the compile judge (ADR-0013), and it JUDGED: three catch rounds
+on the pushed branch --- (1) the guard's WorkManager.getInstance sat
+outside its fault tolerance and crashed every Roborazzi teardown
+(the README suite fell over 02→03→01 with poisoned shared state);
+(2) the pre-F-39 vault-exclusion assertion in VaultExclusionReadGateTest
+(its sibling was updated, this one missed); (3) the flavor guard's
+prefix filter caught AGP's test-classpath helpers
+(packageEngineDebugUnitTestForUnitTest, then
+bundleEngineDebugClassesToCompileJar) --- now an exact canonical
+task-name match. The 03-search golden re-recorded (the stale-promise
+removal IS basic-visible in the search empty state; the Settings
+deltas are engine-gated and did not drift). The maintainer merges.

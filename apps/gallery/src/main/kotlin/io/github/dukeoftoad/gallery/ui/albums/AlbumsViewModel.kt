@@ -16,6 +16,7 @@ import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
+import io.github.dukeoftoad.gallery.ml.index.EngineSessionGuard
 import io.github.dukeoftoad.gallery.ml.people.PeopleEngineAdapter
 import io.github.dukeoftoad.gallery.ml.people.PeopleRepository
 import io.github.dukeoftoad.gallery.ml.people.PeopleStateFile
@@ -379,11 +380,18 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         albumsObserver?.let { source.unregisterTimelineObserver(it) }
         albumsObserver = null
-        // r25: release the People section's engine session with the screen.
-        engineAdapter.close()
-        // r39: the Things section's semantic session too (the same
-        // process-global engine, released by its own adapter).
-        thingsEngineAdapter.close()
+        // r25/r39: release the People and Things sections' engine sessions
+        // with the screen. r50 (F-38): ONLY when neither index chain is
+        // live --- the process-global native session is shared with the
+        // background queues, and an unconditional close killed them
+        // mid-batch. Skipped closes leak nothing (lazy re-open).
+        if (!EngineSessionGuard.anyIndexChainLive(getApplication())) {
+            // r25: release the People section's engine session with the screen.
+            engineAdapter.close()
+            // r39: the Things section's semantic session too (the same
+            // process-global engine, released by its own adapter).
+            thingsEngineAdapter.close()
+        }
         super.onCleared()
     }
     /**

@@ -172,7 +172,19 @@ class FaceIndexWorker(
                     // runCatching wrap restores the tested skip contract.
                     readBytes = { candidate ->
                         runCatching {
-                            resolver.openInputStream(Uri.parse(candidate.uri))?.use { it.readBytes() }
+                            resolver.openInputStream(Uri.parse(candidate.uri))?.use { input ->
+                                // r50: bounded per-item read, refuse-don't-
+                                // truncate --- the same 64 MiB posture as
+                                // MediaReadHandle.DEFAULT_MAX_BYTES (docs/
+                                // phase-5/hardening.md #2/#4): the r24 seam
+                                // had NO cap, so one pathological file was
+                                // an OOM vector on low-RAM devices. An
+                                // over-cap item yields null bytes --- which,
+                                // with r50's F-39 skip record, terminally
+                                // skips it (revision change re-reads it).
+                                input.readBytes()
+                                    .takeIf { it.size <= MAX_INDEXABLE_ITEM_BYTES }
+                            }
                         }.getOrNull()
                     },
                     distanceThreshold = threshold,
@@ -203,6 +215,7 @@ class FaceIndexWorker(
                 TAG,
                 "face queue: batch done (indexed=${outcome.indexedThisRun} faces=${outcome.facesWrittenThisRun} " +
                     "depth=${outcome.queueDepth} unreadable=${outcome.unreadableThisRun} " +
+                    "skippedUnreadable=${outcome.skippedUnreadable} " +
                     "clusters=${outcome.clusterSummary?.clusters ?: -1} more=${outcome.moreRemaining})",
             )
 
@@ -260,6 +273,7 @@ class FaceIndexWorker(
         .putInt(KEY_OUT_UNREADABLE, outcome.unreadableThisRun)
         .putInt(KEY_OUT_SKIPPED_UP_TO_DATE, outcome.skippedUpToDate)
         .putInt(KEY_OUT_SKIPPED_METADATA_ONLY, outcome.skippedMetadataOnly)
+        .putInt(KEY_OUT_SKIPPED_UNREADABLE, outcome.skippedUnreadable)
         .putInt(KEY_OUT_CLUSTERS, outcome.clusterSummary?.clusters ?: -1)
         .putLong(KEY_OUT_TOTAL_FACES, outcome.totalFacesInStore)
         .build()
@@ -267,6 +281,13 @@ class FaceIndexWorker(
     private companion object {
         /** Mid-run engine faults retry (with WorkManager backoff) this often. */
         const val MAX_RUN_ATTEMPTS = 3
+
+        /**
+         * r50: the per-item byte cap for the ML read seam (64 MiB, the
+         * MediaReadHandle.DEFAULT_MAX_BYTES posture --- refuse, never
+         * truncate; see docs/phase-5/hardening.md).
+         */
+        const val MAX_INDEXABLE_ITEM_BYTES = 64L * 1024 * 1024
 
         /** Diagnostics-ring tag (r48, F5). */
         const val TAG = "FaceIndexWorker"
@@ -347,6 +368,9 @@ const val KEY_OUT_DEPTH = "queueDepth"
 const val KEY_OUT_UNREADABLE = "unreadableThisRun"
 const val KEY_OUT_SKIPPED_UP_TO_DATE = "skippedUpToDate"
 const val KEY_OUT_SKIPPED_METADATA_ONLY = "skippedMetadataOnly"
+
+/** r50 (F-39): photos held out by terminal unreadable-skip records. */
+const val KEY_OUT_SKIPPED_UNREADABLE = "skippedUnreadable"
 const val KEY_OUT_CLUSTERS = "clusters"
 const val KEY_OUT_TOTAL_FACES = "totalFacesInStore"
 const val KEY_MESSAGE = "message"

@@ -28,8 +28,8 @@ import io.github.dukeoftoad.gallery.ui.theme.ToadSpacing
  * issue #13).
  *
  * Renders the standard state layout — 72dp decorative icon, `headlineSmall`
- * title, centered `bodyMedium` body, `TextButton` retry, `state_shell_badge`
- * footer — mirroring `io.github.dukeoftoad.gallery.ui.StateScreen` token for
+ * title, centered `bodyMedium` body, `TextButton` retry — mirroring
+ * `io.github.dukeoftoad.gallery.ui.StateScreen` token for
  * token so every state in the app looks native to it.
  *
  * **Frozen design choice — self-contained instead of delegating to
@@ -110,11 +110,9 @@ fun ErrorState(
         ) {
             Text(stringResource(actionRes))
         }
-        Text(
-            text = stringResource(R.string.state_shell_badge),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = ToadSpacing.xxl),
-        )
+        // r50 ux fix: the internal "Phase 3" milestone badge is gone (see
+        // the shell's StateScreen for the rationale); the state card is
+        // user-facing, not a roadmap marker. The committed Roborazzi
+        // baselines re-record with this round (the verify gate re-locks).
     }
 }

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.ml.index.EngineSessionGuard
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
 import io.github.dukeoftoad.gallery.ml.people.PeopleEngineAdapter
@@ -314,7 +315,12 @@ class PersonDetailViewModel(
     }
 
     override fun onCleared() {
-        engineAdapter.close()
+        // r50 (F-38): the adapter's close tears down the PROCESS-GLOBAL
+        // native session --- skip it while an index chain is live (the
+        // queue shares the session); the adapter re-opens lazily anyway.
+        if (!EngineSessionGuard.anyIndexChainLive(getApplication())) {
+            engineAdapter.close()
+        }
         super.onCleared()
     }
 

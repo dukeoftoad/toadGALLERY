@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -232,6 +233,10 @@ internal fun PlaceRegionCard(
         AsyncImage(
             model = cover?.canonicalUri,
             contentDescription = stringResource(R.string.cd_place_cover),
+            // r50 ux fix: the decode-failure plate (AlbumCard's r47 idiom) ---
+            // a corrupt region cover used to render as fully blank pixels,
+            // indistinguishable from loading, under the region's label.
+            error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)

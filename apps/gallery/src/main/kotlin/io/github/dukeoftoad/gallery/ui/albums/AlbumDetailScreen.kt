@@ -81,6 +81,7 @@ import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.ErrorState
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaThumb
+import io.github.dukeoftoad.gallery.ui.media.SelectionCheck
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsEvent
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsUiState
 import io.github.dukeoftoad.gallery.ui.photos.FileOpsViewModel
@@ -445,7 +446,13 @@ fun AlbumDetailScreen(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp),
+                    // r50 ux fix (the PhotosScreen twin): in selection mode
+                    // the AlbumSelectionActions row pins the bottom edge and
+                    // an unoffset snackbar covered its Rename/Copy/Move/
+                    // Delete labels and ate their taps. Same geometry as the
+                    // Photos fix: 48dp row floor + 2 x 6dp padding + the
+                    // host's 12dp gap in both shapes.
+                    .padding(bottom = if (selection != null) 72.dp else 12.dp),
             )
         }
     }
@@ -537,6 +544,16 @@ private fun AlbumDetailGrid(
         ) { index, item ->
             Box(
                 modifier = Modifier.combinedClickable(
+                    // r50 a11y fix: click labels (the MediaPagingGrid cell's
+                    // fix, album-detail edition).
+                    onClickLabel = stringResource(
+                        if (selectionActive) {
+                            R.string.a11y_grid_toggle_select
+                        } else {
+                            R.string.a11y_grid_open
+                        },
+                    ),
+                    onLongClickLabel = stringResource(R.string.a11y_grid_long_press_select),
                     onClick = {
                         if (selectionActive) {
                             fileOpsViewModel.onItemTapped(item)
@@ -561,47 +578,13 @@ private fun AlbumDetailGrid(
                                 ),
                         )
                     }
-                    AlbumSelectionCheck(
+                    SelectionCheck(
                         selected = item.uri.toString() in selectedKeys,
                         modifier = Modifier.align(Alignment.TopStart),
                     )
                 }
             }
         }
-    }
-}
-
-/**
- * The scrim-chip checkmark badge of the selection overlay (issue #64):
- * the same idiom as the Photos grid's badge (dark rounded chip, check in
- * the theme's primary when picked, dimmed white otherwise). Decorative by
- * design --- the selection count in the app bar carries the state for
- * accessibility.
- */
-@Composable
-private fun AlbumSelectionCheck(
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .padding(4.dp)
-            .testTag("file_ops_cell_check")
-            .size(22.dp)
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.55f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.CheckCircle,
-            contentDescription = null, // decorative; the app-bar count is the state
-            tint = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                Color.White.copy(alpha = 0.7f)
-            },
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 

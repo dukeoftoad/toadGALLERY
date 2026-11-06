@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import io.github.dukeoftoad.gallery.R
+import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.MediaGrid
 import io.github.dukeoftoad.gallery.ui.settings.LayoutStyle
@@ -52,6 +53,7 @@ fun PickedPhotosScreen(
     pickedViewModel: PickedPhotosViewModel,
     settingsViewModel: SettingsViewModel,
     onBack: () -> Unit,
+    onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
 ) {
     val items by pickedViewModel.picked.collectAsState()
     val appearance by settingsViewModel.appearance.collectAsState()
@@ -90,6 +92,11 @@ fun PickedPhotosScreen(
                 modifier = Modifier.padding(innerPadding),
                 columns = appearance.columns,
                 uniformCells = appearance.layout == LayoutStyle.GRID,
+                // r50 ux fix: the grid was completely inert --- every other
+                // grid surface opens the shared viewer, this one only stared.
+                // Same hand-off as the timeline: the picked set IS the
+                // viewer window (it is a stable, materialized list).
+                onItemTap = { index, _ -> onOpenViewer(items, index) },
             )
         }
     }

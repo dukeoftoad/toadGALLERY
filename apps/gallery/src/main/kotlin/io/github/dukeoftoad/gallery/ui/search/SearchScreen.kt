@@ -25,7 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -165,7 +168,18 @@ fun SearchScreen(
     // field takes focus (and the keyboard) the moment the tab opens.
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // r50 ux fix: the keyboard popped on EVERY tab re-entry --- the NavHost
+    // disposes the destination's composition, so the old LaunchedEffect(Unit)
+    // re-fired each time and the IME covered the results the user came back
+    // to browse. The search-first behavior stays on the FIRST entry; later
+    // entries auto-focus only while the query is empty (nothing to bury).
+    var hasAutoFocused by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!hasAutoFocused || query.isEmpty()) {
+            focusRequester.requestFocus()
+            hasAutoFocused = true
+        }
+    }
     LaunchedEffect(Unit) { requester.launch() }
 
     Column(

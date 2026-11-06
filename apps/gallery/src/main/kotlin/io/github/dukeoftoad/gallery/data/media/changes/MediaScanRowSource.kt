@@ -42,6 +42,14 @@ interface MediaScanRowSource {
      * [kotlin.coroutines.cancellation.CancellationException] --- no partial
      * catalogue write, the driver rethrows it untouched. The default is the
      * historic no-op so the interface change stays source-compatible.
+     *
+     * r51 hardening (audit E-1): a volume the provider cannot answer is a
+     * WALK FAILURE, never an empty row list --- a query that hands back a
+     * `null` cursor (the resolver's documented "query failed for any
+     * reason") throws, so the driver's per-volume catch isolates the volume
+     * and NO tombstone/checkpoint lands over the failed walk. An honest
+     * empty volume arrives as a NON-null cursor with zero rows and still
+     * walks (and tombstones) as before.
      */
     fun scanVolume(volumeName: String, isCancelled: () -> Boolean = { false }): List<MediaScanRow>
 }
@@ -224,6 +232,13 @@ class AndroidMediaScanRowSource(
      * [ScanWalkPolicy.CANCELLATION_CHECK_ROWS] rows inside the cursor loop
      * ([ScanWalkPolicy] carries the rationale); a positive probe aborts the
      * walk before a single row is returned, let alone written.
+     *
+     * r51 hardening (audit E-1): a NULL cursor from the resolver (its
+     * documented "query fails for any reason" answer, on either the full
+     * or the reduced-projection attempt) THROWS instead of silently
+     * walking zero rows --- a failed query must never be reconciled as an
+     * empty volume (see the null-guard below for the mass-tombstone
+     * failure that motivates it).
      */
     private fun walk(
         collection: Uri,
@@ -282,7 +297,28 @@ class AndroidMediaScanRowSource(
             context.contentResolver
                 .query(collection, REDUCED_PROJECTION, selection, selectionArgs, null)
         }
-        queried?.use { cursor ->
+        // r51 (audit E-1): a NULL cursor is the resolver's documented
+        // "query failed for any reason" answer --- it must NEVER be read as
+        // "the volume is empty". The pre-r51 `queried?.use` swallowed the
+        // failure into an empty row list, the reconciler then classified
+        // every live record of the volume REMOVED, and the driver
+        // tombstoned the whole library AND saved the checkpoint over the
+        // failed walk (locking the empty state in until media really
+        // changed). Throwing here makes the failure the driver's
+        // per-volume catch's problem instead: the volume is isolated, no
+        // tombstone, no checkpoint, the next pass retries honestly.
+        // IllegalStateException rather than the walk's cancellation type:
+        // CancellationException is the ONE exception the driver's
+        // per-volume catch RETHROWS (cancellation must kill the whole
+        // pass), while an ordinary failure is isolated to this volume ---
+        // exactly the E-1 outcome. An honestly empty volume is unaffected:
+        // it arrives as a NON-null cursor with zero rows.
+        val queriedCursor = queried ?: throw IllegalStateException(
+            "MediaStore query returned a null cursor (query failed for any reason) " +
+                "volume=$volumeName collection=$collection --- treating as a walk failure, " +
+                "never an empty volume",
+        )
+        queriedCursor.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)

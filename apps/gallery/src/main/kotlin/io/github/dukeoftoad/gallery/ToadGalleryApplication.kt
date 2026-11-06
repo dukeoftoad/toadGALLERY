@@ -21,6 +21,8 @@ import io.github.dukeoftoad.gallery.data.media.changes.AndroidVolumeMonitor
 import io.github.dukeoftoad.gallery.data.media.changes.AndroidCombinedExifSource
 import io.github.dukeoftoad.gallery.data.media.changes.CombinedExifIndexer
 import io.github.dukeoftoad.gallery.data.media.changes.MediaScanDriver
+import io.github.dukeoftoad.gallery.data.media.changes.PROVENANCE_HEALING_MARKER_FILE_NAME
+import io.github.dukeoftoad.gallery.data.media.changes.ProvenanceHealingFailureMarkerFile
 import io.github.dukeoftoad.gallery.data.media.changes.ProvenanceHealingPass
 import io.github.dukeoftoad.gallery.data.media.dates.CatalogueRecordEligibilityGate
 import io.github.dukeoftoad.gallery.data.media.location.AndroidMediaLocationAccess
@@ -236,10 +238,18 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
         )
         // The NULL-provenance healing pass (r20): re-offers rows whose
         // indexing never completed --- selected by the v6 stamp column ---
-        // bounded per app start (see [ProvenanceHealingPass]).
+        // bounded per app start (see [ProvenanceHealingPass]). r51 (E-3,
+        // verification wiring): the failure-marker store is now
+        // production-wired, so the healing selection rotates past rows
+        // that keep failing (three strikes, 30-day expiry) instead of
+        // starving behind them --- the rotation policy and its JVM suite
+        // live in ProvenanceHealingStore / ProvenanceHealingRotationTest.
         val healingPass = ProvenanceHealingPass(
             healingStore = catalogue,
             indexHook = combinedIndexer,
+            failureMarkers = ProvenanceHealingFailureMarkerFile(
+                File(filesDir, PROVENANCE_HEALING_MARKER_FILE_NAME),
+            ),
         )
         val scanDriver = MediaScanDriver(
             rowSource = AndroidMediaScanRowSource(this),

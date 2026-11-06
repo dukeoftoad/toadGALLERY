@@ -23,7 +23,10 @@ import kotlinx.coroutines.flow.Flow
  * transaction), so a process interruption can never leave the paired
  * halves half-applied. `@Transaction` on suspend DAO methods is the
  * suspend-native spelling of `RoomDatabase.runInTransaction` and needs no
- * API beyond the already-present room-ktx coroutine support.
+ * API beyond the already-present room-ktx coroutine support. Since the
+ * r51 round both wrappers issue their `IN (:keys)` DELETE halves in
+ * [CatalogueInListChunking]-sized chunks inside that one transaction
+ * (audit E-2: SQLite < 3.32 caps a statement at 999 host parameters).
  *
  * The one deliberate exception to "no SQL-side logic" is the r13 timeline
  * window pair ([timelineWindowNewestFirst] /
@@ -129,6 +132,13 @@ interface CatalogueDao {
      * Removes the live rows for [localMediaKeys] (the tombstone half of the
      * delete --- see [CatalogueTombstoneEntity] for why removal is paired
      * with a tombstone write, never performed alone).
+     *
+     * r51 (audit E-2): the `IN (:localMediaKeys)` bind is one host
+     * parameter PER KEY, and SQLite below 3.32 (Android 8-11; minSdk 26)
+     * caps a statement at 999 host parameters. Callers must hand this
+     * statement lists of at most
+     * [CatalogueInListChunking.MAX_KEYS_PER_IN_STATEMENT] keys --- the
+     * [removeItemsAndWriteTombstones] wrapper is the chunking call site.
      */
     @Query("DELETE FROM catalogue_items WHERE localMediaKey IN (:localMediaKeys)")
     suspend fun deleteItemsByLocalMediaKey(localMediaKeys: List<String>)
@@ -173,13 +183,27 @@ interface CatalogueDao {
      * Idempotent: re-running the same call converges to the same state
      * (deleting absent rows and re-upserting the same tombstone are no-ops
      * in effect). Callers reach this via [RoomMediaCatalogue.tombstone].
+     *
+     * r51 (audit E-2): the delete half is now issued in CHUNKS of at most
+     * [CatalogueInListChunking.MAX_KEYS_PER_IN_STATEMENT] keys per
+     * statement, all inside this one transaction. SQLite below 3.32
+     * (Android 8-11; minSdk 26) defaults SQLITE_MAX_VARIABLE_NUMBER to 999
+     * and Room expands `IN (:keys)` into one bind parameter per key, so an
+     * unbounded driver tombstone list (a >999-item mass removal) threw
+     * "too many SQL variables", rolled the whole transition back and
+     * re-failed identically on every later pass. Chunking keeps the SQL
+     * under the cap while the @Transaction keeps every chunk atomic.
+     * [upsertTombstones] needs no chunking: @Upsert binds each row's fixed
+     * columns per statement, never one host parameter per list element.
      */
     @Transaction
     suspend fun removeItemsAndWriteTombstones(
         localMediaKeys: List<String>,
         tombstones: List<CatalogueTombstoneEntity>,
     ) {
-        deleteItemsByLocalMediaKey(localMediaKeys)
+        for (keyChunk in CatalogueInListChunking.chunks(localMediaKeys)) {
+            deleteItemsByLocalMediaKey(keyChunk)
+        }
         upsertTombstones(tombstones)
     }
 
@@ -197,6 +221,11 @@ interface CatalogueDao {
      * Clears tombstones for resurrected keys --- called on upsert, because
      * an item present in an authoritative scan is live and its old death
      * record would otherwise keep lying to callers and compaction.
+     *
+     * r51 (audit E-2): same per-key host-parameter exposure as
+     * [deleteItemsByLocalMediaKey] --- callers must chunk to at most
+     * [CatalogueInListChunking.MAX_KEYS_PER_IN_STATEMENT] keys per call
+     * ([upsertItemsAndClearTombstones] is the chunking call site).
      */
     @Query("DELETE FROM catalogue_tombstones WHERE localMediaKey IN (:localMediaKeys)")
     suspend fun deleteTombstonesByLocalMediaKey(localMediaKeys: List<String>)
@@ -212,6 +241,14 @@ interface CatalogueDao {
      * Idempotent: re-running converges (re-upsert of the same rows and
      * re-deletion of absent tombstones are no-ops in effect). Callers
      * reach this via [RoomMediaCatalogue.upsertAll].
+     *
+     * r51 (audit E-2): the tombstone-clear half is now issued in CHUNKS
+     * of at most [CatalogueInListChunking.MAX_KEYS_PER_IN_STATEMENT] keys
+     * per statement, all inside this one transaction (same 999 host
+     * -parameter cap as [removeItemsAndWriteTombstones] --- a >999-item
+     * restore batch wedged identically). [upsertItems] needs no chunking:
+     * @Upsert binds each row's fixed columns per statement, never one host
+     * parameter per list element.
      */
     @Transaction
     suspend fun upsertItemsAndClearTombstones(
@@ -219,7 +256,9 @@ interface CatalogueDao {
         clearedLocalMediaKeys: List<String>,
     ) {
         upsertItems(items)
-        deleteTombstonesByLocalMediaKey(clearedLocalMediaKeys)
+        for (keyChunk in CatalogueInListChunking.chunks(clearedLocalMediaKeys)) {
+            deleteTombstonesByLocalMediaKey(keyChunk)
+        }
     }
 
     /**
@@ -463,3 +502,55 @@ data class CatalogueLocationRow(
     /** EXIF GPS longitude, signed decimal degrees; non-null by the query. */
     val longitude: Double,
 )
+
+// =====================================================================
+// --- r51 round (audit E-2): the IN-list chunking policy ----------------
+// (additive end-of-file section, the r16/r19a/r20 fencing discipline.
+// Pure and JVM-tested (`CatalogueInListChunkingTest`): the DAO's default
+// @Transaction methods are Room code --- untestable per ADR-0016 --- so
+// the one decision that must never silently rot (how small the IN chunks
+// are, and why) lives here where the JVM suite can pin it.)
+// =====================================================================
+
+/**
+ * The chunking policy every `IN (:localMediaKeys)` statement in
+ * [CatalogueDao] is issued under (r51, audit E-2): the two @Transaction
+ * wrappers ([CatalogueDao.removeItemsAndWriteTombstones] /
+ * [CatalogueDao.upsertItemsAndClearTombstones]) slice their key lists
+ * through [chunks] so no single statement binds more than
+ * [MAX_KEYS_PER_IN_STATEMENT] host parameters.
+ *
+ * WHY 900, stated once: Room expands an `IN (:keys)` collection into ONE
+ * bind parameter per element, and SQLite below 3.32 --- which is what
+ * Android 8 through 11 ship, and minSdk 26 keeps in the support matrix ---
+ * defaults `SQLITE_MAX_VARIABLE_NUMBER` to 999. A driver tombstone/restore
+ * list larger than that (emptying a big trash, the OS-upgrade re-sight)
+ * threw "too many SQL variables", rolled the whole transaction back and
+ * re-failed identically on every later scan pass: a permanently wedged
+ * pipeline on exactly the devices with the oldest SQLite. 900 leaves
+ * headroom below the 999 cap (any fixed statement parameters + future
+ * bind-side growth) while keeping the statement count for a mass removal
+ * trivial (a 50k-library wipe is 56 statements, all inside the one
+ * transaction the wrapper owns).
+ *
+ * Empty lists stay empty: [chunks] yields NO statements for an empty
+ * input, which preserves the pre-r51 empty-list behavior exactly (the
+ * single `IN ()` DELETE Room generated matched zero rows --- a no-op
+ * either way).
+ */
+internal object CatalogueInListChunking {
+
+    /**
+     * The maximum key count handed to one `IN (:keys)` statement. MUST
+     * stay below 999 (SQLite < 3.32 host-parameter default; see the object
+     * KDoc) --- pinned by test.
+     */
+    const val MAX_KEYS_PER_IN_STATEMENT = 900
+
+    /**
+     * [keys] sliced into statement-sized chunks, order preserved. An empty
+     * list yields an empty chunk list (zero statements --- the caller's
+     * loop body never runs).
+     */
+    fun <T> chunks(keys: List<T>): List<List<T>> = keys.chunked(MAX_KEYS_PER_IN_STATEMENT)
+}

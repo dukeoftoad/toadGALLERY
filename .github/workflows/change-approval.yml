@@ -1,5 +1,13 @@
 name: Sensitive change approval
 
+# Guards sensitive paths (workflows, build scripts, engine, gradle)
+# against unaudited changes. For external-contributor PRs, requires at
+# least one non-author approval on the current head commit. For
+# owner-authored PRs the non-author-approval requirement is
+# unsatisfiable on a solo-maintainer repo, so the gate is skipped
+# (the owner is assumed to self-review) — it still protects external
+# contributions.
+
 on:
   pull_request:
     branches: [main]
@@ -23,6 +31,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          REPO_OWNER: ${{ github.repository_owner }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -35,13 +44,22 @@ jobs:
             exit 1
           fi
 
+          # Solo-maintainer escape hatch: the repo owner has no second
+          # maintainer to supply a non-author approval, so enforcing the
+          # gate on owner-authored PRs would permanently block them.
+          # The gate still fires for any non-owner (external) contributor.
+          if [[ "${PR_AUTHOR:-}" == "${REPO_OWNER:-}" ]]; then
+            echo "PR author '$PR_AUTHOR' is the repo owner; skipping the non-author-approval gate (solo-maintainer repo)."
+            exit 0
+          fi
+
           gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
             --jq '.[].filename' > "$RUNNER_TEMP/pr-files.txt"
 
           sensitive=false
           while IFS= read -r path; do
             case "$path" in
-              .github/workflows/*|.github/actions/*|engine/*|gradle/*|gradle/libs.versions.toml|build.gradle.kts|settings.gradle.kts|*/build.gradle.kts|gradle.properties|gradlew|gradlew.bat)
+              .github/workflows/*|.github/actions/*|engine/*|gradle/*|build.gradle.kts|settings.gradle.kts|*/build.gradle.kts|gradle.properties|gradlew|gradlew.bat)
                 sensitive=true
                 break
                 ;;

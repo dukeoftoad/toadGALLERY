@@ -3,9 +3,12 @@
 This directory is a vendored, adapted extract of the **Ente Photos** Rust ML
 engine. It is **AGPL-3.0** licensed code (c) Ente Services Pvt. Ltd. and
 contributors, incorporated into toadGALLERY per the maintainer's direction
-(2026-11-02). See `docs/licensing-and-attribution.md` §2 and §5 for the compliance
-record and `docs/integration-decisions.md` ADR-0020 for the delivery-policy
-context.
+(2026-11-02). The full AGPL-3.0 license text ships alongside this notice as
+`engine/LICENSE`, so any redistribution of `engine/` carries the license
+text itself, not only this grant pointer. See
+`docs/licensing-and-attribution.md` §2 and §5 for the compliance record and
+the per-artifact license offer, and `docs/integration-decisions.md` ADR-0020
+for the delivery-policy context.
 
 ## Pinned source
 

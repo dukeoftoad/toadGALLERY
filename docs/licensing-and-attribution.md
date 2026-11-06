@@ -1,6 +1,8 @@
 # Licensing and Attribution
 
-**Status:** Living document (updated every phase) · **Last revised:** 2026-11-02 (v2.5 —
+**Status:** Living document (updated every phase) · **Last revised:** 2026-11-07 (v2.6 —
+r51 commits the canonical AGPL-3.0 text as `engine/LICENSE` and records the explicit
+per-artifact license offer in §2/§3; v2.5 —
 r23 records the photos-side vendored crates `ente-vecdb` (whole upstream `vecdb`) and
 `ente-photos-ml` (partial `photos` extraction with one crypto seam) in §2/§5; v2.4 —
 r22 records the net-new `engine/crates/toad-ml-jni` JNI bridge crate, AGPL-3.0 via the
@@ -59,13 +61,24 @@ rationale changes.
   keeps upstream's AGPL-3.0 via `engine/NOTICE.md` + crate-level `license` fields; the
   pinned upstream commit makes every adaptation diffable. No re-licensing of vendored
   files occurs.
+- **Per-artifact license offer (explicit, recorded so every release artifact
+  names its own terms):** the **basic-flavor gallery APK** (the F-Droid
+  recipe's package) and the **edit APK** contain no vendored engine code and
+  are offered under **GPL-3.0** (root `LICENSE`); the **engine-family gallery
+  APKs** (the `engine`/`semantic`/`face` flavors, r46+) package `engine/` and
+  are offered under **AGPL-3.0**. The full AGPL-3.0 text is committed as
+  `engine/LICENSE` (r51), so any redistribution of `engine/` — source or
+  engine-flavor APK — carries the license text itself, not only the grant
+  pointer in `engine/NOTICE.md`.
 - No proprietary or trademark-encumbered assets from Mi Gallery.
 
 ## 3. Obligations the project has accepted
 
 1. **Source disclosure:** any distributed build must come with corresponding GPL-3.0
    source at the matching commit (GitHub releases must link the exact source tree; CI
-   workflow per ADR-0013 is the canonical build recipe).
+   workflow per ADR-0013 is the canonical build recipe). Engine-family builds follow
+   the per-artifact license offer in §2: their corresponding source is offered under
+   AGPL-3.0, with the full text in `engine/LICENSE`.
 2. **Notice preservation:** upstream copyright notices and the GPL-3.0 text may never be
    removed from derivative files. (No upstream code was ported under ADR-0008; under
    ADR-0020 the vendored engine keeps upstream's AGPL-3.0 notice via `engine/NOTICE.md`

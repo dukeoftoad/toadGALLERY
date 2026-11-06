@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ml.index
 
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.revision.MediaRevision
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +12,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.Rule
@@ -124,10 +124,17 @@ class ClipIndexQueueTest {
         var indexedFileIdsResult: List<Long> = emptyList()
         var refusePutFor: Set<Long> = emptySet()
 
+        /** Candidate uris whose embedding throws (r51, audit C-5). */
+        var embedFaultFor: Set<String> = emptySet()
+
         private fun embedding(seed: Int) = FloatArray(512) { (it + seed).toFloat() }
 
         override fun clipImageEmbedding(jpeg: ByteArray): FloatArray {
-            embedCalls.add(String(jpeg))
+            val uri = String(jpeg)
+            if (uri in embedFaultFor) {
+                throw IllegalStateException("native clip decode fault for $uri")
+            }
+            embedCalls.add(uri)
             return embedding(embedCalls.size)
         }
 
@@ -173,7 +180,9 @@ class ClipIndexQueueTest {
         val plan = ClipIndexQueuePlanner.plan(candidates, states, storeIndexedFileIds = setOf(1, 2, 3))
 
         assertEquals(listOf("c", "d"), plan.toIndex.map { it.localMediaKey })
-        assertEquals(setOf("c"), plan.reIndexKeys)
+        // r51 (audit C-9): the dead reIndexKeys set is gone --- delete-first
+        // is unconditional (putClip even upserts), so a CONTENT_CHANGED
+        // candidate needs no extra bookkeeping to have its stale row dropped.
         assertEquals(1, plan.skippedUpToDate)
         assertEquals(1, plan.skippedMetadataOnly)
         assertTrue(plan.orphanFileIds.isEmpty())
@@ -195,7 +204,6 @@ class ClipIndexQueueTest {
         assertEquals(setOf("gone"), plan.staleStateKeys)
         // "a" is up to date; nothing to index:
         assertTrue(plan.toIndex.isEmpty())
-        assertTrue(plan.reIndexKeys.isEmpty())
         assertEquals(1, plan.skippedUpToDate)
         // Orphan cleanup IS real work for the plan:
         assertFalse(plan.isEmpty)
@@ -394,11 +402,13 @@ class ClipIndexQueueTest {
         assertFalse(outcome.moreRemaining)
 
         // The NEXT plan holds b out --- counted as skippedUnreadable, NOT
-        // up-to-date (the terminal card stays honest about what skipped):
+        // up-to-date (the terminal card stays honest about what skipped).
+        // The store truth is the honest post-run read: c's row is in the
+        // store (the r51 C-3 cross-check would re-plan it otherwise).
         val nextPlan = ClipIndexQueuePlanner.plan(
             candidates = listOf(candidate("b", 2), candidate("c", 3)),
             states = store.saved!!,
-            storeIndexedFileIds = emptySet(),
+            storeIndexedFileIds = setOf(3L),
         )
         assertTrue(nextPlan.toIndex.isEmpty())
         assertEquals(1, nextPlan.skippedUnreadable)
@@ -410,33 +420,53 @@ class ClipIndexQueueTest {
         val replan = ClipIndexQueuePlanner.plan(
             candidates = listOf(changed, candidate("c", 3)),
             states = store.saved!!,
-            storeIndexedFileIds = emptySet(),
+            storeIndexedFileIds = setOf(3L),
         )
         assertEquals(listOf("b"), replan.toIndex.map { it.localMediaKey })
     }
 
     @Test
-    fun `a refused putClip is a fault, never a silent drop from the index`() {
+    fun `a refused putClip terminally skips the photo, never a silent drop from the index`() = runBlocking {
+        // r51 (audit C-5): the engine's own success flag refused the
+        // insert --- still a FAULT, never a silent drop, but the fault is
+        // now contained per-photo: the deliberate IllegalStateException
+        // rides the engine-fault catch, so THIS photo terminally skips
+        // (counted, logged, held until its revision changes) and the batch
+        // completes instead of wedging at this head item forever (a
+        // refused insert is deterministic per photo --- no retry could fix
+        // it).
         val engine = FakeEngine().apply { refusePutFor = setOf(2L) }
         val store = FakeStateStore()
         val plan = ClipIndexQueuePlanner.plan(
-            candidates = listOf(candidate("b", 2)),
+            candidates = listOf(candidate("b", 2), candidate("c", 3)),
             states = emptyList(),
             storeIndexedFileIds = emptySet(),
         )
-        try {
-            runBlocking {
-                ClipIndexQueueProcessor(engine, Dispatchers.Unconfined).processBatch(
-                    plan = plan,
-                    stateStore = store,
-                    readBytes = { bytesOf(it) },
-                    nowMillis = { 1L },
-                )
-            }
-            fail("a refused putClip must surface as an engine fault")
-        } catch (expected: IllegalStateException) {
-            assertTrue(expected.message!!.contains("returned false for file 2"))
+
+        val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+        DiagLog.sink = { _, _, _ -> }
+        val outcome = try {
+            ClipIndexQueueProcessor(engine, Dispatchers.Unconfined).processBatch(
+                plan = plan,
+                stateStore = store,
+                readBytes = { bytesOf(it) },
+                nowMillis = { 1L },
+            )
+        } finally {
+            DiagLog.sink = stockSink
         }
+
+        // The batch completed: c was still embedded and put, b was not:
+        assertEquals(1, outcome.indexedThisRun)
+        assertEquals(1, outcome.engineFailedThisRun)
+        assertEquals(listOf("2", "3"), engine.embedCalls.map { it.substringAfterLast('/') })
+        assertEquals(listOf(3L), engine.putCalls.map { it.first })
+        // The skip record (the F-39 mirror with the engine-fault flag):
+        val skipped = store.saved!!.single { it.localMediaKey == "b" }
+        assertTrue(skipped.engineFailed)
+        assertFalse(skipped.unreadable)
+        assertFalse(store.saved!!.single { it.localMediaKey == "c" }.engineFailed)
+        assertFalse(outcome.moreRemaining)
     }
 
     @Test
@@ -476,36 +506,176 @@ class ClipIndexQueueTest {
     }
 
     @Test
-    fun `engine failures propagate unchanged`() {
-        val engine = object : ClipIndexEngine {
-            override fun clipImageEmbedding(jpeg: ByteArray): FloatArray =
-                throw IllegalStateException("face index store is not open; call openFaceIndex(dir) first")
-
-            override fun putClip(fileId: Long, embedding: FloatArray): Boolean = true
-            override fun deleteClipsForFiles(fileIds: LongArray): Boolean = true
-            override fun clipIndexedFileIds(): List<Long> = emptyList()
-            override fun clipCount(): Long = 0L
-            override fun fillClipIndex(): MlEngine.ClipFillReport =
-                MlEngine.ClipFillReport("completed", 0, 0, 0, resumed = false)
+    fun `an engine fault on one photo terminally skips it and the batch completes`() = runBlocking {
+        // r51 (audit C-5), the face queue's mirror: a decodable-but-corrupt
+        // JPEG makes clipImageEmbedding throw EVERY run. The pre-r51
+        // contract aborted the batch at the first throw, so the same photo
+        // sat at the head of the queue through every WorkManager retry and
+        // every restart, wedging BOTH queues (they share the store). The
+        // per-photo catch now terminally skips it (the F-39 unreadable
+        // mirror) and the batch COMPLETES with the photos after it.
+        val engine = FakeEngine().apply {
+            embedFaultFor = setOf("content://media/external/file/2")
         }
+        val store = FakeStateStore()
         val plan = ClipIndexQueuePlanner.plan(
-            candidates = listOf(candidate("b", 2)),
+            candidates = listOf(candidate("b", 2), candidate("c", 3)),
             states = emptyList(),
             storeIndexedFileIds = emptySet(),
         )
-        try {
-            runBlocking {
-                ClipIndexQueueProcessor(engine, Dispatchers.Unconfined).processBatch(
-                    plan = plan,
-                    stateStore = FakeStateStore(),
-                    readBytes = { bytesOf(it) },
-                    nowMillis = { 1L },
-                )
-            }
-            fail("the engine's failure shape must propagate")
-        } catch (expected: IllegalStateException) {
-            assertTrue(expected.message!!.contains("not open"))
+
+        // The engine-fault skip logs one DiagLog line; the default sink
+        // touches android.util.Log --- unmocked on the JVM. Swap it for a
+        // recorder (the CompositeScanIndexHookTest pattern) and restore it
+        // no matter how the test ends.
+        val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+        val logged = mutableListOf<String>()
+        DiagLog.sink = { _, _, msg -> logged.add(msg) }
+        val outcome = try {
+            ClipIndexQueueProcessor(engine, Dispatchers.Unconfined).processBatch(
+                plan = plan,
+                stateStore = store,
+                readBytes = { bytesOf(it) },
+                nowMillis = { 1L },
+            )
+        } finally {
+            DiagLog.sink = stockSink
         }
+
+        // The batch COMPLETED: c (after the poison b) was still indexed.
+        assertEquals(1, outcome.indexedThisRun)
+        assertEquals(listOf("3"), engine.embedCalls.map { it.substringAfterLast('/') })
+        assertFalse(outcome.moreRemaining)
+        // The new counter is reported alongside unreadableThisRun:
+        assertEquals(1, outcome.engineFailedThisRun)
+        assertEquals(0, outcome.unreadableThisRun)
+        // One log line for the one poison photo:
+        assertEquals(1, logged.size)
+        assertTrue(logged.single().contains("b"))
+        assertTrue(logged.single().contains("terminal skip"))
+        // b leaves a TERMINAL-SKIP record with the engine-fault flag (the
+        // F-39 mirror): no clip row, held out until its revision changes.
+        val skipped = store.saved!!.single { it.localMediaKey == "b" }
+        assertTrue(skipped.engineFailed)
+        assertFalse(skipped.unreadable)
+        assertFalse(store.saved!!.single { it.localMediaKey == "c" }.engineFailed)
+
+        // The NEXT plan holds b out --- counted as skippedEngineFailed, NOT
+        // up-to-date (the outcome stays honest about what skipped):
+        val nextPlan = ClipIndexQueuePlanner.plan(
+            candidates = listOf(candidate("b", 2), candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = setOf(3L),
+        )
+        assertTrue(nextPlan.toIndex.isEmpty())
+        assertEquals(1, nextPlan.skippedEngineFailed)
+        assertEquals(1, nextPlan.skippedUpToDate)
+
+        // A revision change gives the photo a fresh attempt: the skip is a
+        // hold, not a ban (a genuinely changed file re-enters delete-first).
+        val changed = candidate("b", 2, size = 101L)
+        val replan = ClipIndexQueuePlanner.plan(
+            candidates = listOf(changed, candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = setOf(3L),
+        )
+        assertEquals(listOf("b"), replan.toIndex.map { it.localMediaKey })
+    }
+
+    @Test
+    fun `state records over a missing store plan a full re-index`() {
+        // r51 (audit C-3 backstop, the file half): the reset-timeout
+        // resurrect shape --- the state file survived while the store it
+        // describes was deleted. The old planner diffed every record
+        // UNCHANGED and skipped the whole library; the backstop plans the
+        // full re-index.
+        val dir = tmp.newFolder()
+        val stateFile = File(dir, "clip-index-state.json")
+        runBlocking { ClipIndexStateFile(stateFile).save(listOf(state("a", 1), state("b", 2))) }
+        val candidates = listOf(candidate("a", 1), candidate("b", 2), candidate("new", 3))
+
+        // The backstop logs one DiagLog line (same JVM sink discipline).
+        val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+        DiagLog.sink = { _, _, _ -> }
+        val plan = try {
+            ClipIndexQueuePlanner.plan(
+                candidates = candidates,
+                states = runBlocking { ClipIndexStateFile(stateFile).load() },
+                storeIndexedFileIds = emptySet(),
+                stateStoreFile = stateFile,
+            )
+        } finally {
+            DiagLog.sink = stockSink
+        }
+
+        // Everything is re-index work --- no UNCHANGED skips:
+        assertEquals(listOf("a", "b", "new"), plan.toIndex.map { it.localMediaKey })
+        assertEquals(0, plan.skippedUpToDate)
+        assertEquals(0, plan.skippedMetadataOnly)
+        assertEquals(0, plan.skippedUnreadable)
+        assertEquals(0, plan.skippedEngineFailed)
+        assertFalse(plan.isEmpty)
+
+        // The control: with the store file PRESENT and its rows live (the
+        // normal world), the same inputs keep the plain diff mapping ---
+        // a and b skip, only the never-processed "new" indexes. (The row
+        // truth must be healthy too: the store-truth half of the backstop
+        // --- pinned by its own test below --- re-plans a live record
+        // whose row is gone even when the file exists.)
+        File(dir, ML_INDEX_STORE_FILE_NAME).writeText("sqlite")
+        val normalPlan = ClipIndexQueuePlanner.plan(
+            candidates = candidates,
+            states = runBlocking { ClipIndexStateFile(stateFile).load() },
+            storeIndexedFileIds = setOf(1L, 2L),
+            stateStoreFile = stateFile,
+        )
+        assertEquals(listOf("new"), normalPlan.toIndex.map { it.localMediaKey })
+        assertEquals(2, normalPlan.skippedUpToDate)
+    }
+
+    @Test
+    fun `live state records whose store rows are gone plan a re-index, not a skip`() {
+        // r51 (audit C-3 backstop, the store-truth half): after the
+        // reset-timeout resurrect the worker's own store-open RECREATES an
+        // empty ml-index.sqlite before the planner runs, so a File check
+        // can no longer see the deletion --- but the store truth the
+        // planner already receives is empty while the resurrected records
+        // claim indexed photos. Every CLIP-indexed photo carries exactly
+        // one row, so a live record with no row is a definite
+        // inconsistency: plan the delete-first re-index. (The terminal-skip
+        // records are exempt --- they never carry rows by design.)
+        val states = listOf(
+            state("a", 1), // row gone -> re-index
+            state("b", 2).copy(unreadable = true), // terminal skip stays a skip
+            state("c", 3).copy(engineFailed = true), // terminal skip stays a skip
+        )
+        val candidates = listOf(candidate("a", 1), candidate("b", 2), candidate("c", 3))
+
+        val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+        DiagLog.sink = { _, _, _ -> }
+        val plan = try {
+            ClipIndexQueuePlanner.plan(
+                candidates = candidates,
+                states = states,
+                storeIndexedFileIds = emptySet(), // the resurrected store is empty
+            )
+        } finally {
+            DiagLog.sink = stockSink
+        }
+
+        assertEquals(listOf("a"), plan.toIndex.map { it.localMediaKey })
+        assertEquals(0, plan.skippedUpToDate)
+        assertEquals(1, plan.skippedUnreadable)
+        assertEquals(1, plan.skippedEngineFailed)
+
+        // The control: with the row present, the same record skips.
+        val healthy = ClipIndexQueuePlanner.plan(
+            candidates = candidates,
+            states = states,
+            storeIndexedFileIds = setOf(1L),
+        )
+        assertTrue(healthy.toIndex.isEmpty())
+        assertEquals(1, healthy.skippedUpToDate)
     }
 
     // State file tests -----------------------------------------------------------------
@@ -520,6 +690,9 @@ class ClipIndexQueueTest {
             // r50 (F-39): the terminal-skip flag rides the same round trip
             // (an additive optional field on version 1).
             state("c", 3, indexedAt = 30L).copy(unreadable = true),
+            // r51 (audit C-5): the engine-fault flag rides the same round
+            // trip (the same additive-optional-field discipline).
+            state("d", 4, indexedAt = 40L).copy(engineFailed = true),
         )
 
         runBlocking { file.save(states) }

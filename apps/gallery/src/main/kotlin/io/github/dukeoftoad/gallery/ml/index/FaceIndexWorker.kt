@@ -147,11 +147,17 @@ class FaceIndexWorker(
             }
 
             val candidates = eligibleCandidates(app.mediaCatalogue.allRecords())
-            val stateStore = FaceIndexStateFile(File(faceIndexDir, FACE_INDEX_STATE_FILE_NAME))
+            val stateStoreFile = File(faceIndexDir, FACE_INDEX_STATE_FILE_NAME)
+            val stateStore = FaceIndexStateFile(stateStoreFile)
             val plan = FaceIndexQueuePlanner.plan(
                 candidates = candidates,
                 states = stateStore.load(),
                 storeIndexedFileIds = engine.indexedFaceFileIds().toSet(),
+                // r51 C-3 backstop, verification wiring: the planner's
+                // store-existence check reads THIS file's directory ---
+                // without it the FACE-side resurrect self-heal stayed
+                // dormant (the wave-1 review's finding).
+                stateStoreFile = stateStoreFile,
             )
             val resolver = app.contentResolver
             val processor = FaceIndexQueueProcessor(MlEngineIndexEngine(engine))

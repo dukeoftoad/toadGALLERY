@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.ml.index
 
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.revision.MediaRevision
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +12,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.Rule
@@ -113,6 +113,9 @@ class FaceIndexQueueTest {
         var faceCountResult = 4L
         var indexedFileIdsResult: List<Long> = emptyList()
 
+        /** Candidate uris whose detection throws (r51, audit C-5). */
+        var detectFaultFor: Set<String> = emptySet()
+
         private fun embedding(seed: Float) = FloatArray(192) { it.toFloat() + seed }
 
         private fun face(seed: Float) = MlEngine.FaceEmbedding(
@@ -125,7 +128,11 @@ class FaceIndexQueueTest {
         )
 
         override fun detectFaceEmbeddings(jpeg: ByteArray): List<MlEngine.FaceEmbedding> {
-            detectCalls.add(String(jpeg))
+            val uri = String(jpeg)
+            if (uri in detectFaultFor) {
+                throw IllegalStateException("native decode fault for $uri")
+            }
+            detectCalls.add(uri)
             val count = if (facesPerPhoto.isEmpty()) 0 else facesPerPhoto.removeFirst()
             return (0 until count).map { face(it.toFloat()) }
         }
@@ -172,7 +179,9 @@ class FaceIndexQueueTest {
         val plan = FaceIndexQueuePlanner.plan(candidates, states, storeIndexedFileIds = setOf(1, 2, 3))
 
         assertEquals(listOf("c", "d"), plan.toIndex.map { it.localMediaKey })
-        assertEquals(setOf("c"), plan.reIndexKeys)
+        // r51 (audit C-9): the dead reIndexKeys set is gone --- delete-first
+        // is unconditional, so a CONTENT_CHANGED candidate needs no extra
+        // bookkeeping to have its stale rows dropped.
         assertEquals(1, plan.skippedUpToDate)
         assertEquals(1, plan.skippedMetadataOnly)
         assertTrue(plan.orphanFileIds.isEmpty())
@@ -194,7 +203,6 @@ class FaceIndexQueueTest {
         assertEquals(setOf("gone"), plan.staleStateKeys)
         // "a" is up to date; nothing to index:
         assertTrue(plan.toIndex.isEmpty())
-        assertTrue(plan.reIndexKeys.isEmpty())
         assertEquals(1, plan.skippedUpToDate)
         // Orphan cleanup IS real work for the plan:
         assertFalse(plan.isEmpty)
@@ -452,7 +460,14 @@ class FaceIndexQueueTest {
     }
 
     @Test
-    fun `engine failures propagate unchanged`() {
+    fun `an engine fault on every photo still leaves honest state and a real fault path out of the loop`() {
+        // r51 (audit C-5), the other edge: when the ENGINE is what's broken
+        // (the C-2 teardown shape --- every photo faults), the batch now
+        // COMPLETES with every photo terminally skipped instead of burning
+        // the three WorkManager retries. The per-photo faults that are NOT
+        // bytes-dependent (the orphan delete, the drain-time clustering,
+        // the store count) still propagate unchanged --- those are batch
+        // faults, and the worker's retry-with-backoff remains their path.
         val engine = object : IndexCoordinator.FaceIndexEngine {
             override fun detectFaceEmbeddings(jpeg: ByteArray): List<MlEngine.FaceEmbedding> =
                 throw IllegalStateException("face index store is not open; call openFaceIndex(dir) first")
@@ -470,19 +485,156 @@ class FaceIndexQueueTest {
             states = emptyList(),
             storeIndexedFileIds = emptySet(),
         )
-        try {
+        val store = FakeStateStore()
+
+        val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+        DiagLog.sink = { _, _, _ -> }
+        val outcome = try {
             runBlocking {
                 FaceIndexQueueProcessor(engine, Dispatchers.Unconfined).processBatch(
                     plan = plan,
-                    stateStore = FakeStateStore(),
+                    stateStore = store,
                     readBytes = { bytesOf(it) },
                     nowMillis = { 1L },
                 )
             }
-            fail("the engine's failure shape must propagate")
-        } catch (expected: IllegalStateException) {
-            assertTrue(expected.message!!.contains("not open"))
+        } finally {
+            DiagLog.sink = stockSink
         }
+
+        // No propagation from the per-photo loop anymore --- the skip is
+        // recorded and counted (the honest state for a torn-down engine:
+        // held out until revision change, re-attempted on the next run's
+        // fresh session):
+        assertEquals(0, outcome.indexedThisRun)
+        assertEquals(1, outcome.engineFailedThisRun)
+        assertTrue(store.saved!!.single().engineFailed)
+    }
+
+    @Test
+    fun `an engine fault on one photo terminally skips it and the batch completes`() = runBlocking {
+        // r51 (audit C-5): the poison-photo shape --- a decodable-but-
+        // corrupt JPEG makes detectFaceEmbeddings throw EVERY run. The
+        // pre-r51 contract aborted the batch at the first throw, so the
+        // same photo sat at the head of the queue through every WorkManager
+        // retry and every restart, wedging the chain. The per-photo catch
+        // now terminally skips it (the F-39 unreadable mirror) and the
+        // batch COMPLETES with the photos after it.
+        val engine = FakeEngine().apply {
+            detectFaultFor = setOf("content://media/external/file/2")
+        }
+        val store = FakeStateStore()
+        val plan = FaceIndexQueuePlanner.plan(
+            candidates = listOf(candidate("b", 2), candidate("c", 3)),
+            states = emptyList(),
+            storeIndexedFileIds = emptySet(),
+        )
+        val processor = FaceIndexQueueProcessor(engine, Dispatchers.Unconfined)
+
+        // The engine-fault skip logs one DiagLog line; the default sink
+        // touches android.util.Log --- unmocked on the JVM. Swap it for a
+        // recorder (the CompositeScanIndexHookTest pattern) and restore it
+        // no matter how the test ends.
+        val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+        val logged = mutableListOf<String>()
+        DiagLog.sink = { _, _, msg -> logged.add(msg) }
+        val outcome = try {
+            processor.processBatch(
+                plan = plan,
+                stateStore = store,
+                readBytes = { bytesOf(it) },
+                nowMillis = { 1L },
+            )
+        } finally {
+            DiagLog.sink = stockSink
+        }
+
+        // The batch COMPLETED: c (after the poison b) was still indexed.
+        assertEquals(1, outcome.indexedThisRun)
+        assertEquals(listOf("3"), engine.detectCalls.map { it.substringAfterLast('/') })
+        assertFalse(outcome.moreRemaining)
+        // The new counter is reported alongside unreadableThisRun:
+        assertEquals(1, outcome.engineFailedThisRun)
+        assertEquals(0, outcome.unreadableThisRun)
+        // One log line for the one poison photo:
+        assertEquals(1, logged.size)
+        assertTrue(logged.single().contains("b"))
+        assertTrue(logged.single().contains("terminal skip"))
+        // b leaves a TERMINAL-SKIP record with the engine-fault flag (the
+        // F-39 mirror): no faces, held out until its revision changes.
+        val skipped = store.saved!!.single { it.localMediaKey == "b" }
+        assertTrue(skipped.engineFailed)
+        assertFalse(skipped.unreadable)
+        assertFalse(store.saved!!.single { it.localMediaKey == "c" }.engineFailed)
+
+        // The NEXT plan holds b out --- counted as skippedEngineFailed, NOT
+        // up-to-date (the outcome stays honest about what skipped):
+        val nextPlan = FaceIndexQueuePlanner.plan(
+            candidates = listOf(candidate("b", 2), candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = emptySet(),
+        )
+        assertTrue(nextPlan.toIndex.isEmpty())
+        assertEquals(1, nextPlan.skippedEngineFailed)
+        assertEquals(1, nextPlan.skippedUpToDate)
+
+        // A revision change gives the photo a fresh attempt: the skip is a
+        // hold, not a ban (a genuinely changed file re-enters delete-first).
+        val changed = candidate("b", 2, size = 101L)
+        val replan = FaceIndexQueuePlanner.plan(
+            candidates = listOf(changed, candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = emptySet(),
+        )
+        assertEquals(listOf("b"), replan.toIndex.map { it.localMediaKey })
+    }
+
+    @Test
+    fun `state records over a missing store plan a full re-index`() {
+        // r51 (audit C-3 backstop): the reset-timeout resurrect shape ---
+        // the state file survived (a NonCancellable save landed after the
+        // reset's deleteRecursively) while the store it describes was
+        // deleted. The old planner diffed every record UNCHANGED and
+        // skipped the whole library; the backstop plans the full re-index.
+        val dir = tmp.newFolder()
+        val stateFile = File(dir, "index-state.json")
+        runBlocking { FaceIndexStateFile(stateFile).save(listOf(state("a", 1), state("b", 2))) }
+        val candidates = listOf(candidate("a", 1), candidate("b", 2), candidate("new", 3))
+
+        // The backstop logs one DiagLog line (same JVM sink discipline).
+        val stockSink: (Char, String, String) -> Unit = DiagLog.sink
+        DiagLog.sink = { _, _, _ -> }
+        val plan = try {
+            FaceIndexQueuePlanner.plan(
+                candidates = candidates,
+                states = runBlocking { FaceIndexStateFile(stateFile).load() },
+                storeIndexedFileIds = emptySet(),
+                stateStoreFile = stateFile,
+            )
+        } finally {
+            DiagLog.sink = stockSink
+        }
+
+        // Everything is re-index work --- no UNCHANGED skips:
+        assertEquals(listOf("a", "b", "new"), plan.toIndex.map { it.localMediaKey })
+        assertEquals(0, plan.skippedUpToDate)
+        assertEquals(0, plan.skippedMetadataOnly)
+        assertEquals(0, plan.skippedUnreadable)
+        assertEquals(0, plan.skippedEngineFailed)
+        assertFalse(plan.isEmpty)
+
+        // The control: with the store file PRESENT (the normal world), the
+        // same inputs keep the plain diff mapping --- a and b skip, only
+        // the never-processed "new" indexes.
+        File(dir, ML_INDEX_STORE_FILE_NAME).writeText("sqlite")
+        val normalPlan = FaceIndexQueuePlanner.plan(
+            candidates = candidates,
+            states = runBlocking { FaceIndexStateFile(stateFile).load() },
+            storeIndexedFileIds = emptySet(),
+            stateStoreFile = stateFile,
+        )
+        assertEquals(listOf("new"), normalPlan.toIndex.map { it.localMediaKey })
+        assertEquals(2, normalPlan.skippedUpToDate)
     }
 
     // State file tests -----------------------------------------------------------------
@@ -498,6 +650,9 @@ class FaceIndexQueueTest {
             // (an additive optional field on version 1 --- old readers
             // ignore the key, new readers default it to false).
             state("c", 3, indexedAt = 30L).copy(unreadable = true),
+            // r51 (audit C-5): the engine-fault flag rides the same round
+            // trip (the same additive-optional-field discipline).
+            state("d", 4, indexedAt = 40L).copy(engineFailed = true),
         )
 
         runBlocking { file.save(states) }

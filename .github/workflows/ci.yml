@@ -53,7 +53,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # F-2 (follow-up 2026-11-04): the canonical toolchain setup now lives
       # in .github/actions/toad-setup --- the host-gates Rust shape (stable
@@ -101,7 +101,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # F-2: the canonical toolchain setup (.github/actions/toad-setup) ---
       # the pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 +
@@ -149,7 +149,7 @@ jobs:
         run: ./gradlew :apps:edit:testDebugUnitTest :shared:editor-contract:test --no-daemon --stacktrace
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: gallery-debug-apk
@@ -158,7 +158,7 @@ jobs:
           retention-days: 14
 
       - name: Upload editor APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: edit-debug-apk
@@ -167,7 +167,7 @@ jobs:
           retention-days: 14
 
       - name: Upload lint reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: lint-reports
@@ -176,7 +176,7 @@ jobs:
           retention-days: 14
 
       - name: Upload test reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: test-reports
@@ -191,7 +191,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # F-2: the canonical toolchain setup (.github/actions/toad-setup) ---
       # the full engine-cross shape (Rust + aarch64 target + the android

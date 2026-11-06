@@ -196,7 +196,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Fail fast: the vendored engine workspace must be present (both gallery
       # targets package it).
@@ -317,33 +317,28 @@ jobs:
           ls -la "$DEST"
           sha256sum "$DEST"/*
 
-      # ADR-0018 contract (release variant, engine target), mirrored verbatim
-      # from release.yml: the Gradle signingConfig reads exactly these four
-      # TG_* env vars. Debug dispatches skip both steps entirely (debug key,
-      # like every other test build).
+      # ADR-0018 contract (release variant, engine target), mirrored from
+      # release.yml: the Gradle signingConfig reads exactly these four
+      # TG_* env vars. Debug dispatches skip the decode step entirely (debug
+      # key, like every other test build). F-2 (r51): the keystore secret
+      # reaches the decode step through a step-level env var (never
+      # interpolated into the script body), and the three credential
+      # secrets reach the ONE step that consumes them --- the assemble
+      # below --- the same way: no GITHUB_ENV write, no heredoc, so they
+      # never appear in command lines or command logs and never persist
+      # beyond the step that uses them (GitHub masks them in logs
+      # regardless; this keeps it clean --- and now also minimal).
       - name: Decode release keystore (release variant only)
         if: env.GALLERY_VARIANT == 'release'
+        env:
+          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
+          printf '%s' "$TG_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
           chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
           if [ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]; then
             echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
             exit 1
           fi
-
-      - name: Export signing environment for Gradle (release variant only)
-        if: env.GALLERY_VARIANT == 'release'
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
-        run: |
-          cat >> "$GITHUB_ENV" <<EOF
-          TG_KEYSTORE_FILE=$RUNNER_TEMP/toadgallery-release.jks
-          TG_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD
-          TG_KEY_ALIAS=$KEY_ALIAS
-          TG_KEY_PASSWORD=$KEY_PASSWORD
-          EOF
 
       # The assemble. -PwithEngine registers the buildRustEngine Exec task
       # (preBuild dependency runs engine/scripts/build-android.sh, idempotent):
@@ -355,7 +350,18 @@ jobs:
       # the full log for the on-failure upload below. r46: the ENGINE flavor
       # (applicationIdSuffix .engine, the full BuildShape) --- the output
       # paths are flavor-qualified (apk/engine/<variant>/).
+      # The signing env (F-2): the TG_* quartet rides this step's env for
+      # the release variant (the signingConfig wires only when
+      # TG_KEYSTORE_FILE is present); debug dispatches set them too but
+      # nothing consumes them --- the debug build type never reads the
+      # release signingConfig, so the debug APK stays debug-keyed exactly
+      # as before.
       - name: Assemble the engine-enabled (${{ needs.prepare.outputs.gallery_variant }}) APK
+        env:
+          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
         run: |
           set -o pipefail
           # Array form so each -P flag is a distinct argv element
@@ -410,8 +416,17 @@ jobs:
       - name: Verify APK identity (package + the checkout's version)
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
-          if [ -z "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
+          # F-14: resolve aapt2 from the exact pinned build-tools dir first
+          # (the same 36.0.0 toad-setup installs), glob fallback only if the
+          # runner layout differs --- the signature gate in release.yml
+          # resolves apksigner the same way. Newest-wins made the gate read
+          # whatever the runner image shipped that day (silent toolchain
+          # drift).
+          AAPT2="$SDK_ROOT/build-tools/36.0.0/aapt2"
+          if [ ! -x "$AAPT2" ]; then
+            AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
+          fi
+          if [ -z "$AAPT2" ] || [ ! -x "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
           APK="$(ls "apps/gallery/build/outputs/apk/engine/$GALLERY_VARIANT/"*.apk)"
           EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
           if [ -z "$EXPECTED_VC" ]; then echo "::error::could not derive versionCode from apps/gallery/build.gradle.kts"; exit 1; fi
@@ -470,7 +485,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Upload APK + mapping artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}/apk-staging/*
@@ -480,7 +495,7 @@ jobs:
 
       - name: Upload build log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: apk-build-gallery-${{ env.GALLERY_TARGET }}-logs-${{ github.run_id }}
           path: build-output.log
@@ -539,7 +554,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The canonical toolchain setup (.github/actions/toad-setup): the
       # pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 + the
@@ -558,8 +573,13 @@ jobs:
         if: matrix.editor_target == 'edit-debug'
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
-          if [ -z "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
+          # F-14: same pinned-first aapt2 resolve as the gallery identity
+          # gate above (build-tools/36.0.0 first, glob fallback).
+          AAPT2="$SDK_ROOT/build-tools/36.0.0/aapt2"
+          if [ ! -x "$AAPT2" ]; then
+            AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
+          fi
+          if [ -z "$AAPT2" ] || [ ! -x "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
           APK="$(ls apps/edit/build/outputs/apk/debug/*.apk)"
           # The EDITOR gradle appends LIVE versionCode/versionName pairs per
           # round --- the LAST pair is the effective one (last-wins, the
@@ -594,7 +614,7 @@ jobs:
 
       - name: Upload the editor debug APK artifact (edit-debug)
         if: matrix.editor_target == 'edit-debug'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: toadGALLERY-Edit-${{ env.EDITOR_VERSION_NAME }}-debug
           path: ${{ runner.temp }}/edit-apk-staging/*
@@ -632,7 +652,7 @@ jobs:
 
       - name: Upload the unsigned editor release artifact (edit-release)
         if: matrix.editor_target == 'edit-release'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: toadGALLERY-Edit-${{ env.EDITOR_VERSION_NAME }}-release-UNSIGNED
           path: ${{ runner.temp }}/edit-apk-staging/*
@@ -649,7 +669,7 @@ jobs:
 
       - name: Upload the contract jar artifact (contract)
         if: matrix.editor_target == 'contract'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: editor-contract-jar
           path: shared/editor-contract/build/libs/*.jar
@@ -660,7 +680,7 @@ jobs:
       # --- per-leg diagnostics + summary --------------------------------------
       - name: Upload build log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: apk-build-editor-${{ matrix.editor_target }}-logs-${{ github.run_id }}
           path: build-output.log

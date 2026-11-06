@@ -83,7 +83,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Fixed staging dir for the publishable artifact set, exported to
       # GITHUB_ENV from this first runnable step so the always() artifact
@@ -159,9 +159,13 @@ jobs:
       # ADR-0018: the release keystore lives ONLY in GitHub Encrypted Secrets
       # (TG_RELEASE_KEYSTORE_BASE64, set per ADR-0018) --- it is never
       # committed to the repo, so no clone can ever sign releases.
+      # F-2 (r51): the keystore secret reaches this step through a
+      # step-level env var (never interpolated into the script body).
       - name: Decode release keystore
+        env:
+          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
+          printf '%s' "$TG_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
           chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
           if [[ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]]; then
             echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
@@ -171,24 +175,14 @@ jobs:
       # ADR-0018 contract with the release signingConfigs in BOTH
       # apps/gallery/build.gradle.kts and apps/edit/build.gradle.kts (the
       # edit app's block landed in r43, mirroring the gallery's): the Gradle
-      # build reads exactly these four TG_* env vars, for both apps. The
-      # TG_RELEASE_* secret values are passed through the step env and
-      # appended to GITHUB_ENV in one heredoc, so they never appear in
-      # command lines or command logs (GitHub masks them in logs regardless
-      # --- this keeps it clean).
-      - name: Export signing environment for Gradle
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
-        run: |
-          cat >> "$GITHUB_ENV" <<EOF
-          TG_KEYSTORE_FILE=$RUNNER_TEMP/toadgallery-release.jks
-          TG_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD
-          TG_KEY_ALIAS=$KEY_ALIAS
-          TG_KEY_PASSWORD=$KEY_PASSWORD
-          EOF
-
+      # build reads exactly these four TG_* env vars, for both apps. F-2
+      # (r51): instead of a job-persisted GITHUB_ENV write through an
+      # unquoted heredoc (whose shell expansion could corrupt a secret
+      # containing `$`), the three credential secrets and the keystore path
+      # now reach EACH gradle invocation through step-level env --- they
+      # never appear in command lines or command logs and never persist
+      # beyond the invocation that consumes them (GitHub masks them in
+      # logs regardless --- this keeps it clean).
       # TWO gradle invocations, deliberately (r46). -PwithEngine is a
       # GLOBAL property: in one invocation it would register the engine
       # jniLibs srcDir for EVERY variant, packaging the native libraries
@@ -205,9 +199,19 @@ jobs:
       # all five APKs are re-verified offline-by-construction AND minified
       # (mapping.txt) before anything is published.
       - name: Build signed release APKs (basic gallery + edit, property-less)
+        env:
+          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
         run: ./gradlew :apps:gallery:assembleBasicRelease :apps:edit:assembleRelease --no-daemon --stacktrace
 
       - name: Build signed release APKs (engine / semantic / face galleries, -PwithEngine)
+        env:
+          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
         run: ./gradlew :apps:gallery:assembleEngineRelease :apps:gallery:assembleSemanticRelease :apps:gallery:assembleFaceRelease -PwithEngine --no-daemon --stacktrace
 
       # HARD SIGNATURE GATES (ADR-0018) --- the core invariant of this
@@ -335,6 +339,99 @@ jobs:
           done
           echo "engine-library packaging gate OK --- basic carries NEITHER library; engine/semantic/face carry BOTH."
 
+      # F-14 (r51): the release-stage PERMISSION gate --- aapt2 re-checks the
+      # FINAL APKs' uses-permission sets after signing and before anything is
+      # staged or published. The signature gate above covers identity; this
+      # gate covers the privacy surface at the point of no return: the
+      # release-time INTERNET guarantee no longer rests solely on the
+      # build-time merged-manifest gates (which for the gallery are only as
+      # strong as their allowlist, F-4). The rule is "no UNEXPECTED
+      # permissions": every uses-permission the APK carries must be in its
+      # allowlist or the run fails and nothing is published. (The reverse is
+      # deliberately NOT asserted --- a missing allowlisted entry only breaks
+      # a feature, e.g. downloads; an extra one is a privacy regression.)
+      # The allowlists are derived from the source manifests plus the
+      # documented library merges; docs/phase-11/permissions-and-privacy.md
+      # is the record:
+      #   - the gallery source manifest declares the pinned five
+      #     (READ_MEDIA_IMAGES / READ_MEDIA_VIDEO / READ_EXTERNAL_STORAGE /
+      #     ACCESS_MEDIA_LOCATION + the ADR-0020 model-fetch INTERNET);
+      #   - androidx.work merges WAKE_LOCK + RECEIVE_BOOT_COMPLETED,
+      #     androidx.biometric merges USE_BIOMETIC (both documented and
+      #     pinned by PrivacyPolicyTest); the ACCESS_NETWORK_STATE and
+      #     FOREGROUND_SERVICE injections are stripped at merge time
+      #     (tools:node="remove") and never reach a merged manifest;
+      #   - the BASIC flavor's r50 overlay strips INTERNET, so INTERNET is
+      #     not in basic's allowlist: its presence fails below as an
+      #     unexpected permission (the hard fail F-14 asks for);
+      #   - the edit app's only request is its own pre-Q capped
+      #     WRITE_EXTERNAL_STORAGE; its r41 hard strip keeps the merged
+      #     manifest INTERNET-free (onnxruntime's AAR declaration is removed
+      #     at merge time), so edit's allowlist excludes INTERNET the same
+      #     way.
+      # aapt2 is resolved exactly like the signature gate's apksigner: the
+      # pinned build-tools dir first, glob fallback if the runner layout
+      # differs. The found set is printed per APK for auditability.
+      - name: Verify the release APKs' permission sets (uses-permission gates)
+        run: |
+          # Resolve aapt2 like the signature gate resolves apksigner: the
+          # exact pinned build-tools dir first, then a glob fallback in case
+          # the runner layout differs.
+          AAPT2="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/aapt2"
+          if [[ ! -x "$AAPT2" ]]; then
+            AAPT2="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name aapt2 | sort -V | tail -1)"
+          fi
+          if [[ -z "$AAPT2" || ! -x "$AAPT2" ]]; then
+            echo "::error::aapt2 not found under build-tools 36.0.0"
+            exit 1
+          fi
+
+          # The gallery's manifest-derived base set: the source manifest's
+          # declared five minus INTERNET, plus the documented library merges.
+          GALLERY_BASE="android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_VIDEO android.permission.READ_EXTERNAL_STORAGE android.permission.ACCESS_MEDIA_LOCATION android.permission.USE_BIOMETIC android.permission.WAKE_LOCK android.permission.RECEIVE_BOOT_COMPLETED"
+
+          # One gate per APK; UNEXPECTED accumulates across all five.
+          check_permissions() {
+            local LABEL="$1" APK="$2"; shift 2
+            local ALLOWED="$*"
+            local FOUND name
+            FOUND="$("$AAPT2" dump badging "$APK" | sed -n "s/^uses-permission[^:]*: name='\([^']*\)'.*$/\1/p")"
+            echo "== $LABEL: $APK"
+            if [[ -n "$FOUND" ]]; then
+              printf '%s\n' "$FOUND" | sed 's/^/   uses-permission: /'
+            else
+              echo "   (aapt2 reported no uses-permission lines)"
+            fi
+            while IFS= read -r name; do
+              if [[ -n "$name" ]]; then
+                case " $ALLOWED " in
+                  *" $name "*)
+                    ;;
+                  *)
+                    echo "::error::$LABEL: unexpected uses-permission '$name' --- not in this APK's manifest-derived allowlist; refusing to publish"
+                    UNEXPECTED=1
+                    ;;
+                esac
+              fi
+            done <<< "$FOUND"
+            return 0
+          }
+
+          UNEXPECTED=0
+          # The engine family keeps the main manifest's ADR-0020
+          # model-fetch INTERNET (the flavors download models).
+          check_permissions "gallery-basic"    "$BASIC_APK"    "$GALLERY_BASE"
+          check_permissions "gallery-engine"   "$ENGINE_APK"   "$GALLERY_BASE android.permission.INTERNET"
+          check_permissions "gallery-semantic" "$SEMANTIC_APK" "$GALLERY_BASE android.permission.INTERNET"
+          check_permissions "gallery-face"     "$FACE_APK"     "$GALLERY_BASE android.permission.INTERNET"
+          check_permissions "edit"             "$EDIT_APK"     "android.permission.WRITE_EXTERNAL_STORAGE"
+
+          if [[ "$UNEXPECTED" != 0 ]]; then
+            echo "::error::permission gate FAILED --- at least one release APK carries a uses-permission outside its manifest-derived allowlist; nothing is published"
+            exit 1
+          fi
+          echo "permission gate OK --- all five APKs' uses-permission sets are within their allowlists (basic and edit carry no INTERNET at all)."
+
       # Publishable set (r43 shape, r46 matrix): FIVE renamed APKs, each
       # with its sha256 checksum, and FIVE clearly-named per-APK R8
       # mapping.txt files --- every release build is minified, so every
@@ -394,7 +491,7 @@ jobs:
           cat "$RELEASE_STAGE"/*.sha256
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: release-apks
@@ -410,8 +507,11 @@ jobs:
       # keep these testing builds clearly separate from any future stable
       # release (they never show up as "Latest"; the v1.0 cut is a human
       # decision per ADR-0018, never a workflow default).
+      # F-1 (r51): SHA-pinned --- this step holds the job's contents: write
+      # scope, so a moved/compromised upstream tag can no longer execute
+      # here; the highest v2 tag at pin time was v2.6.2.
       - name: Publish GitHub pre-release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: toadGALLERY ${{ env.VERSION_NAME }} + Edit ${{ env.EDIT_VERSION_NAME }} — the APK-matrix pre-release (r${{ env.ROUND }})

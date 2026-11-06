@@ -201,3 +201,9 @@
 * [x] **P6 — Documentation + Flaw Review**: F-7 closed (stale Phase 5/6 rows collapsed, Phase 5 label corrected); roadmap v2.4 entry; README debug-APK section; CHANGELOG bullets; `docs/ci-workflows.md`; follow-up F-1..F-9; worklog Run #10. Flaw verdict: 0 blockers, 2 non-blockers fixed, nits logged (F-5/F-6).
 * [x] **P7 — Single push + one CI poll (≤20 min)**: one batched push of `main`; one CI poll. (Outcome recorded in worklog Run #10.)
 * **Blockers**: none. (Push/poll deferred to P7 by protocol; the window's one push activates the new workflows.)
+
+## r51 checkpoint — the audit-verification round (2026-11-06)
+
+* [x] The r50 audit fix plan executed as eight disjoint PRs (#135–#142), verified in two ADR-0013 waves, the two wiring-dormancy PARTIALs completed pre-merge (`4d39207` E-3, `d1ccc62` C-3, `725c2d3` F-8 docs), squash-merged in order #135→#142; main @ `4c995bc` CI + CodeQL green; merged tree byte-identical to the zero-conflict rehearsal.
+* [ ] **Maintainer decisions still open**: the D-1 root fix (fix-plan §5.1 — `PIN_ITERATIONS` raise strategy; throttle-only shipped in #142); dispatching the R51-3 prioritization-gated waves (3a read-path eligibility, 3b About/licenses UI, 3c scan perf, 3d robustness sweep); merging PR #134 (the audit + verification record).
+* [ ] The standing human-only device rows (above) unchanged.

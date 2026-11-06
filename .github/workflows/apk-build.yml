@@ -358,17 +358,19 @@ jobs:
       - name: Assemble the engine-enabled (${{ needs.prepare.outputs.gallery_variant }}) APK
         run: |
           set -o pipefail
-          PROPS="-PwithEngine"
+          # Array form so each -P flag is a distinct argv element
+          # (avoids SC2086 word-splitting on a space-joined string).
+          PROPS=(-PwithEngine)
           if [ "$GALLERY_TARGET" = "modelpack" ]; then
-            PROPS="$PROPS -PwithBundledModels"
+            PROPS+=(-PwithBundledModels)
           fi
           if [ "$GALLERY_VARIANT" = "release" ]; then
             TASK=":apps:gallery:assembleEngineRelease"
           else
             TASK=":apps:gallery:assembleEngineDebug"
           fi
-          echo "task: $TASK $PROPS"
-          ./gradlew "$TASK" $PROPS --no-daemon --stacktrace 2>&1 | tee build-output.log
+          echo "task: $TASK ${PROPS[*]}"
+          ./gradlew "$TASK" "${PROPS[@]}" --no-daemon --stacktrace 2>&1 | tee build-output.log
 
       # Gate 1 (every gallery target): the engine-enabled APK must carry BOTH
       # native libraries (a silently broken jniLibs wiring would otherwise

@@ -4,6 +4,85 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r51 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
+
+The audit-verification round: the r50 backend/ente audit's fix plan
+(`docs/audit/2026-11-06-r50-audit-verification-and-fix-plan.md`, PR
+#134) executed as eight disjoint PRs (#135–#142), each verified
+line-by-line under ADR-0013 and squash-merged to `main` in order
+#135→#142 (main @ `4c995bc`: CI + CodeQL green; the merged tree proved
+byte-identical to the zero-conflict merge rehearsal). The two
+production-wiring gaps the verification caught were completed
+pre-merge so the fixes ride inside their PRs (`4d39207` E-3 wiring on
+#137, `d1ccc62` C-3 wiring on #138, `725c2d3` F-8 doc refresh on
+#139).
+
+### Fixed
+
+- **[engine] B-1/B-2 — the two JNI `put*` exports can no longer unwind
+  into a SIGABRT, and a non-positive search limit can no longer
+  underflow.** `nativeStorePutFace`/`nativeStorePutClip` now run inside
+  the existing `call_or_throw` (`catch_unwind`) helper with sentinel
+  returns, mirroring `nativeStoreMergeFaceClusters`; `limit <= 0` is
+  rejected at the Rust boundary in both search paths, mirroring the
+  `max_distance` guard (PR #135).
+- **[engine] C-4 — the MlEngine facade can no longer lie about native
+  state.** The per-instance `sessionOpen`/`faceIndexOpen`/`semanticReady`
+  flags and per-instance monitors moved behind process-global shared
+  state so every `MlEngine` instance (the workers construct one per
+  run) observes native truth; the class stays instantiable and the
+  public API byte-compatible (PR #136).
+- **[scan] E-1/E-2/E-3 — the scan pipeline's three data-integrity
+  wedges closed.** A `null` MediaStore cursor is now a walk failure (no
+  tombstone/checkpoint lands, so no mass tombstone); every `IN (:keys)`
+  list is chunked ≤ 900 per statement inside the `@Transaction`
+  wrappers (the 999-host-param wedge on API ≤ 30); and the NULL-
+  provenance healing pass rotates past repeatedly-failing rows via the
+  failure-marker store (three strikes, 30-day expiry, atomic JSON —
+  no Room schema change), production-wired at app start (PR #137 +
+  `4d39207`).
+- **[ml] C-5/C-9/C-3 — the index queues survive poison photos and the
+  reset-resurrect self-heal went live.** Per-photo catch around both
+  engines' calls → count + F-39-style terminal-skip record → the batch
+  completes past a decodable-but-corrupt JPEG instead of failing ×3
+  and re-planning it forever; the dead `reIndexKeys` field removed
+  (delete-first documented as unconditional); and both workers now
+  pass `stateStoreFile` to `plan(...)` so a missing engine store with
+  live state records plans a delete-first re-index instead of an
+  UNCHANGED-skip (PR #138 + `d1ccc62`).
+- **[vault] D-3/D-5/D-9 — vault durability.** Blob writes are fsynced
+  before the index commit; the biometric keygen mirrors the media
+  key's StrongBox→TEE fallback parity; `atomicWrite` drops the
+  delete-then-rename fallback and fails loudly with the fsynced `.tmp`
+  surviving (PR #141).
+- **[vault] D-1(throttle)/D-2/D-11 — vault screen security.** A
+  persisted failed-attempt counter with exponential backoff (1s → 2ⁿ →
+  60s cap, reset on success) on PIN unlock; `FLAG_SECURE` + no-recents-
+  screenshot while any vault surface is Unlocked; the plaintext video
+  temp file is swept at app start (PR #142). The `PIN_ITERATIONS` root
+  fix stays decision-gated (fix-plan §5.1) — throttle-only shipped.
+
+### Added
+
+- **[compliance] F-5/F-7/F-8/F-9 — the compliance artifacts.** The
+  canonical AGPL-3.0 text at `engine/LICENSE` + NOTICE/licensing-doc
+  references + per-artifact license offer; the catalogue DB excluded
+  from cloud-backup/device-transfer rules; the fdroid metadata
+  refreshed to flavor-qualified tasks/outputs with CurrentVersion
+  parity (both apps) + the doc catch-up (`725c2d3`); the reproducibility
+  doc moved to the flavor-qualified paths (PR #139).
+
+### Changed
+
+- **[ci] F-1/F-2/F-3/F-12/F-14 — supply-chain hardening.** All
+  third-party action refs SHA-pinned (version-commented) + a concrete
+  Rust toolchain; the signing pipelines' secret hygiene (`<<'EOF'`/
+  step-env, no `$`-interpolation corruption); Gradle wrapper
+  `distributionSha256Sum` + wrapper-validation in toad-setup; the
+  toad-setup NDK export prefers the pin over newest-wins; aapt2 from
+  the pinned build-tools + a release-stage `uses-permission` gate
+  (PR #140).
+
 ## [Unreleased] — the r50 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
 
 ### Fixed

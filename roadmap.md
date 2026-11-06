@@ -13,7 +13,40 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.16 (2026-11-05, latest) --- the r46 extension window: the APK matrix
+### v2.17 (2026-11-06, latest) --- the r51 audit-verification round: the r50 audit's fix plan executed and merged
+
+- **The campaign** --- the r50 backend/ente audit's fix plan (PR #134)
+  executed as eight disjoint fix/ci PRs (#135--#142, squash-merged to
+  main in order, 2026-11-06): JNI unwind guards +
+  the search-limit boundary (B-1/B-2), the MlEngine process-global
+  shared state (C-4), scan-pipeline integrity --- null-cursor walk
+  failure, chunked IN-lists, the healing rotation PRODUCTION-WIRED
+  (E-1/E-2/E-3), the index-queue poison-skip + dead-field removal +
+  the reset-resurrect self-heal also PRODUCTION-WIRED (C-5/C-9/C-3),
+  vault durability (D-3/D-5/D-9), vault screen security --- unlock
+  backoff, FLAG_SECURE, temp sweep (D-1 throttle/D-2/D-11),
+  supply-chain hardening (F-1/F-2/F-3/F-12/F-14), and the compliance
+  artifacts (F-5/F-7/F-8/F-9).
+- **Verification and merge proof** --- two parallel ADR-0013 waves
+  (line-by-line review, `file:line@head` citations,
+  `tools/kotlin_lex_check.py`, CI as the compile judge): wave 1 = 6
+  FIXED / 2 PARTIAL, wave 2 = 15 FIXED, zero regressions and zero new
+  defects; the two PARTIALs were wiring dormancy and were completed
+  pre-merge (`4d39207`/`d1ccc62`/`725c2d3`); the eight squashes were
+  rehearsed locally (zero conflicts) and merged main @ `4c995bc`
+  proved byte-identical to the rehearsal, CI + CodeQL green.
+- **Documentation gap closed** --- the r47--r50 windows (Roborazzi
+  plugin-first, screenshots/workflow-truth, workflow organization,
+  UI/UX polish + dual-flavor audit) landed without entries here; they
+  are recorded in `CHANGELOG.md` (r47--r50 sections), `worklog.md`
+  (Runs #20--#24) and `follow-up.md` (per-window sections). This entry
+  resumes the change log at the r51 tip.
+- **Still open** --- the D-1 root fix (fix-plan §5.1, maintainer
+  decision; throttle-only shipped), the R51-3 prioritization-gated
+  waves (3a--3d), and PR #134 (the audit + verification record)
+  itself.
+
+### v2.16 (2026-11-05) --- the r46 extension window: the APK matrix
   + the contract-discovery fix + Roborazzi; the v0.4.5-alpha-r46 release
 
 - **The r46 APK-matrix round MERGED (PR #124 squash `dcc85f0`, merge-gate

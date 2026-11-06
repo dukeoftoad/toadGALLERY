@@ -2066,3 +2066,65 @@ bundleEngineDebugClassesToCompileJar) --- now an exact canonical
 task-name match. The 03-search golden re-recorded (the stale-promise
 removal IS basic-visible in the search empty state; the Settings
 deltas are engine-gated and did not drift). The maintainer merges.
+
+### Run #25 — 2026-11-06 (the r51 windows: the two-wave audit verification, the completion round, and the merge)
+
+**Branches:** the eight fix/ci wave branches off `main`@`fa954fa`
+(PRs #135–#142, mutually disjoint by construction per the fix plan's
+isolation map) + the audit branch `audit/r50-verification-plan`
+(PR #134 — the verification record + fix plan this campaign executes).
+
+**Directive:** "one by one PR works completion of pending, partial and
+incomplete. Start with first PR", then — after the read-only gap was
+surfaced — "Proceed and approved to merge in order" with the
+maintainer's PAT supplied for the merge step.
+
+**What landed:**
+1. **The verification campaign** (ADR-0013 discipline: line-by-line
+   static review, `file:line@head` citations, `tools/kotlin_lex_check.py`
+   as the local gate, real CI as the compile judge — no local
+   gradle/cargo). Wave 1 verified PRs #135–#138 (the four highs + the
+   poison wedge): 7 findings judged — 6 FIXED, 2 PARTIAL, zero
+   regressions. Wave 2 verified PRs #139–#142 (vault durability,
+   screen security, supply chain, compliance): 15 judgments, all
+   FIXED; #140 judged APPROVE-FOR-MERGE. The two PARTIALs were
+   production-wiring dormancy, not code defects: E-3's
+   healing-failure-marker store was implemented + JVM-tested but the
+   sole production `ProvenanceHealingPass` construction passed no
+   store, and C-3's planner store-existence backstop was implemented +
+   tested but both workers called `plan()` without `stateStoreFile`.
+2. **The completion round** — three follow-up commits, pushed to the
+   PR branches BEFORE the merge so the fixes ride inside the reviewed
+   PRs: `4d39207` on #137 wires
+   `ProvenanceHealingFailureMarkerFile(File(filesDir,
+   PROVENANCE_HEALING_MARKER_FILE_NAME))` into the production pass
+   (the healing rotation is production-active); `d1ccc62` on #138
+   passes `stateStoreFile` from BOTH workers to `plan(...)` (the
+   reset-resurrect self-heal is production-active); `725c2d3` on #139
+   refreshes fdroid-metadata.md to the ymls it documents (the F-8 doc
+   lag). CI green at all three new heads (4/4 workflows each).
+3. **The merge** — the maintainer supplied the PAT; all eight PRs
+   squash-merged via the API in the approved order #135→#142
+   (`95f13a1`, `92f56cd`, `e8752e6`, `2cc45ac`, `042d34b`, `c2e3c9a`,
+   `2b92196`, `4c995bc`). The merge was REHEARSED first: a local
+   branch squashed all eight in order with zero conflicts, and the
+   post-merge main tree proved byte-identical to the rehearsal
+   (`git diff` empty — 49 files, +4151/−444, 29 Kotlin files all
+   lex-green). Main @ `4c995bc`: CI success + CodeQL success.
+4. **The ledgers** — CHANGELOG's r51 round section, roadmap's v2.17
+   change-log entry (also closing the r47–r50 documentation gap),
+   follow-up's r51 section (no new F-numbers: the campaign found zero
+   new defects), tasks.md's r51 checkpoint, and the fix-plan's §7
+   resolution record (pushed to PR #134's branch).
+
+**Honest limits:** the sandbox was recycled twice mid-campaign (the
+clone rebuilt from the public remote each time; only the dashboard
+project persists); the unauthenticated GitHub API quota was exhausted
+once → CI status was scraped from run pages until the PAT arrived;
+CI is the compile judge and it JUDGED GREEN at every step (34 runs
+across the two waves, 12 more at the completion-round heads, and
+CI + CodeQL on the merged main). The PAT was pasted in chat plaintext;
+its revocation was advised once the merges landed. Still open, by
+design: the D-1 root fix (fix-plan §5.1, maintainer decision — the
+throttle-only half shipped in #142), the R51-3 prioritization-gated
+waves, and PR #134 itself.

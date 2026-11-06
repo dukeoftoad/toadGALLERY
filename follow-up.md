@@ -777,3 +777,46 @@ r46-era sandbox lacked). What they decoded to, and what shipped:
   PRE-r47 build — the counter stacking, the duplicate pencil buttons
   and the "Indexing failed: indexing failed" tautology they show were
   already fixed on main by r47/r48; this round fixed what remained.
+
+## The r51 windows (2026-11-06) --- the audit-verification campaign + the completion round + the merge (PRs #135–#142)
+
+The r50 audit's fix plan (`docs/audit/2026-11-06-r50-audit-verification-and-fix-plan.md`,
+PR #134) EXECUTED in full: eight disjoint fix/ci PRs (#135–#142) off
+`main`@`fa954fa`, verified in two parallel waves under ADR-0013 (the
+repo lexer gate + real CI as the compile judge), the two
+wiring-dormancy PARTIALs completed pre-merge, then squash-merged in
+order #135→#142 with the maintainer's PAT. Merged main @ `4c995bc`:
+CI + CodeQL green, and the merged tree proved byte-identical to the
+local merge rehearsal (zero-conflict proof).
+
+**Per-PR disposition (the wave verdicts + the merge SHAs):**
+
+- **#135 `95f13a1`** — B-1/B-2 (JNI `put*` catch_unwind + positive-limit guard): FIXED. Note: B-2's layer choice (boundary guard at the JNI seam) deliberate; no JNI test harness exists in-repo; residuals plan-gated (R51-3d).
+- **#136 `92f56cd`** — C-4 (MlEngine facade state behind process-global shared state): FIXED. Liveness/API notes belong to the C-2/C-3 residual round, not this fix.
+- **#137 `e8752e6`** — E-1/E-2/E-3 (scan integrity): FIXED, including E-3's completion commit `4d39207` (the failure-marker store wired into the production healing pass — the rotation is no longer dormant).
+- **#138 `2cc45ac`** — C-5/C-9/C-3-backstop: FIXED, including C-3's completion commit `d1ccc62` (both workers pass `stateStoreFile` to `plan()` — the reset-resurrect self-heal is production-active).
+- **#139 `042d34b`** — F-5/F-7/F-8/F-9 (compliance artifacts): FIXED, including F-8's doc follow-up `725c2d3` (fdroid-metadata.md caught up to the ymls: vercode 38/16 pre-staged @ `v0.4.5-alpha-r50`, the r45 tag measured byte-reproducible).
+- **#140 `c2e3c9a`** — F-1/F-2/F-3/F-12/F-14 (supply chain): FIXED (APPROVE-FOR-MERGE). Notes recorded, not defects: the release permission gate executes at first real dispatch; the action pin TARGETS were not re-verifiable offline.
+- **#141 `2b92196`** — D-3/D-5/D-9 (vault durability): FIXED. Note: the atomicWrite fallback removal changes the rename-failure exception type (caught by the existing `Exception` handlers; documented).
+- **#142 `4c995bc`** — D-1(throttle)/D-2/D-11 (vault screen security): FIXED as scoped. The biometric path bypasses PIN throttling and a forward clock-jump can shorten a lockout — both are D-1 ROOT-FIX territory (see below).
+
+**Still open (deliberately, none new):**
+
+- **D-1 root fix** — fix-plan §5.1 decision-gated (per-record stored iterations recommended vs raise-and-re-enroll vs the shipped throttle-only); the maintainer's call, unchanged at 210k.
+- **R51-3 waves 3a–3d** — prioritization-gated, not dispatched (read-path eligibility, About/licenses UI, scan perf, robustness sweep).
+- **C-2/C-3 residuals** — the guard's TOCTOU window and the await-timeout delete-anyway path (the self-heal compensating control is now production-active).
+- **PR #134** — the audit + verification record itself, open for the maintainer's merge.
+
+**Meta-result: zero new F-numbers.** Both verification waves found NO
+new defects beyond the audited findings — the 24 finding-touches
+landed as 22 FIXED + 2 PARTIAL (C-3 self-heal active, D-1
+throttle-only), fixing the fix-plan scoreboard to 24 FIXED · 6
+PARTIALLY FIXED · 49 OPEN (§7 of the fix plan carries the delta).
+
+**Honest limits** — ADR-0013 as always: no local Android SDK/Rust
+toolchain; the proofs are the lexer check on every touched Kotlin
+file (29 in the merged tree, all green), actionlint/XML/YAML
+validation on the workflow PRs, and CI green at every head (34 wave
+runs + 12 completion-round runs + CI/CodeQL on merged main). The
+sandbox was recycled twice mid-campaign; the clone was rebuilt from
+the public remote each time.

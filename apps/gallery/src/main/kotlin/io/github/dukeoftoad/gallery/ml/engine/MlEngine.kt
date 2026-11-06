@@ -71,6 +71,24 @@ import org.json.JSONObject
  * dedicated message (carried verbatim). [searchClipsWithin] is the
  * r39 membership search: the same top-K over the same index, cut by
  * cosine distance inside the vecdb (upstream's own `max_distance`).
+ *
+ * r51 (audit C-4) centralizes what the rounds above documented
+ * piecemeal: the native engine behind the bridge is ONE PROCESS-GLOBAL
+ * singleton (the Rust side's `engine::ENGINE` / `store::STORE` OnceLock
+ * statics), but the facade tracked its open/ready/error state per
+ * INSTANCE with per-instance monitors --- one instance's [release] left
+ * another still reporting [State.Ready] over a released engine while
+ * its next native call threw (workers construct an engine per run;
+ * adapters, the self-test and the ViewModels hold their own). The five
+ * state flags now live in shared static state (`SharedEngineState`, the
+ * bottom of this file) behind ONE shared monitor: every instance reads
+ * and writes the same process-wide truth, so a release, close or init
+ * outcome on ANY instance is immediately visible to ALL of them. The
+ * class stays instantiable with unchanged signatures (zero call-site
+ * changes), and [initialize] / [initSemantic] remain the unconditional
+ * re-opens they always were --- which over shared state is exactly the
+ * idempotent re-init contract the per-run workers and the Settings
+ * self-test dogfood.
  */
 class MlEngine(private val bridge: Bridge = JniBridge) {
 
@@ -298,35 +316,43 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
         ): String = MlEngineJni.nativeStoreSearchClipsWithin(queryEmbedding, maxDistance, limit)
     }
 
-    private var sessionOpen = false
-    private var initError: String? = null
-    /** The r23 face-index store's open state (separate from the session). */
-    private var faceIndexOpen = false
-    /** The r26 semantic half's ready state (requires the engine session). */
-    private var semanticReady = false
-    /** The last [initSemantic] failure, tracked like [initError]. */
-    private var semanticError: String? = null
+    // The five facade-state flags are PROCESS-GLOBAL (r51, audit C-4): they
+    // live in SharedEngineState (bottom of this file) behind its one shared
+    // lock, because the native engine they describe is a process-wide
+    // singleton --- per-instance copies could disagree with the native truth
+    // and with each other.
 
-    /** Instance-side guard for the r23 store state machine. */
+    /**
+     * Store gate for the r23 state machine. The state it guards is the
+     * SHARED faceIndexOpen flag, so callers must hold SharedEngineState's
+     * lock --- and every caller does (a `synchronized(SharedEngineState.lock)`
+     * block), the discipline the per-instance @Synchronized monitors had
+     * before r51.
+     */
     private fun requireFaceIndexOpen() {
         // Library-missing dominates: on a library-less build every store op
         // must fail with the build-shape message, never the state-machine one.
         if (!bridge.available) {
             throw IllegalStateException("engine library not in this build (build with the engine flag)")
         }
-        check(faceIndexOpen) { FACE_INDEX_NOT_OPEN }
+        check(SharedEngineState.faceIndexOpen) { FACE_INDEX_NOT_OPEN }
     }
 
     /** Whether the engine library is present in this build. */
     val available: Boolean get() = bridge.available
 
-    /** The current [State]; [State.LibraryMissing] dominates when set. */
-    @Synchronized
-    fun state(): State = when {
-        !bridge.available -> State.LibraryMissing
-        initError != null -> State.Error(initError!!)
-        sessionOpen -> State.Ready
-        else -> State.Uninitialized
+    /**
+     * The current [State]; [State.LibraryMissing] dominates when set.
+     * Process-global since r51: this reports the SHARED session's state,
+     * so a [release] on any instance is visible here immediately.
+     */
+    fun state(): State = synchronized(SharedEngineState.lock) {
+        when {
+            !bridge.available -> State.LibraryMissing
+            SharedEngineState.initError != null -> State.Error(SharedEngineState.initError!!)
+            SharedEngineState.sessionOpen -> State.Ready
+            else -> State.Uninitialized
+        }
     }
 
     /**
@@ -335,19 +361,20 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * false one, [State.LibraryMissing] when the build carries no
      * library. An IllegalStateException from the native layer (panic
      * surfaced per the contract) propagates unchanged --- callers that
-     * want a message read it; the state stays without a session.
+     * want a message read it; the state stays without a session. The
+     * call is an unconditional re-open over the process-global session
+     * (r51): the outcome is immediately visible to every instance.
      */
-    @Synchronized
-    fun initialize(modelsDir: String): State {
+    fun initialize(modelsDir: String): State = synchronized(SharedEngineState.lock) {
         if (!bridge.available) return State.LibraryMissing
-        return if (bridge.nativeInit(modelsDir)) {
-            sessionOpen = true
-            initError = null
+        if (bridge.nativeInit(modelsDir)) {
+            SharedEngineState.sessionOpen = true
+            SharedEngineState.initError = null
             State.Ready
         } else {
-            sessionOpen = false
-            initError = "nativeInit failed for $modelsDir"
-            State.Error(initError!!)
+            SharedEngineState.sessionOpen = false
+            SharedEngineState.initError = "nativeInit failed for $modelsDir"
+            State.Error(SharedEngineState.initError!!)
         }
     }
 
@@ -382,21 +409,23 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * Frees the session: true when one was freed, false when there was
      * none (also false on a library-less build). Idempotent; the state
      * returns to [State.Uninitialized] and [initialize] works again.
+     * Process-global since r51: the freed state is shared, so EVERY
+     * instance's [state] leaves Ready --- no instance keeps reporting a
+     * session the native side no longer has (the C-4 desync, dead).
      */
-    @Synchronized
-    fun release(): Boolean {
+    fun release(): Boolean = synchronized(SharedEngineState.lock) {
         if (!bridge.available) return false
         val freed = bridge.nativeRelease()
-        sessionOpen = false
-        initError = null
+        SharedEngineState.sessionOpen = false
+        SharedEngineState.initError = null
         // nativeRelease closes the face-index store too (the r23 contract);
         // the facade state follows without a second native call.
-        faceIndexOpen = false
+        SharedEngineState.faceIndexOpen = false
         // It also tears the whole engine --- the semantic half with it (the
         // r26 contract); same discipline, no second native call.
-        semanticReady = false
-        semanticError = null
-        return freed
+        SharedEngineState.semanticReady = false
+        SharedEngineState.semanticError = null
+        freed
     }
 
     /**
@@ -421,14 +450,13 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * Throws IllegalStateException on a library-less build or when the
      * native open fails.
      */
-    @Synchronized
-    fun openFaceIndex(dir: String): Boolean {
+    fun openFaceIndex(dir: String): Boolean = synchronized(SharedEngineState.lock) {
         if (!bridge.available) {
             throw IllegalStateException("engine library not in this build (build with the engine flag)")
         }
         val opened = bridge.nativeStoreOpen(dir)
-        faceIndexOpen = opened
-        return opened
+        SharedEngineState.faceIndexOpen = opened
+        opened
     }
 
     /**
@@ -438,23 +466,21 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * and IllegalStateException when the store is not open or the native
      * insert fails.
      */
-    @Synchronized
-    fun putFace(fileId: Long, embedding: FloatArray): Long {
+    fun putFace(fileId: Long, embedding: FloatArray): Long = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
         require(embedding.size == FACE_EMBEDDING_DIM) {
             "embedding must be $FACE_EMBEDDING_DIM floats; got ${embedding.size}"
         }
-        return bridge.nativeStorePutFace(fileId, embedding)
+        bridge.nativeStorePutFace(fileId, embedding)
     }
 
     /**
      * Total face rows in the store (r23). Throws IllegalStateException
      * when the store is not open (or the build is library-less).
      */
-    @Synchronized
-    fun faceCount(): Long {
+    fun faceCount(): Long = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreFaceCount()
+        bridge.nativeStoreFaceCount()
     }
 
     /**
@@ -464,10 +490,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * fails, or the JSON shape is not the pinned
      * `{"faces":N,"clusters":M,"sizes":[...]}`.
      */
-    @Synchronized
-    fun clusterFaces(distanceThreshold: Double): ClusterSummary {
+    fun clusterFaces(distanceThreshold: Double): ClusterSummary = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return parseClusterSummary(bridge.nativeStoreCluster(distanceThreshold))
+        parseClusterSummary(bridge.nativeStoreCluster(distanceThreshold))
     }
 
     /**
@@ -475,12 +500,11 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * was no open store to close; the state returns to closed either way
      * and [openFaceIndex] works again.
      */
-    @Synchronized
-    fun closeFaceIndex(): Boolean {
+    fun closeFaceIndex(): Boolean = synchronized(SharedEngineState.lock) {
         if (!bridge.available) return false
         val closed = bridge.nativeStoreClose()
-        faceIndexOpen = false
-        return closed
+        SharedEngineState.faceIndexOpen = false
+        closed
     }
 
     /**
@@ -491,10 +515,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * un-indexed. Throws IllegalStateException when the store is not
      * open (or the build is library-less).
      */
-    @Synchronized
-    fun indexedFaceFileIds(): List<Long> {
+    fun indexedFaceFileIds(): List<Long> = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreIndexedFaceFileIds().toList()
+        bridge.nativeStoreIndexedFaceFileIds().toList()
     }
 
     /**
@@ -507,10 +530,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * Throws IllegalStateException when the store is not open (or the
      * build is library-less).
      */
-    @Synchronized
-    fun deleteFacesForFiles(fileIds: LongArray): Boolean {
+    fun deleteFacesForFiles(fileIds: LongArray): Boolean = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreDeleteFacesForFiles(fileIds)
+        bridge.nativeStoreDeleteFacesForFiles(fileIds)
     }
 
     /**
@@ -525,10 +547,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * call fails, or the JSON shape is not the pinned
      * `[{"cluster_id":…,"count":…,"cover_file_id":…}]` array.
      */
-    @Synchronized
-    fun faceClusters(): List<FaceCluster> {
+    fun faceClusters(): List<FaceCluster> = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return parseFaceClusters(bridge.nativeStoreFaceClusters())
+        parseFaceClusters(bridge.nativeStoreFaceClusters())
     }
 
     /**
@@ -539,10 +560,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * store is not open (or the build is library-less) or the native
      * call fails.
      */
-    @Synchronized
-    fun clusterFileIds(clusterId: String): List<Long> {
+    fun clusterFileIds(clusterId: String): List<Long> = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreClusterFileIds(clusterId).toList()
+        bridge.nativeStoreClusterFileIds(clusterId).toList()
     }
 
     /**
@@ -556,13 +576,12 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * embeddings. Throws IllegalStateException when the store is not
      * open (or the build is library-less) or the native call fails.
      */
-    @Synchronized
-    fun mergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean {
+    fun mergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
         require(sourceClusterId != targetClusterId) {
             "source and target cluster ids must differ; both are \"$sourceClusterId\""
         }
-        return bridge.nativeStoreMergeFaceClusters(sourceClusterId, targetClusterId)
+        bridge.nativeStoreMergeFaceClusters(sourceClusterId, targetClusterId)
     }
 
     /**
@@ -575,10 +594,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * returning true. Throws IllegalStateException when the store is
      * not open (or the build is library-less) or the native call fails.
      */
-    @Synchronized
-    fun removeFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean {
+    fun removeFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreRemoveFacesFromCluster(clusterId, fileIds)
+        bridge.nativeStoreRemoveFacesFromCluster(clusterId, fileIds)
     }
 
     // ---- r26: the semantic (Magic Search) layer ----
@@ -600,18 +618,19 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * [state] and [semanticState] report the two halves independently.
      * Requires nothing about the face-index store; an
      * IllegalStateException from the native layer propagates unchanged.
+     * The re-open is unconditional and (r51) process-global: the outcome
+     * is immediately visible to every instance.
      */
-    @Synchronized
-    fun initSemantic(modelsDir: String): SemanticState {
+    fun initSemantic(modelsDir: String): SemanticState = synchronized(SharedEngineState.lock) {
         if (!bridge.available) return SemanticState.LibraryMissing
-        return if (bridge.nativeInitSemantic(modelsDir)) {
-            semanticReady = true
-            semanticError = null
+        if (bridge.nativeInitSemantic(modelsDir)) {
+            SharedEngineState.semanticReady = true
+            SharedEngineState.semanticError = null
             SemanticState.Ready
         } else {
-            semanticReady = false
-            semanticError = "nativeInitSemantic failed for $modelsDir"
-            SemanticState.Error(semanticError!!)
+            SharedEngineState.semanticReady = false
+            SharedEngineState.semanticError = "nativeInitSemantic failed for $modelsDir"
+            SemanticState.Error(SharedEngineState.semanticError!!)
         }
     }
 
@@ -621,14 +640,16 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * ready, then uninitialized. Since r39 "uninitialized" means only
      * what it says --- the CLIP half is not installed --- with NO claim
      * about the face half ([state] owns that truth; either half may be
-     * installed first, and the other upgrades in place).
+     * installed first, and the other upgrades in place). Process-global
+     * since r51: a [release] on any instance is visible here immediately.
      */
-    @Synchronized
-    fun semanticState(): SemanticState = when {
-        !bridge.available -> SemanticState.LibraryMissing
-        semanticError != null -> SemanticState.Error(semanticError!!)
-        semanticReady -> SemanticState.Ready
-        else -> SemanticState.Uninitialized
+    fun semanticState(): SemanticState = synchronized(SharedEngineState.lock) {
+        when {
+            !bridge.available -> SemanticState.LibraryMissing
+            SharedEngineState.semanticError != null -> SemanticState.Error(SharedEngineState.semanticError!!)
+            SharedEngineState.semanticReady -> SemanticState.Ready
+            else -> SemanticState.Uninitialized
+        }
     }
 
     /**
@@ -671,13 +692,12 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * defense in depth) and IllegalStateException when the store is not
      * open or the native upsert fails.
      */
-    @Synchronized
-    fun putClip(fileId: Long, embedding: FloatArray): Boolean {
+    fun putClip(fileId: Long, embedding: FloatArray): Boolean = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
         require(embedding.size == CLIP_EMBEDDING_DIM) {
             "embedding must be $CLIP_EMBEDDING_DIM floats; got ${embedding.size}"
         }
-        return bridge.nativeStorePutClip(fileId, embedding)
+        bridge.nativeStorePutClip(fileId, embedding)
     }
 
     /**
@@ -686,10 +706,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * returning true. Throws IllegalStateException when the store is not
      * open (or the build is library-less) or the native call fails.
      */
-    @Synchronized
-    fun deleteClipsForFiles(fileIds: LongArray): Boolean {
+    fun deleteClipsForFiles(fileIds: LongArray): Boolean = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreDeleteClipsForFiles(fileIds)
+        bridge.nativeStoreDeleteClipsForFiles(fileIds)
     }
 
     /**
@@ -700,20 +719,18 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * IllegalStateException when the store is not open (or the build is
      * library-less).
      */
-    @Synchronized
-    fun clipIndexedFileIds(): List<Long> {
+    fun clipIndexedFileIds(): List<Long> = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreClipIndexedFileIds().toList()
+        bridge.nativeStoreClipIndexedFileIds().toList()
     }
 
     /**
      * Total CLIP rows in the store (r26). Throws IllegalStateException
      * when the store is not open (or the build is library-less).
      */
-    @Synchronized
-    fun clipCount(): Long {
+    fun clipCount(): Long = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return bridge.nativeStoreClipCount()
+        bridge.nativeStoreClipCount()
     }
 
     /**
@@ -727,14 +744,13 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * native call fails, or the JSON shape is not the pinned
      * `[{"file_id":…,"distance":…}]` array.
      */
-    @Synchronized
-    fun searchClips(queryEmbedding: FloatArray, limit: Int): List<ClipMatch> {
+    fun searchClips(queryEmbedding: FloatArray, limit: Int): List<ClipMatch> = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
         require(queryEmbedding.size == CLIP_EMBEDDING_DIM) {
             "query embedding must be $CLIP_EMBEDDING_DIM floats; got ${queryEmbedding.size}"
         }
         require(limit > 0) { "limit must be positive; got $limit" }
-        return parseClipMatches(bridge.nativeStoreSearchClips(queryEmbedding, limit))
+        parseClipMatches(bridge.nativeStoreSearchClips(queryEmbedding, limit))
     }
 
     /**
@@ -753,12 +769,11 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * (or the build is library-less), the native call fails, or the JSON
      * shape is not the pinned array.
      */
-    @Synchronized
     fun searchClipsWithin(
         queryEmbedding: FloatArray,
         maxDistance: Float,
         limit: Int,
-    ): List<ClipMatch> {
+    ): List<ClipMatch> = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
         require(queryEmbedding.size == CLIP_EMBEDDING_DIM) {
             "query embedding must be $CLIP_EMBEDDING_DIM floats; got ${queryEmbedding.size}"
@@ -767,7 +782,7 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
             "max distance must be a finite non-negative float; got $maxDistance"
         }
         require(limit > 0) { "limit must be positive; got $limit" }
-        return parseClipMatches(bridge.nativeStoreSearchClipsWithin(queryEmbedding, maxDistance, limit))
+        parseClipMatches(bridge.nativeStoreSearchClipsWithin(queryEmbedding, maxDistance, limit))
     }
 
     /**
@@ -778,10 +793,9 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * fails, or the JSON shape is not the pinned
      * `{"outcome":…,"rows":…,"indexed":…,"skipped":…,"resumed":…}`.
      */
-    @Synchronized
-    fun fillClipIndex(): ClipFillReport {
+    fun fillClipIndex(): ClipFillReport = synchronized(SharedEngineState.lock) {
         requireFaceIndexOpen()
-        return parseClipFillReport(bridge.nativeStoreFillClipIndex())
+        parseClipFillReport(bridge.nativeStoreFillClipIndex())
     }
 
     internal companion object {
@@ -949,4 +963,39 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
             }
         }
     }
+}
+
+/**
+ * The process-global facade state (r51, audit C-4): the five
+ * open/ready/error flags EVERY [MlEngine] instance shares. The JNI
+ * engine behind the production bridge is one process-wide singleton
+ * (the Rust side's `engine::ENGINE` / `store::STORE` OnceLock statics),
+ * so its Kotlin-side truth must be process-wide too --- per-instance
+ * flags let one instance's [MlEngine.release] leave another reporting
+ * [MlEngine.State.Ready] over a released engine (workers construct an
+ * engine per run; adapters, the Settings self-test and the ViewModels
+ * hold their own). [lock] is the ONE monitor for all five flags and
+ * nothing else: every read and write goes through it, so an open /
+ * close / init outcome on ANY instance is immediately visible to EVERY
+ * instance.
+ */
+private object SharedEngineState {
+
+    /** The single monitor for the five flags below (and nothing else). */
+    val lock = Any()
+
+    /** True after a successful initialize on ANY instance (the FACE half). */
+    var sessionOpen = false
+
+    /** The last initialize failure, process-wide like the engine it describes. */
+    var initError: String? = null
+
+    /** The r23 face-index store's open state (separate from the session). */
+    var faceIndexOpen = false
+
+    /** The r26 semantic half's ready state (requires the engine session). */
+    var semanticReady = false
+
+    /** The last [MlEngine.initSemantic] failure, tracked like [initError]. */
+    var semanticError: String? = null
 }

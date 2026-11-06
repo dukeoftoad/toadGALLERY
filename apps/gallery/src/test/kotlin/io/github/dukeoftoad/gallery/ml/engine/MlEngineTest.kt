@@ -1,10 +1,12 @@
 package io.github.dukeoftoad.gallery.ml.engine
 
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -264,6 +266,30 @@ class MlEngineTest {
             storeFillClipCalls++
             return storeFillClipResult
         }
+    }
+
+    /**
+     * r51 (audit C-4): the facade's five state flags are process-global
+     * shared state, so every test in this class --- and any other engine
+     * construction in the same JVM --- reads and writes ONE truth. Each
+     * test is therefore bracketed by a full reset: release() on a fresh
+     * available bridge restores exactly the five flags' initial values
+     * (the production teardown's own discipline --- no test-only hook in
+     * the facade). @Before defends against state leaked in by an earlier
+     * test, @After against state this class leaks out.
+     */
+    @Before
+    fun resetSharedEngineStateBefore() {
+        resetSharedEngineState()
+    }
+
+    @After
+    fun resetSharedEngineStateAfter() {
+        resetSharedEngineState()
+    }
+
+    private fun resetSharedEngineState() {
+        MlEngine(FakeBridge()).release()
     }
 
     @Test
@@ -1503,5 +1529,70 @@ class MlEngineTest {
                 expected.message,
             )
         }
+    }
+
+    // ---- r51 (audit C-4): the process-global shared-state contract ----
+
+    @Test
+    fun `release on one instance is observed by every instance - the C-4 desync is dead`() {
+        // One fake bridge shared by both instances: the injected bridge is
+        // still per-instance (the seam), but the state it drives is
+        // process-global --- the production shape (JniBridge everywhere).
+        val bridge = FakeBridge()
+        val a = MlEngine(bridge)
+        val b = MlEngine(bridge)
+
+        assertEquals(MlEngine.State.Ready, a.initialize("/data/models"))
+        assertTrue(a.openFaceIndex("/data/index"))
+        assertEquals("b observes a's initialize over the shared state", MlEngine.State.Ready, b.state())
+
+        assertTrue(a.release())
+
+        // The desync is dead: b no longer reports Ready over the engine a
+        // just released...
+        assertEquals(MlEngine.State.Uninitialized, b.state())
+        // ...and b's next store op fails at the FACADE's own shared-state
+        // gate, before any native call --- not as a Rust-side
+        // IllegalStateException thrown at a stale-Ready instance.
+        try {
+            b.faceCount()
+            fail("a store op over a released engine must fail at the facade's gate")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("not open"))
+        }
+        assertEquals("no native call may happen behind the facade's gate", 0, bridge.storeFaceCountCalls)
+
+        // Idempotent re-init preserved: initialize is the unconditional
+        // re-open it always was, now process-global --- b re-opens, a
+        // observes it, and a second initialize while ALREADY open still
+        // calls nativeInit (the control flow the state move did not touch).
+        assertEquals(MlEngine.State.Ready, b.initialize("/data/models"))
+        assertEquals(MlEngine.State.Ready, a.state())
+        assertEquals(MlEngine.State.Ready, a.initialize("/data/models"))
+        assertEquals(3, bridge.initCalls)
+    }
+
+    @Test
+    fun `release on one instance resets the semantic half for every instance too`() {
+        val bridge = FakeBridge()
+        val a = MlEngine(bridge)
+        val b = MlEngine(bridge)
+
+        assertEquals(MlEngine.SemanticState.Ready, a.initSemantic("/data/models"))
+        assertEquals(
+            "b observes a's initSemantic over the shared state",
+            MlEngine.SemanticState.Ready,
+            b.semanticState(),
+        )
+
+        a.release()
+
+        assertEquals(MlEngine.SemanticState.Uninitialized, b.semanticState())
+        assertEquals(
+            "re-init after release works for any instance",
+            MlEngine.SemanticState.Ready,
+            b.initSemantic("/data/models"),
+        )
+        assertEquals(MlEngine.SemanticState.Ready, a.semanticState())
     }
 }

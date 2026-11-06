@@ -27,4 +27,4 @@ jobs:
           # Fail on high/critical risk; avoid unexpectedly blocking routine
           # transitive updates at moderate severity.
           fail-on-severity: high
-          comment-summary-in-pr: always
+          comment-summary-in-pr: never

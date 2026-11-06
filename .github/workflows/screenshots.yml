@@ -78,7 +78,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The canonical toolchain setup (.github/actions/toad-setup): the
       # pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 + the
@@ -156,7 +156,7 @@ jobs:
       # (never 'error'): an empty capture set must not mask the outcome of the
       # gradle step itself.
       - name: Upload screenshots artifact (the baseline source)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: roborazzi-baselines
@@ -168,7 +168,7 @@ jobs:
           retention-days: 14
 
       - name: Upload test reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: roborazzi-test-reports

@@ -73,10 +73,12 @@ data class VaultStoreState(
  * it wholesale), not the media key.
  *
  * ## Crash-safety orderings (ADR-0017)
- *  - **store**: blob fully written FIRST, index persisted SECOND --- a crash
- *    in between leaves an orphan blob (harmless, reclaimed by [sweepOrphans]
- *    once aged past its grace window), never an index entry pointing at a
- *    missing blob.
+ *  - **store**: blob fully written AND fsynced FIRST, index persisted SECOND
+ *    --- a crash in between leaves an orphan blob (harmless, reclaimed by
+ *    [sweepOrphans] once aged past its grace window), never an index entry
+ *    pointing at a missing blob; the blob fsync (D-3) closes the sibling
+ *    power-loss window where the durable index referenced a blob whose
+ *    data blocks were only close()-flushed.
  *  - **delete**: index entry removed FIRST, blob file deleted SECOND --- a
  *    crash in between leaves the same harmless orphan shape.
  *  - **restore**: [restoreOut] streams plaintext out but deliberately does
@@ -391,10 +393,10 @@ class VaultStore(
      * column); the entry records the ACTUAL plaintext byte count streamed
      * --- when the two disagree, the store keeps the truth.
      *
-     * Crash order: blob first (orphan-safe), index second. A failure while
-     * persisting the index leaves an orphan blob that [sweepOrphans]
-     * reclaims once it ages past the grace window; nothing index-visible
-     * ever half-exists.
+     * Crash order: blob first (orphan-safe, and fsynced before the index
+     * commit --- D-3), index second. A failure while persisting the index
+     * leaves an orphan blob that [sweepOrphans] reclaims once it ages past
+     * the grace window; nothing index-visible ever half-exists.
      *
      * Serialized (see the class KDoc's mutual-exclusion section): the WHOLE
      * cycle --- index read, blob copy, index rewrite --- runs under
@@ -422,7 +424,14 @@ class VaultStore(
         val counting = CountingInputStream(bytes)
         try {
             FileOutputStream(blob).use { output ->
-                VaultCrypto.encryptTo(counting, output, keys.key())
+                VaultCrypto.encryptTo(counting, NonClosingOutputStream(output), keys.key())
+                // D-3: the blob must be durable BEFORE the fsynced index
+                // commit references it (the crash-ordering contract). The
+                // shield is load-bearing: encryptTo's CipherOutputStream
+                // close would cascade to (and close) this stream, leaving
+                // the sync a closed-fd SyncFailedException; shielded, the
+                // GCM tail still flushes while the fd stays open to sync.
+                output.fd.sync()
             }
         } catch (e: Exception) {
             // The half-written blob has no index entry: it is a plain orphan
@@ -503,10 +512,11 @@ class VaultStore(
      *
      * ## Crash order, per batch
      *
-     * All blobs first, the index second --- the same orphan-safety as
-     * [store], scaled up: a crash before the rewrite leaves N sweepable
-     * orphans and an honest pre-batch index; nothing index-visible ever
-     * half-exists, for any batch size.
+     * All blobs first (each fsynced before the single index commit --- D-3),
+     * the index second --- the same orphan-safety as [store], scaled up: a
+     * crash before the rewrite leaves N sweepable orphans and an honest
+     * pre-batch index; nothing index-visible ever half-exists, for any
+     * batch size.
      *
      * Serialized behind [storeLock] with every other mutation: a
      * concurrent [sweepOrphans], [store] or unlock cannot observe the
@@ -531,7 +541,12 @@ class VaultStore(
                         throw VaultStoreException("vault blobs directory is missing")
                     }
                     FileOutputStream(blob).use { output ->
-                        VaultCrypto.encryptTo(counting, output, keys.key())
+                        VaultCrypto.encryptTo(counting, NonClosingOutputStream(output), keys.key())
+                        // D-3: the blob must be durable BEFORE the fsynced index
+                        // commit references it (the crash-ordering contract;
+                        // the shield keeps the fd open for the sync --- see
+                        // store()'s identical site).
+                        output.fd.sync()
                     }
                 } catch (e: Exception) {
                     // This item alone failed: no index entry, no lingering
@@ -729,9 +744,14 @@ class VaultStore(
     /**
      * Writes [bytes] to a `.tmp` sibling, then renames into place. On
      * Linux/Android the rename atomically replaces the target, so a crash
-     * leaves either the old or the new complete file, never a mix. The
-     * delete-then-rename fallback only serves JVM hosts whose rename
-     * refuses to replace (not the production platform).
+     * leaves either the old or the new complete file, never a mix. A rename
+     * that refuses to replace FAILS LOUDLY (D-9): the old delete-then-rename
+     * fallback deleted the current target before a retry that could itself
+     * fail, opening a crash window with no target file at all --- a vault
+     * without `index.bin`. Throwing on the FIRST rename failure instead
+     * leaves the current target untouched and the fsynced `.tmp` on disk
+     * for manual recovery (the sweep reclaims it only once it ages past
+     * its grace window).
      *
      * The staged bytes are fsynced ([FileOutputStream.getFD].sync) before
      * the rename: power-loss durability. Without it a sudden loss can
@@ -746,14 +766,24 @@ class VaultStore(
                 it.write(bytes)
                 it.fd.sync()
             }
-            if (!tmp.renameTo(target)) {
-                target.delete()
-                if (!tmp.renameTo(target)) {
-                    throw VaultStoreException("cannot replace ${target.name}")
-                }
-            }
-        } finally {
+        } catch (e: IOException) {
+            // The staging write itself failed: the partial `.tmp` is
+            // garbage, never recoverable content --- remove it now (the
+            // sweep would eventually). Any non-IO throwable leaves a fresh
+            // `.tmp` behind instead, which is exactly the interrupted-run
+            // residue [sweepOrphans] is documented to reclaim once aged.
             tmp.delete()
+            throw e
+        }
+        if (!tmp.renameTo(target)) {
+            // D-9: fail loudly on the first rename failure --- NEVER delete
+            // the current target to force a replace (a crash between the
+            // delete and the retry left the vault with no index at all).
+            throw IOException(
+                "cannot replace ${target.absolutePath} with the staged " +
+                    "${tmp.absolutePath}: rename failed; the current ${target.name} is " +
+                    "untouched and the fsynced ${tmp.name} survives for manual recovery",
+            )
         }
     }
 
@@ -796,6 +826,21 @@ class VaultStore(
             salt = plain.copyOfRange(0, VaultCrypto.SALT_BYTES),
             digest = plain.copyOfRange(VaultCrypto.SALT_BYTES, plain.size),
         )
+    }
+
+    /**
+     * Passes writes and flushes straight through but swallows close: the
+     * D-3 blob fsync needs the fd still OPEN after [VaultCrypto.encryptTo]
+     * (whose CipherOutputStream close would otherwise cascade here and
+     * close the FileOutputStream early), while the cipher's own close ---
+     * the one that writes the GCM tail --- still happens on the cipher
+     * stream itself, through this shield.
+     */
+    private class NonClosingOutputStream(private val out: OutputStream) : OutputStream() {
+        override fun write(b: Int) = out.write(b)
+        override fun write(b: ByteArray, off: Int, len: Int) = out.write(b, off, len)
+        override fun flush() = out.flush()
+        override fun close() = flush()
     }
 
     /** Counts plaintext bytes as [VaultCrypto.encryptTo] drains the source. */

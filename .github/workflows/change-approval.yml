@@ -1,0 +1,93 @@
+name: Sensitive change approval
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - "engine/**"
+      - "gradle/**"
+      - "gradle/libs.versions.toml"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "**/build.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  approval:
+    name: Fresh approval for sensitive changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check for a current approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${PR_NUMBER:-}" || -z "${HEAD_SHA:-}" ]]; then
+            echo "::error::This workflow expects a pull-request event."
+            exit 1
+          fi
+
+          gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
+            --jq '.[].filename' > "$RUNNER_TEMP/pr-files.txt"
+
+          sensitive=false
+          while IFS= read -r path; do
+            case "$path" in
+              .github/workflows/*|.github/actions/*|engine/*|gradle/*|gradle/libs.versions.toml|build.gradle.kts|settings.gradle.kts|*/build.gradle.kts|gradle.properties|gradlew|gradlew.bat)
+                sensitive=true
+                break
+                ;;
+            esac
+          done < "$RUNNER_TEMP/pr-files.txt"
+
+          if [[ "$sensitive" != true ]]; then
+            echo "No sensitive build, engine, or workflow files changed."
+            exit 0
+          fi
+
+          gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/reviews" \
+            > "$RUNNER_TEMP/reviews.json"
+
+          approvals="$(jq -s --arg sha "$HEAD_SHA" --arg author "$PR_AUTHOR" '
+            add
+            | map(select(
+                .state == "APPROVED"
+                and .commit_id == $sha
+                and .user.login != $author
+              ))
+            | length
+          ' "$RUNNER_TEMP/reviews.json")"
+
+          if [[ "$approvals" -lt 1 ]]; then
+            {
+              echo "### Approval required"
+              echo ""
+              echo "This pull request changes a sensitive workflow, build, dependency, or engine path."
+              echo "At least one non-author approval on the **current head commit** is required."
+              echo "A new commit invalidates earlier approvals for this check; submit a fresh review."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Sensitive changes need at least one non-author approval on the current head commit."
+            exit 1
+          fi
+
+          echo "Found $approvals approval(s) on the current head commit from reviewer(s) other than the PR author."

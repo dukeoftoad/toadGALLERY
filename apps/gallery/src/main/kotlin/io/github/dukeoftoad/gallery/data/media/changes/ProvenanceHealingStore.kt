@@ -101,9 +101,12 @@ data class ProvenanceHealingFailureMarker(
  * --- deliberately NOT Room: no schema, no migration, E-10-safe).
  *
  * Constructor-injected into [ProvenanceHealingPass] as an OPTIONAL
- * defaulted parameter: the pass's r20 constructor stays source-compatible
- * (call sites outside the r51 file scope construct it without a marker
- * store), and JVM tests inject a fake.
+ * defaulted parameter: the pass's r20 constructor stays source-compatible,
+ * and JVM tests inject a fake. The production wiring passes
+ * [ProvenanceHealingFailureMarkerFile] on [PROVENANCE_HEALING_MARKER_FILE_NAME]
+ * (ToadGalleryApplication --- the r51 E-3 verification follow-up; before
+ * it the sole call site used the default null and the rotation stayed
+ * dormant, which is exactly what the wave-1 review caught).
  */
 interface ProvenanceHealingFailureMarkerStore {
 
@@ -578,3 +581,13 @@ class ProvenanceHealingPass(
         const val MAX_BATCHES_PER_PASS = 10
     }
 }
+
+/**
+ * The r51 (E-3) failure-marker file name, defined next to the store class
+ * that owns the format (the ml queue state-file constant pattern): one
+ * versioned JSON file in app-private storage, written with
+ * [ProvenanceHealingFailureMarkerFile]'s atomic temp-then-move discipline
+ * and read forgivingly. One shared constant so the production wiring and
+ * the store can never drift apart.
+ */
+const val PROVENANCE_HEALING_MARKER_FILE_NAME = "provenance-healing-markers.json"

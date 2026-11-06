@@ -306,12 +306,17 @@ class PrivacyPolicyTest {
         // things-state.json: the r39 Things collections' state file
         // (the ente-port exit round --- the named collections in the
         // SAME directory, the identical deliberate addition).
+        // ml-index.sqlite: the r26 engine store the face/clip queues
+        // write through the JNI bridge (the r51 C-3 backstop names it
+        // for the store-existence check --- the SAME app-private
+        // directory, the identical deliberate addition).
         val nonHostLiterals = setOf(
             "install.properties",
             "index-state.json",
             "people-state.json",
             "clip-index-state.json",
             "things-state.json",
+            "ml-index.sqlite",
         )
         val found = mlDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }

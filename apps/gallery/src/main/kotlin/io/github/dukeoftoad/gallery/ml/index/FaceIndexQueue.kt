@@ -78,12 +78,22 @@ data class FaceIndexCandidate(
  * the current bytes written, zero faces included): the [revision] OBSERVED
  * AT INDEX TIME is the half that makes re-planning incremental --- a later
  * [MediaRevision.diff] against a fresh candidate decides skip vs re-index.
+ *
+ * r50 (F-39): [unreadable] marks the TERMINAL-SKIP record the processor
+ * writes when the photo's bytes could not be read (deleted row / revoked
+ * grant / DRM stub / above the read cap). The old contract left such
+ * photos state-less, so they re-entered every plan and the chain
+ * re-enqueued FOREVER whenever the unindexed set outgrew one batch (the
+ * "indexing never finishes" device shape). A skip record holds the photo
+ * out of the queue until its revision CHANGES (a genuinely changed file
+ * gets a fresh read); it never produces faces or clip rows.
  */
 data class FaceIndexedState(
     val localMediaKey: String,
     val fileId: Long,
     val revision: MediaRevision,
     val indexedAtMillis: Long,
+    val unreadable: Boolean = false,
 )
 
 /**
@@ -104,6 +114,8 @@ data class FaceIndexPlan(
     val staleStateKeys: Set<String>,
     val skippedUpToDate: Int,
     val skippedMetadataOnly: Int,
+    /** r50 (F-39): photos held out by a terminal unreadable-skip record. */
+    val skippedUnreadable: Int = 0,
 ) {
     /** True when the plan asks for no store work at all. */
     val isEmpty: Boolean get() = toIndex.isEmpty() && orphanFileIds.isEmpty()
@@ -141,6 +153,7 @@ object FaceIndexQueuePlanner {
         val reIndexKeys = HashSet<String>()
         var skippedUpToDate = 0
         var skippedMetadataOnly = 0
+        var skippedUnreadable = 0
 
         for (candidate in candidates) {
             candidateFileIds.add(candidate.fileId)
@@ -154,7 +167,10 @@ object FaceIndexQueuePlanner {
             }
             when (state.revision.diff(candidate.revision)) {
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.UNCHANGED ->
-                    skippedUpToDate++
+                    // r50 (F-39): an unreadable-skip record holds the photo
+                    // out until its revision changes; counted separately so
+                    // the outcome stays honest about WHAT was skipped.
+                    if (state.unreadable) skippedUnreadable++ else skippedUpToDate++
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.METADATA_CHANGED ->
                     skippedMetadataOnly++
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.CONTENT_CHANGED -> {
@@ -182,6 +198,7 @@ object FaceIndexQueuePlanner {
             staleStateKeys = staleStateKeys,
             skippedUpToDate = skippedUpToDate,
             skippedMetadataOnly = skippedMetadataOnly,
+            skippedUnreadable = skippedUnreadable,
         )
     }
 }
@@ -242,8 +259,10 @@ class FaceIndexQueueProcessor(
      * batch --- the worker re-enqueues itself then. [clusterSummary] is
      * non-null only on the draining run of a non-empty plan.
      * [unreadableThisRun] counts photos whose bytes could not be read;
-     * they stay in the queue (no state record) and are retried next run
-     * --- honest, bounded by the batch size, visible in the card.
+     * r50 (F-39): each now leaves a TERMINAL-SKIP state record (until its
+     * revision changes), so unreadable photos can no longer keep the
+     * chain re-enqueueing forever. [skippedUnreadable] mirrors the plan's
+     * count of photos held out by earlier skip records.
      */
     data class BatchOutcome(
         val queueDepth: Int,
@@ -253,6 +272,7 @@ class FaceIndexQueueProcessor(
         val skippedUpToDate: Int,
         val skippedMetadataOnly: Int,
         val unreadableThisRun: Int,
+        val skippedUnreadable: Int = 0,
         val moreRemaining: Boolean,
         val clusterSummary: MlEngine.ClusterSummary?,
         val totalFacesInStore: Long,
@@ -295,6 +315,20 @@ class FaceIndexQueueProcessor(
                 val bytes = readBytes(candidate)
                 if (bytes == null) {
                     unreadable++
+                    // r50 (F-39): write the TERMINAL-SKIP record. The old
+                    // "stay queued, retry next run" contract meant an
+                    // unindexed set larger than one batch of permanently
+                    // unreadable rows (DRM/cloud stubs, revoked grants,
+                    // deleted rows) re-enqueued the chain FOREVER with
+                    // zero progress. The record holds the photo out until
+                    // its revision changes; it carries no faces.
+                    statesByKey[candidate.localMediaKey] = FaceIndexedState(
+                        localMediaKey = candidate.localMediaKey,
+                        fileId = candidate.fileId,
+                        revision = candidate.revision,
+                        indexedAtMillis = nowMillis(),
+                        unreadable = true,
+                    )
                     continue
                 }
                 // Delete-first: the r23 putFace ordinals append, so stale
@@ -341,6 +375,7 @@ class FaceIndexQueueProcessor(
             skippedUpToDate = plan.skippedUpToDate,
             skippedMetadataOnly = plan.skippedMetadataOnly,
             unreadableThisRun = unreadable,
+            skippedUnreadable = plan.skippedUnreadable,
             moreRemaining = moreRemaining,
             clusterSummary = clusterSummary,
             totalFacesInStore = engine.faceCount(),
@@ -433,6 +468,11 @@ class FaceIndexStateFile(
         const val METADATA_WRITE_REVISION = "metadataWriteRevision"
         const val CONTENT_FINGERPRINT = "contentFingerprint"
 
+        // r50 (F-39): the terminal-skip flag. Additive OPTIONAL field on
+        // version 1: an old reader ignores the unknown key, a new reader
+        // defaults a missing key to false --- no schema bump, no migration.
+        const val UNREADABLE = "unreadable"
+
         fun stateToJson(state: FaceIndexedState): JSONObject = JSONObject()
             .put(KEY, state.localMediaKey)
             .put(FILE_ID, state.fileId)
@@ -448,6 +488,7 @@ class FaceIndexStateFile(
                 CONTENT_FINGERPRINT,
                 state.revision.contentFingerprint ?: JSONObject.NULL,
             )
+            .put(UNREADABLE, state.unreadable)
 
         fun stateFromJson(obj: JSONObject): FaceIndexedState? {
             val key = obj.optString(KEY)
@@ -473,6 +514,7 @@ class FaceIndexStateFile(
                     },
                 ),
                 indexedAtMillis = obj.optLong(INDEXED_AT),
+                unreadable = obj.optBoolean(UNREADABLE, false),
             )
         }
     }

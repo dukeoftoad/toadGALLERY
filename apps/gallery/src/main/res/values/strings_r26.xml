@@ -36,8 +36,11 @@
     <!-- The r26 semantic-index queue card (the r24 face queue card's
          shape). The reset's scope is stated honestly: the queue's own
          bookkeeping; the stored index rides the r24 Reset face index. -->
-    <string name="settings_ai_semantic_queue_start">Start semantic index (r26 dogfood)</string>
-    <string name="settings_ai_semantic_queue_body">Builds the content-search index in the background: one whole-photo embedding per JPEG, in bounded batches that survive app restarts, re-indexing only photos that actually changed. Needs the face AND semantic models (the engine session is face-based in this round). Runs on-device; no network access. Reset below restarts the queue — erasing the stored index itself is the Reset face index above.</string>
+    <!-- r50 (the UI/UX polish round): the round-tag jargon is gone from
+         the USER-FACING label (build codenames are process language, not
+         product copy). -->
+    <string name="settings_ai_semantic_queue_start">Start semantic index</string>
+    <string name="settings_ai_semantic_queue_body">Builds the content-search index in the background: one whole-photo embedding per JPEG, in bounded batches that survive app restarts, re-indexing only photos that actually changed. Needs both model packs installed above. Runs on-device; no network access. Reset below restarts the queue — erasing the stored index itself is the Reset face index above.</string>
     <string name="settings_ai_semantic_queue_cancel">Cancel semantic indexing</string>
     <string name="settings_ai_semantic_queue_reset">Reset semantic index</string>
 
@@ -45,8 +48,9 @@
     <string name="settings_ai_semantic_queue_enqueued">Semantic indexing queued…</string>
     <string name="settings_ai_semantic_queue_progress">Indexing %1$d of %2$d this run · %3$d left in queue</string>
 
-    <!-- Outcomes. -->
-    <string name="settings_ai_semantic_queue_done">Semantic queue drained: indexed %1$d photos · %2$d skipped as up-to-date · %3$d photos in the content index</string>
+    <!-- Outcomes. r50 (F-39): the unreadable count joins the drained line
+         (same honesty fix as the r24 card's). -->
+    <string name="settings_ai_semantic_queue_done">Semantic queue drained: indexed %1$d photos · %2$d skipped as up-to-date · %4$d unreadable (skipped) · %3$d photos in the content index</string>
     <string name="settings_ai_semantic_fill">Reconciliation pass: %1$s — %2$d rows, %3$d indexed, %4$d skipped, resumed: %5$s</string>
     <string name="settings_ai_semantic_fill_resumed_yes">yes</string>
     <string name="settings_ai_semantic_fill_resumed_no">no</string>

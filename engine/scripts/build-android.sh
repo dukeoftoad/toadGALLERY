@@ -79,10 +79,15 @@ if ! command -v cargo-ndk >/dev/null 2>&1; then
 fi
 
 # --- 2. NDK discovery -------------------------------------------------------
-# Preference order: (1) an existing ANDROID_NDK_HOME; (2) the newest NDK under
-# any known SDK root (GH runners ship several preinstalled under
-# $ANDROID_HOME/ndk/); (3) sdkmanager install of the pinned version.
+# Preference order (r50: the PIN is first-class, not the fallback): (1) an
+# existing ANDROID_NDK_HOME; (2) the PINNED NDK under any known SDK root;
+# (3) the newest other NDK as a compatibility fallback; (4) sdkmanager
+# install of the pinned version. The r49-and-earlier shape preferred the
+# NEWEST NDK over the pin, so a runner-image NDK bump silently moved the
+# Rust toolchain while the policy test asserted "The NDK must stay
+# pinned" --- true only for the no-NDK-at-all path.
 
+PINNED_NDK_VERSION="28.1.13356709"
 NDK_HOME="${ANDROID_NDK_HOME:-}"
 if [ -z "$NDK_HOME" ] || [ ! -d "$NDK_HOME" ]; then
   for sdk_root in \
@@ -92,6 +97,11 @@ if [ -z "$NDK_HOME" ] || [ ! -d "$NDK_HOME" ]; then
       "/opt/android-sdk" \
       "/usr/local/lib/android/sdk"; do
     [ -n "$sdk_root" ] && [ -d "$sdk_root/ndk" ] || continue
+    pinned="$sdk_root/ndk/$PINNED_NDK_VERSION"
+    if [ -d "$pinned" ]; then
+      NDK_HOME="$pinned"
+      break
+    fi
     newest="$(ls -1d "$sdk_root"/ndk/* 2>/dev/null | sort -V | tail -1 || true)"
     if [ -n "$newest" ]; then
       NDK_HOME="$newest"
@@ -123,7 +133,7 @@ if [ -z "$NDK_HOME" ] || [ ! -d "$NDK_HOME" ]; then
     echo "error: no NDK found and no sdkmanager available --- set ANDROID_NDK_HOME or ANDROID_HOME" >&2
     exit 1
   }
-  PINNED_NDK="ndk;28.1.13356709"
+  PINNED_NDK="ndk;$PINNED_NDK_VERSION"
   echo "==> no installed NDK; $SDK_MGR --install $PINNED_NDK"
   yes | "$SDK_MGR" --licenses >/dev/null || true
   "$SDK_MGR" --install "$PINNED_NDK"

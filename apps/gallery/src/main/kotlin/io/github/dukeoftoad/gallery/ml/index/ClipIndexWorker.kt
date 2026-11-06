@@ -197,7 +197,13 @@ class ClipIndexWorker(
                     // whole queue. runCatching restores the skip contract.
                     readBytes = { candidate ->
                         runCatching {
-                            resolver.openInputStream(Uri.parse(candidate.uri))?.use { it.readBytes() }
+                            resolver.openInputStream(Uri.parse(candidate.uri))?.use { input ->
+                                // r50: bounded per-item read (the face
+                                // queue's 64 MiB refuse-don't-truncate
+                                // posture --- see FaceIndexWorker's seam).
+                                input.readBytes()
+                                    .takeIf { it.size <= MAX_INDEXABLE_ITEM_BYTES }
+                            }
                         }.getOrNull()
                     },
                     nowMillis = { System.currentTimeMillis() },
@@ -224,7 +230,8 @@ class ClipIndexWorker(
             DiagLog.i(
                 TAG,
                 "clip queue: batch done (indexed=${outcome.indexedThisRun} depth=${outcome.queueDepth} " +
-                    "unreadable=${outcome.unreadableThisRun} fill=${outcome.fillReport?.outcome ?: "none"} " +
+                    "unreadable=${outcome.unreadableThisRun} skippedUnreadable=${outcome.skippedUnreadable} " +
+                    "fill=${outcome.fillReport?.outcome ?: "none"} " +
                     "more=${outcome.moreRemaining})",
             )
 
@@ -270,6 +277,7 @@ class ClipIndexWorker(
         .putInt(KEY_CLIP_OUT_UNREADABLE, outcome.unreadableThisRun)
         .putInt(KEY_CLIP_OUT_SKIPPED_UP_TO_DATE, outcome.skippedUpToDate)
         .putInt(KEY_CLIP_OUT_SKIPPED_METADATA_ONLY, outcome.skippedMetadataOnly)
+        .putInt(KEY_CLIP_OUT_SKIPPED_UNREADABLE, outcome.skippedUnreadable)
         .putString(KEY_CLIP_OUT_FILL_OUTCOME, outcome.fillReport?.outcome)
         .putInt(KEY_CLIP_OUT_FILL_ROWS, outcome.fillReport?.rows ?: -1)
         .putInt(KEY_CLIP_OUT_FILL_INDEXED, outcome.fillReport?.indexed ?: -1)
@@ -281,6 +289,12 @@ class ClipIndexWorker(
     private companion object {
         /** Mid-run engine faults retry (with WorkManager backoff) this often. */
         const val MAX_RUN_ATTEMPTS = 3
+
+        /**
+         * r50: the per-item byte cap for the ML read seam (64 MiB, the
+         * MediaReadHandle.DEFAULT_MAX_BYTES posture; see FaceIndexWorker).
+         */
+        const val MAX_INDEXABLE_ITEM_BYTES = 64L * 1024 * 1024
 
         /** Diagnostics-ring tag (r48, F5). */
         const val TAG = "ClipIndexWorker"
@@ -314,6 +328,9 @@ const val KEY_CLIP_OUT_DEPTH = "clipQueueDepth"
 const val KEY_CLIP_OUT_UNREADABLE = "clipUnreadableThisRun"
 const val KEY_CLIP_OUT_SKIPPED_UP_TO_DATE = "clipSkippedUpToDate"
 const val KEY_CLIP_OUT_SKIPPED_METADATA_ONLY = "clipSkippedMetadataOnly"
+
+/** r50 (F-39): photos held out by terminal unreadable-skip records. */
+const val KEY_CLIP_OUT_SKIPPED_UNREADABLE = "clipSkippedUnreadable"
 
 /**
  * Output: the once-per-drain reconciliation pass's report. The outcome

@@ -76,11 +76,13 @@ import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
  * allocation only, and `start()` moves the observer registration and the
  * first scan onto a background `Dispatchers.Default` scope --- nothing
  * heavy touches the main thread. The downstream indexing stage
- * (`ScanIndexHook`) is wired as a [CompositeScanIndexHook] of the two
- * indexers the pipeline owns so far --- the capture-date indexer (r12) and
- * the EXIF-GPS location indexer (r16, feeding the Map tab's Room v4
- * location columns) --- with per-hook failure isolation, so one indexer
- * throwing can never starve its sibling or the scan itself.
+ * (`ScanIndexHook`) is wired through the combined EXIF indexer
+ * ([CombinedExifIndexer] --- the capture-date indexer of r12 plus the
+ * EXIF-GPS location indexer of r16 feeding the Map tab's Room v4
+ * location columns, failure-isolated per hook). r50 note: the ML queues
+ * (face/clip) are NOT wired to the scan feed --- they start only from
+ * their Settings cards (a recorded follow-up, not an oversight; see
+ * follow-up.md).
  *
  * ## Diagnostics boot line (W1)
  * [onCreate] writes the diagnostics ring's FIRST entry --- one INFO line

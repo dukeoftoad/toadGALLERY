@@ -62,6 +62,7 @@ import io.github.dukeoftoad.gallery.data.MediaItem
 import io.github.dukeoftoad.gallery.ui.StateScreen
 import io.github.dukeoftoad.gallery.ui.media.LoadingState
 import io.github.dukeoftoad.gallery.ui.media.MediaThumb
+import io.github.dukeoftoad.gallery.ui.media.SelectionCheck
 import io.github.dukeoftoad.gallery.ui.settings.LayoutStyle
 import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
 
@@ -361,27 +362,23 @@ private fun TrashCell(
     onTap: () -> Unit,
 ) {
     Box(
-        modifier = Modifier.combinedClickable(onClick = onTap),
+        modifier = Modifier.combinedClickable(
+            // r50 a11y fix: the tap toggles selection (no long-press here by
+            // design) --- say so instead of a bare "double-tap to activate".
+            onClickLabel = stringResource(R.string.a11y_grid_toggle_select),
+            onClick = onTap,
+        ),
     ) {
         MediaThumb(item = item, forceSquare = forceSquare)
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(4.dp)
-                .size(22.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.55f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = null, // the selection count is the state
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
+        // r50 ux fix: the cell used to draw its own drifted badge copy ---
+        // an EMPTY circle while unselected (the other three surfaces show
+        // the dim-white check) and no `file_ops_cell_check` test tag. The
+        // shared SelectionCheck closes the drift (the trash selection now
+        // reads exactly like timeline selection, as the KDoc promised).
+        SelectionCheck(
+            selected = selected,
+            modifier = Modifier.align(Alignment.TopStart),
+        )
     }
 }
 

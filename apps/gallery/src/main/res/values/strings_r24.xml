@@ -13,7 +13,10 @@
 <resources>
 
     <!-- The r24 action + its one-line honest description. -->
-    <string name="settings_ai_queue_start">Start background index (r24 dogfood)</string>
+    <!-- r50 (the UI/UX polish round): the round-tag jargon is gone from the
+         USER-FACING label (the maintainer's device-screenshot audit: build
+         codenames are process language, not product copy). -->
+    <string name="settings_ai_queue_start">Start background index</string>
     <string name="settings_ai_queue_body">Indexes the whole library in the background: face detection + embeddings in bounded batches that survive app restarts, re-indexing only photos that actually changed and skipping the rest. Runs on-device in app-private storage; no network access. Reset below erases everything.</string>
 
     <!-- The clustering threshold tuning control (r23 flagged this for r24). -->
@@ -27,9 +30,18 @@
     <string name="settings_ai_queue_enqueued">Indexing queued…</string>
     <string name="settings_ai_queue_progress">Indexing %1$d of %2$d this run · %3$d left in queue · %4$d faces written</string>
 
-    <!-- Outcomes. -->
-    <string name="settings_ai_queue_done">Queue drained: indexed %1$d photos · %2$d faces · %3$d skipped as up-to-date · %4$d clusters · %5$d faces in store</string>
-    <string name="settings_ai_queue_done_no_cluster">Queue drained: indexed %1$d photos · %2$d faces · %3$d skipped as up-to-date · %4$d faces in store</string>
+    <!-- Outcomes. r50 (F-39): the unreadable count joins the drained line
+         (terminally skipped photos — unindexable bytes, held out until
+         their revision changes), so the terminal card stays honest about
+         every photo in the plan. -->
+    <string name="settings_ai_queue_done">Queue drained: indexed %1$d photos · %2$d faces · %3$d skipped as up-to-date · %6$d unreadable (skipped) · %4$d clusters · %5$d faces in store</string>
+    <string name="settings_ai_queue_done_no_cluster">Queue drained: indexed %1$d photos · %2$d faces · %3$d skipped as up-to-date · %5$d unreadable (skipped) · %4$d faces in store</string>
     <string name="settings_ai_queue_failed">Indexing failed: %1$s</string>
     <string name="settings_ai_queue_cancelled">Indexing cancelled — finished photos stay indexed; start again to resume the queue.</string>
+    <!-- r50 ux fix: the provisioning busy line, the delete-models
+         confirmation, and the inline queue Retry (which reuses the shared
+         state_action_retry). -->
+    <string name="settings_ai_busy">Working on-device…</string>
+    <string name="settings_ai_delete_confirm_title">Delete the downloaded models?</string>
+    <string name="settings_ai_delete_confirm_body">The model files are removed from this device. Nothing is uploaded or changed in your library — but re-downloading may take several minutes on the next start.</string>
 </resources>

@@ -23,6 +23,14 @@
 # behind ADR-0020's model downloads --- pinned host models.ente.com,
 # enforced by the egress gates named in that ADR's revision note.
 #
+# r50 (the dual-flavor audit): the entry authorizes INTERNET for the
+# ENGINE-FAMILY flavors only. The BASIC flavor's contract is stronger
+# --- its manifest overlay (src/basic/AndroidManifest.xml) removes the
+# permission entirely, and the gate task FAILS any basic* merged
+# manifest that carries INTERNET no matter what this file says (the
+# allowlist cannot override the basic flavor's offline-by-construction
+# posture).
+#
 # See docs/phase-2/privacy-gate.md for the full enforcement model.
 
 android.permission.INTERNET

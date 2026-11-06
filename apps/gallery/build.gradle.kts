@@ -707,6 +707,62 @@ if (withBundledModels) {
     }
 }
 
+// --- The flavor <-> property binding guard (r50, the dual-flavor audit) ---
+// The -PwithEngine / -PwithBundledModels flags are invoked GLOBALLY, but
+// only SOME flavors may carry them (apk-matrix.md: "The basic APK NEVER
+// carries the engine libraries or a model pack"; the engine family is
+// USELESS without them --- BuildShape renders the whole AI UI over a
+// missing .so). Until now the binding was release.yml/ci.yml invocation
+// discipline only: `assembleBasicRelease -PwithEngine` silently packed
+// the .so files into basic, and `assembleEngineRelease` WITHOUT the
+// property built an honest-but-wrong LibraryMissing APK. This guard
+// fail-fasts at task-graph time --- ONLY for the tasks that actually
+// PACKAGE a gallery APK/AAB, so the test/lint/record tasks CI runs
+// across flavors stay property-free and untouched.
+// r50 catches (two CI rounds): AGP reuses the assemble/package/bundle
+// NAME PREFIXES for non-artifact tasks --- packageEngineDebugUnitTestForUnitTest
+// (the test-classpath packager) and bundleEngineDebugClassesToCompileJar
+// (the compile-classpath bundler) both ride ci.yml's two-flavor unit-test
+// invocation and tripped a prefix-based filter. The filter is now the
+// EXACT canonical task-name set (assemble|package|bundle + Flavor +
+// optional BuildType, nothing after) --- the APK/AAB/lifecycle tasks
+// every workflow actually invokes; every suffixed helper stays exempt.
+gradle.taskGraph.whenReady {
+    val packagingTaskPattern = Regex(
+        "^(assemble|package|bundle)(Basic|Engine|Semantic|Face)(Debug|Release)?$",
+    )
+    val packagingTaskNames = allTasks
+        .filter { it.project.path == ":apps:gallery" }
+        .map { it.name }
+        .filter { it.matches(packagingTaskPattern) }
+    val engineFamilyPackaging = packagingTaskNames.any {
+        it.contains("Engine") || it.contains("Semantic") || it.contains("Face")
+    }
+    val basicPackaging = packagingTaskNames.any { it.contains("Basic") }
+    if (engineFamilyPackaging && !withEngine) {
+        throw GradleException(
+            "The engine-family gallery flavors (engine/semantic/face) package the Rust JNI " +
+                "libraries only under -PwithEngine (ADR-0020): assembling them without the " +
+                "property produces an APK whose whole AI UI renders over a missing native " +
+                "library (BuildShape.withEngine=true, LibraryMissing at runtime). Re-run with " +
+                "-PwithEngine, or build the basic flavor (the offline core gallery)."
+        )
+    }
+    if (basicPackaging && (withEngine || withBundledModels)) {
+        throw GradleException(
+            "The basic flavor never carries the engine libraries or a model pack " +
+                "(apk-matrix.md): -PwithEngine/-PwithBundledModels are engine-family-only " +
+                "properties. Build the engine flavor for the AI surface."
+        )
+    }
+    if (withBundledModels && !withEngine) {
+        throw GradleException(
+            "-PwithBundledModels stages a model pack for the ENGINE-ENABLED build: it " +
+                "requires -PwithEngine (the apk-build modelpack target always passes both)."
+        )
+    }
+}
+
 /**
  * Privacy gate (issue #20): the core gallery app must never hold
  * `android.permission.INTERNET`. Dependencies can silently inject
@@ -744,6 +800,33 @@ abstract class InternetPermissionGateTask : DefaultTask() {
                 "Privacy gate (${variantName.get()}): merged manifest declares no INTERNET permission --- OK"
             )
             return
+        }
+        // r50 (the dual-flavor audit): the BASIC flavor's contract is the
+        // STRONGEST form of the offline posture --- its manifest overlay
+        // (src/basic/AndroidManifest.xml) strips the permission entirely,
+        // and NO allowlist entry may ever override that (the allowlist
+        // exists for the engine-family flavors, whose ADR-0020 model
+        // download legitimately needs it). A basic* merged manifest that
+        // carries INTERNET fails here, whatever the file says.
+        if (variantName.get().startsWith("basic")) {
+            throw GradleException(
+                """
+                |
+                |**************************************************************************
+                |* PRIVACY GATE FAILED (variant '${variantName.get()}')
+                |*
+                |* The BASIC flavor must never hold android.permission.INTERNET: it is
+                |* the offline-first core gallery with the whole AI surface gated
+                |* out (BuildShape), so nothing in it can use a socket. The flavor
+                |* overlay (src/basic/AndroidManifest.xml) removes the permission;
+                |* its reappearance means a dependency injected it via manifest
+                |* merger or the overlay was dropped. Find it:
+                |*   ./gradlew :apps:gallery:dependencies
+                |* and remove the source --- the allowlist cannot authorize INTERNET
+                |* for basic (see docs/phase-2/privacy-gate.md).
+                |**************************************************************************
+                """.trimMargin()
+            )
         }
         val authorized = allowlist.get().asFile.readLines()
             .map(String::trim)

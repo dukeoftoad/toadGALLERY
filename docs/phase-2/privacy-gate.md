@@ -157,3 +157,32 @@ data does not leave the device.
   model downloads (it does not per ADR-0010 --- models ship in the APK), that
   APK gets its own gate and allowlist; the core gallery's policy is not
   relaxed for it.
+
+## r50: the flavor-scoped rule
+
+The r46 flavor matrix split the gallery into **basic** (the offline-first
+core, no AI surface at all) and the **engine family** (engine / semantic /
+face, whose ADR-0020 model download is the one authorized network use).
+r50 closes the flavor gap in the gate itself:
+
+* The basic flavor's manifest overlay
+  (`apps/gallery/src/basic/AndroidManifest.xml`) carries
+  `tools:node="remove"` for `android.permission.INTERNET` --- the merged
+  basic manifest holds **no network permission at all**, matching the
+  flavor's BuildShape contract (the entire AI surface, including the
+  model downloader, is gated out of basic, so nothing in it can use a
+  socket).
+* The gate task **fails any `basic*` merged manifest that declares
+  INTERNET regardless of the allowlist** --- the allowlist authorizes the
+  engine family's model-download grant only and cannot override the
+  basic flavor's offline-by-construction posture. A dependency-injected
+  INTERNET in basic fails the build with the standard investigation
+  path.
+* The engine family keeps the r22 posture: INTERNET present +
+  allowlisted = the warned, ADR-0020-scoped shape (pinned host
+  `models.ente.com`, verified sizes + SHA-256 before install).
+
+The gate's flavor rule mirrors the app copy: the basic build's About
+screen states the stronger no-network-permission truth via its own
+flavor string override; the engine family keeps the model-download
+sentence.

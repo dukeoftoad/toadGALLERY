@@ -360,7 +360,7 @@ class FaceIndexQueueTest {
     }
 
     @Test
-    fun `unreadable photos skip without a state record and stay queued`() = runBlocking {
+    fun `unreadable photos leave a terminal skip record and do not re-enter the queue`() = runBlocking {
         val engine = FakeEngine()
         val store = FakeStateStore()
         val plan = FaceIndexQueuePlanner.plan(
@@ -381,9 +381,38 @@ class FaceIndexQueueTest {
         assertEquals(1, outcome.indexedThisRun)
         // Only c was read, embedded and recorded:
         assertEquals(listOf("3"), engine.detectCalls.map { it.substringAfterLast('/') })
-        assertTrue(store.saved!!.none { it.localMediaKey == "b" })
-        // The queue drained per the plan (b stays retried next run):
+        // r50 (F-39): b leaves a TERMINAL-SKIP record instead of staying
+        // state-less --- the r24 contract retried it forever, so a batch-
+        // sized set of permanently unreadable rows (DRM stubs, revoked
+        // grants, deleted rows) re-enqueued the chain endlessly with zero
+        // progress. The record carries no faces (b never reached the
+        // engine) and marks the skip:
+        val skipped = store.saved!!.single { it.localMediaKey == "b" }
+        assertTrue(skipped.unreadable)
+        assertFalse(store.saved!!.single { it.localMediaKey == "c" }.unreadable)
+        // The queue drained per the plan:
         assertFalse(outcome.moreRemaining)
+
+        // The NEXT plan holds b out --- counted as skippedUnreadable, NOT
+        // up-to-date (the terminal card stays honest about what skipped):
+        val nextPlan = FaceIndexQueuePlanner.plan(
+            candidates = listOf(candidate("b", 2), candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = emptySet(),
+        )
+        assertTrue(nextPlan.toIndex.isEmpty())
+        assertEquals(1, nextPlan.skippedUnreadable)
+        assertEquals(1, nextPlan.skippedUpToDate)
+
+        // A revision change gives the photo a fresh read: the skip is a
+        // hold, not a ban (a genuinely changed file re-enters delete-first).
+        val changed = candidate("b", 2, size = 101L)
+        val replan = FaceIndexQueuePlanner.plan(
+            candidates = listOf(changed, candidate("c", 3)),
+            states = store.saved!!,
+            storeIndexedFileIds = emptySet(),
+        )
+        assertEquals(listOf("b"), replan.toIndex.map { it.localMediaKey })
     }
 
     @Test
@@ -465,6 +494,10 @@ class FaceIndexQueueTest {
         val states = listOf(
             state("a", 1, generation = "g42", metadataWrites = 3, indexedAt = 10L),
             state("b", 2, generation = null, indexedAt = 20L),
+            // r50 (F-39): the terminal-skip flag rides the same round trip
+            // (an additive optional field on version 1 --- old readers
+            // ignore the key, new readers default it to false).
+            state("c", 3, indexedAt = 30L).copy(unreadable = true),
         )
 
         runBlocking { file.save(states) }

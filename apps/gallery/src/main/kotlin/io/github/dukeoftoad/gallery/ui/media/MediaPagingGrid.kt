@@ -297,6 +297,18 @@ private fun SelectableMediaCell(
 ) {
     Box(
         modifier = Modifier.combinedClickable(
+            // r50 a11y fix: the grid-wide combinedClickable carried NO click
+            // labels --- TalkBack read a bare "double-tap to activate" with
+            // no way to discover the long-press selection entry. Labels
+            // adapt to the mode; the long-press label says the gesture.
+            onClickLabel = stringResource(
+                if (overlayVisible) {
+                    R.string.a11y_grid_toggle_select
+                } else {
+                    R.string.a11y_grid_open
+                },
+            ),
+            onLongClickLabel = stringResource(R.string.a11y_grid_long_press_select),
             onClick = { onItemTap(index, item) },
             onLongClick = { onItemLongPress(item) },
         ),
@@ -324,9 +336,14 @@ private fun SelectableMediaCell(
  * check in the theme's primary color when the cell is picked and dimmed
  * white otherwise. Decorative by design --- the selection count in the app
  * bar carries the state for accessibility.
+ *
+ * r50: the ONE shared copy --- the album-detail, person-detail and trash
+ * cells render this exact badge too (their byte-identical private copies
+ * deleted; the trash copy had already drifted: no dim check while
+ * unselected and no `file_ops_cell_check` test tag).
  */
 @Composable
-private fun SelectionCheck(
+internal fun SelectionCheck(
     selected: Boolean,
     modifier: Modifier = Modifier,
 ) {

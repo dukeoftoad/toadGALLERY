@@ -3,7 +3,7 @@ package io.github.dukeoftoad.gallery.ui.photos
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -32,10 +32,11 @@ import io.github.dukeoftoad.gallery.data.TimelineSort
  * the open/closed flag.
  *
  * Icons come from the material-icons CORE set the repo already depends on
- * (Menu, Check --- no extended-icons dependency); the sort DIRECTION itself
- * is a [TimelineSort] value, so the label mapping below stays in the UI
- * layer and the data enum stays resource-free (the `SearchQuery` purity
- * convention).
+ * (MoreVert, Check --- no extended-icons dependency; r50 swapped the old
+ * hamburger glyph to the overflow idiom the menu actually is); the sort
+ * DIRECTION itself is a [TimelineSort] value, so the label mapping below
+ * stays in the UI layer and the data enum stays resource-free (the
+ * `SearchQuery` purity convention).
  */
 @Composable
 fun TimelineSortMenu(
@@ -50,7 +51,11 @@ fun TimelineSortMenu(
             modifier = Modifier.testTag("timeline_sort_menu"),
         ) {
             Icon(
-                imageVector = Icons.Filled.Menu,
+                // r50 ux fix: the hamburger glyph (Menu) universally means a
+                // navigation drawer --- the two-entry sort dropdown behind it
+                // was undiscoverable and misleading. MoreVert is the overflow
+                // idiom this menu actually is (both stay in the CORE set).
+                imageVector = Icons.Filled.MoreVert,
                 contentDescription = stringResource(R.string.cd_sort_menu),
             )
         }

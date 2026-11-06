@@ -12,6 +12,7 @@ import io.github.dukeoftoad.gallery.ml.index.IndexCoordinator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -250,14 +251,18 @@ class VaultExclusionReadGateTest {
      * The composition the gate exists for: the queue reads plan
      * candidates through the access boundary, and a read that comes
      * back `null` --- vault-moved row, revoked grant, vanished file ---
-     * persists NOTHING. Photo 1 is public and readable; photo 2's
-     * eligibility is VAULT_EXCLUDED (moved to the vault between plan
-     * and read): no wrapper can be minted for it, the boundary is
-     * never even opened with it, and the engine never sees a byte of
-     * it.
+     * leaves NO engine rows and (r50, F-39) a TERMINAL-SKIP state record
+     * instead of the old state-less retry-forever shape. Photo 1 is
+     * public and readable; photo 2's eligibility is VAULT_EXCLUDED
+     * (moved to the vault between plan and read): no wrapper can be
+     * minted for it, the boundary is never even opened with it, and the
+     * engine never sees a byte of it. The skip record is bookkeeping
+     * ONLY --- the NEXT plan's fresh candidate list drops it as stale
+     * state (the vault row is gone from the catalogue), and should the
+     * photo ever return its revision re-read wins over the skip.
      */
     @Test
-    fun `a vault-excluded photo reads nothing and persists nothing through the boundary`() = runBlocking {
+    fun `a vault-excluded photo reads nothing and persists no rows through the boundary`() = runBlocking {
         val gate = ScriptedGate(allow = true)
         val access = ContractAccess(gate)
         val engine = RecordingEngine()
@@ -316,11 +321,20 @@ class VaultExclusionReadGateTest {
         // handle's payload), so exactly one detection saw exactly that:
         assertEquals(listOf("1"), engine.detectCalls)
         assertTrue("no face rows may be persisted for the vault-excluded photo", engine.putCalls.isEmpty())
-        assertEquals(
-            "no queue state record may be persisted for the vault-excluded photo",
-            listOf("external_primary:1"),
-            store.saved!!.map { it.localMediaKey },
+        // r50 (F-39): the vault-moved photo leaves a TERMINAL-SKIP record
+        // (unreadable = true, no faces) instead of NO record --- the old
+        // shape kept unreadable rows retrying forever, re-enqueuing the
+        // chain endlessly. The skip record holds the photo out of a
+        // future plan until its revision changes, and the NEXT plan's
+        // fresh candidate list (the vault row is gone) drops it as
+        // stale state anyway.
+        val savedByKey = store.saved!!.associateBy { it.localMediaKey }
+        assertEquals(setOf("external_primary:1", "external_primary:2"), savedByKey.keys)
+        assertTrue(
+            "the vault-excluded photo's record must mark the unreadable skip",
+            savedByKey.getValue("external_primary:2").unreadable,
         )
+        assertFalse(savedByKey.getValue("external_primary:1").unreadable)
     }
 
     /** Unit-test working dir is the module dir (apps/gallery); be tolerant either way. */

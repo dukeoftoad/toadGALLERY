@@ -64,6 +64,15 @@ AntiFeatures: []
 
 Builds:
   - versionName: 0.4.5-alpha
+    versionCode: 38
+    commit: v0.4.5-alpha-r50
+    gradle:
+      - assembleBasicRelease
+    output: apps/gallery/build/outputs/apk/basic/release/gallery-basic-release-unsigned.apk
+    scanignore:
+      - gradle/wrapper/gradle-wrapper.jar
+
+  - versionName: 0.4.5-alpha
     versionCode: 37
     commit: v0.4.5-alpha-r45
     gradle:
@@ -80,9 +89,13 @@ MaintainerNotes: |-
     no sudo or ndk fields are needed for this package.
 
     output name: verified against the ADR-0018 release workflow's unsigned glob
-    (it looks for '*unsigned*.apk' under apps/gallery/build/outputs/apk/release
-    after assembleRelease); if a first fdroid build disagrees with
-    gallery-release-unsigned.apk, adjust output: to the real glob.
+    (at the r45 pin it looked for '*unsigned*.apk' under
+    apps/gallery/build/outputs/apk/release after assembleRelease; since r46
+    the workflow collects the BASIC flavor under
+    apps/gallery/build/outputs/apk/basic/release after assembleBasicRelease,
+    and the flavor-world recipe above pins the flavor-qualified name); if a
+    first fdroid build disagrees with the output name, adjust output: to the
+    real glob.
 
     reproducibility: the repo's reproducible-build workflow (landing with the
     r43 round) double-builds both unsigned release APKs on every v* tag push
@@ -114,6 +127,14 @@ MaintainerNotes: |-
     The r45 entry below predates the flavor matrix and keeps the flavorless
     shape that was correct at its pinned commit.
 
+    pre-staging: the versionCode 38 entry above is pinned to
+    v0.4.5-alpha-r50, a tag that does NOT exist yet at the time of this
+    note --- the entry is PRE-STAGED with the flavor-qualified shape so the
+    next release does not derive from the stale flavorless recipe above. It
+    becomes buildable when the maintainer cuts v0.4.5-alpha-r50 at the
+    r51/r52 release commit; until that tag exists, the versionCode 37 entry
+    is the last buildable one and the reader must skip the 38 entry.
+
     the optional vendored Rust ML engine (engine/, AGPL-3.0 per engine/NOTICE.md,
     ADR-0020) is NOT packaged by this recipe: its native libraries only enter
     the APK when gradle runs with -PwithEngine (Rust + cargo-ndk + NDK), and the
@@ -131,7 +152,8 @@ MaintainerNotes: |-
     prebuilt binaries ship in this package.
 
     versioning conventions: the gallery versionCode bumps once per release
-    round (vercode 37 = the r43 round); the release tag convention is
+    round (vercode 37 = the r43 round; vercode 38 = the r46 APK-matrix round,
+    shared by all four flavors); the release tag convention is
     v<versionName>-r<round>, this entry's tag v0.4.5-alpha-r45 being the round
     the release is cut in. AutoUpdateMode: Version derives the versionName from
     the tag group and the versionCode from apps/gallery/build.gradle.kts ---
@@ -147,4 +169,4 @@ MaintainerNotes: |-
 AutoUpdateMode: Version
 UpdateCheckMode: Tags v([0-9.]+-alpha)-r[0-9]+
 CurrentVersion: 0.4.5-alpha
-CurrentVersionCode: 37
+CurrentVersionCode: 38

@@ -1,6 +1,8 @@
 # Reproducible builds --- the canonical recipe and the verification machinery
 
-**Status:** DOCUMENTED (2026-11-05, the r44 round). This doc delivers the
+**Status:** DOCUMENTED (2026-11-05, the r44 round; r51 refresh: every
+task/path below follows the r46+ flavor-qualified build world, and the
+engine-family exclusion is stated explicitly in §1/§4). This doc delivers the
 reproducible-build half of the Phase 11 "F-Droid metadata" task (the
 metadata half is the sibling `docs/phase-11/fdroid-metadata.md`). It
 records what "reproducible" means for this repo, the canonical recipe
@@ -34,9 +36,16 @@ bytes.** Two qualifications, both deliberate:
   push to main. Between releases the claim is design intent backed by the
   pinned toolchain; at each release it becomes a measurement.
 
-The claim covers both apps' unsigned release APKs
-(`gallery-release-unsigned.apk`, `edit-release-unsigned.apk`) and both
-R8 `mapping.txt` files. The mapping must **byte-match**: R8 is
+The claim covers both apps' unsigned release APKs and both
+R8 `mapping.txt` files. Since the r46 flavor matrix the verified gallery
+artifact is the **basic flavor** --- `gallery-basic-release-unsigned.apk`,
+the flavor-qualified `:apps:gallery:assembleBasicRelease` task, the APK the
+F-Droid recipe packages --- while the edit app has no flavors and stays
+`edit-release-unsigned.apk`. The engine-family flavors
+(`engine`/`semantic`/`face`) are **excluded from the measurement**: they
+package the vendored Rust engine (built under `-PwithEngine`) and are owned
+by a follow-up measurement round; the basic-pair property is what the
+machinery was cut to verify. The mapping must **byte-match**: R8 is
 deterministic given the same commit, toolchain and inputs, so a mapping
 mismatch is a real finding, never zip-metadata noise.
 
@@ -58,17 +67,21 @@ The workflows: `ci.yml` gates every PR and main push (build, lint, tests
 with the hard `apksigner verify` pin on the signer certificate digest);
 `reproducible-build.yml` (the r43 round) does the verification in §3.
 
-Building locally is the same recipe without the runner:
+Building locally is the same recipe without the runner (since r46 the
+gallery task is flavor-qualified: `assembleBasicRelease` builds the basic
+flavor, the canonical offline artifact):
 
 ```console
-$ ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease
+$ ./gradlew :apps:gallery:assembleBasicRelease :apps:edit:assembleRelease
 ```
 
 - **No `TG_*` env** (the local/dev case): the signing config stays
   unwired by design (ADR-0018's env-injected convention) and both apps
-  fall back to the unsigned APKs --- `apps/gallery/build/outputs/apk/release/gallery-release-unsigned.apk`
+  fall back to the unsigned APKs --- `apps/gallery/build/outputs/apk/basic/release/gallery-basic-release-unsigned.apk`
   and `apps/edit/build/outputs/apk/release/edit-release-unsigned.apk`,
-  with the R8 mappings at `apps/*/build/outputs/mapping/release/mapping.txt`.
+  with the R8 mappings at
+  `apps/gallery/build/outputs/mapping/basicRelease/mapping.txt` and
+  `apps/edit/build/outputs/mapping/release/mapping.txt`.
   This is the F-Droid path: identical bytes expected from the identical
   toolchain.
 - **With the `TG_*` env present** (the release-runner case): the same
@@ -77,11 +90,13 @@ $ ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease
 - Every assemble runs the ADR-0014 privacy gate transitively (the gate
   anchors on `assemble<Variant>`), so no verified artifact can carry the
   INTERNET permission.
-- The optional `-PwithEngine` property (the vendored Rust engine) is OFF
-  in every published path; the reproducibility claim covers the default
-  recipe --- the one F-Droid uses. Turning the engine on needs Rust +
-  cargo-ndk + NDK and changes the artifact; that is a recorded follow-up,
-  not part of this claim (see the sibling doc §4.3).
+- The engine-family flavors (`engine`/`semantic`/`face`, built under
+  `-PwithEngine`) are OFF in every published reproducibility path and
+  **excluded from the claim**: the measurement covers the basic flavor +
+  the edit app --- exactly what the F-Droid recipe packages. Building the
+  engine family needs Rust + cargo-ndk + NDK and changes the artifact;
+  that is a recorded follow-up measurement round, not part of this claim
+  (see the sibling doc §4.3).
 
 ## 3. The verification machinery (`reproducible-build.yml`, the r43 round)
 
@@ -93,9 +108,13 @@ by the lead):
 - **Triggers:** `v*` tag pushes + `workflow_dispatch`, checking out the
   exact tag SHA --- it verifies the same bits release.yml publishes, from
   the same commit, with no signing secrets involved at all (the workflow
-  never exports the `TG_*` environment; with no signing config wired,
-  `assembleRelease`'s output is the `*-unsigned.apk`).
-- **Two clean builds** of BOTH unsigned release APKs + both `mapping.txt`
+  never exports the `TG_*` environment; with no signing config wired, the
+  assemble tasks' output is the `*-unsigned.apk` --- r46+: the gallery
+  task is the flavor-qualified `:apps:gallery:assembleBasicRelease`, the
+  edit app's stays `:apps:edit:assembleRelease`).
+- **Two clean builds** of BOTH unsigned release APKs (the gallery's basic
+  flavor + the unflavored edit app; the engine-family flavors are
+  excluded --- §1) + both `mapping.txt`
   (two R8 passes each), and the cleanliness is engineered, not assumed:
   pass 1 runs with `--no-build-cache` --- with a warm build cache a
   post-clean rebuild could replay cached task outputs (`FROM-CACHE`),
@@ -106,7 +125,9 @@ by the lead):
   warm. The toolchain is the same `toad-setup` as ci.yml's build job.
 - **Byte compare:** the four artifacts are collected under canonical
   names per pass (`gallery-release-unsigned.apk`, `edit-release-unsigned.apk`,
-  `gallery-mapping.txt`, `edit-mapping.txt`) with their sha256 list, and
+  `gallery-mapping.txt`, `edit-mapping.txt` --- renamed copies; the on-disk
+  gallery outputs are `apk/basic/release/gallery-basic-release-unsigned.apk`
+  and `mapping/basicRelease/mapping.txt` since r46) with their sha256 list, and
   the two passes are compared. The verdicts are honestly named:
   - **BYTE-REPRODUCIBLE** --- every artifact compared byte-identical
     (`cmp`); the claim of §1, fully met.
@@ -142,6 +163,11 @@ honestly), mapping.txt byte-identical".
   the F-Droid comparison target (§1).
 - **`mapping.txt` must byte-match** --- R8 is deterministic given the
   same commit + toolchain; a mapping mismatch is a finding, never noise.
+- **The engine-family flavors (engine/semantic/face) are excluded from the
+  measurement** --- they build under `-PwithEngine` with the Rust
+  toolchain in the artifact and are owned by a follow-up measurement
+  round; the verified set is the basic-flavor gallery APK + the edit APK
+  (§1).
 - **The first measurement is IN (2026-11-05, the r45 close-out): the
   `v0.4.5-alpha-r45` push measured BYTE-REPRODUCIBLE** --- run
   `42002437535` on the tag (and the identical-tree pre-flight run
@@ -159,28 +185,31 @@ honestly), mapping.txt byte-identical".
 ## 5. Local verification (the third-party recipe)
 
 What anyone --- an F-Droid packager, a distro auditor, a user --- can run
-to check the claim independently, double-build and compare:
+to check the claim independently, double-build and compare (the recipe
+below is the r46+ flavor-world shape; at the r45 tag and older the
+flavorless `:apps:gallery:assembleRelease` + `apk/release/` paths were
+correct --- those tags predate the flavor matrix):
 
 ```console
 $ git clone https://github.com/dukeoftoad/toadGALLERY.git
 $ cd toadGALLERY
-$ git checkout v0.4.5-alpha-r45
+$ git checkout v0.4.5-alpha-r46
 # toolchain: JDK 17 + Android SDK (platform 36, build-tools 36.0.0);
 # no other setup --- the gradle wrapper (9.5.1) is committed.
 
-$ ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease
+$ ./gradlew :apps:gallery:assembleBasicRelease :apps:edit:assembleRelease
 $ mkdir -p /tmp/rb1
-$ cp apps/gallery/build/outputs/apk/release/gallery-release-unsigned.apk /tmp/rb1/gallery.apk
+$ cp apps/gallery/build/outputs/apk/basic/release/gallery-basic-release-unsigned.apk /tmp/rb1/gallery.apk
 $ cp apps/edit/build/outputs/apk/release/edit-release-unsigned.apk /tmp/rb1/edit.apk
-$ cp apps/gallery/build/outputs/mapping/release/mapping.txt /tmp/rb1/gallery-mapping.txt
+$ cp apps/gallery/build/outputs/mapping/basicRelease/mapping.txt /tmp/rb1/gallery-mapping.txt
 $ cp apps/edit/build/outputs/mapping/release/mapping.txt /tmp/rb1/edit-mapping.txt
 
 $ ./gradlew clean
-$ ./gradlew :apps:gallery:assembleRelease :apps:edit:assembleRelease
+$ ./gradlew :apps:gallery:assembleBasicRelease :apps:edit:assembleRelease
 $ mkdir -p /tmp/rb2
-$ cp apps/gallery/build/outputs/apk/release/gallery-release-unsigned.apk /tmp/rb2/gallery.apk
+$ cp apps/gallery/build/outputs/apk/basic/release/gallery-basic-release-unsigned.apk /tmp/rb2/gallery.apk
 $ cp apps/edit/build/outputs/apk/release/edit-release-unsigned.apk /tmp/rb2/edit.apk
-$ cp apps/gallery/build/outputs/mapping/release/mapping.txt /tmp/rb2/gallery-mapping.txt
+$ cp apps/gallery/build/outputs/mapping/basicRelease/mapping.txt /tmp/rb2/gallery-mapping.txt
 $ cp apps/edit/build/outputs/mapping/release/mapping.txt /tmp/rb2/edit-mapping.txt
 
 # byte compare (the claim) --- all four pairs must match:
@@ -195,8 +224,8 @@ On a byte mismatch, run the same content-level fallback the workflow runs
 
 ```console
 $ mkdir -p /tmp/rb1x /tmp/rb2x
-$ (cd /tmp/rb1x && unzip -q /tmp/rb1/gallery-release-unsigned.apk)
-$ (cd /tmp/rb2x && unzip -q /tmp/rb2/gallery-release-unsigned.apk)
+$ (cd /tmp/rb1x && unzip -q /tmp/rb1/gallery.apk)
+$ (cd /tmp/rb2x && unzip -q /tmp/rb2/gallery.apk)
 $ diff -r /tmp/rb1x /tmp/rb2x && echo "content-identical (byte difference is zip metadata only)"
 ```
 

@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.data.media.changes
 import io.github.dukeoftoad.gallery.data.catalogue.CatalogueRecord
 import io.github.dukeoftoad.gallery.data.catalogue.MetadataCacheState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -343,5 +344,46 @@ class ScanDriverPolicyTest {
         assertEquals(0, result.changed.size)
         assertEquals(1, result.unchangedCount)
         assertTrue(result.added.isEmpty())
+    }
+
+    // --- isImplausibleMassRemoval (r51 / audit E-1) ---------------------------
+
+    @Test
+    fun `a zero-row walk with removals is the implausible mass-removal signature`() {
+        // The E-1 shape: the walk observed NOTHING while the reconciler
+        // wants to tombstone live records --- a failed-but-non-throwing
+        // walk, never an honest answer (an honest empty volume has nothing
+        // to remove; an honest mass deletion leaves survivors in the
+        // walk). One removed key is enough to abort: the guard's job is to
+        // keep the tombstone path locked behind a walk that saw rows.
+        assertTrue(ScanDriverPolicy.isImplausibleMassRemoval(walkedRowCount = 0, removedKeyCount = 1))
+        assertTrue(
+            ScanDriverPolicy.isImplausibleMassRemoval(walkedRowCount = 0, removedKeyCount = 50_000),
+        )
+    }
+
+    @Test
+    fun `a walk that observed rows never trips the guard however lopsided the removal`() {
+        // A legitimate mass deletion (album wipe, big trash empty, the
+        // OS-upgrade re-sight) always leaves survivors in the walk, and
+        // however extreme the removed/walked ratio gets, a walk with rows
+        // is the provider's honest answer --- tombstone away.
+        assertFalse(
+            ScanDriverPolicy.isImplausibleMassRemoval(walkedRowCount = 1, removedKeyCount = 49_999),
+        )
+        assertFalse(
+            ScanDriverPolicy.isImplausibleMassRemoval(walkedRowCount = 500, removedKeyCount = 50_000),
+        )
+        assertFalse(
+            ScanDriverPolicy.isImplausibleMassRemoval(walkedRowCount = 50_000, removedKeyCount = 50_000),
+        )
+    }
+
+    @Test
+    fun `an empty walk with nothing to remove is a normal empty volume`() {
+        // The guard must not fire on the honest empty volume (no records,
+        // no removals) or the no-op pass (rows, no removals).
+        assertFalse(ScanDriverPolicy.isImplausibleMassRemoval(walkedRowCount = 0, removedKeyCount = 0))
+        assertFalse(ScanDriverPolicy.isImplausibleMassRemoval(walkedRowCount = 7, removedKeyCount = 0))
     }
 }

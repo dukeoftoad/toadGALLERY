@@ -8,14 +8,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * JVM tests for the NULL-provenance healing pass (r20 round): the bounded
- * batch loop, the drain-until-empty convergence, the re-offer of failed
- * rows, and the max-batches circuit breaker that keeps a permanently
- * failing selection from looping forever.
+ * JVM tests for the NULL-provenance healing pass (r20 round + the r51
+ * E-3 rotation additions): the bounded batch loop, the drain-until-empty
+ * convergence, the re-offer of failed rows, and the r51 NO-PROGRESS BREAK
+ * that stops a permanently failing selection from burning the whole batch
+ * budget re-reading the same bytes.
  *
  * The healing STORE is faked (the Room side is two DAO statements, ADR
  * -0016-thin); the HOOK is a recording fake too --- what is pinned here is
- * the pass's own orchestration, which is all the pass is.
+ * the pass's own orchestration, which is all the pass is. The r51
+ * cross-start rotation (persisted failure markers) has its own suite:
+ * `ProvenanceHealingRotationTest`.
  */
 class ProvenanceHealingPassTest {
 
@@ -114,11 +117,14 @@ class ProvenanceHealingPassTest {
     }
 
     @Test
-    fun `rows that never succeed are re-offered only until the batch budget is spent`() = runBlocking {
+    fun `a fully repeating selection is offered once then stops on the no-progress break`() = runBlocking {
         // The pathological store: marking does nothing (every stamp lands
         // but the selectable set never shrinks --- the "indexing keeps
-        // failing" stand-in, e.g. a read-only disk). The pass must STOP at
-        // its budget, not loop forever.
+        // failing" stand-in, e.g. a read-only disk). The r20 pass re-
+        // offered the same head batch up to its max-batches budget --- the
+        // audited E-3 waste (the same bytes re-read 10x per start). The
+        // r51 no-progress break offers the batch ONCE and stops at the
+        // first batch drawn entirely from already-offered keys.
         val rows = (1..2).map { record("external_primary:$it") }
         val store = object : ProvenanceHealingStore {
             val queries = mutableListOf<Int>()
@@ -141,9 +147,53 @@ class ProvenanceHealingPassTest {
 
         val offered = withQuietDiag { pass.heal() }
 
-        // Budget honored: 3 batches x 2 rows, then the pass yields.
+        // Offered exactly once, then the repeat batch stops the pass
+        // (before the hook sees the same rows a second time).
+        assertEquals(2, offered)
+        assertEquals(2, store.queries.size)
+        assertEquals(2, store.offeredCount)
+    }
+
+    @Test
+    fun `mixed batches keep making progress until the batch budget is spent`() = runBlocking {
+        // The same broken-disk world, but only SOME rows are poisoned: a
+        // batch of repeats + new rows is forward progress, so the pass
+        // must NOT stop on it --- only a batch drawn ENTIRELY from
+        // already-offered keys is the no-progress signature. Here rows b
+        // and e never heal while a, c, d do; every batch carries at least
+        // one new row until the budget is spent.
+        val rows = listOf("a", "b", "c", "d", "e").map { record("external_primary:$it") }
+        val poisoned = setOf("external_primary:b", "external_primary:e")
+        val store = FakeHealingStore(rows.toMutableList())
+        val hook = object : ScanIndexHook {
+            val offeredKeys = mutableListOf<String>()
+
+            override suspend fun onRecordsApplied(
+                added: List<CatalogueRecord>,
+                changed: List<CatalogueReconciler.ChangedRecord>,
+            ) {
+                offeredKeys += added.map { it.localMediaKey }
+                for (record in added) {
+                    if (record.localMediaKey !in poisoned) {
+                        store.markProvenanceIndexed(record.localMediaKey, atMillis = 1L)
+                    }
+                }
+            }
+        }
+        val pass = ProvenanceHealingPass(store, hook, batchSize = 2, maxBatches = 3)
+
+        val offered = withQuietDiag { pass.heal() }
+
+        // All three batches ran (each had a new row), six rows offered
+        // (a,b then b,c then b,d --- the poisoned b rides every batch).
         assertEquals(6, offered)
         assertEquals(3, store.queries.size)
+        // The healthy rows healed; the poisoned pair stays selectable.
+        assertEquals(
+            listOf("external_primary:b", "external_primary:e"),
+            store.selectable.map { it.localMediaKey },
+        )
+        assertTrue(hook.offeredKeys.contains("external_primary:b"))
     }
 
     @Test

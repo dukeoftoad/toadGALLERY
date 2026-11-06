@@ -1,7 +1,9 @@
 package io.github.dukeoftoad.gallery.ml.index
 
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.media.revision.MediaRevision
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -21,7 +23,9 @@ import java.nio.file.StandardCopyOption
  * a full-library, resumable, revision-aware indexing queue.
  *
  * Everything in this file is PURE JVM (no `android.*` type; ADR-0016) and
- * covered by `FaceIndexQueueTest` / `FaceIndexStateFileTest`:
+ * covered by `FaceIndexQueueTest` / `FaceIndexStateFileTest` (the r51 log
+ * lines ride [DiagLog], whose JVM-test seam swaps the sink away from
+ * `android.util.Log` --- the `CompositeScanIndexHook` pattern):
  *
  *  - [FaceIndexQueuePlanner] decides, per photo, EXACTLY what the queue
  *    owes next from three inputs --- the current eligible listing
@@ -44,6 +48,15 @@ import java.nio.file.StandardCopyOption
  *    previous contents, and parsed FORGIVINGLY (a corrupt or missing file
  *    degrades to "nothing processed yet" --- the delete-first re-index
  *    keeps that state loss correct, just slower).
+ *
+ * r51 (audit C-5/C-9/C-3-backstop, the queue-poison-skip round): the
+ * processor terminally SKIPS a photo whose engine calls fault (the F-39
+ * unreadable mirror, an `engineFailed` record holding it out until its
+ * revision changes) so one poison JPEG can no longer wedge the chain at
+ * the same head-of-queue item through every retry; the plan's dead
+ * `reIndexKeys` field is gone (delete-first is unconditional); and the
+ * planner self-heals a reset-resurrected state file over a deleted store
+ * by planning a full re-index instead of UNCHANGED skips.
  *
  * Design rules this file pins (mirroring [IndexCoordinator]):
  *  - NO MediaStore, NO resolver, NO WorkManager, NO UI concerns here; the
@@ -87,6 +100,16 @@ data class FaceIndexCandidate(
  * "indexing never finishes" device shape). A skip record holds the photo
  * out of the queue until its revision CHANGES (a genuinely changed file
  * gets a fresh read); it never produces faces or clip rows.
+ *
+ * r51 (audit C-5): [engineFailed] is the same TERMINAL-SKIP shape for
+ * ENGINE faults --- the processor's per-photo delete/detect/put block
+ * threw (the [MlEngine] facade's `IllegalStateException` for an
+ * engine/store fault, or a native decoder fault crossing JNI as a
+ * `RuntimeException` for a decodable-but-corrupt JPEG). The pre-r51
+ * contract let that throw abort the batch, so one poison photo wedged
+ * the queue at the same head-of-queue item through every WorkManager
+ * retry and every restart. The record holds the photo out until its
+ * revision CHANGES, exactly like [unreadable]; it carries no faces.
  */
 data class FaceIndexedState(
     val localMediaKey: String,
@@ -94,28 +117,34 @@ data class FaceIndexedState(
     val revision: MediaRevision,
     val indexedAtMillis: Long,
     val unreadable: Boolean = false,
+    /** r51 (audit C-5): the engine-fault terminal skip (the F-39 mirror). */
+    val engineFailed: Boolean = false,
 )
 
 /**
  * What the queue owes, derived once per worker run from candidates +
  * states + store truth. [toIndex] is the FULL queue depth (new files plus
- * CONTENT_CHANGED re-indexes, newest first); [reIndexKeys] marks the
- * subset whose stale faces must be deleted before re-inserting (the r23
- * `putFace` ordinals APPEND, so a re-index without delete would duplicate
- * rows); [orphanFileIds] are store files with no current candidate
- * (deleted / trashed / vault-moved media --- their rows must go);
- * [staleStateKeys] are state records with no current candidate (their
- * bookkeeping must not survive the photos it describes).
+ * CONTENT_CHANGED re-indexes, newest first). Delete-first is
+ * UNCONDITIONAL for every photo in [toIndex]: the processor deletes the
+ * file's rows before EVERY fresh insert (the r23 `putFace` ordinals
+ * APPEND, so a re-index without delete would duplicate rows --- and
+ * delete-before-insert is a superset of re-index for any upsert), so r51
+ * (audit C-9) removed the old `reIndexKeys` set this planner computed
+ * and no executor ever read. [orphanFileIds] are store files with no
+ * current candidate (deleted / trashed / vault-moved media --- their rows
+ * must go); [staleStateKeys] are state records with no current candidate
+ * (their bookkeeping must not survive the photos it describes).
  */
 data class FaceIndexPlan(
     val toIndex: List<FaceIndexCandidate>,
-    val reIndexKeys: Set<String>,
     val orphanFileIds: List<Long>,
     val staleStateKeys: Set<String>,
     val skippedUpToDate: Int,
     val skippedMetadataOnly: Int,
     /** r50 (F-39): photos held out by a terminal unreadable-skip record. */
     val skippedUnreadable: Int = 0,
+    /** r51 (audit C-5): photos held out by a terminal engine-fault record. */
+    val skippedEngineFailed: Int = 0,
 ) {
     /** True when the plan asks for no store work at all. */
     val isEmpty: Boolean get() = toIndex.isEmpty() && orphanFileIds.isEmpty()
@@ -130,53 +159,91 @@ data class FaceIndexPlan(
  *  - state METADATA_CHANGED --- skip ([FaceIndexPlan.skippedMetadataOnly]):
  *    the app itself rewrote EXIF/IPTC/XMP, the pixels did not move, and
  *    `RevisionDelta.invalidatesAiOutputs` is false by construction;
- *  - state CONTENT_CHANGED or NO state at all --- index (delete-first when
- *    the store holds rows for the file: [FaceIndexPlan.reIndexKeys] for
- *    known revisions, plus any store file without a state record --- the
- *    r23 dogfood rows, re-run once against the r24 queue's bookkeeping);
+ *  - state CONTENT_CHANGED or NO state at all --- index, delete-first
+ *    UNCONDITIONALLY (see [FaceIndexPlan]; a store file without a state
+ *    record lands in the same set --- the r23 dogfood rows, re-run once
+ *    against the r24 queue's bookkeeping);
  *  - store file with NO candidate --- orphan: delete its rows;
  *  - state record with NO candidate --- stale bookkeeping: drop it.
  */
 object FaceIndexQueuePlanner {
 
-    /** The plan for one run's inputs; see the object KDoc for the mapping. */
+    /**
+     * The plan for one run's inputs; see the object KDoc for the mapping.
+     *
+     * r51 (audit C-3 backstop): [stateStoreFile] is the queue's state file
+     * (the same `File` the worker builds its [FaceIndexStateFile] on).
+     * When it is non-null, live state records exist, and the store file
+     * those records describe ([ML_INDEX_STORE_FILE_NAME], the naming
+     * convention [MlEngine.openFaceIndex] pins for the shared
+     * `ml-index.sqlite`) is MISSING next to it, the bookkeeping
+     * resurrected against a deleted store (the reset-timeout shape #132's
+     * cancel-both-chains-and-await primary fix closes only in the common
+     * case): every such record would diff UNCHANGED and skip forever
+     * ("Magic Search/Things stuck NotIndexed"). The planner instead plans
+     * those photos for a full delete-first re-index and logs one line.
+     * Null (the default, and today's worker call shape) keeps the plain
+     * diff mapping.
+     */
     fun plan(
         candidates: List<FaceIndexCandidate>,
         states: List<FaceIndexedState>,
         storeIndexedFileIds: Set<Long>,
+        stateStoreFile: File? = null,
     ): FaceIndexPlan {
+        // r51 (audit C-3 backstop): the store-existence check, BEFORE any
+        // diffing --- cheap by design, one File.isFile at plan time.
+        val storeDir = stateStoreFile?.parentFile
+        val storeMissing = storeDir != null && states.isNotEmpty() &&
+            !File(storeDir, ML_INDEX_STORE_FILE_NAME).isFile
+        if (storeMissing) {
+            DiagLog.w(
+                TAG,
+                "face queue planner: ${states.size} state records reference a deleted store " +
+                    "($ML_INDEX_STORE_FILE_NAME missing next to ${stateStoreFile.name}); " +
+                    "planning full re-index",
+            )
+        }
+
         val statesByKey = HashMap<String, FaceIndexedState>(states.size)
         states.forEach { statesByKey[it.localMediaKey] = it }
         val candidateFileIds = HashSet<Long>(candidates.size)
         val candidateKeys = HashSet<String>(candidates.size)
         val toIndex = ArrayList<FaceIndexCandidate>(candidates.size)
-        val reIndexKeys = HashSet<String>()
         var skippedUpToDate = 0
         var skippedMetadataOnly = 0
         var skippedUnreadable = 0
+        var skippedEngineFailed = 0
 
         for (candidate in candidates) {
             candidateFileIds.add(candidate.fileId)
             candidateKeys.add(candidate.localMediaKey)
             val state = statesByKey[candidate.localMediaKey]
-            if (state == null) {
+            if (state == null || storeMissing) {
                 // Never processed by this queue (or its record was lost):
                 // index it; delete-first if the r23 dogfood left rows.
+                // storeMissing routes EVERY state-backed photo here too
+                // (the C-3 full re-index above).
                 toIndex.add(candidate)
                 continue
             }
             when (state.revision.diff(candidate.revision)) {
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.UNCHANGED ->
-                    // r50 (F-39): an unreadable-skip record holds the photo
-                    // out until its revision changes; counted separately so
-                    // the outcome stays honest about WHAT was skipped.
-                    if (state.unreadable) skippedUnreadable++ else skippedUpToDate++
+                    // r50 (F-39) / r51 (C-5): a terminal-skip record holds
+                    // the photo out until its revision changes; counted
+                    // separately so the outcome stays honest about WHAT
+                    // was skipped.
+                    when {
+                        state.unreadable -> skippedUnreadable++
+                        state.engineFailed -> skippedEngineFailed++
+                        else -> skippedUpToDate++
+                    }
                 io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.METADATA_CHANGED ->
                     skippedMetadataOnly++
-                io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.CONTENT_CHANGED -> {
+                io.github.dukeoftoad.gallery.data.media.revision.RevisionDelta.CONTENT_CHANGED ->
+                    // r51 (audit C-9): no reIndexKeys bookkeeping --- the
+                    // processor's delete-first is unconditional.
                     toIndex.add(candidate)
-                    reIndexKeys.add(candidate.localMediaKey)
-                }
             }
         }
 
@@ -193,12 +260,12 @@ object FaceIndexQueuePlanner {
 
         return FaceIndexPlan(
             toIndex = toIndex,
-            reIndexKeys = reIndexKeys,
             orphanFileIds = orphanFileIds,
             staleStateKeys = staleStateKeys,
             skippedUpToDate = skippedUpToDate,
             skippedMetadataOnly = skippedMetadataOnly,
             skippedUnreadable = skippedUnreadable,
+            skippedEngineFailed = skippedEngineFailed,
         )
     }
 }
@@ -263,6 +330,10 @@ class FaceIndexQueueProcessor(
      * revision changes), so unreadable photos can no longer keep the
      * chain re-enqueueing forever. [skippedUnreadable] mirrors the plan's
      * count of photos held out by earlier skip records.
+     * [engineFailedThisRun]/[skippedEngineFailed] are the r51 (audit C-5)
+     * mirrors on the engine-fault side: photos whose per-photo
+     * delete/detect/put block threw, each leaving a TERMINAL-SKIP record
+     * (until its revision changes) instead of aborting the batch.
      */
     data class BatchOutcome(
         val queueDepth: Int,
@@ -273,6 +344,10 @@ class FaceIndexQueueProcessor(
         val skippedMetadataOnly: Int,
         val unreadableThisRun: Int,
         val skippedUnreadable: Int = 0,
+        /** r51 (audit C-5): engine-fault terminal skips written THIS run. */
+        val engineFailedThisRun: Int = 0,
+        /** r51 (audit C-5): photos held out by earlier engine-fault records. */
+        val skippedEngineFailed: Int = 0,
         val moreRemaining: Boolean,
         val clusterSummary: MlEngine.ClusterSummary?,
         val totalFacesInStore: Long,
@@ -309,6 +384,7 @@ class FaceIndexQueueProcessor(
         var facesWritten = 0
         var indexed = 0
         var unreadable = 0
+        var engineFailed = 0
         try {
             for (candidate in batch) {
                 currentCoroutineContext().ensureActive()
@@ -331,13 +407,55 @@ class FaceIndexQueueProcessor(
                     )
                     continue
                 }
-                // Delete-first: the r23 putFace ordinals append, so stale
-                // rows (re-index) or dogfood leftovers must go before the
-                // fresh insert. Idempotent no-op when the file had no rows.
-                engine.deleteFacesForFiles(longArrayOf(candidate.fileId))
-                for (face in engine.detectFaceEmbeddings(bytes)) {
-                    engine.putFace(candidate.fileId, face.embedding)
-                    facesWritten++
+                // r51 (audit C-5): the per-photo engine-fault guard. The
+                // whole delete/detect/put block rides the catch: the
+                // [MlEngine] facade's failure shape is
+                // IllegalStateException (the requireX helpers' check, the
+                // Rust panic surface) and native decoder faults cross JNI
+                // as RuntimeException --- a decodable-but-corrupt JPEG
+                // fails in the bytes-dependent call, deterministically,
+                // every run. The pre-r51 contract let that throw abort the
+                // batch, so one such poison photo wedged BOTH queues at
+                // the same head-of-queue item through every WorkManager
+                // retry and every restart. CancellationException is an
+                // IllegalStateException subclass --- rethrow it first (the
+                // worker's own discipline): a cancel must never be filed
+                // as an engine fault (this block has no suspension
+                // points, so the rethrow is belt-and-braces).
+                try {
+                    // Delete-first: the r23 putFace ordinals append, so
+                    // stale rows (re-index) or dogfood leftovers must go
+                    // before the fresh insert. Idempotent no-op when the
+                    // file had no rows. Unconditional --- audit C-9.
+                    engine.deleteFacesForFiles(longArrayOf(candidate.fileId))
+                    for (face in engine.detectFaceEmbeddings(bytes)) {
+                        engine.putFace(candidate.fileId, face.embedding)
+                        facesWritten++
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: RuntimeException) {
+                    // The F-39 unreadable mirror: a TERMINAL-SKIP record
+                    // holds the photo out until its revision changes, and
+                    // the batch CONTINUES with the next photo. Not a
+                    // silent drop --- the skip is counted, logged and
+                    // reported in the outcome.
+                    engineFailed++
+                    statesByKey[candidate.localMediaKey] = FaceIndexedState(
+                        localMediaKey = candidate.localMediaKey,
+                        fileId = candidate.fileId,
+                        revision = candidate.revision,
+                        indexedAtMillis = nowMillis(),
+                        engineFailed = true,
+                    )
+                    DiagLog.w(
+                        TAG,
+                        "face queue: engine fault on ${candidate.localMediaKey} " +
+                            "(file ${candidate.fileId}): ${e.javaClass.simpleName}" +
+                            (e.message?.let { ": $it" } ?: "") +
+                            " --- terminal skip until revision changes",
+                    )
+                    continue
                 }
                 statesByKey[candidate.localMediaKey] = FaceIndexedState(
                     localMediaKey = candidate.localMediaKey,
@@ -376,6 +494,8 @@ class FaceIndexQueueProcessor(
             skippedMetadataOnly = plan.skippedMetadataOnly,
             unreadableThisRun = unreadable,
             skippedUnreadable = plan.skippedUnreadable,
+            engineFailedThisRun = engineFailed,
+            skippedEngineFailed = plan.skippedEngineFailed,
             moreRemaining = moreRemaining,
             clusterSummary = clusterSummary,
             totalFacesInStore = engine.faceCount(),
@@ -473,6 +593,10 @@ class FaceIndexStateFile(
         // defaults a missing key to false --- no schema bump, no migration.
         const val UNREADABLE = "unreadable"
 
+        // r51 (audit C-5): the engine-fault terminal-skip flag, under the
+        // same additive-optional-field discipline as [UNREADABLE].
+        const val ENGINE_FAILED = "engineFailed"
+
         fun stateToJson(state: FaceIndexedState): JSONObject = JSONObject()
             .put(KEY, state.localMediaKey)
             .put(FILE_ID, state.fileId)
@@ -489,6 +613,7 @@ class FaceIndexStateFile(
                 state.revision.contentFingerprint ?: JSONObject.NULL,
             )
             .put(UNREADABLE, state.unreadable)
+            .put(ENGINE_FAILED, state.engineFailed)
 
         fun stateFromJson(obj: JSONObject): FaceIndexedState? {
             val key = obj.optString(KEY)
@@ -515,7 +640,20 @@ class FaceIndexStateFile(
                 ),
                 indexedAtMillis = obj.optLong(INDEXED_AT),
                 unreadable = obj.optBoolean(UNREADABLE, false),
+                engineFailed = obj.optBoolean(ENGINE_FAILED, false),
             )
         }
     }
 }
+
+/**
+ * The shared ML store's file name inside the app-private face-index
+ * directory --- the naming convention [MlEngine.openFaceIndex] pins (the
+ * store lives at `<dir>/ml-index.sqlite`, next to both queues' state
+ * files). Referenced by the r51 C-3 planner backstop, which checks store
+ * existence by looking for this file next to the queue's state file.
+ */
+const val ML_INDEX_STORE_FILE_NAME = "ml-index.sqlite"
+
+/** The queue file's diagnostics-ring tag (r51, the workers' DiagLog pattern). */
+private const val TAG = "FaceIndexQueue"

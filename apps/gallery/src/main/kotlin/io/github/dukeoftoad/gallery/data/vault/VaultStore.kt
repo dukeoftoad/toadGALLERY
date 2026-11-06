@@ -424,9 +424,13 @@ class VaultStore(
         val counting = CountingInputStream(bytes)
         try {
             FileOutputStream(blob).use { output ->
-                VaultCrypto.encryptTo(counting, output, keys.key())
+                VaultCrypto.encryptTo(counting, NonClosingOutputStream(output), keys.key())
                 // D-3: the blob must be durable BEFORE the fsynced index
-                // commit references it (the crash-ordering contract).
+                // commit references it (the crash-ordering contract). The
+                // shield is load-bearing: encryptTo's CipherOutputStream
+                // close would cascade to (and close) this stream, leaving
+                // the sync a closed-fd SyncFailedException; shielded, the
+                // GCM tail still flushes while the fd stays open to sync.
                 output.fd.sync()
             }
         } catch (e: Exception) {
@@ -537,9 +541,11 @@ class VaultStore(
                         throw VaultStoreException("vault blobs directory is missing")
                     }
                     FileOutputStream(blob).use { output ->
-                        VaultCrypto.encryptTo(counting, output, keys.key())
+                        VaultCrypto.encryptTo(counting, NonClosingOutputStream(output), keys.key())
                         // D-3: the blob must be durable BEFORE the fsynced index
-                        // commit references it (the crash-ordering contract).
+                        // commit references it (the crash-ordering contract;
+                        // the shield keeps the fd open for the sync --- see
+                        // store()'s identical site).
                         output.fd.sync()
                     }
                 } catch (e: Exception) {
@@ -820,6 +826,21 @@ class VaultStore(
             salt = plain.copyOfRange(0, VaultCrypto.SALT_BYTES),
             digest = plain.copyOfRange(VaultCrypto.SALT_BYTES, plain.size),
         )
+    }
+
+    /**
+     * Passes writes and flushes straight through but swallows close: the
+     * D-3 blob fsync needs the fd still OPEN after [VaultCrypto.encryptTo]
+     * (whose CipherOutputStream close would otherwise cascade here and
+     * close the FileOutputStream early), while the cipher's own close ---
+     * the one that writes the GCM tail --- still happens on the cipher
+     * stream itself, through this shield.
+     */
+    private class NonClosingOutputStream(private val out: OutputStream) : OutputStream() {
+        override fun write(b: Int) = out.write(b)
+        override fun write(b: ByteArray, off: Int, len: Int) = out.write(b, off, len)
+        override fun flush() = out.flush()
+        override fun close() = flush()
     }
 
     /** Counts plaintext bytes as [VaultCrypto.encryptTo] drains the source. */

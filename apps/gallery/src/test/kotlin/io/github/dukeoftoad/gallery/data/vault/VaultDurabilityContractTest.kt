@@ -58,7 +58,12 @@ class VaultDurabilityContractTest {
     @Test
     fun `every blob seal is fsynced before the index commit that references it`() {
         val source = moduleFile(VAULT_STORE_SRC).readText()
-        val sealAnchors = Regex("""VaultCrypto\.encryptTo\(counting, output""")
+        // The seal's second argument is the shielded destination stream
+        // (NonClosingOutputStream --- CI caught the close-cascade: an
+        // UNSHIELDED output meant fd.sync() ran on a closed fd and threw
+        // SyncFailedException), so the anchor pins on the call prefix,
+        // not the output argument.
+        val sealAnchors = Regex("""VaultCrypto\.encryptTo\(counting,""")
             .findAll(source)
             .map { it.range.first }
             .toList()

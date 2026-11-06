@@ -23,6 +23,7 @@ import io.github.dukeoftoad.gallery.data.vault.VaultRepository
 import io.github.dukeoftoad.gallery.data.vault.VaultRestoreResult
 import io.github.dukeoftoad.gallery.data.vault.VaultThumbnailPolicy
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,6 +35,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * Lock phases of the hidden vault (issue #32, ADR-0017).
@@ -180,6 +183,20 @@ sealed interface VaultBiometricRequest {
  * media persists on disk (the video frame temp file is private-cache and
  * deleted immediately; see `VaultThumbnailDecoder`).
  *
+ * ## Unlock throttle (audit D-1, r51 --- throttle-only)
+ * [attemptUnlock] is rate-limited by [VaultUnlockThrottle]: a persisted
+ * consecutive-failure counter with exponential backoff (1st failure free,
+ * then 1 s doubling to a 60 s cap) that survives process death and is
+ * checked BEFORE the PBKDF2 runs, so a throttled session cannot even
+ * grind the KDF. A wrong PIN registers a failure; a successful PIN unlock
+ * resets the ladder; the lockout is narrated through the normal snackbar
+ * event flow. Biometric failures do NOT count (the prompt/keystore path
+ * carries its own device-bound rate limiting; see [VaultUnlockThrottle]'s
+ * KDoc). Deliberately throttle-only: `PIN_ITERATIONS` and
+ * `MIN_PIN_LENGTH` are untouched (the maintainer's recorded decision
+ * gate --- raising the KDF budget / minimum length is a separate,
+ * migration-sensitive change).
+ *
  * ## Lock race (issue #69)
  * A decode is a suspend call: file I/O + cipher + `BitmapFactory` spend real
  * time, and an auto-lock can land in the middle. The pre-decode unlocked
@@ -289,6 +306,17 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
     /** Bounds concurrent thumbnail decodes (issue #58: 2-4, IO-friendly). */
     private val thumbnailGate = Semaphore(THUMBNAIL_CONCURRENCY)
 
+    /**
+     * The D-1 (r51) wrong-PIN backoff state machine --- pure JVM, pinned
+     * by `VaultUnlockThrottleTest`. Loaded once in [resolveConfiguration]
+     * BEFORE the Locked phase can appear (disk on Dispatchers.IO), so
+     * every [attemptUnlock] consults resident state. The state file lives
+     * in the vault's data directory (see [UNLOCK_THROTTLE_STATE_PATH]).
+     */
+    private val unlockThrottle = VaultUnlockThrottle(
+        stateFile = File(getApplication<Application>().filesDir, UNLOCK_THROTTLE_STATE_PATH),
+    )
+
     /** Entry ids already attempted this session; prevents retry loops on failure. */
     private val thumbnailAttempted = mutableSetOf<Long>()
 
@@ -324,6 +352,12 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
     private fun resolveConfiguration() {
         if (_state.value == VaultUiState.Unsupported) return
         viewModelScope.launch {
+            // D-1 (r51): the throttle state must be resident before the
+            // Locked phase can ever appear, or the very first attempt of
+            // a fresh process would race the load. Disk read off the main
+            // thread; a missing/corrupt file loads as a fresh counter and
+            // never throws into the unlock flow.
+            withContext(Dispatchers.IO) { unlockThrottle.load() }
             val configured = repository.isConfigured()
             _biometrics.value = VaultBiometricSupport.readiness(
                 hardwareCanPrompt = VaultBiometrics.canPrompt(getApplication()),
@@ -377,6 +411,13 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
      * inside the repository and surfaces as the generic error line --- that
      * is a vault-state problem, never a "wrong PIN". W1: the swallow
      * WARN-logs the op + throwable to [DiagLog] first.
+     *
+     * D-1 (r51, throttle-only): before the PBKDF2 runs, the persisted
+     * backoff ([VaultUnlockThrottle]) is consulted --- a locked-out
+     * session fails fast with the honest "try again in N s" line instead
+     * of paying the KDF cost. A wrong PIN registers a failure (growing the
+     * ladder), a correct one resets it. `PIN_ITERATIONS`/`MIN_PIN_LENGTH`
+     * stay untouched (the maintainer's decision gate).
      */
     fun attemptUnlock(pin: CharArray) {
         if (_state.value != VaultUiState.Locked) return
@@ -385,9 +426,28 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
         _busy.value = VaultBusy(VaultBusyKind.VERIFYING)
         viewModelScope.launch {
             try {
+                val remaining = unlockThrottle.remainingLockoutMs(System.currentTimeMillis())
+                if (remaining > 0L) {
+                    // Fail fast, BEFORE the KDF: the whole point of the
+                    // throttle is that a locked-out session cannot even
+                    // grind the derivation cost. Counts only (W1): the
+                    // remaining milliseconds, never PIN data.
+                    DiagLog.i(TAG, "unlock: throttled (${remaining}ms left)")
+                    _events.tryEmit(
+                        VaultEvent.ShowMessage(
+                            messageRes = R.string.vault_unlock_throttled,
+                            // Round UP: "1 s" must not expire early from the
+                            // user's point of view.
+                            formatArgs = listOf((remaining + 999L) / 1000L),
+                        ),
+                    )
+                    return@launch
+                }
                 if (repository.verifyPin(pin)) {
+                    registerUnlockThrottleSuccess()
                     enterUnlockedSession()
                 } else {
+                    registerUnlockThrottleFailure()
                     _events.tryEmit(VaultEvent.ShowMessage(R.string.vault_unlock_wrong))
                 }
             } catch (e: CancellationException) {
@@ -399,6 +459,36 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
                 pin.fill(PIN_WIPE_CHAR)
                 _busy.value = null
             }
+        }
+    }
+
+    /**
+     * D-1: records a wrong-PIN attempt --- the in-memory ladder is the
+     * truth for this process; the persist is best-effort (off the main
+     * thread) and a failed write only WARN-logs (W1), never narrates: the
+     * session is throttled either way, only the cross-restart memory of
+     * the counter is at stake.
+     */
+    private suspend fun registerUnlockThrottleFailure() {
+        val persisted = withContext(Dispatchers.IO) {
+            unlockThrottle.registerFailure(System.currentTimeMillis())
+        }
+        if (!persisted) {
+            DiagLog.w(TAG, "throttle state not persisted; backoff is memory-only this process")
+        }
+    }
+
+    /**
+     * D-1: clears the backoff after a successful PIN unlock, persisting
+     * the reset so a process death right after unlock cannot resurrect a
+     * stale counter.
+     */
+    private suspend fun registerUnlockThrottleSuccess() {
+        val persisted = withContext(Dispatchers.IO) {
+            unlockThrottle.registerSuccess(System.currentTimeMillis())
+        }
+        if (!persisted) {
+            DiagLog.w(TAG, "throttle reset not persisted; backoff is memory-only this process")
         }
     }
 
@@ -949,6 +1039,19 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Concurrent thumbnail decodes (issue #58: 2-4 keeps IO + heap sane). */
         private const val THUMBNAIL_CONCURRENCY = 3
+
+        /**
+         * The D-1 (r51) unlock-throttle state file, relative to `filesDir`.
+         * Co-located with the sealed store's root (VaultRepository roots
+         * VaultStore at `filesDir/vault`; that directory name is a private
+         * constant there, so the path is restated here) so it inherits the
+         * backup / device-transfer exclusions that keep ALL vault state on
+         * the device, and the store's orphan sweep ignores it by name
+         * (root files that are neither `.bin` nor `.tmp` are not its to
+         * judge). If the two names ever diverge, the worst case is a fresh
+         * counter in a fresh directory --- never a data-integrity issue.
+         */
+        private const val UNLOCK_THROTTLE_STATE_PATH = "vault/unlock-throttle.json"
     }
 }
 

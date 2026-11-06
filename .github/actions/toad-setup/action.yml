@@ -32,14 +32,14 @@ runs:
   steps:
 
     # ---- Rust, host mode: the engine's cargo check/fmt/clippy/test gates ----
-    # F-1 (r51): the toolchain is pinned to a concrete version (1.120.0)
+    # F-1 (r51): the toolchain is pinned to a concrete version (1.99.1)
     # instead of the floating @stable --- docs/phase-11/reproducible-
     # builds.md §2's pinned-toolchain claim now covers the Rust side too
     # (the audit: @stable "weakens the pinned-toolchain claim"). The
     # version ref implies the toolchain; the with: inputs are unchanged.
-    - name: Set up Rust (1.120.0, rustfmt + clippy)
+    - name: Set up Rust (1.99.1, rustfmt + clippy)
       if: ${{ inputs.rust == 'host' }}
-      uses: dtolnay/rust-toolchain@9bd08f027b2fe39fa33325f9c2d201979b1cc076 # 1.120.0
+      uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       with:
         components: rustfmt, clippy
 
@@ -56,10 +56,10 @@ runs:
 
     # ---- Rust, android mode: the engine-enabled cross builds ----
     # F-1 (r51): same concrete-version pin as the host mode above
-    # (1.120.0, no more @stable float); the target list is unchanged.
-    - name: Set up Rust (1.120.0, aarch64-linux-android)
+    # (1.99.1, no more @stable float); the target list is unchanged.
+    - name: Set up Rust (1.99.1, aarch64-linux-android)
       if: ${{ inputs.rust == 'android' }}
-      uses: dtolnay/rust-toolchain@9bd08f027b2fe39fa33325f9c2d201979b1cc076 # 1.120.0
+      uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       with:
         targets: aarch64-linux-android
 

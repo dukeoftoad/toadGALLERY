@@ -4,18 +4,6 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - ".github/workflows/**"
-      - ".github/actions/**"
-      - "engine/**"
-      - "gradle/**"
-      - "gradle/libs.versions.toml"
-      - "build.gradle.kts"
-      - "settings.gradle.kts"
-      - "**/build.gradle.kts"
-      - "gradle.properties"
-      - "gradlew"
-      - "gradlew.bat"
   pull_request_review:
     types: [submitted, dismissed, edited]
 

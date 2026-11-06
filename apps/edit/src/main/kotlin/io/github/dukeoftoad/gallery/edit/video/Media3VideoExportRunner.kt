@@ -44,6 +44,12 @@ import java.io.File
  *  - [MuteDecision.STRIP_AUDIO] maps to [EditedMediaItem.Builder
  *    .setRemoveAudio]; a no-audio clip's recorded no-op maps to false
  *    (there is no track to strip; the plan recorded the fact).
+ *  - volume rides [EditedMediaItem.Builder.setVolume] (media3 1.11.1's
+ *    audio gain --- no separate pass through the effects chain); it is
+ *    skipped on the strip-audio path (mute wins by construction: no track
+ *    is left to scale) and skipped at the exact 1f identity (the same
+ *    neutral-adjustment rule as the effects: a no-op pass is never
+ *    attached).
  *  - progress: [Transformer.getProgress] polled on the main looper into
  *    the seam's hundredths-of-a-percent; honest stages (PREPARING before
  *    the start call, RENDERING while polling).
@@ -88,6 +94,13 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
         } else {
             listOf(VideoAdjustEffect(plan.adjustments))
         }
+        // The r52 volume gain: attached only when it is neither moot (the
+        // strip-audio path has no track left to scale --- mute wins by
+        // construction) nor the exact 1f identity (the same
+        // neutral-adjustment rule the effects above follow: a no-op pass is
+        // never attached).
+        val volumeGain = plan.volume
+        val applyVolumeGain = !stripAudio && volumeGain != 1f
         val items = VideoEditMath.timelineRuns(plan).map { run ->
             val mediaItem = MediaItem.Builder()
                 .setUri(request.sourceUri)
@@ -101,6 +114,7 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
             EditedMediaItem.Builder(mediaItem)
                 .setSpeed(SpeedParameters(ConstantSpeedProvider(run.speedFactor.toFloat()), /* shouldMaintainPitch= */ true))
                 .setRemoveAudio(stripAudio)
+                .apply { if (applyVolumeGain) setVolume(volumeGain) }
                 .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
                 .build()
         }

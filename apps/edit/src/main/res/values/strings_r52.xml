@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r52: the redesigned video editor surface (the Image-2 base chassis:
+     dark+violet palette, preview top, transport row, filmstrip, bottom tab
+     bar, per-tab screens). Only NEW concepts live here: every string the
+     r42 surface already carried is REUSED from strings_r42.xml / r32 / the
+     photo surface's base strings (names prefixed editor_v2_ to avoid
+     collisions with the older rounds). -->
+<resources>
+    <!-- The six tool tabs (also the sub-screen titles) -->
+    <string name="editor_v2_tab_trim">Trim</string>
+    <string name="editor_v2_tab_speed">Speed</string>
+    <string name="editor_v2_tab_audio">Audio</string>
+    <string name="editor_v2_tab_adjust">Adjust</string>
+    <string name="editor_v2_tab_extract">Extract</string>
+    <string name="editor_v2_tab_animate">Animate</string>
+
+    <!-- Header actions -->
+    <string name="editor_v2_export">Export</string>
+    <string name="editor_v2_apply">Apply</string>
+    <string name="editor_v2_reset">Reset</string>
+    <string name="editor_v2_confirm">Confirm changes</string>
+    <string name="editor_v2_back">Back</string>
+
+    <!-- Transport -->
+    <string name="editor_v2_play">Play</string>
+    <string name="editor_v2_pause">Pause</string>
+    <string name="editor_v2_seek_back">Back one second</string>
+    <string name="editor_v2_seek_forward">Forward one second</string>
+
+    <!-- Preview + filmstrip -->
+    <string name="editor_v2_fullscreen">Toggle fullscreen preview</string>
+    <string name="editor_v2_fullscreen_fit">Preview fitted</string>
+    <string name="editor_v2_fullscreen_zoom">Preview zoomed to fill</string>
+    <string name="editor_v2_filmstrip">Filmstrip of the clip; drag to scrub</string>
+    <string name="editor_v2_filmstrip_state">Position %1$s</string>
+    <string name="editor_v2_filmstrip_mini">Frame picker strip; drag to choose the frame</string>
+    <string name="editor_v2_duration">Duration: %1$s</string>
+
+    <!-- Audio screen -->
+    <string name="editor_v2_volume">Volume</string>
+    <string name="editor_v2_volume_a11y">Output volume</string>
+    <string name="editor_v2_volume_value">%1$d%%</string>
+
+    <!-- Speed screen -->
+    <string name="editor_v2_presets">Presets</string>
+    <string name="editor_v2_speed_normal">Normal</string>
+    <string name="editor_v2_speed_slower">Slower motion</string>
+    <string name="editor_v2_speed_faster">Faster</string>
+
+    <!-- Animate screen -->
+    <string name="editor_v2_animation_range">Animation range</string>
+    <string name="editor_v2_frame_rate">Frame rate</string>
+    <string name="editor_v2_width">Width</string>
+    <string name="editor_v2_width_a11y">Animation width choice</string>
+    <string name="editor_v2_format">Format</string>
+    <string name="editor_v2_estimated_size">Estimated size</string>
+
+    <!-- Extract screen -->
+    <string name="editor_v2_save_frame">Save frame</string>
+    <string name="editor_v2_extract_hint">Drag the strip to choose the frame — the preview shows it live.</string>
+</resources>

@@ -445,3 +445,39 @@ names and the u2netp `input.1`), with the reason recorded in the set's
 comment. A UI label, never a host; the scan re-verified locally against
 the whole main tree (the standalone kotlinc run, all three tests green)
 BEFORE the push this time.
+
+---
+
+## Delivery record (the r52 round): the surface redesign + the volume boundary decision
+
+Delivered in this round (branch `ui/r52-video-redesign`): the
+maintainer-approved Image-2 base redesign of the r42 surface —
+`VideoEditorScreen.kt` (one scaffold, six real tool tabs, the
+committed/draft session model, the real-frame filmstrip, the two-handle
+trim strip, the big-value speed screen, the nine-adjustment selector,
+the paused-player frame preview, the chips + width dropdown + honest
+preflight on animation) with the r42 plan semantics unchanged, the
+activity keeping every piece of plumbing (plan building, validators,
+permission gate, preflight, progress + cancellation, the non-
+destructive MediaStore publish), the r47 toad-green EditorTheme
+untouched (the video surface carries its own fixed dark+violet scheme,
+LOCAL to the new file), and editor `versionCode 17`.
+
+**The ADR-0012 §5 boundary note (recorded, not silent):** the contract
+says "no audio mixing, no gain, no replacement". The maintainer's
+approved mute+volume bundle (decision 2026-11-06) adds ONE gain —
+`VideoEditPlan.volume`, bounds [0..2], default 1f — realized as
+media3's `EditedMediaItem.Builder.setVolume` (skipped on the
+strip-audio path and at the 1f identity) and `player.volume` in the
+preview, with five JVM tests. Audio MIXING and audio REPLACEMENT stay
+out of scope exactly as before; this note records the single approved
+extension so the contract and the code do not drift.
+
+**Recorded omissions (no fake UI):** the mock's Text & Effects tab
+(text/stickers/filters are off-video per ADR-0012 §2; F-40 carries the
+pipeline question), the waveform strip (F-42), and header undo/redo
+(F-41). The speed slider spans the REAL 0.25x–2x validated bounds (the
+mock's 4x endpoint dropped), and the six-tab bar is the approved
+navigation resolution (option 2(a)) making Extract Frame and Export
+Animation first-class tabs — the mock's own navigation left them
+unreachable.

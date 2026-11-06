@@ -13,7 +13,42 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.17 (2026-11-06, latest) --- the r51 audit-verification round: the r50 audit's fix plan executed and merged
+### v2.18 (2026-11-06, latest) --- the r52 video-editor redesign round: the Image-2 base surface + the mute+volume bundle
+
+- **The maintainer's approved bundle** --- "Image 2 base + option 2(a) +
+  2x + Mute+Volume": the crafted dark+violet design (Image 2) is the
+  chassis for every screen; the navigation resolution (option 2(a))
+  turns the mock's placeholder Effects tab into the two real tool tabs
+  (Extract, Animate) --- a six-tab bar where every tab is a real
+  capability, since text/stickers/filters stay off-video per
+  ADR-0012 §2; the speed factor is capped at the real 0.25x--2x plan
+  bounds (the mock's 4x endpoint dropped); and the Audio screen ships
+  Mute + a 0--200% Volume slider.
+- **Volume is the round's only new capability** ---
+  `VideoEditPlan.volume` (default 1f keeps every pre-r52 plan/test
+  byte-compatible) with structured validation (bounds [0..2] + the NaN
+  gate), realized as media3 `EditedMediaItem.Builder.setVolume` at
+  export (skipped on strip-audio --- mute wins --- and at the 1f
+  identity) and `player.volume` in the preview; five JVM tests pin it.
+  This extends the ADR-0012 §5 "no gain" boundary BY MAINTAINER
+  DECISION (2026-11-06); the phase-10 contract doc carries the record.
+- **The surface** --- one scaffold (header / preview+fit-zoom /
+  transport / timestamps / real-frame filmstrip / six-tab bar), tool
+  screens with the draft Reset/Apply + ✓-confirm flow, the two-handle
+  trim filmstrip with the live cut preview, the big-value speed screen
+  with presets, the nine-real-adjustment selector, the paused-player
+  frame preview, and the chips + width-dropdown animation screen with
+  the honest preflight. The palette is LOCAL to the video surface; the
+  r47 toad-green photo-editor theme is untouched.
+- **Recorded omissions (no fake UI)** --- text/stickers/filters on
+  video (ADR-0012), the mock's waveform strip (no honest cheap decode
+  path), header undo/redo (deferred with its own semantics question).
+- **Still open** --- the D-1 root fix, the R51-3 waves, PR #134 (all
+  carried from v2.17); new follow-ups: the video text/effects pipeline
+  (media3 OverlayEffect path) if the maintainer expands scope, and the
+  video-session undo/redo design.
+
+### v2.17 (2026-11-06) --- the r51 audit-verification round: the r50 audit's fix plan executed and merged
 
 - **The campaign** --- the r50 backend/ente audit's fix plan (PR #134)
   executed as eight disjoint fix/ci PRs (#135--#142, squash-merged to

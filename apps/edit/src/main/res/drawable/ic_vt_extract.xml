@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r52 video editor tab icon: extract (frame corner brackets + centre
+     pick dot). House style = the gallery ic_nav_*.xml vectors: 24dp
+     viewport, white fill, tinted in Compose. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Four L-shaped corner brackets -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4,4h6v2H6v4H4V4zM14,4h6v6h-2V6h-4V4zM4,14h2v4h4v2H4v-6zM20,14v6h-6v-2h4v-4H20z" />
+    <!-- Centre pick dot -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,10.5a1.5,1.5 0 1,0 0,3a1.5,1.5 0 1,0 0,-3z" />
+</vector>

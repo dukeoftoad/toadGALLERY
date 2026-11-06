@@ -2128,3 +2128,90 @@ its revocation was advised once the merges landed. Still open, by
 design: the D-1 root fix (fix-plan §5.1, maintainer decision — the
 throttle-only half shipped in #142), the R51-3 prioritization-gated
 waves, and PR #134 itself.
+
+### Run #26 — 2026-11-06 (the r52 window: the video editor's UI/UX redesign — the maintainer's approved bundle)
+
+**The task.** The maintainer crafted UI/UX mockups for every tab under
+the video editor (two design sheets) and directed: implement the
+attached design, replace the current UI/UX, act as an expert, use
+agents, ask doubts now, assume nothing without saying so, under a new
+PR. The maintainer then approved the recommended bundle: **Image 2
+base + option 2(a) + 2x + Mute+Volume**.
+
+**Context recovery, stated honestly.** The design discussion happened
+as pure conversation (no tool calls → no persisted artifacts), and a
+context compaction consumed it; the bundle's four tokens are the
+surviving record. The two design images were recovered intact from the
+session's upload directory and re-read; the current r42 surface was
+re-explored line-by-line before any code moved. Every bundle token was
+implemented as an explicit, flagged interpretation (below), never a
+silent one.
+
+**The interpretations (all flagged to the maintainer in the round
+report and the PR description).**
+1. *Image 2 base* — the full chassis: dark+violet fixed palette,
+   preview top, transport row, timestamps, filmstrip, per-tab screens
+   with the `← Title ✓` header and the Reset/Apply footer, bottom tab
+   bar.
+2. *option 2(a) (the navigation resolution)* — the mock's 5th tab
+   ("Effects": text/stickers/filters) has NO real pipeline behind it
+   (ADR-0012 §2 excludes titles; no filters/stickers exist on video),
+   and a fake tab violates the repo's honesty rules; the approved
+   resolution ships a SIX-tab bar (Trim, Speed, Audio, Adjust,
+   Extract, Animate) where every tab is a real tool. Image 1/2's
+   Extract Frame + Export Animation screens were otherwise unreachable
+   in the mock's own navigation.
+3. *2x* — the Speed slider spans the real validated bounds
+   0.25x..2.0x (`VideoEditPlanValidator`), NOT the mock's 4.0x
+   endpoint; preset chips 0.25/0.50/1.00/1.50/2.00 (runtime-formatted,
+   so no new dotted literals enter the EditAiPrivacyScanTest surface).
+4. *Mute+Volume* — the Audio screen carries the Mute toggle AND a
+   0–200% Volume slider; the mock's "Original Audio"/"Add Music" rows
+   and Image 1's fades/music/sfx/voiceover are omitted (no audio
+   mixing in the pipeline, ADR-0012 §5 — except the gain itself, which
+   the maintainer's bundle explicitly approves; recorded as a boundary
+   decision, not silently assumed).
+
+**The implementation.** Branch `ui/r52-video-redesign` off main
+`aa8601f`. Spec pinned FIRST (`agent-ctx/r52-video-redesign.md`):
+palette hexes, per-screen behavior, the exact API inventory, file
+ownership, hard constraints. Two parallel agents: **2-a** landed the
+volume capability (`VideoEditPlan.volume` + validator bounds/NaN gate
++ runner `setVolume` + five JVM tests; every existing call site uses
+named args, so the constructor insertion is compile-safe) and **2-b**
+built the surface (`VideoEditorScreen.kt` — the one-scaffold chassis,
+session committed/draft model, six screens, twelve `ic_vt_*` vector
+drawables, `strings_r52.xml`; the activity slimmed to its plumbing +
+the `decodeThumbnails` hook). 2-b hit its context deadline and its
+output was treated as UNTRUSTED until the full line-by-line
+integration review passed.
+
+**The integration review (ADR-0013; the catches).** The whole 2,100-
+line surface file was read against the spec; behavior parity with the
+r42 block verified hunk by hunk (plan building incl. region elision,
+validators, permission gate, preflight, progress/cancel, non-
+destructive publish, a11y conventions). Catches: (1) the 2-b agent
+hardcoded the speed preset labels — quoted dotted literals that would
+have FAILED the `EditAiPrivacyScanTest` host-literal scan (the r42
+merge-gate story repeating); fixed to runtime `formatSpeed()`
+formatting with the reason narrated in the code; (2) the fix's own
+explanatory comment quoted the literal shape and would itself have
+tripped the scan — reworded; the scan was then run locally over all
+five touched Kotlin files (CLEAN) plus the lex gate (all OK). The
+`AutoMirrored` arrow and every other API were checked against
+in-repo usage before acceptance.
+
+**Honest limits.** No gradle/kotlinc in the sandbox: CI remains the
+compile judge; the round's compile/lint/test verdict rides the PR's
+runs. `EditedMediaItem.Builder.setVolume` is pinned from the media3
+1.11.1 surface (the same verification posture as r42's five
+merge-gate catches) — if CI disagrees, the fix is one line. Device
+rows (TalkBack over the new surface, the volume gain audible, the
+filmstrip decode cost on long clips) stay human-only. The mock's
+waveform strip, text/effects, and undo/redo are RECORDED omissions
+with reasons, not silent gaps.
+
+**Open follow-ups created:** the video text/effects pipeline question
+(media3 OverlayEffect path exists if the maintainer expands ADR-0012);
+the video-session undo/redo design; the fdroid metadata vercode bump
+rides the next release-engineering pass, not this PR.

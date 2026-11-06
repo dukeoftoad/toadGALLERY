@@ -326,6 +326,18 @@ android {
         // shared EditorVersionMetadata rule and EditorLaunch.kt.
         versionCode = 16
         versionName = "0.4.11-edit-alpha"
+
+        // versionCode 17 (r52 round): the video editor's UI/UX redesign ---
+        // the maintainer-approved Image-2 base chassis (dark+violet fixed
+        // palette local to the video surface, preview top, transport row,
+        // real-frame filmstrip, six-tab bottom bar, per-tab screens with
+        // the confirm/reset/apply flow) over the UNCHANGED r42 plan
+        // semantics, plus the maintainer-approved mute+volume bundle (the
+        // 0..200 percent slider realized as VideoEditPlan.volume at export
+        // and player.volume in the preview). The photo editor's r47
+        // toad-green EditorTheme is untouched.
+        versionCode = 17
+        versionName = "0.4.12-edit-alpha"
     }
 
     buildFeatures {

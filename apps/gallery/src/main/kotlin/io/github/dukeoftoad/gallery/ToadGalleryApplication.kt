@@ -8,6 +8,7 @@ import coil.decode.VideoFrameDecoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 import io.github.dukeoftoad.gallery.data.catalogue.room.MediaCatalogueDatabase
 import io.github.dukeoftoad.gallery.data.catalogue.room.RoomMediaCatalogue
@@ -30,6 +31,7 @@ import io.github.dukeoftoad.gallery.ml.engine.BundledFirstModelDownloader
 import io.github.dukeoftoad.gallery.ml.engine.BundledModelAssets
 import io.github.dukeoftoad.gallery.ml.engine.HttpModelDownloader
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
+import io.github.dukeoftoad.gallery.data.vault.VaultThumbnailPolicy
 
 /**
  * toadGALLERY's [Application]; exists to wire Coil's video frame decoder into
@@ -184,6 +186,19 @@ class ToadGalleryApplication : Application(), ImageLoaderFactory {
         }
         DiagLog.i(TAG, "process start ${info.versionName ?: "unknown"} (build $build)")
         startPhase4ScanPipeline()
+        // r51 (D-11): sweep stale plaintext video temps at process start, not just next unlock.
+        // Disk I/O, so it launches on its own supervisor scope (the scan
+        // pipeline's pattern) on Dispatchers.IO and never blocks onCreate;
+        // any failure is swallowed --- a leftover temp is still reclaimed by
+        // the next unlock's sweep, and a sweep must never kill process start.
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val swept = runCatching { VaultThumbnailPolicy.sweepStaleTempFiles(cacheDir) }.getOrDefault(0)
+            if (swept > 0) {
+                // W1: log only when something actually happened --- the
+                // common start (no crash leftover) stays silent.
+                DiagLog.i(TAG, "vault temp sweep: removed $swept stale plaintext file(s) at process start")
+            }
+        }
     }
 
     /**

@@ -29,16 +29,20 @@ separate F-Droid packages** versioned independently off one shared release
 tag (the editor-contract meta-data version 2; the tag follows the
 GALLERY's `versionName`, the editor's `versionName` is its own):
 
-| File | Package | AutoName | Build entry |
+| File | Package | AutoName | newest Build entry |
 |---|---|---|---|
-| `io.github.dukeoftoad.gallery.yml` | `io.github.dukeoftoad.gallery` | toadGALLERY | `0.4.5-alpha` / vercode 37 |
-| `io.github.dukeoftoad.gallery.edit.yml` | `io.github.dukeoftoad.gallery.edit` | toadGALLERY Edit | `0.4.10-edit-alpha` / vercode 15 |
+| `io.github.dukeoftoad.gallery.yml` | `io.github.dukeoftoad.gallery` | toadGALLERY | `0.4.5-alpha` / vercode 38 |
+| `io.github.dukeoftoad.gallery.edit.yml` | `io.github.dukeoftoad.gallery.edit` | toadGALLERY Edit | `0.4.11-edit-alpha` / vercode 16 |
 
-Both Build entries point at the same commit, the release tag
-`v0.4.5-alpha-r45` (the `v<versionName>-r<round>` tag convention; the
+Both newest Build entries point at the same commit, the release tag
+`v0.4.5-alpha-r50` (the `v<versionName>-r<round>` tag convention; the
 suffix is the round the release is cut in, not the code round that last
-bumped the versionCode --- the gallery's vercode 37 and the editor's
-vercode 15 were last bumped by the r43 round). The tag is cut by the
+bumped the versionCode --- vercode 38/16 were bumped by the r46 round,
+the flavor-matrix release whose tag carries the same codes, and the r50
+pre-stage re-uses them). That tag is PRE-STAGED --- it does not exist
+yet; each yml's MaintainerNotes says so explicitly, and the previous
+Build entries (gallery 37 @ `v0.4.5-alpha-r45`, edit 15 @ the same tag)
+stay in the files as the last buildable ones. The tag is cut by the
 maintainer at release time; **the fdroiddata merge request should go in
 only after the tag exists**, because `fdroid build` needs the commit to
 resolve.
@@ -220,8 +224,9 @@ and notice preservation is tracked in `docs/licensing-and-attribution.md`
 ## 5. Update conventions (the by-round cadence)
 
 The repo releases by round: each delivery round bumps the affected app's
-`versionCode` once (the gallery is at 37, the editor at 15 --- both last
-bumped by the r43 round) and the maintainer cuts one shared tag
+`versionCode` once (the gallery is at 38 and the editor at 16 --- both
+bumped by the r46 round, the flavor-matrix release whose tag carries
+the same codes) and the maintainer cuts one shared tag
 `v<versionName>-r<round>` per release window. For F-Droid that means: the
 gallery's Build entries can be auto-derived (`AutoUpdateMode: Version`,
 vercode read from `apps/gallery/build.gradle.kts`), while the editor's
@@ -248,11 +253,19 @@ reasoning, not just the setting.
    gradle-wrapper jar and ONNX model scanignore entries are the standard
    practice, but `fdroid scanner`'s actual disposition is only knowable
    at merge-request time; the fonts were not scanignored at all (§1).
-4. **The tag does not exist yet.** `v0.4.5-alpha-r45` is cut by the
-   maintainer at release time; the metadata targets it per the agreed
-   convention. Until the tag exists, `fdroid build` for vercode 37/15
-   cannot run against it --- submit after the release round lands it.
-5. **First verification run pending.** The reproducible-build workflow
-   (the r43 round) has not yet run on a release tag; the honest status
-   line and the local third-party recipe are in the sibling doc
-   (`docs/phase-11/reproducible-builds.md` §4).
+4. **The pre-staged tag does not exist yet.** The newest Build entries
+   (vercode 38/16) target `v0.4.5-alpha-r50`, cut by the maintainer at
+   release time per the agreed convention; each yml's MaintainerNotes
+   documents the pre-staging. Until that tag exists, `fdroid build` for
+   vercode 38/16 cannot run against it (the buildable entries remain
+   37/15 @ `v0.4.5-alpha-r45`, which EXISTS and was measured
+   byte-reproducible --- see note 5) --- submit after the release round
+   lands it.
+5. **First verification run: IN.** The r45 close-out measured the
+   `v0.4.5-alpha-r45` push BYTE-REPRODUCIBLE (run `42002437535` on the
+   tag, plus the identical-tree pre-flight `42000127417` at the same
+   SHA): all four pairs --- the gallery and edit unsigned release APKs
+   AND both `mapping.txt` files --- byte-identical across two clean
+   `--no-build-cache` builds. Every future `v*` tag re-measures; the
+   honest status line and the local third-party recipe are in the
+   sibling doc (`docs/phase-11/reproducible-builds.md` §4).

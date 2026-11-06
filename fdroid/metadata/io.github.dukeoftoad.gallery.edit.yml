@@ -65,6 +65,16 @@ Binaries: []
 AntiFeatures: []
 
 Builds:
+  - versionName: 0.4.11-edit-alpha
+    versionCode: 16
+    commit: v0.4.5-alpha-r50
+    gradle:
+      - yes
+    output: apps/edit/build/outputs/apk/release/edit-release-unsigned.apk
+    scanignore:
+      - gradle/wrapper/gradle-wrapper.jar
+      - apps/edit/src/main/assets/models
+
   - versionName: 0.4.10-edit-alpha
     versionCode: 15
     commit: v0.4.5-alpha-r45
@@ -123,14 +133,24 @@ MaintainerNotes: |-
     same kind of comment as the models entry.
 
     versioning conventions: the edit versionCode bumps once per release round
-    (vercode 15 = the r43 round) and is fully independent of the gallery's ---
+    (vercode 15 = the r43 round; vercode 16 = the r46 contract-discovery
+    round) and is fully independent of the gallery's ---
     the shared release tag follows the GALLERY's versionName
     (v<versionName>-r<round>, this entry's tag v0.4.5-alpha-r45 being the round
-    the release is cut in), so this file's versionName (0.4.10-edit-alpha)
+    the release is cut in), so this file's versionName (0.4.11-edit-alpha)
     cannot be derived from the tag: AutoUpdateMode stays None and each Build
     entry is curated by hand --- do not trust auto-derived vercodes for this
     package either (the repo hosts two apps and a reader would pick the
     gallery's higher code).
+
+    pre-staging: the versionCode 16 entry above is pinned to
+    v0.4.5-alpha-r50, a tag that does NOT exist yet at the time of this
+    note --- the SAME future tag the gallery file pre-stages its versionCode
+    38 entry on (one shared release tag, two independently-versioned
+    packages). It becomes buildable when the maintainer cuts
+    v0.4.5-alpha-r50 at the r51/r52 release commit; until that tag exists,
+    the versionCode 15 entry is the last buildable one and the reader must
+    skip the 16 entry.
 
     the main gallery is its own package (io.github.dukeoftoad.gallery) with its
     own metadata file; the two are versioned independently off the same tag
@@ -138,5 +158,5 @@ MaintainerNotes: |-
 
 AutoUpdateMode: None
 UpdateCheckMode: Tags v([0-9.]+-alpha)-r[0-9]+
-CurrentVersion: 0.4.10-edit-alpha
-CurrentVersionCode: 15
+CurrentVersion: 0.4.11-edit-alpha
+CurrentVersionCode: 16

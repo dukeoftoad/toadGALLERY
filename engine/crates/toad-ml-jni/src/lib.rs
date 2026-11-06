@@ -57,10 +57,11 @@
 //!   never unwinds across the JNI boundary and is reported to Kotlin as
 //!   `java.lang.IllegalStateException("panic: …")`.
 //! * Engine failures are surfaced as `java.lang.IllegalStateException` whose
-//!   message is the Rust error's `Display` string; the three caller-input
+//!   message is the Rust error's `Display` string; the caller-input
 //!   failures (a wrong embedding dimension on `nativeStorePutFace`, a
 //!   source==target merge on `nativeStoreMergeFaceClusters`, a wrong
-//!   embedding dimension on `nativeStorePutClip`) are surfaced as
+//!   embedding dimension on `nativeStorePutClip`, a non-positive limit on
+//!   the two search exports, r51) are surfaced as
 //!   `java.lang.IllegalArgumentException`.
 //! * The engine state lives in a process-global `OnceLock<Mutex<…>>` that is
 //!   held for the whole of `nativeInit`, `nativeInitSemantic`, the
@@ -383,10 +384,7 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
             ),
         );
     }
-    match store::put_face(file_id, &values) {
-        Ok(ordinal) => ordinal,
-        Err(message) => fail(&mut env, ILLEGAL_STATE_EXCEPTION, message),
-    }
+    call_or_throw(&mut env, 0, |_| store::put_face(file_id, &values))
 }
 
 /// `MlEngineJni.nativeStoreFaceCount(): Long`.
@@ -881,10 +879,10 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
             ),
         );
     }
-    match store::put_clip(file_id, &values) {
-        Ok(()) => sys::JNI_TRUE,
-        Err(message) => fail(&mut env, ILLEGAL_STATE_EXCEPTION, message),
-    }
+    call_or_throw(&mut env, sys::JNI_FALSE, |_| {
+        store::put_clip(file_id, &values)?;
+        Ok(sys::JNI_TRUE)
+    })
 }
 
 /// `MlEngineJni.nativeStoreDeleteClipsForFiles(fileIds: LongArray):
@@ -982,7 +980,16 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
 /// (nearest first; preserved verbatim --- never re-sorted). A
 /// wrong-dimension query is rejected at the Rust boundary (an error
 /// naming the pinned dimension); a closed store or search failure throws
-/// `java.lang.IllegalStateException`.
+/// `java.lang.IllegalStateException`. A non-positive `limit` is the one
+/// caller-input failure of this entry point (r51, audit B-2) and throws
+/// `java.lang.IllegalArgumentException` BEFORE any store access, the
+/// `nativeStoreMergeFaceClusters` leg: the store casts the limit to
+/// `usize`, so a negative jint would silently become `usize::MAX` — an
+/// unbounded top-K over the whole index under the store mutex.
+/// `limit == 0` is refused with it: no Kotlin caller passes zero (the
+/// facade's own `require(limit > 0)` refuses it, and ThingsRepository
+/// coerces its bound to >= 1 for an honest empty), so zero is never a
+/// legitimate "no results" request.
 #[expect(
     unsafe_code,
     reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
@@ -996,6 +1003,18 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
     query_embedding: JFloatArray<'local>,
     limit: jint,
 ) -> jstring {
+    // The r51 caller-input leg (audit B-2): the store casts the limit to
+    // usize, so a negative jint would silently become usize::MAX — an
+    // unbounded top-K over the whole index under the store mutex. Zero is
+    // rejected with the negatives: no Kotlin caller passes zero (the
+    // facade's require(limit > 0) refuses it, and ThingsRepository coerces
+    // its bound to >= 1 for an honest empty), so zero is never a
+    // legitimate "no results" request.
+    if limit <= 0 {
+        let message = format!("limit must be positive; got {limit}");
+        let _ = env.throw_new(ILLEGAL_ARGUMENT_EXCEPTION, &message);
+        return ptr::null_mut();
+    }
     call_or_throw(&mut env, ptr::null_mut(), |env| {
         let length = env
             .get_array_length(&query_embedding)
@@ -1030,7 +1049,16 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
 /// own `require` checks give the caller-input failures their
 /// `IllegalArgumentException` shape before the bridge is ever reached);
 /// a closed store or a search failure throws the same, exactly like the
-/// plain search.
+/// plain search. A non-positive `limit` is the r51 addition (audit B-2)
+/// and carries its own shape: it is refused HERE, BEFORE any store
+/// access, with `java.lang.IllegalArgumentException` and the facade's own
+/// message, the `nativeStoreMergeFaceClusters` caller-input leg — the
+/// store casts the limit to `usize`, so a negative jint would silently
+/// become `usize::MAX`, an unbounded top-K over the whole index under the
+/// store mutex. `limit == 0` is refused with it: no Kotlin caller passes
+/// zero (the facade's `require(limit > 0)` refuses it, and
+/// ThingsRepository coerces its bound to >= 1 for an honest empty), so
+/// zero is never a legitimate "no results" request.
 #[expect(
     unsafe_code,
     reason = "JNI export: the symbol name is the fixed Kotlin-side calling contract"
@@ -1045,6 +1073,18 @@ pub extern "C" fn Java_io_github_dukeoftoad_gallery_ml_engine_MlEngineJni_native
     max_distance: jfloat,
     limit: jint,
 ) -> jstring {
+    // The r51 caller-input leg (audit B-2): the store casts the limit to
+    // usize, so a negative jint would silently become usize::MAX — an
+    // unbounded top-K over the whole index under the store mutex. Zero is
+    // rejected with the negatives: no Kotlin caller passes zero (the
+    // facade's require(limit > 0) refuses it, and ThingsRepository coerces
+    // its bound to >= 1 for an honest empty), so zero is never a
+    // legitimate "no results" request.
+    if limit <= 0 {
+        let message = format!("limit must be positive; got {limit}");
+        let _ = env.throw_new(ILLEGAL_ARGUMENT_EXCEPTION, &message);
+        return ptr::null_mut();
+    }
     call_or_throw(&mut env, ptr::null_mut(), |env| {
         let length = env
             .get_array_length(&query_embedding)

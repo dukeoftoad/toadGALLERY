@@ -157,6 +157,37 @@ object ScanDriverPolicy {
             },
             lastSeenAtMillis = lastSeenAtMillis,
         )
+
+    /**
+     * The E-1 defense-in-depth verdict (r51, audit track E): may a walk
+     * that observed [walkedRowCount] live rows legitimately drive the
+     * tombstoning of [removedKeyCount] catalogue records?
+     *
+     * The ONE condition that fires: the walk observed ZERO rows while the
+     * reconciler wants to remove a non-empty set. That is the signature of
+     * a failed-but-non-throwing walk (a provider that answered a non-null
+     * EMPTY cursor while the volume has media, or a future regression that
+     * again swallows a query failure into an empty row list) --- the
+     * mass-tombstone shape E-1 is about. It can NEVER fire on a walk that
+     * observed at least one row: a legitimate mass deletion (user wipes an
+     * album, empties a large trash, the OS-upgrade re-sight) always leaves
+     * the survivors in the walk, and however lopsided the removed/walked
+     * ratio gets, a walk with rows is the provider's honest answer.
+     *
+     * The honest trade-off, stated once: a genuinely EMPTIED volume (user
+     * deleted every item from another app) also matches this condition,
+     * and the guard deliberately blocks its tombstone pass. That fails
+     * SAFE: the blocked pass writes nothing and saves no checkpoint, so
+     * the next pass retries, and the first real change (one photo added)
+     * lets the pass through --- the catalogue keeps showing the records a
+     * little longer instead of DESTROYING them over a walk that might have
+     * been defective. The two failure modes are not symmetric: a false
+     * mass tombstone blanks the timeline and orphans the ML indexes
+     * (unrecoverable without a full re-scan), a false abort is one
+     * retried pass.
+     */
+    fun isImplausibleMassRemoval(walkedRowCount: Int, removedKeyCount: Int): Boolean =
+        walkedRowCount == 0 && removedKeyCount > 0
 }
 
 /**
@@ -443,6 +474,31 @@ class MediaScanDriver(
             MediaIdentity.fromKeyString(key)?.volumeName == volume
         }
         val reconciliation = CatalogueReconciler.reconcile(rows, liveRecords)
+        // E-1 defense-in-depth (r51, audit track E): a zero-row walk that
+        // wants to tombstone live records is the mass-tombstone signature
+        // (see [ScanDriverPolicy.isImplausibleMassRemoval] for the full
+        // rationale, including the one legitimate shape it deliberately
+        // blocks and why that fails safe). Abort BEFORE any catalogue
+        // write: no upsert (an empty walk implies none anyway), no
+        // tombstone, and no checkpoint over the suspect walk --- the
+        // per-volume catch isolates the abort and the next pass retries.
+        val implausibleMassRemoval = ScanDriverPolicy.isImplausibleMassRemoval(
+            walkedRowCount = rows.size,
+            removedKeyCount = reconciliation.removedKeys.size,
+        )
+        if (implausibleMassRemoval) {
+            diag.e(
+                TAG,
+                "scan abort: implausible mass removal volume=$volume " +
+                    "walked=${rows.size} removed=${reconciliation.removedKeys.size} " +
+                    "(no tombstone, no checkpoint; retrying next pass)",
+            )
+            throw IllegalStateException(
+                "scan walk observed ${rows.size} rows but reconciliation removes " +
+                    "${reconciliation.removedKeys.size} live records " +
+                    "(volume=$volume trigger=$trigger) --- aborting before tombstone/checkpoint",
+            )
+        }
         val scannedAt = System.currentTimeMillis()
         val addedRecords = reconciliation.added.map { it.toRecord().copy(lastSeenAtMillis = scannedAt) }
         val changedRecords = reconciliation.changed.map {

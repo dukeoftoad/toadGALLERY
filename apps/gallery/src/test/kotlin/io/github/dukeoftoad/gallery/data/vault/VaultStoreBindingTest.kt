@@ -10,6 +10,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.security.SecureRandom
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -127,6 +128,49 @@ class VaultStoreBindingTest {
         val second = sealedSecret()
         store.saveBiometricBinding(second)
         assertArrayEquals(second, store.loadBiometricBinding())
+    }
+
+    /**
+     * D-9 (the R51-2a durability round): a [VaultStore.saveBiometricBinding]
+     * whose replace-rename CANNOT succeed must fail loudly on the FIRST
+     * rename failure --- never delete the obstructing target to force a
+     * replace. The injection is this suite's established rename-failure
+     * idiom (a directory parked at the atomicWrite target makes
+     * `File.renameTo` refuse on the JVM), sharpened to the EMPTY directory:
+     * empty is the discriminating shape, because the old delete-then-rename
+     * fallback DELETED exactly this directory and replaced it silently,
+     * while the fail-loud contract must throw with the current target
+     * untouched and the fsynced `.tmp` left on disk for manual recovery
+     * (the sweep reclaims it only once it ages past its grace window).
+     */
+    @Test
+    fun `an unreplaceable target throws loudly and keeps the fsynced tmp for recovery`() {
+        val (root, store) = configuredStore()
+        val blocker = File(root, "biometric.binding").apply { mkdir() }
+        val failure = assertThrows(IOException::class.java) {
+            store.saveBiometricBinding(sealedSecret())
+        }
+        // The obstructing target is NEVER deleted for a retry: the old
+        // fallback would have removed exactly this empty directory.
+        assertTrue("the obstructing target must survive untouched", blocker.isDirectory)
+        // The fsynced staging file survives the failed commit (D-9's
+        // manual-recovery story) instead of being swept up by a finally.
+        val staged = File(root, "biometric.binding.tmp")
+        assertTrue("the fsynced .tmp must survive for manual recovery", staged.isFile)
+        // The failure names both sides of the failed rename (recovery context).
+        assertTrue(failure.message.orEmpty().contains("biometric.binding.tmp"))
+        assertTrue(failure.message.orEmpty().contains("rename failed"))
+        // The sealed vault state is untouched by the failed write.
+        assertTrue(store.verifyPin(pin.toCharArray()))
+        assertTrue(store.entries().isEmpty())
+        // Retry once the obstruction is gone: the store is still usable and
+        // the surviving .tmp does not wedge the next write.
+        assertTrue(blocker.delete())
+        val sealed = sealedSecret()
+        store.saveBiometricBinding(sealed)
+        assertTrue(store.hasBiometricBinding())
+        assertArrayEquals(sealed, store.loadBiometricBinding())
+        assertFalse("a successful retry consumes its staging file", staged.isFile)
     }
 
     @Test

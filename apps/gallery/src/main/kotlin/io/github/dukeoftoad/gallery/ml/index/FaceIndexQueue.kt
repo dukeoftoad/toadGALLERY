@@ -182,8 +182,11 @@ object FaceIndexQueuePlanner {
      * case): every such record would diff UNCHANGED and skip forever
      * ("Magic Search/Things stuck NotIndexed"). The planner instead plans
      * those photos for a full delete-first re-index and logs one line.
-     * Null (the default, and today's worker call shape) keeps the plain
-     * diff mapping.
+     * Null (the default) keeps the plain diff mapping --- since the r51
+     * verification wiring both workers pass their state file, so the
+     * check is production-active (before it, the workers used the
+     * default and the FACE-side self-heal stayed dormant --- the wave-1
+     * review's finding).
      */
     fun plan(
         candidates: List<FaceIndexCandidate>,

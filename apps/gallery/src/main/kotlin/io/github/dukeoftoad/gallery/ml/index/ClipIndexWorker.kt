@@ -175,11 +175,18 @@ class ClipIndexWorker(
                         dateAddedMillis = record.dateAddedMillis,
                     )
                 }
-            val stateStore = ClipIndexStateFile(File(faceIndexDir, CLIP_INDEX_STATE_FILE_NAME))
+            val stateStoreFile = File(faceIndexDir, CLIP_INDEX_STATE_FILE_NAME)
+            val stateStore = ClipIndexStateFile(stateStoreFile)
             val plan = ClipIndexQueuePlanner.plan(
                 candidates = candidates,
                 states = stateStore.load(),
                 storeIndexedFileIds = engine.clipIndexedFileIds().toSet(),
+                // r51 C-3 backstop, verification wiring: the store-TRUTH
+                // cross-check inside the loop was already live; this
+                // activates the planner's file-existence half too (it
+                // read THIS file's directory --- the wave-1 review's
+                // dormant-wiring finding).
+                stateStoreFile = stateStoreFile,
             )
             val resolver = app.contentResolver
             val processor = ClipIndexQueueProcessor(MlEngineClipIndexEngine(engine))

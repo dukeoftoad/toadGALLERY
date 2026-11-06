@@ -193,10 +193,13 @@ object ClipIndexQueuePlanner {
      * resurrected against a deleted store: every such record would diff
      * UNCHANGED and skip forever ("Magic Search/Things stuck NotIndexed").
      * The planner instead plans those photos for a full delete-first
-     * re-index and logs one line. Null (the default, and today's worker
-     * call shape) keeps the plain diff mapping --- the store-TRUTH
-     * cross-check inside the loop needs no wiring and still catches the
-     * resurrect in production (see its comment).
+     * re-index and logs one line. Null (the default) keeps the plain
+     * diff mapping --- the store-TRUTH cross-check inside the loop needs
+     * no wiring and still catches the resurrect in production (see its
+     * comment), and since the r51 verification wiring both workers also
+     * pass their state file, so this file-existence check is
+     * production-active too (before it, the workers used the default ---
+     * the wave-1 review's finding).
      */
     fun plan(
         candidates: List<ClipIndexCandidate>,

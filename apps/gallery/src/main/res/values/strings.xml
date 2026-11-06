@@ -248,6 +248,9 @@
     <string name="vault_unlock_pin_label">PIN</string>
     <string name="vault_unlock_action">Unlock</string>
     <string name="vault_unlock_wrong">Wrong PIN. Try again.</string>
+    <!-- D-1 (r51): the persisted wrong-PIN backoff's fail-fast line; the
+         argument is the rounded-up whole seconds of remaining lockout. -->
+    <string name="vault_unlock_throttled">Too many wrong attempts — try again in %1$d s.</string>
     <string name="vault_error_generic">Something went wrong. Nothing was changed.</string>
     <string name="vault_empty_title">The vault is empty</string>
     <string name="vault_empty_body">Use Move to vault from the photo timeline to store media here, encrypted. It leaves your gallery and is only reachable through this screen.</string>

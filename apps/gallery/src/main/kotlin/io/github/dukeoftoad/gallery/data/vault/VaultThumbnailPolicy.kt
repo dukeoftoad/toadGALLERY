@@ -1,5 +1,6 @@
 package io.github.dukeoftoad.gallery.data.vault
 
+import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -69,6 +70,26 @@ object VaultThumbnailPolicy {
      * [cleanStaleTempFiles] matches to sweep crash leftovers.
      */
     fun tempFileName(entryId: Long): String = "$TEMP_PREFIX$entryId$TEMP_SUFFIX"
+
+    /**
+     * Deletes stale `vault-thumb-*.tmp` plaintext leftovers (a process
+     * death mid video-frame extraction) from [cacheDir], returning how
+     * many files were removed. Pure `java.io` so both call sites share
+     * one sweep: the decoder's per-unlock [cleanStaleTempFiles] leg and
+     * the r51 (D-11) app-start leg (`ToadGalleryApplication` sweeps once
+     * at process start, closing the window where a crash-orphaned temp
+     * survived until the NEXT unlock). A missing or unreadable directory
+     * is a clean no-op (0) --- a sweep must never crash its caller, and
+     * `File.listFiles` returns null for exactly those cases.
+     */
+    fun sweepStaleTempFiles(cacheDir: File): Int {
+        val files = cacheDir.listFiles() ?: return 0
+        var removed = 0
+        for (file in files) {
+            if (file.isFile && isTempFileName(file.name) && file.delete()) removed++
+        }
+        return removed
+    }
 
     /**
      * True when [name] matches the temp-file policy shape (the stale-sweep

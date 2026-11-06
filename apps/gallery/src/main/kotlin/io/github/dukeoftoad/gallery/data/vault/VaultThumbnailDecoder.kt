@@ -89,12 +89,15 @@ class VaultThumbnailDecoder(
      * Deletes stale `vault-thumb-*.tmp` plaintext leftovers (a process death
      * mid-extraction). Called once before each unlock's decode batch; files
      * in `cacheDir` are app-private and the OS may purge them anyway, this
-     * just makes the no-plaintext-persists rule hold proactively.
+     * just makes the no-plaintext-persists rule hold proactively. r51
+     * (D-11): the sweep ALSO runs once at process start
+     * (`ToadGalleryApplication`), closing the window where a crash-orphaned
+     * temp survived until the next unlock; the logic itself lives in
+     * [VaultThumbnailPolicy.sweepStaleTempFiles] (pure JVM, tested) so the
+     * app-start wiring needs none of this Android seam.
      */
     fun cleanStaleTempFiles() {
-        cacheDir.listFiles()
-            ?.filter { it.isFile && VaultThumbnailPolicy.isTempFileName(it.name) }
-            ?.forEach { it.delete() }
+        VaultThumbnailPolicy.sweepStaleTempFiles(cacheDir)
     }
 
     // ------------------------------------------------------------------

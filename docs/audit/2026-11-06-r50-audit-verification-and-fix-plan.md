@@ -11,7 +11,9 @@
 
 ## 1. Scoreboard
 
-**79 findings → 2 FIXED · 6 PARTIALLY FIXED · 71 OPEN.**
+**79 findings → 2 FIXED · 6 PARTIALLY FIXED · 71 OPEN.** *(Snapshot at
+verification time, pre-r51. Post-r51 scoreboard: 24 FIXED · 6
+PARTIALLY FIXED · 49 OPEN — see §7.)*
 
 ### The 7 high-severity findings at HEAD
 
@@ -138,3 +140,58 @@ No file appears in two branches: 1a owns `data/media/changes/*` + `data/catalogu
 - All wave branches cut from `main`@`fa954fa` before any sibling merges — rebase-free by construction; if the maintainer merges some waves first, the rest still apply cleanly (disjoint files).
 - Each wave PR body carries: findings addressed, per-file construction, acceptance outcomes, isolation statement, honest limits (ADR-0013: no local Android SDK; CI is the compile judge).
 - #131 is closed as superseded by this PR (the work-order lands here verbatim + this verification round).
+
+---
+
+## 7. Resolution record — r51 executed and merged (2026-11-06)
+
+Waves R51-1 + R51-2 shipped as PRs #135–#142 and are **MERGED to
+`main`** (squash, in order #135→#142, with the maintainer's PAT):
+
+| Wave item | PR | Merge |
+| --- | --- | --- |
+| 1a scan integrity (E-1/E-2/E-3) | #137 | `e8752e6` |
+| 1b JNI unwind guards (B-1/B-2) | #135 | `95f13a1` |
+| 1c queue poison-skip + backstop (C-5/C-9/C-3) | #138 | `2cc45ac` |
+| 1d engine shared state (C-4) | #136 | `92f56cd` |
+| 2a vault durability (D-3/D-5/D-9) | #141 | `2b92196` |
+| 2b vault screen security (D-1 throttle/D-2/D-11) | #142 | `4c995bc` |
+| 2c supply chain (F-1/F-2/F-3/F-12/F-14) | #140 | `c2e3c9a` |
+| 2d compliance artifacts (F-5/F-7/F-8/F-9) | #139 | `042d34b` |
+
+**Verification (ADR-0013, two parallel waves):** wave 1 (#135–#138):
+7 findings judged — 6 FIXED, 2 PARTIAL, zero regressions; wave 2
+(#139–#142): 15 judgments, all FIXED. Both PARTIALs were
+production-wiring dormancy, completed PRE-merge by follow-up commits
+on the PR branches so the fixes ride inside the reviewed PRs:
+`4d39207` (#137 — the healing failure-marker store wired into the
+sole production `ProvenanceHealingPass` construction) and `d1ccc62`
+(#138 — both workers pass `stateStoreFile` to `plan()`); plus
+`725c2d3` (#139 — fdroid-metadata.md caught up to the ymls it
+documents). CI green at every head (34 wave runs + 12
+completion-round runs; all four workflows per head).
+
+**Merge proof:** the eight squashes were rehearsed locally in the
+approved order (zero conflicts, disjoint files as mapped in §4), and
+the merged `main` tree proved byte-identical to the rehearsal
+(`git diff` empty). Main @ `4c995bc`: **CI success + CodeQL
+success.**
+
+**Honest post-merge verdicts (the 24 finding-touches):** E-1, E-2,
+E-3, B-1, B-2, C-5, C-9, C-4, D-2, D-3, D-5, D-9, D-11, F-1, F-2,
+F-3, F-5, F-7, F-8, F-9, F-14 → **FIXED**; F-12 → **FIXED**
+(residual notes, not defects: pin targets were not re-verifiable
+offline; the release permission gate executes at first real
+dispatch); **C-3 stays PARTIAL** — the reset-resurrect self-heal
+compensating control is now production-active, the await-timeout
+delete-anyway residual stays open (R51-3d); **D-1 stays PARTIAL** —
+throttle-only (option (c)) shipped, the `PIN_ITERATIONS` root fix
+remains decision-gated (§5.1). Unchanged partials: C-2, E-8 (b/c),
+F-4, F-6.
+
+**Post-r51 scoreboard: 79 findings → 24 FIXED · 6 PARTIALLY FIXED ·
+49 OPEN.** The OPEN set maps to §3's open-by-delta tracks and the
+R51-3 prioritization-gated waves (3a read-path eligibility, 3b
+About/licenses UI, 3c scan perf, 3d robustness sweep) plus §5's
+decision-gated items. Zero new findings were discovered by the
+verification waves — the campaign's meta-result.

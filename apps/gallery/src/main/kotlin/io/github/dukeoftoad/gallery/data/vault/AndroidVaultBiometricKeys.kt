@@ -5,6 +5,8 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import androidx.annotation.RequiresApi
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -45,7 +47,15 @@ import javax.crypto.SecretKey
  *
  * StrongBox is attempted on API 28+ with fallback to the regular TEE-backed
  * Keystore exactly like [AndroidVaultKeys] (`setIsStrongBoxBacked(true)` →
- * [StrongBoxUnavailableException] → TEE); both spellings satisfy ADR-0017/0019.
+ * [StrongBoxUnavailableException] → TEE) --- including the sibling's BROAD
+ * fallback (D-5 parity): some OEM/custom-ROM keystores abort StrongBox
+ * generation with a plain `ProviderException` or `KeyStoreException`
+ * instead of the documented exception, which used to abort biometric
+ * enrollment raw on exactly those devices. The StrongBox leg therefore
+ * falls back to the TEE on ANY [GeneralSecurityException] or
+ * [RuntimeException] too (WARN-logged with the throwable; the expected
+ * StrongBox-unavailable case stays INFO). Only the TEE generation path
+ * itself still propagates failures. Both spellings satisfy ADR-0017/0019.
  *
  * Privacy (ADR-0014): the key material never leaves the Keystore hardware;
  * the app holds no INTERNET permission, so neither key nor ciphertext can be
@@ -55,6 +65,9 @@ import javax.crypto.SecretKey
 object AndroidVaultBiometricKeys {
 
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
+
+    /** Diagnostics tag shared by the vault's Android seams (W1; [AndroidVaultKeys]'s tag). */
+    private const val TAG = "ToadVault"
 
     /**
      * Keystore alias of the biometric binding key. Distinct from
@@ -131,6 +144,26 @@ object AndroidVaultBiometricKeys {
             } catch (e: StrongBoxUnavailableException) {
                 // No StrongBox secure element on this device; the regular
                 // Keystore is the ADR-0017/0019-approved home for the key.
+                DiagLog.i(TAG, "biometric key: StrongBox unavailable -> TEE keystore")
+            } catch (e: GeneralSecurityException) {
+                // D-5 parity with AndroidVaultKeys: some OEM/custom-ROM
+                // keystores abort StrongBox generation with a plain
+                // KeyStoreException instead of the documented exception
+                // above --- fall back exactly like the expected case, but
+                // WARN with the throwable (unexpected).
+                DiagLog.w(
+                    TAG,
+                    "biometric key: StrongBox generation failed (${e.javaClass.name}) -> TEE keystore",
+                    e,
+                )
+            } catch (e: RuntimeException) {
+                // ... and some with a plain ProviderException. StrongBox is
+                // defense in depth, never a requirement (ADR-0017/0019).
+                DiagLog.w(
+                    TAG,
+                    "biometric key: StrongBox generation failed (${e.javaClass.name}) -> TEE keystore",
+                    e,
+                )
             }
         }
         return generateKeystoreKey()

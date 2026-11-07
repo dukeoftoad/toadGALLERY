@@ -4,7 +4,6 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-<<<<<<< HEAD
 ## [Unreleased] — the r58 round (edit panel slider craft, F-58b; `0.4.14-edit-alpha`; gallery unchanged)
 
 The r56 ledger scheduled F-58b as the per-panel `LabeledSlider` conversion +
@@ -58,7 +57,50 @@ live-draft) are **verbatim** --- only the control's VISUAL shape changes.
   name resources); no `versionCode`/`versionName` bump.
 - Stacked on #151's head (`edit/r57-panel-seam`); merge order:
   #150 → #151 → this round.
-=======
+
+## [Unreleased] — the r59 round (the unified app + the debug tools; `0.4.5-alpha-unified`)
+
+The maintainer's 2026-11-08 directive: one manual workflow building ONE app
+that unifies every currently-split feature, plus a debug-tool option, then
+merge the PRs and run it. Full narrative in worklog Run #32.
+
+- **[gallery] The `unified` flavor** (`io.github.dukeoftoad.gallery.unified`,
+  `0.4.5-alpha-unified`): gallery shell + engine .so + BOTH index pipelines
+  + the editor's sources compiled in-process (sourceSets at apps/edit
+  verbatim; no copies). Coexists with the family; launcher icon on.
+- **[gallery] The unified manifest fragment**: the two contract activities
+  under the unified id (v1/v2 wire markers), deliberately WITHOUT edit's
+  INTERNET strip (the model downloader needs it; the editor code opens no
+  socket).
+- **[contract] `EditorIdentity.matches(package, ownPackage)`** + the
+  EditorLaunch threading: the unified build resolves its EMBEDDED editor
+  through the same contract path; self-grants add no new risk.
+- **[gallery] Developer diagnostics (BuildConfig.DEBUG only)**: DiagLog
+  ring tail, build shape, app id, face-index dir listing, clipboard
+  export, ring clear. Zero new dependencies; release surfaces untouched.
+- **[ci] `unified-apk.yml`** (dispatch-only): variant debug/release (ADR-0018
+  TG_* signing when the secrets exist) + bundled_models. Outside the tag
+  pipeline; the F-14 gate is unchanged (F-60 records the promotion path).
+- **[edit] Launcher-resource de-collision**: `ic_launcher_*` renamed
+  `editor_ic_launcher*` so the unified APK's only icon is the gallery's.
+
+## [Unreleased] — the r57 round (edit panel seam, F-58a; #151)
+
+The ten tool panels out of `EditorContent` behind `PhotoPanelHost` (67
+explicit parameters, nothing captured); 4,818 -> 2,848 lines; 120
+mechanical closure-to-setter rewrites; bit-identical Roborazzi baselines;
+459/459 JVM tests. (Entry restored by r59 --- the squash-merge sequence
+dropped it; full narrative in worklog's r57 section.)
+
+## [Unreleased] — the r56-edit round (edit craft; #150)
+
+The maintainer-directed craft pass on the r30-r41 control panels: honest
+on-device thumbnails through the real render paths, `LabeledSlider` (live
+value pill + double-tap reset), real `ModalBottomSheet`s, press-and-hold
+compare, `Crossfade` panel swaps, tab-bar craft, the module's first
+Roborazzi harness, `PhotoChrome`/`PhotoControls` extraction. (Entry
+restored by r59; full narrative in worklog Run #30's addendum.)
+
 ## [Unreleased] — the r56 round (gallery indexing fix; `0.4.5-alpha`; edit unchanged)
 
 The r55 device failure root cause: BOTH engine flavors of the gallery
@@ -120,7 +162,6 @@ cause-less fallback message; this round removes the cause itself.
 - Coordination: PR is gallery + engine only; the open editor PRs
   (#150, #151) touch `apps/edit` and do not collide. A coordination
   comment is posted on the PR for the other agents working the editor.
->>>>>>> origin/main
 
 ## [Unreleased] — the r55 round (gallery versionCode 40; `0.4.5-alpha`; edit unchanged)
 

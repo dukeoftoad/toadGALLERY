@@ -127,6 +127,16 @@ jobs:
       # -PwithEngine anywhere: unit tests compile no native code.
       - name: Run unit tests (basic + engine flavors)
         run: ./gradlew :apps:gallery:testBasicDebugUnitTest :apps:gallery:testEngineDebugUnitTest --no-daemon --stacktrace
+
+      # r59 (the unified-app round): the canonical gate ALSO compiles the
+      # unified flavor's Kotlin --- the editor app's sources compiled
+      # in-process into the gallery module (sourceSets at apps/edit
+      # verbatim). compileDebugKotlin proves the whole unified source
+      # graph (gallery + editor + both shared modules) resolves and
+      # compiles on EVERY PR, without packaging the heavy APK here (the
+      # unified-apk.yml dispatch workflow assembles it on demand).
+      - name: Compile the unified flavor (editor-in-gallery source graph)
+        run: ./gradlew :apps:gallery:compileUnifiedDebugKotlin -PwithEngine --no-daemon --stacktrace
         # Binding since the issue #20 privacy policy tests landed; lint stays
         # non-binding until the Phase 2 cleanup pass.
 

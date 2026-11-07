@@ -19,11 +19,24 @@ object EditorIdentity {
     private val ACCEPTED_SUFFIXES: List<String> = listOf("", ".debug")
 
     /** True iff [packageName] is the contract editor (release or `.debug` dogfood build). */
-    fun matches(packageName: String?): Boolean =
-        packageName != null &&
+    fun matches(packageName: String?): Boolean = matches(packageName, ownPackage = null)
+
+    /**
+     * r59 (the unified-app round): [ownPackage] extends the match to the
+     * CALLING app itself, so the unified build (`io.github.dukeoftoad.gallery.unified`,
+     * which embeds the editor's activities in-process) resolves its own
+     * contract surfaces. The grant security story is unchanged --- a
+     * self-grant to the caller's own package carries no risk the exact
+     * package match did not already carry (the result is still a fresh
+     * save-copy; the editor code is the same first-party source). Every
+     * other package keeps matching ONLY the contract id + `.debug`.
+     */
+    fun matches(packageName: String?, ownPackage: String?): Boolean =
+        packageName != null && (
             ACCEPTED_SUFFIXES.any { suffix ->
                 packageName == EditContract.EDITOR_APPLICATION_ID + suffix
-            }
+            } || (ownPackage != null && packageName == ownPackage)
+        )
 
     /** Every package name [matches] accepts, in release-first order. */
     fun acceptedPackageNames(): List<String> =

@@ -11,22 +11,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-<<<<<<< HEAD
-=======
-import androidx.compose.material3.Slider
->>>>>>> origin/main
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-<<<<<<< HEAD
-=======
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
->>>>>>> origin/main
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -41,7 +30,6 @@ import kotlinx.coroutines.launch
 // `runRetouchDetect`, `selectSky`) arrive as explicit value + callback
 // parameters. The committed Roborazzi chassis baselines are the regression
 // proof.
-<<<<<<< HEAD
 //
 // r58b (F-58b): every raw Slider in the panel converts to the r56
 // `LabeledSlider` --- label + live value pill + double-tap-to-neutral.
@@ -49,8 +37,6 @@ import kotlinx.coroutines.launch
 // draft, release commits through `commit`); only the control's VISUAL shape
 // changes. Six sliders converted: sky-opacity, bokeh-strength, bokeh-focal,
 // retouch-smoothing, retouch-eyes, retouch-slim.
-=======
->>>>>>> origin/main
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -261,7 +247,6 @@ internal fun AiPanel(
     if (skySelection != null) {
         val skyOpacityLive = draft?.takeIf { it.first == "sky-opacity" }?.second
             ?: skySelection.opacityPct
-<<<<<<< HEAD
         // r58b: the crafted LabeledSlider on the r39 sky-opacity live-draft
         // contract (tick drafts, release commits, double-tap to 100% full).
         LabeledSlider(
@@ -273,19 +258,6 @@ internal fun AiPanel(
             enabled = !exporting,
             onChange = { onDraftChange("sky-opacity" to it) },
             onFinish = {
-=======
-        val skyOpacityName = stringResource(R.string.editor_a11y_ai_sky_opacity)
-        val skyOpacityLabel = stringResource(R.string.editor_ai_sky_opacity, skyOpacityLive)
-        Text(
-            text = skyOpacityLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
-            value = skyOpacityLive.toFloat(),
-            onValueChange = { onDraftChange("sky-opacity" to it.toInt())},
-            onValueChangeFinished = {
->>>>>>> origin/main
                 draft?.let { d ->
                     if (d.first == "sky-opacity" && committed.sky != null) {
                         commit(
@@ -297,16 +269,7 @@ internal fun AiPanel(
                 }
                 onDraftChange(null)
             },
-<<<<<<< HEAD
             resetValue = 100,
-=======
-            valueRange = 0f..100f,
-            enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = skyOpacityName
-                stateDescription = skyOpacityLabel
-            },
->>>>>>> origin/main
         )
         if (BundledSkies.byId(skySelection.skyId) == null &&
             importedSkies.containsKey(skySelection.skyId)
@@ -372,7 +335,6 @@ internal fun AiPanel(
     if (bokehSelection != null) {
         val strengthLive = draft?.takeIf { it.first == "bokeh-strength" }?.second
             ?: bokehSelection.blurStrengthPct
-<<<<<<< HEAD
         // r58b: the crafted LabeledSlider on the r40 bokeh-strength live-draft
         // contract (tick drafts, release commits, double-tap to 50% medium).
         LabeledSlider(
@@ -384,19 +346,6 @@ internal fun AiPanel(
             enabled = !exporting,
             onChange = { onDraftChange("bokeh-strength" to it) },
             onFinish = {
-=======
-        val strengthName = stringResource(R.string.editor_a11y_ai_bokeh_strength)
-        val strengthLabel = stringResource(R.string.editor_ai_bokeh_strength, strengthLive)
-        Text(
-            text = strengthLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
-            value = strengthLive.toFloat(),
-            onValueChange = { onDraftChange("bokeh-strength" to it.toInt())},
-            onValueChangeFinished = {
->>>>>>> origin/main
                 draft?.let { d ->
                     if (d.first == "bokeh-strength" && committed.bokeh != null) {
                         commit(
@@ -410,7 +359,6 @@ internal fun AiPanel(
                 }
                 onDraftChange(null)
             },
-<<<<<<< HEAD
             resetValue = 50,
         )
         val focalLive = draft?.takeIf { it.first == "bokeh-focal" }?.second
@@ -426,28 +374,6 @@ internal fun AiPanel(
             enabled = !exporting,
             onChange = { onDraftChange("bokeh-focal" to it) },
             onFinish = {
-=======
-            valueRange = 1f..100f,
-            enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = strengthName
-                stateDescription = strengthLabel
-            },
-        )
-        val focalLive = draft?.takeIf { it.first == "bokeh-focal" }?.second
-            ?: (bokehSelection.focalDepthNorm * 100).toInt()
-        val focalName = stringResource(R.string.editor_a11y_ai_bokeh_focal)
-        val focalLabel = stringResource(R.string.editor_ai_bokeh_focal, focalLive)
-        Text(
-            text = focalLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
-            value = focalLive.toFloat(),
-            onValueChange = { onDraftChange("bokeh-focal" to it.toInt())},
-            onValueChangeFinished = {
->>>>>>> origin/main
                 draft?.let { d ->
                     if (d.first == "bokeh-focal" && committed.bokeh != null) {
                         commit(
@@ -461,16 +387,7 @@ internal fun AiPanel(
                 }
                 onDraftChange(null)
             },
-<<<<<<< HEAD
             resetValue = 50,
-=======
-            valueRange = 0f..100f,
-            enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = focalName
-                stateDescription = focalLabel
-            },
->>>>>>> origin/main
         )
         if (bokehSelection.depthRef.isNotEmpty() &&
             !activity.aiStore.contains(EditAiStore.ArtifactKind.DEPTH, bokehSelection.depthRef)
@@ -516,7 +433,6 @@ internal fun AiPanel(
             if (retouchSelection != null) {
                 val smoothingLive = draft?.takeIf { it.first == "retouch-smoothing" }?.second
                     ?: retouchSelection.smoothingPct
-<<<<<<< HEAD
                 // r58b: the crafted LabeledSlider on the r41 retouch live-draft
                 // contracts (tick drafts, release commits, double-tap to 0 off).
                 LabeledSlider(
@@ -531,22 +447,6 @@ internal fun AiPanel(
                     enabled = !exporting,
                     onChange = { onDraftChange("retouch-smoothing" to it) },
                     onFinish = {
-=======
-                val smoothingName = stringResource(R.string.editor_a11y_ai_retouch_smoothing)
-                val smoothingLabel = stringResource(
-                    R.string.editor_ai_retouch_smoothing,
-                    smoothingLive,
-                )
-                Text(
-                    text = smoothingLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = smoothingLive.toFloat(),
-                    onValueChange = { onDraftChange("retouch-smoothing" to it.toInt())},
-                    onValueChangeFinished = {
->>>>>>> origin/main
                         draft?.let { d ->
                             if (d.first == "retouch-smoothing" && committed.retouch != null) {
                                 commit(
@@ -560,7 +460,6 @@ internal fun AiPanel(
                         }
                         onDraftChange(null)
                     },
-<<<<<<< HEAD
                     resetValue = 0,
                 )
                 val eyesLive = draft?.takeIf { it.first == "retouch-eyes" }?.second
@@ -574,28 +473,6 @@ internal fun AiPanel(
                     enabled = !exporting,
                     onChange = { onDraftChange("retouch-eyes" to it) },
                     onFinish = {
-=======
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = smoothingName
-                        stateDescription = smoothingLabel
-                    },
-                )
-                val eyesLive = draft?.takeIf { it.first == "retouch-eyes" }?.second
-                    ?: retouchSelection.eyeBrightenPct
-                val eyesName = stringResource(R.string.editor_a11y_ai_retouch_eyes)
-                val eyesLabel = stringResource(R.string.editor_ai_retouch_eyes, eyesLive)
-                Text(
-                    text = eyesLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = eyesLive.toFloat(),
-                    onValueChange = { onDraftChange("retouch-eyes" to it.toInt())},
-                    onValueChangeFinished = {
->>>>>>> origin/main
                         draft?.let { d ->
                             if (d.first == "retouch-eyes" && committed.retouch != null) {
                                 commit(
@@ -609,7 +486,6 @@ internal fun AiPanel(
                         }
                         onDraftChange(null)
                     },
-<<<<<<< HEAD
                     resetValue = 0,
                 )
                 val slimLive = draft?.takeIf { it.first == "retouch-slim" }?.second
@@ -623,28 +499,6 @@ internal fun AiPanel(
                     enabled = !exporting,
                     onChange = { onDraftChange("retouch-slim" to it) },
                     onFinish = {
-=======
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = eyesName
-                        stateDescription = eyesLabel
-                    },
-                )
-                val slimLive = draft?.takeIf { it.first == "retouch-slim" }?.second
-                    ?: retouchSelection.faceSlimPct
-                val slimName = stringResource(R.string.editor_a11y_ai_retouch_slim)
-                val slimLabel = stringResource(R.string.editor_ai_retouch_slim, slimLive)
-                Text(
-                    text = slimLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = slimLive.toFloat(),
-                    onValueChange = { onDraftChange("retouch-slim" to it.toInt())},
-                    onValueChangeFinished = {
->>>>>>> origin/main
                         draft?.let { d ->
                             if (d.first == "retouch-slim" && committed.retouch != null) {
                                 commit(
@@ -658,16 +512,7 @@ internal fun AiPanel(
                         }
                         onDraftChange(null)
                     },
-<<<<<<< HEAD
                     resetValue = 0,
-=======
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = slimName
-                        stateDescription = slimLabel
-                    },
->>>>>>> origin/main
                 )
                 if (retouchSelection.boxesRef.isNotEmpty() &&
                     !activity.aiStore.contains(

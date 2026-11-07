@@ -4,6 +4,7 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+<<<<<<< HEAD
 ## [Unreleased] — the r59 round (the unified app + the debug tools; `0.4.5-alpha-unified`)
 
 The maintainer's 2026-11-08 directive: one manual workflow building ONE app
@@ -47,6 +48,63 @@ compare, `Crossfade` panel swaps, tab-bar craft, the module's first
 Roborazzi harness, `PhotoChrome`/`PhotoControls` extraction. (Entry
 restored by r59; full narrative in worklog Run #30's addendum.)
 
+=======
+<<<<<<< HEAD
+## [Unreleased] — the r58 round (edit panel slider craft, F-58b; `0.4.14-edit-alpha`; gallery unchanged)
+
+The r56 ledger scheduled F-58b as the per-panel `LabeledSlider` conversion +
+per-panel screenshot pin, now possible because the r57 panel seam (#151)
+made each panel compose standalone. This round delivers it: every raw
+`Slider` in the Draw / Region / AI / Crop panels converts to the r56
+`LabeledSlider` (label + live value pill + double-tap-to-neutral), and
+three of the four converted panel families gain per-panel Roborazzi
+captures. The r32/r36/r37/r38/r39/r40/r41 contracts (plain-state and
+live-draft) are **verbatim** --- only the control's VISUAL shape changes.
+
+### Changed
+
+- **[edit] PhotoPanelPaint.kt** — 8 raw `Slider`s → `LabeledSlider`:
+  the brush width/opacity/smoothing (r36 plain-state) + the per-layer
+  draw-width/draw-opacity/draw-smoothing (r36 live-draft) + the region
+  strength (r37 plain-state) + the per-layer region-strength (r38
+  live-draft). Double-tap neutrals: width=10, opacity=100, smoothing=0,
+  strength=50.
+- **[edit] PhotoPanelGeometry.kt** — 1 raw `Slider` → `LabeledSlider`:
+  the straighten control (r32 live-draft, range −15..+15, double-tap
+  to 0 deg).
+- **[edit] PhotoPanelAi.kt** — 6 raw `Slider`s → `LabeledSlider`:
+  sky-opacity (r39), bokeh-strength + bokeh-focal (r40), retouch-smoothing
+  + retouch-eyes + retouch-slim (r41). All live-draft. Double-tap
+  neutrals: sky=100, bokeh-strength=50, bokeh-focal=50, retouch-*=0.
+- **[edit] Each panel's imports** trimmed: `Slider`, `contentDescription`,
+  `stateDescription`, `semantics` removed from the three panel files
+  (the `LabeledSlider` handles a11y internally; the panel files no
+  longer touch the raw slider's semantics modifier).
+
+### Added
+
+- **[edit] Three per-panel Roborazzi captures**
+  (`EditChassisScreenshotTest`): `cropPanelStraightenSliderRecordsBaseline`,
+  `drawPanelBrushSlidersRecordsBaseline`,
+  `regionsPanelStrengthSliderRecordsBaseline`. Each composes the panel
+  standalone with a minimal `EditRecipe()` fixture (the r57 seam made
+  this possible). The captures pin the slider rows in their actual panel
+  context --- the regression surface for the conversions above.
+
+### Notes
+
+- The `AiPanel`'s per-panel capture is **deferred to F-58b-2**: the panel
+  still takes `EditActivity` as its first parameter, so it cannot compose
+  standalone in a Roborazzi test without refactoring the activity
+  dependency out. The 6 AI slider conversions themselves are in this
+  round; only the screenshot pin is deferred.
+- No new permissions; no new dependencies; no new strings (the
+  `LabeledSlider` reuses the existing `editor_*` label + `editor_a11y_*`
+  name resources); no `versionCode`/`versionName` bump.
+- Stacked on #151's head (`edit/r57-panel-seam`); merge order:
+  #150 → #151 → this round.
+=======
+>>>>>>> origin/main
 ## [Unreleased] — the r56 round (gallery indexing fix; `0.4.5-alpha`; edit unchanged)
 
 The r55 device failure root cause: BOTH engine flavors of the gallery
@@ -108,6 +166,7 @@ cause-less fallback message; this round removes the cause itself.
 - Coordination: PR is gallery + engine only; the open editor PRs
   (#150, #151) touch `apps/edit` and do not collide. A coordination
   comment is posted on the PR for the other agents working the editor.
+>>>>>>> origin/main
 
 ## [Unreleased] — the r55 round (gallery versionCode 40; `0.4.5-alpha`; edit unchanged)
 

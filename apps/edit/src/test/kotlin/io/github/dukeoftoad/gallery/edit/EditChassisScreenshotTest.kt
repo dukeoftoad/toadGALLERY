@@ -42,6 +42,19 @@ import org.robolectric.annotation.GraphicsMode
  * under src/test/resources/roborazzi (the plugin outputDir). The plugin's
  * recordRoborazziDebug task records them; verifyRoborazziDebug gates
  * against the committed baselines once they exist.
+<<<<<<< HEAD
+ *
+ * r58b (F-58b): the per-panel slider captures. The r57 panel seam made
+ * each panel composable in isolation; this round converts every raw Slider
+ * in the Draw/Region/AI/Crop panels to the r56 `LabeledSlider` and pins
+ * the result. Three panels (Crop, Draw, Regions) compose standalone with
+ * minimal `EditRecipe()` fixtures --- the `AiPanel` still takes `EditActivity`
+ * as its first parameter, so its per-panel capture is deferred to F-58b-2
+ * (the activity-dependency refactor). Each capture paints the theme's
+ * background first (the r56 rule: transparent-root captures gate
+ * near-white ink against white, not the contrast the user sees).
+=======
+>>>>>>> origin/main
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -136,4 +149,147 @@ class EditChassisScreenshotTest {
         rule.waitForIdle()
         rule.onRoot().captureRoboImage()
     }
+<<<<<<< HEAD
+
+    /**
+     * r58b: the Crop panel's straighten slider on the crafted LabeledSlider.
+     * Minimal fixture: `EditRecipe()` defaults (straightenDeg = 0.0). The
+     * capture pins the slider row + the geometry chip row + the crop aspect
+     * presets --- the r32 contract on the r56 control, the regression surface
+     * for the straighten conversion.
+     */
+    @Test
+    fun cropPanelStraightenSliderRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    CropPanel(
+                        committed = EditRecipe(),
+                        draft = null,
+                        onDraftChange = {},
+                        exporting = false,
+                        previewBase = null,
+                        commit = {},
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    /**
+     * r58b: the Draw panel's three brush sliders (width/opacity/smoothing) on
+     * the crafted LabeledSlider. Minimal fixture: `drawMode = true` shows the
+     * brush controls (the r36 plain-state contract: every tick writes the
+     * chassis state, no draft). The capture pins the slider rows + the color
+     * swatch row + the draw-mode/layer chip row.
+     */
+    @Test
+    fun drawPanelBrushSlidersRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    DrawPanel(
+                        committed = EditRecipe(),
+                        draft = null,
+                        onDraftChange = {},
+                        exporting = false,
+                        commit = {},
+                        sweepPendingDrafts = {},
+                        commitSelectedDrawLayer = {},
+                        drawMode = true,
+                        onDrawModeChange = {},
+                        regionMode = false,
+                        onRegionModeChange = {},
+                        eraseMode = false,
+                        onEraseModeChange = {},
+                        brushColor = 0xFFFFFFFFL,
+                        onBrushColorChange = {},
+                        brushWidth = 25,
+                        onBrushWidthChange = {},
+                        brushOpacity = 80,
+                        onBrushOpacityChange = {},
+                        brushSmoothing = 30,
+                        onBrushSmoothingChange = {},
+                        selectedTextLayerId = null,
+                        onSelectTextLayerChange = {},
+                        selectedStickerLayerId = null,
+                        onSelectStickerLayerChange = {},
+                        selectedDrawLayerId = null,
+                        onSelectDrawLayerChange = {},
+                        selectedRegionLayerId = null,
+                        onSelectRegionLayerChange = {},
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    /**
+     * r58b: the Regions panel's strength slider on the crafted LabeledSlider.
+     * Minimal fixture: `regionMode = true` shows the kind chips + the strength
+     * slider (the r37 plain-state contract). The capture pins the slider row +
+     * the mosaic/blur chip row + the region-mode/layer chip row.
+     */
+    @Test
+    fun regionsPanelStrengthSliderRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    RegionsPanel(
+                        committed = EditRecipe(),
+                        draft = null,
+                        onDraftChange = {},
+                        exporting = false,
+                        commit = {},
+                        sweepPendingDrafts = {},
+                        commitSelectedRegionLayer = {},
+                        drawMode = false,
+                        onDrawModeChange = {},
+                        regionMode = true,
+                        onRegionModeChange = {},
+                        eraseMode = false,
+                        onEraseModeChange = {},
+                        regionKind = RegionKind.MOSAIC,
+                        onRegionKindChange = {},
+                        regionStrength = 60,
+                        onRegionStrengthChange = {},
+                        selectedTextLayerId = null,
+                        onSelectTextLayerChange = {},
+                        selectedStickerLayerId = null,
+                        onSelectStickerLayerChange = {},
+                        selectedDrawLayerId = null,
+                        onSelectDrawLayerChange = {},
+                        selectedRegionLayerId = null,
+                        onSelectRegionLayerChange = {},
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+=======
+>>>>>>> origin/main
 }

@@ -424,7 +424,19 @@ android {
         // bump is the gallery's alone so the r46 APK updates in place over
         // the previous pre-release on testing devices. All four flavors share
         // this one versionCode.
-        versionCode = 39
+        // versionCode 40 (r55 round): the one-launcher unification round
+        // --- the maintainer's "toadGALLERY(2) need to unify under setting
+        // page" directive. The MAIN/LAUNCHER entry moves onto a
+        // placeholder-gated activity-alias so exactly ONE toadGALLERY
+        // icon exists on a device (basic keeps it; engine/semantic/face
+        // install launcher-less and open from the new Settings
+        // "Installed components" section --- the family's single home:
+        // install status, version lines, and Open actions). The queries
+        // block gains the four companion <package> entries (the probe
+        // surface) and the video-mime contract mirrors (the r42 gap).
+        // No new permissions; no new dependencies; versionName stays
+        // 0.4.5-alpha. All four flavors share this one versionCode.
+        versionCode = 40
         versionName = "0.4.5-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
@@ -522,10 +534,23 @@ android {
     // (src/<flavor>/res/values/strings.xml overriding app_launcher_name);
     // icons are shared. The debug buildType's ".debug" suffix composes
     // with the flavor suffixes as usual.
+    //
+    // r55 (the one-launcher unification round): the MAIN/LAUNCHER entry
+    // lives on an activity-alias (main manifest, .LauncherAlias) whose
+    // enabled state is THIS placeholder. defaultConfig pins true (the
+    // canonical basic build keeps its icon); every engine-family flavor
+    // below overrides it to false, so exactly ONE toadGALLERY icon can
+    // exist on a device no matter how many family members install side
+    // by side --- the launcher-less builds open from the Settings
+    // "Installed components" section instead. The launcher test
+    // (LauncherConsolidationTest) pins the contract per flavor.
+    manifestPlaceholders["launcherAliasEnabled"] = true
     flavorDimensions += "engine"
     productFlavors {
         // The canonical gallery: no engine library, no engine UI, the
         // unchanged applicationId --- the offline-first core app.
+        // Inherits the default launcherAliasEnabled = true: the ONE
+        // launcher icon of the family.
         create("basic") {
             dimension = "engine"
             // No applicationIdSuffix: installs as io.github.dukeoftoad.gallery.
@@ -534,26 +559,33 @@ android {
             buildConfigField("boolean", "INDEX_SEMANTIC", "false")
         }
         // The full engine build: everything the r22-r39 rounds shipped,
-        // installed SEPARATELY from basic (like the edit app).
+        // installed SEPARATELY from basic (like the edit app). r55: no
+        // launcher icon of its own anymore --- opened from the family's
+        // Settings section.
         create("engine") {
             dimension = "engine"
             applicationIdSuffix = ".engine"
+            manifestPlaceholders["launcherAliasEnabled"] = false
             buildConfigField("boolean", "WITH_ENGINE", "true")
             buildConfigField("boolean", "INDEX_FACE", "true")
             buildConfigField("boolean", "INDEX_SEMANTIC", "true")
         }
-        // Semantic-index-only: Magic Search + Things, no People.
+        // Semantic-index-only: Magic Search + Things, no People. r55:
+        // launcher-less like its engine sibling.
         create("semantic") {
             dimension = "engine"
             applicationIdSuffix = ".semantic"
+            manifestPlaceholders["launcherAliasEnabled"] = false
             buildConfigField("boolean", "WITH_ENGINE", "true")
             buildConfigField("boolean", "INDEX_FACE", "false")
             buildConfigField("boolean", "INDEX_SEMANTIC", "true")
         }
-        // Face-index-only: People, no Magic Search / Things.
+        // Face-index-only: People, no Magic Search / Things. r55:
+        // launcher-less like its engine sibling.
         create("face") {
             dimension = "engine"
             applicationIdSuffix = ".face"
+            manifestPlaceholders["launcherAliasEnabled"] = false
             buildConfigField("boolean", "WITH_ENGINE", "true")
             buildConfigField("boolean", "INDEX_FACE", "true")
             buildConfigField("boolean", "INDEX_SEMANTIC", "false")

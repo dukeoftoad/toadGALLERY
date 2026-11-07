@@ -2341,3 +2341,59 @@ analyzes). Recorded here per the r42 convention.
 one-tab-vs-four question), F-54 (the video BackHandler port), the
 carried items (D-1 root fix, R51-3 waves, PR #134, the r52 video
 follow-ups), PAT revocation advised again after this round's push.
+
+### Run #29 — 2026-11-07 (the r55 window: the one-launcher unification — the maintainer's "toadGALLERY(2) need to unify under setting page" directive)
+
+**The task.** The maintainer's chat instruction of 2026-11-07 —
+"Continue build the app for beta release, focus on gallery app for
+now. refine, polish, ui/ux all the components refine. About
+toadGALLERY(2) need to unify under setting page. Then like that we
+will do for Ai/ml, rust, kotlin, edit gallery app, etc." The "(2)"
+is the launcher-icon duplication the r46 APK matrix built in: FOUR
+gallery applicationIds, each shipping the same MainActivity
+MAIN/LAUNCHER filter and the same shared icon (r50 even audited the
+indistinguishability and papered over it with suffixed labels).
+
+**The shape of the round.** One launcher icon, one family home:
+(1) the MAIN/LAUNCHER entry moves onto a placeholder-gated
+`activity-alias` (defaultConfig `launcherAliasEnabled=true`; the
+engine/semantic/face flavors override `false`) — basic keeps the
+icon, the engine family installs launcher-less, MainActivity stays
+exported for the explicit-open path; (2) the Settings page gains the
+"Installed components" section (the unification surface the
+directive names): self build with the BuildShape flavor copy, the
+engine siblings with version + whole-row Open (explicit component
+intent to the shared-namespace MainActivity), toadGALLERY Edit with
+the honest opens-from-the-viewer hint (the editor has no launcher
+activity — verified in its manifest); (3) the `<queries>` block
+gains the four family `<package>` entries (the probe surface on
+API 30+) AND the video-mime contract mirrors (the r42 gap:
+EditorLaunch has queried video mimes since r42 behind the image
+filter's package-visibility side effect); (4) `LauncherConsolidationTest`
+(Robolectric, every flavor's unit-test task) pins the contract:
+basic resolves a launch intent whose component is the alias, the
+engine family resolves none.
+
+**The gates.** Braces/parens/brackets delta 0 on both touched Kotlin
+files; the lex check OK; both XML files well-formed (ONE local catch:
+the Kotlin-style `---` em-dash inside XML comments is ILLEGAL — XML
+forbids `--` in comments; the manifest and strings_r55 comments
+re-phrased, the same class of catch r54's pipeline recorded for
+aapt2 fillType); strings-id uniqueness across all flavor res source
+sets (the only duplicate ids remain the deliberate per-flavor
+`app_launcher_name` overrides + basic's `about_privacy_body`).
+Screenshot-baseline safety reasoned and documented: the components
+section inserts BELOW the 05-settings.png viewport (the README suite
+waits on `settings_layout_grid` at the page top), so no committed
+baseline moves. Gallery versionCode 39→40 (versionName stays
+`0.4.5-alpha` — the beta versionName bump is the maintainer's call,
+flagged in the report). No new permissions (PrivacyPolicyTest's
+pinned sets untouched by construction); no new dependencies.
+
+**Remaining.** The maintainer's review/merge; the beta-cut decision
+(versionName naming); the carried items (D-1 root fix, R51-3 waves,
+PR #134, the r52 video follow-ups, F-52 the derived neutrals,
+F-53 the AI tab granularity, F-54 the video BackHandler port), the
+new F-55/F-56/F-57 (the beta unification roadmap the directive
+sketches: deeper AI/ML bridging, the Rust engine version surfacing,
+the edit-app deep unification), PAT revocation advised again.

@@ -13,7 +13,35 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.20 (2026-11-07, latest) --- the r54 photo-editor re-chassis round: the video editor's tab-bar architecture on the photo surface
+### v2.21 (2026-11-07, latest) --- the r55 one-launcher unification round: one icon, one family home under Settings
+
+- **The instruction** --- the maintainer's "About toadGALLERY(2) need
+  to unify under setting page" (2026-11-07, with the beta push:
+  "focus on gallery app for now. refine, polish, ui/ux all the
+  components refine"). The "(2)" is the r46 APK matrix's launcher
+  duplication: four gallery applicationIds, each shipping the same
+  MAIN/LAUNCHER entry and the same shared icon.
+- **The consolidation** --- the MAIN/LAUNCHER entry moves onto a
+  placeholder-gated activity-alias (`.LauncherAlias`, `android:enabled=
+  ${launcherAliasEnabled}`): defaultConfig true (basic keeps the ONE
+  icon), the engine/semantic/face flavors override false (they
+  install launcher-less). MainActivity stays exported for the
+  explicit-component open path (the EditorLaunch precedent).
+  `LauncherConsolidationTest` (Robolectric, every flavor's
+  unit-test task) pins the contract per flavor.
+- **The unification surface** --- the Settings page gains "Installed
+  components": the self build (version line + the BuildShape flavor
+  copy), the engine siblings (version + whole-row Open), toadGALLERY
+  Edit (version + the opens-from-the-viewer hint). The probes ride
+  four new `<queries>` `<package>` entries; the video-mime contract
+  mirrors close the r42 visibility gap.
+- **Deliberately unchanged** --- the engine family keeps every UI
+  surface and the AI gating (BuildShape untouched); no permissions
+  change (PrivacyPolicyTest's pins hold by construction); versionName
+  stays `0.4.5-alpha` (gallery versionCode 40) --- the BETA naming is
+  the maintainer's decision (F-55).
+
+### v2.20 (2026-11-07) --- the r54 photo-editor re-chassis round: the video editor's tab-bar architecture on the photo surface
 
 - **The instruction, the answer it settles** --- the maintainer's
   "Of course same design for photo editor as like video Editor. So

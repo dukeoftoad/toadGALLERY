@@ -23,6 +23,13 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     alias(libs.plugins.android)
     alias(libs.plugins.kotlin.compose)
+    // Roborazzi (r56, the edit app's screenshot harness --- mirrors the
+    // gallery's r47 wiring): the record/verify task pair exists for this
+    // module (recordRoborazziDebug / verifyRoborazziDebug --- the edit app
+    // has no product flavors), and a PLAIN unit-test run still SKIPS the
+    // captures (roborazzi.test.record is false unless a roborazzi task is
+    // in the graph --- the toadFILES parity rule, docs/phase-11/roborazzi.md).
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -380,6 +387,25 @@ android {
         compose = true // ADR-0009
     }
 
+    // --- Screenshot tests (r56, docs/phase-11/roborazzi.md) ---
+    // The gallery block's r47 wording applies verbatim: Roborazzi captures
+    // render the real Compose UI under Robolectric, so
+    // isIncludeAndroidResources gives the JVM tests the app's actual
+    // resources (the chrome resolves stringResource copy), and NATIVE
+    // graphics mode is mandatory (Robolectric's default LEGACY mode cannot
+    // produce pixels for captureRoboImage). The namingStrategy property
+    // pins PNG names to the fully-qualified test method, keeping baseline
+    // paths stable across refactors.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+                it.systemProperty("roborazzi.record.namingStrategy", "fullyQualifiedName")
+            }
+        }
+    }
+
     // --- Release signing (r43, the Phase 11 release-engineering round) ---
     // The Phase 11 extension of the ADR-0018 convention to the edit app:
     // the SAME four TG_* env vars, the SAME GitHub Encrypted Secrets
@@ -448,6 +474,17 @@ android {
     dependenciesInfo {
         includeInApk = false
     }
+}
+
+// --- Screenshot capture output location (r56, mirrors the gallery's r47
+// block) ---
+// The plugin's default output dir is build/outputs/roborazzi --- a BUILD
+// directory no baseline can be committed from. Pinning the output dir to
+// src/test/resources/roborazzi means the recordRoborazziDebug task writes
+// the PNGs STRAIGHT into the directory they are committed from, and the
+// verifyRoborazziDebug task reads its baselines from the same place.
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/resources/roborazzi"))
 }
 
 /**
@@ -596,4 +633,24 @@ dependencies {
     // r23 org-json note in the version catalog.
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
+
+    // --- Screenshot tests (r56, docs/phase-11/roborazzi.md) ---
+    // The gallery's r47 dependency set, module-for-module: Robolectric +
+    // Roborazzi (the bare artifact carries the gradle-plugin contract;
+    // roborazzi-compose carries the Compose capture surface), the compose
+    // BOM-pinned ui-test-junit4 for createComposeRule, and the debug-scope
+    // test manifest. Test classpath only --- the APK's dependency surface
+    // is unchanged (the permission gate sees nothing new).
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.androidx.test.ext.junit)
+    // The debug-scope test manifest registers the ComponentActivity the
+    // compose test rule launches --- WITHOUT it every createComposeRule()
+    // test dies at instrumentation startup (the gallery block's own r48
+    // note is the precedent; the first CI run of this harness proved it
+    // the hard way: 3/3 captures RuntimeException'd in 0.05s each).
+    debugImplementation(libs.compose.ui.test.manifest)
 }

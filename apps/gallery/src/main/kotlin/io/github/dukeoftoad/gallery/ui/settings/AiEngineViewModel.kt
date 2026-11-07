@@ -17,7 +17,7 @@ import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 import io.github.dukeoftoad.gallery.ml.index.ClipIndexScheduler
 import io.github.dukeoftoad.gallery.ml.index.ClipIndexWorkState
 import io.github.dukeoftoad.gallery.ml.index.EngineSessionGuard
-import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.index.faceIndexDirFor
 import io.github.dukeoftoad.gallery.ml.index.CLIP_INDEX_STATE_FILE_NAME
 import io.github.dukeoftoad.gallery.ml.index.FaceIndexScheduler
 import io.github.dukeoftoad.gallery.ml.index.FaceIndexWorkState
@@ -507,9 +507,12 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 
-    /** The app-private face-index directory (`ml-index.sqlite` inside). */
+    /** The app-private face-index directory (`ml-index.sqlite` inside).
+     *  r56: routes through the single `faceIndexDirFor` helper so the
+     *  directory is created on access (the next Start after a Reset that
+     *  deleteRecursively()'d it cannot regress into SQLITE_CANTOPEN). */
     private fun faceIndexDir(): File =
-        File(getApplication<ToadGalleryApplication>().filesDir, FACE_INDEX_DIR_NAME)
+        faceIndexDirFor(getApplication<ToadGalleryApplication>().filesDir)
 
     /** Presence truth from the provisioner's own derivation (disk-backed). */
     private fun snapshot(): AiDogfoodState {

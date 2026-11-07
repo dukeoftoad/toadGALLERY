@@ -18,7 +18,7 @@ import io.github.dukeoftoad.gallery.ml.people.PersonPhoto
 import io.github.dukeoftoad.gallery.ml.people.VisiblePerson
 import io.github.dukeoftoad.gallery.ml.people.PEOPLE_STATE_FILE_NAME
 import io.github.dukeoftoad.gallery.ml.people.queryPersonPhotos
-import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.index.faceIndexDirFor
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,7 +77,9 @@ class PersonDetailViewModel(
 ) : AndroidViewModel(app) {
 
     private val engineAdapter = PeopleEngineAdapter.fromApplication(app)
-    private val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
+    // r56: see PeopleViewModel --- the dir must exist before the
+    // PeopleStateFile writes through it.
+    private val faceIndexDir = faceIndexDirFor(app.filesDir)
     private val repository = PeopleRepository(
         engine = engineAdapter,
         stateStore = PeopleStateFile(File(faceIndexDir, PEOPLE_STATE_FILE_NAME)),

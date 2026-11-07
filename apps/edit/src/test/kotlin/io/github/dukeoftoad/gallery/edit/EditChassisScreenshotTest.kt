@@ -42,6 +42,7 @@ import org.robolectric.annotation.GraphicsMode
  * under src/test/resources/roborazzi (the plugin outputDir). The plugin's
  * recordRoborazziDebug task records them; verifyRoborazziDebug gates
  * against the committed baselines once they exist.
+<<<<<<< HEAD
  *
  * r58b (F-58b): the per-panel slider captures. The r57 panel seam made
  * each panel composable in isolation; this round converts every raw Slider
@@ -52,6 +53,8 @@ import org.robolectric.annotation.GraphicsMode
  * (the activity-dependency refactor). Each capture paints the theme's
  * background first (the r56 rule: transparent-root captures gate
  * near-white ink against white, not the contrast the user sees).
+=======
+>>>>>>> origin/main
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -146,6 +149,7 @@ class EditChassisScreenshotTest {
         rule.waitForIdle()
         rule.onRoot().captureRoboImage()
     }
+<<<<<<< HEAD
 
     /**
      * r58b: the Crop panel's straighten slider on the crafted LabeledSlider.
@@ -286,4 +290,6 @@ class EditChassisScreenshotTest {
         rule.waitForIdle()
         rule.onRoot().captureRoboImage()
     }
+=======
+>>>>>>> origin/main
 }

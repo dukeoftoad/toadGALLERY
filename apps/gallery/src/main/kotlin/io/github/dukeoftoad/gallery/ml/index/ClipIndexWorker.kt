@@ -130,7 +130,15 @@ class ClipIndexWorker(
             }
         }
 
-        val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
+        // r56: see FaceIndexWorker --- the face-index directory must
+        // exist before the shared ml-index.sqlite store opens, or the
+        // CLIP queue hits SQLITE_CANTOPEN on a fresh install AND right
+        // after a face reset that deleteRecursively()'d the dir (the
+        // CLIP queue writes through the same ml-index.sqlite the face
+        // queue opens --- one missing dir breaks both). Routes through
+        // the single `faceIndexDirFor` helper (defense in depth: the
+        // Rust `open` also create_dir_all()s).
+        val faceIndexDir = faceIndexDirFor(app.filesDir)
         // r47 honesty fix, part 2: the JNI store open THROWS
             // IllegalStateException on a native failure --- it does not
             // only return false (the facade's contract propagates the

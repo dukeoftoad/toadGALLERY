@@ -338,6 +338,23 @@ android {
         // toad-green EditorTheme is untouched.
         versionCode = 17
         versionName = "0.4.12-edit-alpha"
+
+        // versionCode 18 (r53 round): the photo editor's design-language
+        // round --- the maintainer's "Same ux design also" instruction
+        // (2026-11-07) interpreted (and flagged in the PR) as applying the
+        // r52 Image-2 design language to the photo editor surface: the
+        // r47 toad-green EditorTheme retires to the violet family scheme
+        // (the same ten pinned tokens as VideoEditTheme --- Bg, Surface,
+        // SurfaceHigh, Outline, Accent, OnAccent, AccentSoft, TextPrimary,
+        // TextSecondary, Error --- with secondaryContainer = accent so the
+        // selected FilterChips render accent-filled with zero per-chip
+        // overrides), and the EditActivity chrome maps its hardcoded
+        // white/black chrome to theme roles. Behavior, state machine,
+        // information architecture (the long-scroll sectioned page),
+        // commit-on-release draft slots, undo/redo and the a11y
+        // conventions are verbatim --- NOT restructured.
+        versionCode = 18
+        versionName = "0.4.13-edit-alpha"
     }
 
     buildFeatures {

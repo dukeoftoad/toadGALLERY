@@ -4,6 +4,56 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r53 round (editor versionCode 18; edit `0.4.13-edit-alpha`; gallery unchanged)
+
+The photo editor's design-language unification: the maintainer's
+"Same ux design also" instruction (2026-11-07, the PAT re-supplied)
+is interpreted — the interpretation flagged in the round report and
+the PR description — as applying the r52 design language (the
+Image-2 dark+violet chassis approved and shipped for the video
+editor) to the photo editor surface, the remaining old-UI part of
+the edit app (the r47 toad-green `EditorTheme`). The chrome restyle
+maps the activity's hardcoded white/black to theme roles; the
+behavior, state machine, information architecture (the long-scroll
+sectioned page), commit-on-release draft slots, undo/redo and the
+a11y conventions are verbatim — deliberately NOT restructured (the
+photo mockups do not exist; every design image is a video screen,
+and the IA is the battle-tested r30–r41 contract). One PR
+(`ui/r53-photo-redesign`, stacked on the r52 PR #144 per the house
+stacked-PR pattern); CI is the compile judge per ADR-0013.
+
+### Changed
+
+- **[edit] The EditorTheme palette swap (the toad-green retires)**
+  (branch `ui/r53-photo-redesign`): the photo editor's r47 theme
+  carries the same ten pinned tokens as the video surface's
+  `VideoEditTheme` — Bg #0D0A14, Surface #17131F, SurfaceHigh
+  #221B2E, Outline #3A3148, Accent #A78BFA, OnAccent #171126,
+  AccentSoft #8B72E8, TextPrimary #F3F0FA, TextSecondary #A99FBF,
+  Error #F2B8B5 — with `secondaryContainer = accent` so the selected
+  FilterChips render accent-filled with zero per-chip overrides (the
+  r52 trick). A few derived neutrals are documented in the KDoc
+  (primaryContainer #2E2347, onPrimaryContainer #EDE7FA,
+  inversePrimary #7C5CE0, tertiaryContainer #3A2D55,
+  onTertiaryContainer #E6DFF7, outlineVariant #2E2740) — documented
+  derivations, not design-pinned tokens (F-52 tracks the single edit
+  point if the maintainer pins exact values later).
+- **[edit] The chrome restyle (`EditActivity.kt` only)** (same
+  branch): the hardcoded white/black chrome maps to theme roles —
+  the section labels and secondary text read `onSurfaceVariant`, the
+  primary text and icons read `onBackground`, the header spinner
+  reads `primary`, the export-sheet tiles drop `0xEE101010` for
+  `0xEE17131F`, and the color-swatch selection ring reads the
+  accent. No behavior change: the state machine, the long-scroll
+  sectioned information architecture, the commit-on-release draft
+  slots, undo/redo and the a11y conventions are verbatim; the IA is
+  NOT restructured to the video editor's tab-screen chassis (the
+  honest-scope line above; F-51 records the unification question).
+- **[edit] versionCode 18** (`0.4.13-edit-alpha`): the per-round
+  version-line comment in `apps/edit/build.gradle.kts` documents the
+  round. No new strings, no new drawables, no dependencies, no
+  manifest changes, no pipeline/layer changes, no test changes.
+
 ## [Unreleased] — the r52 round (editor versionCode 17; edit `0.4.12-edit-alpha`; gallery unchanged)
 
 The video editor's UI/UX redesign: the maintainer-approved Image-2 base

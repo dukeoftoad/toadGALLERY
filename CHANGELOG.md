@@ -4,6 +4,80 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r55 round (gallery versionCode 40; `0.4.5-alpha`; edit unchanged)
+
+The one-launcher unification: the maintainer's "About toadGALLERY(2)
+need to unify under setting page" instruction (2026-11-07) — the r46
+APK matrix ships FOUR gallery applicationIds (basic / engine /
+semantic / face), each with the same MAIN/LAUNCHER entry and the same
+shared icon, so side-by-side installs render as "toadGALLERY",
+"toadGALLERY(2)", ... on the launcher. Since this round exactly ONE
+toadGALLERY icon exists on a device (the canonical basic build), the
+engine-family flavors install launcher-less, and the Settings page
+becomes the family's single home: an "Installed components" section
+enumerating every applicationId the project ships (the four gallery
+flavors + toadGALLERY Edit) with install status, version lines, and
+Open actions for the engine siblings.
+
+### Added
+
+- **[gallery] The "Installed components" Settings section**
+  (`SettingsScreen.kt`, below the AI block, above Progress): the
+  family's single home. A PackageManager probe in a `remember` (five
+  cheap `getPackageInfo` reads, re-probed per Settings entry, no
+  ViewModel, no state) enumerates the self build first (version line
+  reusing the About page's `about_version_line` format + the
+  BuildShape-algebra flavor copy: basic / engine / semantic / face),
+  then the engine siblings (installed → version + whole-row Open via
+  an explicit component intent to the shared-namespace MainActivity,
+  NEW_TASK'd, runCatching-guarded; not installed → a quiet "Not
+  installed" subtitle; a build never offers Open on itself), then
+  toadGALLERY Edit (installed → version + the honest
+  "Opens from the viewer's Edit action" hint — the editor has no
+  standalone launcher activity, so there is no other surface to
+  open). House row idiom throughout (titleMedium/primary/heading
+  header, bodyLarge + bodyMedium/onSurfaceVariant rows,
+  `settings_components_*` test tags), all copy in the new
+  `strings_r55.xml` companion file.
+- **[gallery] The launcher-consolidation CI gate**
+  (`LauncherConsolidationTest`, Robolectric under every flavor's
+  unit-test task like `BuildShapeTest`): the basic flavor resolves a
+  launch intent whose component is the `.LauncherAlias`; every
+  engine-family flavor resolves NONE (the placeholder-disabled alias
+  keeps the launcher entry off the merged manifest). The four tasks
+  together pin the matrix; a future flavor edit that forgets the
+  placeholder override goes red here before any APK ships.
+- **[gallery] Package visibility for the family probes** (manifest
+  `<queries>`): four `<package>` entries (.engine / .semantic /
+  .face / the editor) so the components probe is honest on API 30+
+  instead of a permanent "not installed". Visibility declarations,
+  not permissions — the ADR-0014 pinned permission set is untouched.
+
+### Changed
+
+- **[gallery] The MAIN/LAUNCHER entry moves onto a placeholder-gated
+  activity-alias** (`apps/gallery/src/main/AndroidManifest.xml` +
+  `apps/gallery/build.gradle.kts`): `MainActivity` keeps
+  `exported="true"` but loses the intent-filter (the
+  EditorLaunch explicit-ComponentName pattern is the in-repo
+  precedent for opening it); the new `.LauncherAlias` carries
+  MAIN/LAUNCHER with `android:enabled="${launcherAliasEnabled}"` —
+  defaultConfig pins `true` (basic keeps its icon), each engine-family
+  flavor overrides `false` (no icon). The alias keeps the label/icon
+  metadata so the basic icon renders identically to the pre-r55
+  shape; the per-flavor launcher-label overrides stay (they key on
+  the same `@string/app_launcher_name` and still tell the builds
+  apart in App info and in the Components rows).
+- **[gallery] The r42 contract-visibility gap closes** (manifest
+  `<queries>`): EditorLaunch has run video-mime contract queries
+  since r42 while the visibility block declared image-only filters —
+  working only through the package-visibility side effect of the
+  image entry. Two explicit `video/*` mirrors (the contract action
+  and the ACTION_EDIT fallback) make the video half self-sufficient.
+- **[gallery] `apps/gallery/build.gradle.kts`**: versionCode 40
+  (`0.4.5-alpha` unchanged — no phase milestone; the beta versionName
+  bump is the maintainer's call) + the per-round comment.
+
 ## [Unreleased] — the r54 round (editor versionCode 19; edit `0.4.14-edit-alpha`; gallery unchanged)
 
 The photo editor's re-chassis: the maintainer's "Of course same

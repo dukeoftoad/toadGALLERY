@@ -1,6 +1,8 @@
 package io.github.dukeoftoad.gallery.ui.settings
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -54,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -68,6 +71,7 @@ import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.buildshape.BuildShape
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
+import io.github.dukeoftoad.gallery.edit.contract.EditContract
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
 import io.github.dukeoftoad.gallery.ml.index.ClipIndexWorkState
 import io.github.dukeoftoad.gallery.ml.index.FaceIndexWorkState
@@ -1425,6 +1429,80 @@ fun SettingsScreen(
             } // BuildShape.semanticIndex
         } // BuildShape.withEngine
 
+        // ---- Installed components (r55: the one-launcher unification) ----
+        // The maintainer's "toadGALLERY(2) need to unify under setting
+        // page" directive: since r55 the launcher consolidation means
+        // exactly ONE toadGALLERY icon exists on a device (the canonical
+        // basic build), so THIS section is the family's single home ---
+        // every applicationId the project ships (four gallery flavors +
+        // the editor), what's installed, at what version, and a way in.
+        // The probes are five PackageManager reads in a remember (no
+        // state, no ViewModel, no lifecycle): package visibility comes
+        // from the r55 <queries> <package> entries, so the probe is
+        // honest on API 30+ instead of a permanent "not installed".
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.settings_components_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(
+            text = stringResource(R.string.settings_components_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        val componentContext = LocalContext.current
+        val componentRows = remember { probeGalleryComponentRows(componentContext) }
+        for (row in componentRows) {
+            val subtitle = when {
+                row.versionLine != null && row.detailRes != null ->
+                    row.versionLine + " \u00b7 " + stringResource(row.detailRes)
+                row.versionLine != null -> row.versionLine
+                else -> stringResource(R.string.settings_components_not_installed)
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .then(
+                        if (row.openable) {
+                            Modifier.clickable(
+                                onClick = {
+                                    openGalleryComponent(componentContext, row.packageId)
+                                },
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .testTag("settings_components_" + row.tag)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(row.nameRes),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (row.openable) {
+                    Text(
+                        text = stringResource(R.string.settings_components_open),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+
         // ---- Progress (F-1: the build-time progress.json mirror) ----
         // Placed ABOVE About (it changes with the roadmap; About is the
         // stable identity page). The same row shape as the About entry.
@@ -1478,6 +1556,133 @@ fun SettingsScreen(
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/**
+ * One rendered row of the r55 "Installed components" section: the
+ * component's display name (a string res, kept in lockstep with the
+ * build's launcher label per the strings_r55.xml sync note), its
+ * version line when the probe found it installed (null = not
+ * installed), an optional detail line (the self build's flavor copy,
+ * the editor's open-from-viewer hint), whether the row is openable
+ * (an installed engine-family sibling; the editor is NOT --- it has no
+ * standalone launcher, verified in its manifest), and the
+ * applicationId the probe/open path keys on. [tag] feeds the
+ * settings_components_* testTag.
+ */
+private data class GalleryComponentRow(
+    val tag: String,
+    val nameRes: Int,
+    val packageId: String,
+    val versionLine: String?,
+    val detailRes: Int?,
+    val openable: Boolean,
+)
+
+/**
+ * The r55 family probe: the self build first (always present, with the
+ * BuildShape-algebra flavor copy), then each engine-family sibling and
+ * the editor, skipping any package that IS this build (a release
+ * engine build must not offer "Open" on itself --- the self row
+ * narrates it; debug applicationIds compose a ".debug" suffix and so
+ * never collide with these release ids). Version lines reuse the
+ * About page's `about_version_line` format ("%1$s (build %2$d)") so
+ * the two surfaces never disagree. The probe reads are five cheap
+ * PackageManager calls inside the caller's remember --- no state, no
+ * lifecycle; a Settings re-entry re-probes.
+ */
+private fun probeGalleryComponentRows(context: Context): List<GalleryComponentRow> {
+    fun versionLineOf(packageId: String): String? {
+        val info = runCatching {
+            context.packageManager.getPackageInfo(packageId, 0)
+        }.getOrNull() ?: return null
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        return context.getString(R.string.about_version_line, info.versionName ?: "", code)
+    }
+
+    val selfId = context.packageName
+    val selfFlavorRes = when {
+        BuildShape.withEngine && BuildShape.faceIndex && BuildShape.semanticIndex ->
+            R.string.settings_components_flavor_engine
+        BuildShape.withEngine && BuildShape.semanticIndex ->
+            R.string.settings_components_flavor_semantic
+        BuildShape.withEngine && BuildShape.faceIndex ->
+            R.string.settings_components_flavor_face
+        else -> R.string.settings_components_flavor_basic
+    }
+
+    val rows = mutableListOf(
+        GalleryComponentRow(
+            tag = "self",
+            nameRes = R.string.settings_components_app_gallery,
+            packageId = selfId,
+            versionLine = versionLineOf(selfId),
+            detailRes = selfFlavorRes,
+            openable = false,
+        ),
+    )
+    val siblings = listOf(
+        Triple("engine", R.string.settings_components_app_engine, "io.github.dukeoftoad.gallery.engine"),
+        Triple("semantic", R.string.settings_components_app_semantic, "io.github.dukeoftoad.gallery.semantic"),
+        Triple("face", R.string.settings_components_app_face, "io.github.dukeoftoad.gallery.face"),
+        Triple("edit", R.string.settings_components_app_edit, EditContract.EDITOR_APPLICATION_ID),
+    )
+    for ((tag, nameRes, packageId) in siblings) {
+        if (packageId == selfId) continue
+        val versionLine = versionLineOf(packageId)
+        rows += if (packageId == EditContract.EDITOR_APPLICATION_ID) {
+            // The editor is a pure contract tool (no launcher activity
+            // in its manifest): status + version + the honest hint, no
+            // openable row.
+            GalleryComponentRow(
+                tag = tag,
+                nameRes = nameRes,
+                packageId = packageId,
+                versionLine = versionLine,
+                detailRes = if (versionLine != null) {
+                    R.string.settings_components_edit_hint
+                } else {
+                    null
+                },
+                openable = false,
+            )
+        } else {
+            GalleryComponentRow(
+                tag = tag,
+                nameRes = nameRes,
+                packageId = packageId,
+                versionLine = versionLine,
+                detailRes = null,
+                openable = versionLine != null,
+            )
+        }
+    }
+    return rows
+}
+
+/**
+ * The one open path of the components section: an explicit component
+ * intent to the sibling's MainActivity (the shared namespace means the
+ * class name is identical across all four gallery flavors --- only the
+ * applicationId differs), NEW_TASK'd for safety. MainActivity stays
+ * exported in every flavor precisely for this path (the
+ * EditorLaunch explicit-ComponentName precedent); the runCatching
+ * keeps a stale-probe edge (uninstalled between probe and tap) from
+ * ever crashing Settings.
+ */
+private fun openGalleryComponent(context: Context, packageId: String) {
+    runCatching {
+        context.startActivity(
+            Intent()
+                .setClassName(packageId, "io.github.dukeoftoad.gallery.MainActivity")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 }
 

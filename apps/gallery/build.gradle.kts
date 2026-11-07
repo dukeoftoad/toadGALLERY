@@ -406,7 +406,25 @@ android {
         // BuildConfig-driven build-shape gating (BuildShape) removing the
         // whole engine UI surface from the basic APK; versionName stays
         // 0.4.5-alpha. All four flavors share this one versionCode.
-        versionCode = 38
+        // versionCode 39 (r47-r54 release cut): the eight-round batch since
+        // the r46 APK matrix --- r47 (the UI/UX flaw sweep + Roborazzi
+        // toadFILES parity + the engine label + device screenshots), r48
+        // (README screenshots + workflow-truth pass + indexing root-cause
+        // fixes), r49 (the four APK test builders collapse to one
+        // apk-build.yml + the least-privilege baseline), r50 (the dual-flavor
+        // audit + CodeQL/workflow-lint/sensitive-change-approval), r51 (the
+        // eleven-PR supply-chain + vault-durability + scan-pipeline +
+        // index-queue + compliance hardening sweep), r52 (the video editor's
+        // Image-2 dark+violet redesign), r53 (the photo editor's
+        // design-language unification onto the same ten tokens), r54 (the
+        // photo editor's chassis re-architecture --- the video editor's
+        // tab-bar IA on the photo surface). versionName stays 0.4.5-alpha
+        // (no phase milestone crossed; the editor's own version line carries
+        // the r52-r54 design bumps as 0.4.12/0.4.13/0.4.14-edit-alpha). The
+        // bump is the gallery's alone so the r46 APK updates in place over
+        // the previous pre-release on testing devices. All four flavors share
+        // this one versionCode.
+        versionCode = 39
         versionName = "0.4.5-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }

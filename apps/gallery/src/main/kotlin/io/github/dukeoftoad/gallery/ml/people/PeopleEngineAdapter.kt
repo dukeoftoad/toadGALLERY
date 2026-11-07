@@ -3,7 +3,7 @@ package io.github.dukeoftoad.gallery.ml.people
 import android.app.Application
 import io.github.dukeoftoad.gallery.ToadGalleryApplication
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
-import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.index.faceIndexDirFor
 import java.io.File
 
 /**
@@ -116,7 +116,9 @@ class PeopleEngineAdapter(
             else ->
                 throw IllegalStateException("engine init: $init")
         }
-        if (!engine.openFaceIndex(faceIndexDir.absolutePath)) {
+        // r56: defense in depth --- the factory already mkdirs'd, but a
+        // direct constructor call (test or future caller) might not have.
+        if (!engine.openFaceIndex(faceIndexDir.also { it.mkdirs() }.absolutePath)) {
             throw IllegalStateException("face index store did not open")
         }
         sessionOpen = true
@@ -134,7 +136,8 @@ class PeopleEngineAdapter(
             val application = app as ToadGalleryApplication
             return PeopleEngineAdapter(
                 modelsDir = application.modelProvisioner.modelsDir.absolutePath,
-                faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME),
+                // r56: faceIndexDirFor mkdirs()s --- see FaceIndexWorker.
+                faceIndexDir = faceIndexDirFor(app.filesDir),
             )
         }
     }

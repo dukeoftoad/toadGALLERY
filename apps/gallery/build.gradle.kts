@@ -628,9 +628,15 @@ android {
         // files the standalone edit app builds from --- no copies). The
         // editor's icon resources were renamed editor_* (r59) so the only
         // launcher icon in the unified APK is the gallery's own.
-        getByName("unified").java.srcDirs("../../edit/src/main/kotlin")
-        getByName("unified").assets.srcDirs("../../edit/src/main/assets")
-        getByName("unified").res.srcDirs("../../edit/src/main/res")
+        // NOTE: paths are relative to THIS module (apps/gallery), so the
+        // editor module is ONE level up: ../edit/... (the r59 debug run's
+        // resource-link failure was the ../../ spelling, which resolved
+        // outside the repo and was silently ignored --- missing srcDirs do
+        // not error, which is why the compile gate stayed green while the
+        // resource link failed).
+        getByName("unified").java.srcDirs("../edit/src/main/kotlin")
+        getByName("unified").assets.srcDirs("../edit/src/main/assets")
+        getByName("unified").res.srcDirs("../edit/src/main/res")
     }
 
     compileOptions {

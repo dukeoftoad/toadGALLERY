@@ -971,3 +971,20 @@ the public remote each time.
   F-55 (beta naming), F-56 (deeper AI/ML unification), F-57
   (components probe freshness), PAT revocation (advised again after
   this round's push).
+
+- **F-58 (2026-11-07, open)** — The edit app's craft round, part two: the
+  remaining structural debt the r56 round deliberately left. (a) The ten
+  tool screens still live inline in `EditActivity`'s `when` — the r56
+  round extracted only the CHROME (PhotoChrome.kt) and the shared controls
+  (PhotoControls.kt) because those compose in isolation; each tool branch
+  reads ~40 closure locals, so extraction wants a `PhotoPanelHost` seam
+  and is its own round. (b) The Draw/Region/AI panels and the crop
+  sliders still use the bare r32 label-over-Slider pairs — the
+  `LabeledSlider` conversion covered the Adjust suite, the looks
+  intensity, the frames width, the text/sticker triples and the export
+  quality. (c) The press-and-hold compare is gesture-only — TalkBack has
+  no press-and-hold; the a11y fix is a semantics custom action
+  ("show original") with a timed hold. (d) `FontPreviewChip` rides
+  `AndroidView(TextView)` because compose-ui 1.7 has no public
+  android.graphics.Typeface bridge; if a later BOM ships one, swap the
+  chip to a pure Compose `Text` and delete the interop.

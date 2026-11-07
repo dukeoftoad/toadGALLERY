@@ -207,3 +207,77 @@
 * [x] The r50 audit fix plan executed as eight disjoint PRs (#135–#142), verified in two ADR-0013 waves, the two wiring-dormancy PARTIALs completed pre-merge (`4d39207` E-3, `d1ccc62` C-3, `725c2d3` F-8 docs), squash-merged in order #135→#142; main @ `4c995bc` CI + CodeQL green; merged tree byte-identical to the zero-conflict rehearsal.
 * [ ] **Maintainer decisions still open**: the D-1 root fix (fix-plan §5.1 — `PIN_ITERATIONS` raise strategy; throttle-only shipped in #142); dispatching the R51-3 prioritization-gated waves (3a read-path eligibility, 3b About/licenses UI, 3c scan perf, 3d robustness sweep); merging PR #134 (the audit + verification record).
 * [ ] The standing human-only device rows (above) unchanged.
+
+## r52 checkpoint — the video editor UI/UX redesign (2026-11-06)
+
+**Landed (branch `ui/r52-video-redesign`, one PR; CI is the compile judge):**
+- [x] The maintainer's approved bundle implemented with every token as a
+  flagged interpretation: Image 2 base chassis / option 2(a) = six real
+  tool tabs (Trim, Speed, Audio, Adjust, Extract, Animate — no fake
+  Effects tab) / speed capped at the real 0.25x–2x bounds / Mute+Volume.
+- [x] `VideoEditPlan.volume` + validator bounds [0..2] + NaN gate + five
+  JVM tests (default/bounds/out-of-bounds/NaN/mute-coexist); runner
+  realizes it via media3's `GainProcessor` (skipped on strip-audio and
+  at the 1f identity; the CI judge's setVolume catch is recorded); preview via `player.volume`.
+- [x] `VideoEditorScreen.kt`: one scaffold, committed/draft session model,
+  six tool screens (draft Reset/Apply + ✓ confirm), two-handle trim
+  filmstrip with live cut preview, big-value speed + presets, nine-real-
+  adjustment selector, paused-player frame preview, chips + width
+  dropdown + honest preflight on Animate; real-frame filmstrip (10
+  decoded thumbnails) with drag-to-scrub; fit/zoom preview toggle.
+- [x] Twelve `ic_vt_*` vector drawables (house style); `strings_r52.xml`
+  (all `editor_v2_`, parity-checked both directions); activity slimmed to
+  plumbing + `decodeThumbnails`; versionCode 17 (`0.4.12-edit-alpha`).
+- [x] Ledgers: CHANGELOG r52, roadmap v2.18, worklog Run #26, follow-up
+  F-40..F-43, phase-10 contract record (the ADR-0012 §5 volume-boundary
+  extension recorded as a maintainer decision).
+
+**Open (design, not defects):** F-40 video text/effects pipeline
+(maintainer scope decision); F-41 video-session undo/redo; F-42 waveform
+strip decode-once option; F-43 volume device rows. Carried: D-1 root fix,
+R51-3 waves, PR #134.
+
+**Human-only device rows owed by this round:** TalkBack over the new
+surface; the audible volume gain; filmstrip decode cost on long clips;
+the trim-handle drag ergonomics.
+
+## r53 checkpoint — the photo editor's design-language round (2026-11-07)
+
+**Round state (branch `ui/r53-photo-redesign`, stacked on PR #144 head `e6c5a7a`; CI is the compile judge):**
+- [x] Branch created off the r52 PR #144 head `e6c5a7a` (the
+  stacked-PR pattern); the round spec written to agent-ctx (the ten
+  pinned tokens + the derived neutrals, the chrome-role map, the
+  honest-scope line).
+- [x] The theme swap (`EditorTheme.kt`: the r47 toad-green → the r52
+  violet scheme — the same ten pinned tokens as `VideoEditTheme` +
+  `secondaryContainer = accent` so the selected FilterChips render
+  accent-filled with zero per-chip overrides; the derived neutrals
+  documented in KDoc) — DONE by the code task.
+- [x] The chrome restyle (`EditActivity.kt` ONLY: the hardcoded
+  white/black chrome mapped to theme roles; behavior, state machine,
+  the long-scroll sectioned IA, commit-on-release draft slots,
+  undo/redo and the a11y conventions verbatim) — DONE (63 hunks,
+  every one a `color =`/`tint =` argument swap; the canvas matting
+  black and the crop-rect stroke + canvas spinner white kept).
+- [x] `apps/edit/build.gradle.kts` — versionCode 18
+  (`0.4.13-edit-alpha`) + the per-round comment.
+- [x] Ledgers: CHANGELOG r53, roadmap v2.19, worklog Run #27 (+ the
+  ledger row), follow-up F-51/F-52, this checkpoint.
+- [x] The local gates (the lex check + the host-literal scan over the
+  touched Kotlin files) + the line-by-line review — DONE (lex OK ×2,
+  literal scan CLEAN, the full diff reviewed hunk-by-hunk).
+- [x] Commit → push → PR #145 (head `8e9e59f`) → CI poll — ALL 7
+  CHECKS GREEN on the first run (Build + lint + test = compileDebugKotlin
+  + lintDebug + the JVM suites incl. the privacy scan, CodeQL, both
+  vendored-engine jobs, the approval + actions analyzes); the ledgers'
+  `pending` cells recorded. Remaining: the maintainer's review/merge;
+  then the rebase onto main after #144 merges (the duplicated
+  r52 commits drop).
+
+**Open (decisions, not defects):** F-51 the photo-editor IA
+unification (the long-scroll page + commit-on-release vs the video
+tab-screen + Reset|Apply chassis — a maintainer decision owed before
+any restructure); F-52 the derived violet neutrals (documented
+derivations, not design-pinned tokens; the theme file is the single
+edit point). Carried: D-1 root fix, R51-3 waves, PR #134, the r52
+video follow-ups.

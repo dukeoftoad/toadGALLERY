@@ -65,9 +65,10 @@ sealed interface VideoPlanValidation {
 
 /**
  * The whole lightweight-edit session as ONE pure value (r42, decision 1):
- * trim range + speed plan + the audio fact + the mute request + the nine
- * ADR-0012 colour adjustments + the output container. The activity executes
- * a VALIDATED plan; every rule below is JVM-pinned.
+ * trim range + speed plan + the audio fact + the mute request + the r52
+ * volume gain + the nine ADR-0012 colour adjustments + the output
+ * container. The activity executes a VALIDATED plan; every rule below is
+ * JVM-pinned.
  *
  * The facts ([durationMs], [audioTrackPresent]) are INPUTS supplied by the
  * caller from the retriever --- the plan never guesses them.
@@ -87,6 +88,16 @@ data class VideoEditPlan(
     val audioTrackPresent: Boolean,
     /** The mute request; on a no-audio clip it is a recorded no-op. */
     val mute: Boolean = false,
+    /**
+     * The audio gain request (r52's maintainer-approved mute+volume bundle,
+     * decision 2026-11-06): 1f = unchanged (the default, so every pre-r52
+     * plan value and test stays byte-compatible), 0f = silent, 2f = the
+     * +6 dB boost ceiling. MUTE WINS over volume at the realization --- a
+     * muted export strips the audio track outright, so the gain is moot
+     * there; on a clip with no audio track both requests are recorded
+     * no-ops (the honest-fact convention).
+     */
+    val volume: Float = 1f,
     /** The nine ADR-0012 adjustment parameters (0 = neutral everywhere). */
     val adjustments: VideoAdjustParams = VideoAdjustParams(),
     /** The output container (v1: MP4 only --- the honest encodable set). */
@@ -99,6 +110,10 @@ object VideoEditPlanValidator {
     /** The speed factor bounds (the contract's 0.25x..2x slow-mo range). */
     const val MIN_SPEED_FACTOR: Double = 0.25
     const val MAX_SPEED_FACTOR: Double = 2.0
+
+    /** The volume gain bounds (r52: 0 = silent .. 2 = +6 dB; 1f is the unchanged identity). */
+    const val MIN_VOLUME: Float = 0.0f
+    const val MAX_VOLUME: Float = 2.0f
 
     fun validate(plan: VideoEditPlan): VideoPlanValidation {
         // The duration fact.
@@ -143,6 +158,22 @@ object VideoEditPlanValidator {
                 )
             }
             previousEnd = segment.endMs
+        }
+
+        // The volume gain: NaN is refused FIRST (every comparison against
+        // NaN is false, so the bounds check below alone would let it slip
+        // through as valid --- defensive; the UI never produces it, the
+        // validator is the second gate).
+        if (plan.volume.isNaN()) {
+            return VideoPlanValidation.Invalid(
+                "volume ${plan.volume} is not a number (NaN) --- not a gain the export can apply",
+            )
+        }
+        if (plan.volume < MIN_VOLUME || plan.volume > MAX_VOLUME) {
+            return VideoPlanValidation.Invalid(
+                "volume ${plan.volume} outside [$MIN_VOLUME..$MAX_VOLUME]" +
+                    " --- the gain the export applies",
+            )
         }
 
         // The colour parameters: the shared projection owns the ranges.

@@ -2555,3 +2555,47 @@ F-58a), the Draw/Region/AI slider conversions (F-58b), the compare's TalkBack
 custom action (F-58c), the font-chip API upgrade path (F-58d), the maintainer's
 review, the baseline-commit flip for the edit verify gate, and the carried
 items (F-52/F-53/F-54, PR #134, PAT revocation — advised again).
+
+## r57 — the edit app's panel seam (the ten-tool extraction, F-58a)
+
+**The maintainer's standing directive** ("Work on generic and flawed apk
+editor apk ... take lead role") continues into its structural half: the r56
+craft pass made the panels WORTH pinning; this round makes them PINNABLE.
+The r54 chassis had re-hosted the ten tool blocks verbatim inside
+`EditorContent` — a ~3,900-line composable whose `when` branches read 4-23
+closure locals each — so the app's UI was one file, unrenderable in
+isolation, exactly the property that kept the edit app screenshot-less
+until r56. The seam the r56 ledger scheduled (F-58a) is now real.
+
+**The move.** `PhotoPanelHost` receives the chassis state EXPLICITLY —
+sixty-seven value + `on...Change` parameters, nothing captured — and
+dispatches to ten extracted panel composables grouped by tool family:
+`PhotoPanelGeometry.kt` (crop), `PhotoPanelTone.kt` (adjust + color, plus
+their private `bandNameRes`/`withBand`), `PhotoPanelMedia.kt` (looks +
+frames, plus `lookNameRes`), `PhotoPanelLayers.kt` (text + stickers),
+`PhotoPanelPaint.kt` (draw + regions), `PhotoPanelAi.kt` (the AI surface,
+with the three ai-runner closures as parameters). The r34 swatch palette
+and `ColorSwatch` move verbatim into `PhotoControls.kt` (they ARE
+controls); `ADJUST_SLIDERS`/`HSL_BANDS` widen private -> internal (the
+chassis still routes the draft keys). The bodies moved verbatim: the ONLY
+edits inside them are closure-state assignments becoming setter calls —
+120 rewrites, mechanically applied by the round's generator script and
+each one printed to the audit log. `EditorContent` drops 4,818 -> 2,848
+lines; the chassis keeps the canvas, the gestures, the sheets, the export
+and the ai runners.
+
+**The proof is that nothing moved.** A refactor round's success condition
+is the ABSENCE of change: `:apps:edit` compiles, `lintDebug` is clean, the
+full JVM suite passes 459/459 (the four r56 pins included), and the
+committed Roborazzi chassis baselines re-render BIT-IDENTICAL —
+`verifyRoborazziDebug` green with zero re-recorded goldens. The
+state-hoisting contract (every tick calls `onDraftChange`, the chassis's
+`draft` var re-renders the preview; release commits through the chassis's
+`commit`) preserves the r32 commit-on-release semantics by construction.
+
+**Remaining.** F-58b (the Draw/Region/AI/crop `LabeledSlider` conversions —
+now a per-file swap with a per-panel screenshot pin, the panels compose in
+isolation), F-58c (the compare gesture's TalkBack custom action), F-58d
+(the font-chip API upgrade path, waiting on the compose BOM), the
+maintainer's review of #150 + this round, and the carried items
+(F-52/F-53/F-54, PR #134, PAT revocation — advised again).

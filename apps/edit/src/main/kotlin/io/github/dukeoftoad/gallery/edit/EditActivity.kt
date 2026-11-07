@@ -921,7 +921,7 @@ private class EditSessionEngine(initial: EditRecipe) {
  * still carries the live value for the visible text AND the
  * stateDescription.
  */
-private data class SliderSpec(
+internal data class SliderSpec(
     val key: String,
     val label: Int,
     val a11yNameRes: Int,
@@ -930,7 +930,7 @@ private data class SliderSpec(
 )
 
 /** The tone + colour + detail sliders (the full r30 adjustment suite minus HSL bands). */
-private val ADJUST_SLIDERS: List<SliderSpec> = listOf(
+internal val ADJUST_SLIDERS: List<SliderSpec> = listOf(
     SliderSpec("exposure", R.string.editor_exposure, R.string.editor_a11y_exposure, { it.exposure }, { r, v -> r.copy(exposure = v) }),
     SliderSpec("brightness", R.string.editor_brightness, R.string.editor_a11y_brightness, { it.brightness }, { r, v -> r.copy(brightness = v) }),
     SliderSpec("contrast", R.string.editor_contrast, R.string.editor_a11y_contrast, { it.contrast }, { r, v -> r.copy(contrast = v) }),
@@ -944,7 +944,7 @@ private val ADJUST_SLIDERS: List<SliderSpec> = listOf(
 )
 
 /** The eight HSL bands with their display names (fixed order). */
-private val HSL_BANDS: List<Pair<String, (HslBands) -> HslBandAdjust>> = listOf(
+internal val HSL_BANDS: List<Pair<String, (HslBands) -> HslBandAdjust>> = listOf(
     "red" to { it.red },
     "orange" to { it.orange },
     "yellow" to { it.yellow },
@@ -2709,6 +2709,79 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // recomposed away); only the panel content fades.
             Crossfade(targetState = screen, label = "photo-tool-panel") { tool ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+<<<<<<< HEAD
+                    PhotoPanelHost(
+                        tool = tool,
+                        committed = committed,
+                        draft = draft,
+                        onDraftChange = { draft = it },
+                        exporting = exporting,
+                        previewBase = previewBase,
+                        commit = { commit(it) },
+                        activity = activity,
+                        uiScope = uiScope,
+                        looks = looks,
+                        onLooksVersionChange = { looksVersion++ },
+                        importError = importError,
+                        importLauncher = importLauncher,
+                        sweepPendingDrafts = { sweepPendingDrafts() },
+                        commitSelectedLayer = { commitSelectedLayer(it) },
+                        commitTextDraftIfPending = { commitTextDraftIfPending() },
+                        textDraft = textDraft,
+                        onTextDraftChange = { textDraft = it },
+                        selectedTextLayerId = selectedTextLayerId,
+                        onSelectTextLayerChange = { selectedTextLayerId = it },
+                        selectedStickerLayerId = selectedStickerLayerId,
+                        onSelectStickerLayerChange = { selectedStickerLayerId = it },
+                        selectedRegionLayerId = selectedRegionLayerId,
+                        onSelectRegionLayerChange = { selectedRegionLayerId = it },
+                        commitSelectedStickerLayer = { commitSelectedStickerLayer(it) },
+                        importedStickers = importedStickers,
+                        stickerImportError = stickerImportError,
+                        stickerImportLauncher = stickerImportLauncher,
+                        commitSelectedDrawLayer = { commitSelectedDrawLayer(it) },
+                        drawMode = drawMode,
+                        onDrawModeChange = { drawMode = it },
+                        regionMode = regionMode,
+                        onRegionModeChange = { regionMode = it },
+                        eraseMode = eraseMode,
+                        onEraseModeChange = { eraseMode = it },
+                        brushColor = brushColor,
+                        onBrushColorChange = { brushColor = it },
+                        brushWidth = brushWidth,
+                        onBrushWidthChange = { brushWidth = it },
+                        brushOpacity = brushOpacity,
+                        onBrushOpacityChange = { brushOpacity = it },
+                        brushSmoothing = brushSmoothing,
+                        onBrushSmoothingChange = { brushSmoothing = it },
+                        selectedDrawLayerId = selectedDrawLayerId,
+                        onSelectDrawLayerChange = { selectedDrawLayerId = it },
+                        commitSelectedRegionLayer = { commitSelectedRegionLayer(it) },
+                        regionKind = regionKind,
+                        onRegionKindChange = { regionKind = it },
+                        regionStrength = regionStrength,
+                        onRegionStrengthChange = { regionStrength = it },
+                        importedFrames = importedFrames,
+                        frameImportError = frameImportError,
+                        frameImportLauncher = frameImportLauncher,
+                        selectedEraseLayerId = selectedEraseLayerId,
+                        onSelectEraseLayerChange = { selectedEraseLayerId = it },
+                        aiBusy = aiBusy,
+                        importedSkies = importedSkies,
+                        skyImportError = skyImportError,
+                        skyImportLauncher = skyImportLauncher,
+                        retouchConsent = retouchConsent,
+                        onRetouchConsentChange = { retouchConsent = it },
+                        retouchConsentDialog = retouchConsentDialog,
+                        onRetouchConsentDialogChange = { retouchConsentDialog = it },
+                        runBokehEstimate = { runBokehEstimate() },
+                        runRetouchDetect = { runRetouchDetect() },
+                        selectSky = { id, fresh -> selectSky(id, fresh) },
+                        selectedBand = selectedBand,
+                        onSelectedBandChange = { selectedBand = it },
+                    )
+                }
+=======
                     when (tool) {
                 PhotoScreen.Crop -> {
                     // ---- Geometry row ----
@@ -4671,6 +4744,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 PhotoScreen.Main -> Unit
                     }
                 }
+>>>>>>> origin/main
             }
             // ---- The value tools' session Reset (the video footer's
             // Reset, adapted honestly): the photo tools commit LIVE on
@@ -4730,6 +4804,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 // The r56 move: HslBandSlider lives in `PhotoControls.kt` (the r56 control
 // kit --- same signature, live value pill added).
 
+<<<<<<< HEAD
+=======
 private fun bandNameRes(name: String): Int = when (name) {
     "red" -> R.string.editor_band_red
     "orange" -> R.string.editor_band_orange
@@ -4808,6 +4884,7 @@ private fun ColorSwatch(
             },
     )
 }
+>>>>>>> origin/main
 
 @Composable
 private fun policyLabel(policy: MetadataPolicy): String = when (policy) {

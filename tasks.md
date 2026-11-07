@@ -305,5 +305,11 @@ video follow-ups.
 - [x] Ledgers: CHANGELOG r54, roadmap v2.20, worklog Run #28,
   follow-up F-53/F-54 (+ F-51 closed by this round), this
   checkpoint.
-- [ ] Commit → push → PR #146 → CI poll → this cell updates with
-  the 7-check outcome (fix-forward if red, per ADR-0013).
+- [x] Commit → push → PR #146 (head `f38b7b6`) → CI poll — first run
+  RED on ONE resource-link catch (`android:fillType="evenodd"` →
+  the camelCase enum `evenOdd`, ic_pt_frames; aapt2 message quoted
+  in the worklog); fixed in `8221ecf` → re-run ALL 7 CHECKS GREEN
+  (Build + lint + test, CodeQL, both vendored-engine jobs, the
+  approval + actions analyzes) — the Kotlin transformation itself
+  compiled clean on the first attempt. Remaining: the maintainer's
+  review/merge.

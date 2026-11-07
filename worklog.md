@@ -2328,8 +2328,14 @@ lives on Main (the export decision surface); BackHandler pops a
 tool screen (the gallery app's in-repo precedent — F-54 records
 that the VIDEO editor still lacks this).
 
-**The catch log.** None yet — CI is the compile judge (PR #146);
-this cell updates with the outcome.
+**The catch log.** ONE catch, resource-linking: aapt2 rejects the
+SVG-style `android:fillType="evenodd"` spelling — the attribute's
+enum is camelCase `[evenOdd=1, nonZero=0]` (ic_pt_frames, the only
+drawable using a fill rule). Fixed in `8221ecf`; the Kotlin
+transformation itself linked clean — zero compile errors across the
+4,919-line file. Re-run: ALL 7 CHECKS GREEN (Build + lint + test,
+CodeQL, both vendored-engine jobs, the approval + actions
+analyzes). Recorded here per the r42 convention.
 
 **Remaining.** The maintainer's review/merge; F-53 (the AI
 one-tab-vs-four question), F-54 (the video BackHandler port), the

@@ -647,4 +647,10 @@ dependencies {
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.androidx.test.ext.junit)
+    // The debug-scope test manifest registers the ComponentActivity the
+    // compose test rule launches --- WITHOUT it every createComposeRule()
+    // test dies at instrumentation startup (the gallery block's own r48
+    // note is the precedent; the first CI run of this harness proved it
+    // the hard way: 3/3 captures RuntimeException'd in 0.05s each).
+    debugImplementation(libs.compose.ui.test.manifest)
 }

@@ -2512,3 +2512,85 @@ isolation), F-58c (the compare gesture's TalkBack custom action), F-58d
 (the font-chip API upgrade path, waiting on the compose BOM), the
 maintainer's review of #150 + this round, and the carried items
 (F-52/F-53/F-54, PR #134, PAT revocation — advised again).
+
+### Run #31 — 2026-11-08 (the r58 window: F-58b — the per-panel LabeledSlider conversions + the Crop/Draw/Regions screenshot pins)
+
+**The task.** The maintainer's chat instruction of 2026-11-08 —
+"follow up on 150,151,152 pr's and do the works in order - what was
+intended to do and next stages" — followed by "you have workon, not
+about merging - you need to work on this pr's for further development
+of app". The three open PRs (#150 edit craft, #151 edit panel seam,
+#152 gallery indexing fix) are all CI-green and mergeable; the
+"works in order" the maintainer wants is the NEXT development stage
+on each PR's track, not a merge. The next stage on #150/#151's track
+is F-58b (the r56 ledger's scheduled per-panel LabeledSlider
+conversion + per-panel screenshot pin, now possible because #151's
+panel seam made each panel compose standalone). #152's track is
+complete (the fix is the work; F-58/F-59 are the gallery-side
+follow-ups, deferred to maintainer taste). This round delivers F-58b.
+
+**The shape of the round.** Every raw `Slider` in the three
+unconverted photo-editor panel files routes through the r56
+`LabeledSlider` (label + live value pill + double-tap-to-neutral).
+15 sliders total across 3 files:
+- `PhotoPanelPaint.kt` (Draw + Regions): 8 sliders --- the brush
+  width/opacity/smoothing (r36 plain-state) + the per-layer
+  draw-width/draw-opacity/draw-smoothing (r36 live-draft) + the region
+  strength (r37 plain-state) + the per-layer region-strength (r38
+  live-draft).
+- `PhotoPanelGeometry.kt` (Crop): 1 slider --- the straighten
+  control (r32 live-draft, range −15..+15).
+- `PhotoPanelAi.kt` (Sky + Bokeh + Retouch): 6 sliders --- sky-opacity
+  (r39), bokeh-strength + bokeh-focal (r40), retouch-smoothing +
+  retouch-eyes + retouch-slim (r41), all live-draft.
+
+The r32/r36/r37/r38/r39/r40/r41 contracts are **verbatim**: the
+plain-state sliders still call the chassis `on...Change` on every
+tick (no draft); the live-draft sliders still write the named draft
+on every tick and commit through `commitSelectedDrawLayer` /
+`commitSelectedRegionLayer` / `commit` on release. The
+`LabeledSlider`'s `onChange: (Int) -> Unit` signature matches the
+chassis's Int-based state exactly; the `.toInt()` the raw Slider's
+`onValueChange` did internally is now inside the `LabeledSlider`
+itself. The `resetValue` (double-tap-to-neutral) is chosen per
+control: width=10, opacity=100, smoothing=0, strength=50,
+straighten=0, sky-opacity=100, bokeh-strength=50, bokeh-focal=50,
+retouch-*=0. Each panel's now-unused imports (`Slider`,
+`contentDescription`, `stateDescription`, `semantics`) trimmed.
+
+**The per-panel screenshot pins.** Three new Roborazzi captures in
+`EditChassisScreenshotTest`: `cropPanelStraightenSliderRecordsBaseline`,
+`drawPanelBrushSlidersRecordsBaseline`,
+`regionsPanelStrengthSliderRecordsBaseline`. Each composes the panel
+standalone with a minimal `EditRecipe()` fixture (the r57 seam made
+this possible --- before #151 the panels were ten `when` branches
+inside a 3,900-line composable reading 4-23 closure locals each,
+unrenderable in isolation). The captures pin the slider rows in
+their actual panel context: the section header, the chip rows, the
+color swatches, and the converted LabeledSlider rows. The
+`AiPanel`'s per-panel capture is **deferred to F-58b-2**: the panel
+still takes `EditActivity` as its first parameter, so it cannot
+compose standalone without refactoring the activity dependency out
+(see the follow-up entry).
+
+**The gates.** All four modified Kotlin files pass the
+`kotlin_lex_check.py` lexer (the sandbox has no Android SDK, so the
+pinned Kotlin 2.3.10 compiler is the local gate per ADR-0013; CI is
+the build channel). Zero raw `Slider(` calls remain in the three
+panel files (8+1+6 = 15 `LabeledSlider(` calls total). No new
+permissions; no new dependencies; no new strings (the `LabeledSlider`
+reuses the existing `editor_*` label + `editor_a11y_*` name
+resources); no `versionCode`/`versionName` bump.
+
+**Coordination.** Stacked on #151's head (`edit/r57-panel-seam` @
+`565fc9c`), the same stacking pattern #151 used on #150. Merge
+order: #150 → #151 → this round (#153). The gallery fix #152 is
+independent and can merge in any order relative to the editor stack.
+A coordination comment is posted on the PR for the other agents.
+
+**Remaining.** The maintainer's review/merge of #150, #151, #152,
+and this round; F-58b-2 (the AiPanel activity-dependency refactor +
+its screenshot pin); F-58c (the compare gesture's TalkBack custom
+action); F-58d (the font-chip API upgrade, waiting on the compose
+BOM); the carried items (F-52/F-53/F-54, PR #134, PAT revocation —
+advised again after this round's push).

@@ -7,16 +7,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 
 // ---------------------------------------------------------------------------
@@ -30,6 +25,14 @@ import androidx.compose.ui.unit.dp
 // Erase mutually exclusive) --- unchanged; the chassis state arrives as
 // explicit value + `on...Change` pairs. The committed Roborazzi chassis
 // baselines are the regression proof.
+//
+// r58b (F-58b): every raw Slider in both panels converts to the r56
+// `LabeledSlider` --- label + live value pill + double-tap-to-neutral.
+// The r36 plain-state contract (every tick writes the chassis state) and
+// the r36 per-layer live-draft contract (tick writes the draft, release
+// commits through `commitSelectedDrawLayer`/`commitSelectedRegionLayer`)
+// are verbatim; only the control's VISUAL shape changes (the pill makes
+// the number readable, the double-tap replaces the drag-back-to-zero hunt).
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -141,56 +144,38 @@ internal fun DrawPanel(
                 )
             }
         }
-        val widthName = stringResource(R.string.editor_a11y_draw_width)
-        val widthLabel = stringResource(R.string.editor_draw_width, brushWidth)
-        Text(
-            text = widthLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        // r58b: the crafted LabeledSlider (r56) --- label + live value
+        // pill + double-tap-to-neutral. The r36 plain-state contract is
+        // verbatim (every tick writes the chassis state; no draft).
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_draw_width),
+            label = stringResource(R.string.editor_draw_width, brushWidth),
+            valueText = brushWidth.toString(),
             value = brushWidth.toFloat(),
-            onValueChange = { onBrushWidthChange(it.toInt().coerceIn(1, 100))},
             valueRange = 1f..100f,
             enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = widthName
-                stateDescription = widthLabel
-            },
+            onChange = { onBrushWidthChange(it.coerceIn(1, 100)) },
+            resetValue = 10,
         )
-        val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
-        val opacityLabel = stringResource(R.string.editor_draw_opacity, brushOpacity)
-        Text(
-            text = opacityLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_draw_opacity),
+            label = stringResource(R.string.editor_draw_opacity, brushOpacity),
+            valueText = brushOpacity.toString(),
             value = brushOpacity.toFloat(),
-            onValueChange = { onBrushOpacityChange(it.toInt().coerceIn(0, 100))},
             valueRange = 0f..100f,
             enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = opacityName
-                stateDescription = opacityLabel
-            },
+            onChange = { onBrushOpacityChange(it.coerceIn(0, 100)) },
+            resetValue = 100,
         )
-        val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
-        val smoothingLabel = stringResource(R.string.editor_draw_smoothing, brushSmoothing)
-        Text(
-            text = smoothingLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_draw_smoothing),
+            label = stringResource(R.string.editor_draw_smoothing, brushSmoothing),
+            valueText = brushSmoothing.toString(),
             value = brushSmoothing.toFloat(),
-            onValueChange = { onBrushSmoothingChange(it.toInt().coerceIn(0, 100))},
             valueRange = 0f..100f,
             enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = smoothingName
-                stateDescription = smoothingLabel
-            },
+            onChange = { onBrushSmoothingChange(it.coerceIn(0, 100)) },
+            resetValue = 0,
         )
     } else if (selectedDrawLayer != null) {
         val layerId = selectedDrawLayer.id
@@ -212,17 +197,18 @@ internal fun DrawPanel(
         }
         val widthLive = draft?.takeIf { it.first == "draw-width@$layerId" }?.second
             ?: selectedDrawLayer.widthPct
-        val widthName = stringResource(R.string.editor_a11y_draw_width)
-        val widthLabel = stringResource(R.string.editor_draw_width, widthLive)
-        Text(
-            text = widthLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        // r58b: the per-layer live-draft pattern on the crafted LabeledSlider;
+        // the r36 contract is verbatim (tick drafts, release commits through
+        // commitSelectedDrawLayer, double-tap returns to the control's neutral).
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_draw_width),
+            label = stringResource(R.string.editor_draw_width, widthLive),
+            valueText = widthLive.toString(),
             value = widthLive.toFloat(),
-            onValueChange = { onDraftChange("draw-width@$layerId" to it.toInt())},
-            onValueChangeFinished = {
+            valueRange = 1f..100f,
+            enabled = !exporting,
+            onChange = { onDraftChange("draw-width@$layerId" to it) },
+            onFinish = {
                 draft?.let { d ->
                     if (d.first == "draw-width@$layerId") {
                         commitSelectedDrawLayer { it.copy(widthPct = d.second.coerceIn(1, 100)) }
@@ -230,26 +216,19 @@ internal fun DrawPanel(
                 }
                 onDraftChange(null)
             },
-            valueRange = 1f..100f,
-            enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = widthName
-                stateDescription = widthLabel
-            },
+            resetValue = 10,
         )
         val opacityLive = draft?.takeIf { it.first == "draw-opacity@$layerId" }?.second
             ?: selectedDrawLayer.opacity
-        val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
-        val opacityLabel = stringResource(R.string.editor_draw_opacity, opacityLive)
-        Text(
-            text = opacityLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_draw_opacity),
+            label = stringResource(R.string.editor_draw_opacity, opacityLive),
+            valueText = opacityLive.toString(),
             value = opacityLive.toFloat(),
-            onValueChange = { onDraftChange("draw-opacity@$layerId" to it.toInt())},
-            onValueChangeFinished = {
+            valueRange = 0f..100f,
+            enabled = !exporting,
+            onChange = { onDraftChange("draw-opacity@$layerId" to it) },
+            onFinish = {
                 draft?.let { d ->
                     if (d.first == "draw-opacity@$layerId") {
                         commitSelectedDrawLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
@@ -257,26 +236,19 @@ internal fun DrawPanel(
                 }
                 onDraftChange(null)
             },
-            valueRange = 0f..100f,
-            enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = opacityName
-                stateDescription = opacityLabel
-            },
+            resetValue = 100,
         )
         val smoothingLive = draft?.takeIf { it.first == "draw-smoothing@$layerId" }?.second
             ?: selectedDrawLayer.smoothingPct
-        val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
-        val smoothingLabel = stringResource(R.string.editor_draw_smoothing, smoothingLive)
-        Text(
-            text = smoothingLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_draw_smoothing),
+            label = stringResource(R.string.editor_draw_smoothing, smoothingLive),
+            valueText = smoothingLive.toString(),
             value = smoothingLive.toFloat(),
-            onValueChange = { onDraftChange("draw-smoothing@$layerId" to it.toInt())},
-            onValueChangeFinished = {
+            valueRange = 0f..100f,
+            enabled = !exporting,
+            onChange = { onDraftChange("draw-smoothing@$layerId" to it) },
+            onFinish = {
                 draft?.let { d ->
                     if (d.first == "draw-smoothing@$layerId") {
                         commitSelectedDrawLayer {
@@ -286,12 +258,7 @@ internal fun DrawPanel(
                 }
                 onDraftChange(null)
             },
-            valueRange = 0f..100f,
-            enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = smoothingName
-                stateDescription = smoothingLabel
-            },
+            resetValue = 0,
         )
         TextButton(
             onClick = {
@@ -433,22 +400,17 @@ internal fun RegionsPanel(
                 modifier = Modifier.padding(end = 8.dp),
             )
         }
-        val strengthName = stringResource(R.string.editor_a11y_region_strength)
-        val strengthLabel = stringResource(R.string.editor_region_strength, regionStrength)
-        Text(
-            text = strengthLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        // r58b: the crafted LabeledSlider on the r37 plain-state contract
+        // (every tick writes the chassis regionStrength; no draft).
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_region_strength),
+            label = stringResource(R.string.editor_region_strength, regionStrength),
+            valueText = regionStrength.toString(),
             value = regionStrength.toFloat(),
-            onValueChange = { onRegionStrengthChange(it.toInt().coerceIn(1, 100))},
             valueRange = 1f..100f,
             enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = strengthName
-                stateDescription = strengthLabel
-            },
+            onChange = { onRegionStrengthChange(it.coerceIn(1, 100)) },
+            resetValue = 50,
         )
     } else if (selectedRegionLayer != null) {
         val layerId = selectedRegionLayer.id
@@ -476,17 +438,18 @@ internal fun RegionsPanel(
         }
         val strengthLive = draft?.takeIf { it.first == "region-strength@$layerId" }?.second
             ?: selectedRegionLayer.strengthPct
-        val strengthName = stringResource(R.string.editor_a11y_region_strength)
-        val strengthLabel = stringResource(R.string.editor_region_strength, strengthLive)
-        Text(
-            text = strengthLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Slider(
+        // r58b: the per-layer live-draft pattern on the crafted LabeledSlider;
+        // the r38 contract is verbatim (tick drafts, release commits through
+        // commitSelectedRegionLayer, double-tap returns to the control's neutral).
+        LabeledSlider(
+            name = stringResource(R.string.editor_a11y_region_strength),
+            label = stringResource(R.string.editor_region_strength, strengthLive),
+            valueText = strengthLive.toString(),
             value = strengthLive.toFloat(),
-            onValueChange = { onDraftChange("region-strength@$layerId" to it.toInt())},
-            onValueChangeFinished = {
+            valueRange = 1f..100f,
+            enabled = !exporting,
+            onChange = { onDraftChange("region-strength@$layerId" to it) },
+            onFinish = {
                 draft?.let { d ->
                     if (d.first == "region-strength@$layerId") {
                         commitSelectedRegionLayer { it.copy(strengthPct = d.second.coerceIn(1, 100)) }
@@ -494,12 +457,7 @@ internal fun RegionsPanel(
                 }
                 onDraftChange(null)
             },
-            valueRange = 1f..100f,
-            enabled = !exporting,
-            modifier = Modifier.semantics {
-                contentDescription = strengthName
-                stateDescription = strengthLabel
-            },
+            resetValue = 50,
         )
         TextButton(
             onClick = {

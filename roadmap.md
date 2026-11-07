@@ -13,7 +13,40 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.19 (2026-11-07, latest) --- the r53 photo-editor design round: the violet family scheme on EditorTheme + the EditActivity chrome restyle
+### v2.20 (2026-11-07, latest) --- the r54 photo-editor re-chassis round: the video editor's tab-bar architecture on the photo surface
+
+- **The instruction, the answer it settles** --- the maintainer's
+  "Of course same design for photo editor as like video Editor. So
+  do implement now" (2026-11-07, the PAT re-supplied) is the direct
+  answer to F-51, the IA question r53 flagged as a maintainer
+  decision owed BEFORE any restructure. One app, one design
+  language (r53), one information architecture (this round).
+- **The chassis** --- the canvas stays on top (never recomposed
+  away, the r52 rule); a horizontally scrollable ten-tool bottom
+  tab bar (Adjust, Color, Looks, Frames, Text, Stickers, Draw,
+  Regions, AI, Crop) replaces the long-scroll sectioned page; each
+  tool's block re-hosts VERBATIM behind its tab (the r30–r41
+  behavior contracts --- commit-on-release, the draft machinery,
+  the cross-family layer exclusivity --- untouched; the review diff
+  confirms 3,670 indent-only lines vs 354 real-change lines); tool
+  screens carry the back/title/check header; the value tools
+  (Adjust/Color/Looks/Frames/Crop) get the session-Reset footer
+  (ONE undoable commit against the entry snapshot; deliberately no
+  dead Apply button --- live-commit leaves nothing to apply).
+- **The honest adaptations** --- the r41 AI progress/notice hoists
+  out of the panel (a running job stays visible + cancellable from
+  every screen, the video still-export precedent); paint modes
+  auto-off on tool exit (the one deliberate behavior change);
+  system back pops a tool screen (the gallery BackHandler
+  precedent); the honesty line's home is the Main screen.
+- **Resources** --- two new strings (`editor_pt_tab_color`,
+  `editor_pt_tab_ai`; every other tab label reuses a
+  section-header string, the Reset/back/confirm a11y reuse the r52
+  `editor_v2_*`), nine `ic_pt_*` drawables (house ic_nav vector
+  style), the Adjust tab reuses `ic_vt_adjust`; versionCode 19
+  (`0.4.14-edit-alpha`).
+
+### v2.19 (2026-11-07) --- the r53 photo-editor design round: the violet family scheme on EditorTheme + the EditActivity chrome restyle
 
 - **The flagged interpretation** --- the maintainer's "Same ux design
   also" instruction (2026-11-07, the PAT re-supplied): apply the r52

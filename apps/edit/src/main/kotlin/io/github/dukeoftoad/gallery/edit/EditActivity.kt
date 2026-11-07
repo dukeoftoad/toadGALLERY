@@ -15,6 +15,7 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,17 +31,24 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -75,6 +83,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -87,6 +96,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
 import io.github.dukeoftoad.gallery.edit.contract.EditRequestValidator
 import io.github.dukeoftoad.gallery.edit.contract.MetadataPolicy
@@ -955,6 +965,41 @@ private fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = whe
     else -> copy(magenta = band)
 }
 
+/**
+ * The r54 photo surface's screens: the main chassis plus the ten tool
+ * tabs (the video editor's EditorScreen adapted). Labels reuse the
+ * section-header strings wherever one exists; the Adjust tab reuses the
+ * video surface's slider icon --- one app, one icon vocabulary.
+ */
+private enum class PhotoScreen(val labelRes: Int, val iconRes: Int) {
+    /** The main chassis; never a tab (the tab bar shows the ten tools only). */
+    Main(R.string.editor_app_name, 0),
+    Adjust(R.string.editor_section_adjust, R.drawable.ic_vt_adjust),
+    Color(R.string.editor_pt_tab_color, R.drawable.ic_pt_color),
+    Looks(R.string.editor_section_filters, R.drawable.ic_pt_looks),
+    Frames(R.string.editor_section_frames, R.drawable.ic_pt_frames),
+    Text(R.string.editor_section_text, R.drawable.ic_pt_text),
+    Stickers(R.string.editor_section_stickers, R.drawable.ic_pt_sticker),
+    Draw(R.string.editor_section_drawing, R.drawable.ic_pt_draw),
+    Regions(R.string.editor_section_regions, R.drawable.ic_pt_region),
+    Ai(R.string.editor_pt_tab_ai, R.drawable.ic_pt_ai),
+    Crop(R.string.editor_section_geometry, R.drawable.ic_pt_crop),
+}
+
+/**
+ * The recipe-field editors --- the tools whose whole surface is a set of
+ * recipe values (vs the layer tools' add/select/delete flows and the AI
+ * tools' jobs). These get the session Reset footer: reverting the tool
+ * session is ONE undoable commit against the entry snapshot.
+ */
+private val PHOTO_VALUE_TOOLS: Set<PhotoScreen> = setOf(
+    PhotoScreen.Adjust,
+    PhotoScreen.Color,
+    PhotoScreen.Looks,
+    PhotoScreen.Frames,
+    PhotoScreen.Crop,
+)
+
 @OptIn(ExperimentalMaterial3Api::class) // FilterChip in the export sheet
 @Composable
 private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
@@ -1049,6 +1094,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var retouchConsent by remember { mutableStateOf(RetouchConsent.NOT_GRANTED) }
     var retouchConsentDialog by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+
+    // r54: the chassis navigation state (the video editor's screen enum,
+    // photo-adapted): the main canvas screen vs the ten tool screens.
+    var screen by remember { mutableStateOf(PhotoScreen.Main) }
+    // r54: the recipe as it was when the CURRENT tool screen was entered
+    // --- the Reset footer's honest boundary (reverting a tool session is
+    // ONE undoable commit against this snapshot).
+    var entryRecipe by remember { mutableStateOf<EditRecipe?>(null) }
 
     val committed = uiState.recipe
 
@@ -2066,6 +2119,35 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
+    // ---- r54: the chassis navigation (the video editor's screen
+    // contract, photo-adapted) ----
+    // Entering a tool snapshots the recipe (the Reset footer's honest
+    // boundary); leaving one sweeps any pending gesture draft and drops
+    // the paint modes --- painting belongs to its tool's screen now,
+    // where the scroll era kept the modes alive across sections (the one
+    // deliberate behavior change; the modes were unreachable from other
+    // sections' controls anyway).
+    fun enterTool(target: PhotoScreen) {
+        if (target == PhotoScreen.Main) return
+        sweepPendingDrafts()
+        entryRecipe = committed
+        screen = target
+    }
+
+    fun exitToMain() {
+        sweepPendingDrafts()
+        drawMode = false
+        regionMode = false
+        eraseMode = false
+        screen = PhotoScreen.Main
+    }
+
+    // The system-back contract: a tool screen pops to the main chassis
+    // (the gallery app's three selection screens set the in-repo
+    // precedent); the main screen keeps the default back = the activity's
+    // cancel path.
+    BackHandler(enabled = screen != PhotoScreen.Main) { exitToMain() }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2076,79 +2158,94 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // targetSdk 36+); the black background still reaches the bars.
             .systemBarsPadding(),
     ) {
-        // ---- Top bar: close / undo / redo / save copy ----
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = { activity.finishCanceled() }) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.editor_close),
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
-            }
-            Text(
-                text = stringResource(R.string.editor_app_name),
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.titleMedium,
-                // r40 a11y: the editor's title is the heading anchor (the
-                // gallery screens' r40 heading convention, editor side).
+        // ---- Top bar: the r54 chassis header ----
+        // The MAIN screen keeps the photo editor's own chrome (close /
+        // title / settings / undo / redo / save) --- the video header is a
+        // back / title / export pill, but the photo surface's undo-redo
+        // and the r41 settings entry are contract chrome that stays one
+        // tap from the canvas. A tool screen swaps in the video shape.
+        if (screen == PhotoScreen.Main) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .semantics { heading() },
-            )
-            // r41: the editor's FIRST settings entry --- a one-row sheet
-            // (the retouch kill-switch lives there; ADR-0010 section 5).
-            TextButton(
-                onClick = { settingsOpen = !settingsOpen },
-                enabled = !exporting,
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(stringResource(R.string.editor_settings))
-            }
-            TextButton(
-                onClick = {
-                    sweepPendingDrafts()
-                    uiState = engine.undo()
-                },
-                enabled = uiState.canUndo && !exporting,
-            ) {
-                Text(stringResource(R.string.editor_undo))
-            }
-            TextButton(
-                onClick = {
-                    sweepPendingDrafts()
-                    uiState = engine.redo()
-                },
-                enabled = uiState.canRedo && !exporting,
-            ) {
-                Text(stringResource(R.string.editor_redo))
-            }
-            if (exporting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                Button(
-                    onClick = {
-                        exportChoice = if (exportChoice == null) ExportChoice() else null
-                    },
-                    modifier = Modifier.padding(end = 4.dp),
-                ) {
-                    Text(
-                        stringResource(
-                            if (exportChoice == null) {
-                                R.string.editor_save_copy
-                            } else {
-                                R.string.editor_cancel_export
-                            },
-                        ),
+                IconButton(onClick = { activity.finishCanceled() }) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.editor_close),
+                        tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
+                Text(
+                    text = stringResource(R.string.editor_app_name),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.titleMedium,
+                    // r40 a11y: the editor's title is the heading anchor (the
+                    // gallery screens' r40 heading convention, editor side).
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() },
+                )
+                // r41: the editor's FIRST settings entry --- a one-row sheet
+                // (the retouch kill-switch lives there; ADR-0010 section 5).
+                TextButton(
+                    onClick = { settingsOpen = !settingsOpen },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_settings))
+                }
+                TextButton(
+                    onClick = {
+                        sweepPendingDrafts()
+                        uiState = engine.undo()
+                    },
+                    enabled = uiState.canUndo && !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_undo))
+                }
+                TextButton(
+                    onClick = {
+                        sweepPendingDrafts()
+                        uiState = engine.redo()
+                    },
+                    enabled = uiState.canRedo && !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_redo))
+                }
+                if (exporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    Button(
+                        onClick = {
+                            exportChoice = if (exportChoice == null) ExportChoice() else null
+                        },
+                        modifier = Modifier.padding(end = 4.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (exportChoice == null) {
+                                    R.string.editor_save_copy
+                                } else {
+                                    R.string.editor_cancel_export
+                                },
+                            ),
+                        )
+                    }
+                }
             }
+        } else {
+            PhotoToolHeader(
+                title = stringResource(screen.labelRes),
+                backA11y = stringResource(R.string.editor_v2_back),
+                confirmA11y = stringResource(R.string.editor_v2_confirm),
+                onBack = { exitToMain() },
+                onConfirm = { exitToMain() },
+            )
         }
 
         // r34: the box also carries the text-layer DRAG gesture (drag near
@@ -2503,1764 +2600,1034 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
         }
 
-        // ---- Controls ----
+        // ---- The r41 AI job machinery, hoisted by r54 out of the controls ----
+        // A RUNNING job stays visible and cancellable from EVERY screen
+        // (the video chassis hoisted its still-export progress block for
+        // exactly this reason). Every AI commit runs ONCE, off the UI
+        // thread, when the user applies or re-applies a feature; the
+        // models never run during a render or an export. The quality note
+        // is honest per ADR-0010: compact on-device models, bounded
+        // results.
+        if (aiBusy) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = stringResource(R.string.editor_ai_progress, aiProgressPct),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                TextButton(
+                    onClick = { aiCancelRequested = true },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_ai_cancel))
+                }
+            }
+        }
+        aiNotice?.let { noticeRes ->
+            Text(
+                text = stringResource(noticeRes),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+
+        // ---- Controls: the r54 per-tool panels ----
+        // The long-scroll sectioned IA retires: each tool's block now
+        // lives behind its tab, re-hosted VERBATIM (the r30-r41 behavior
+        // contracts --- commit-on-release, the draft machinery, the
+        // cross-family layer exclusivity --- are untouched; only the
+        // container changed). The panel shares the canvas above: ONE
+        // preview, never recomposed away (the video chassis's rule).
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = 300.dp)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // ---- Geometry row ----
-            Text(
-                text = stringResource(R.string.editor_section_geometry),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-            ) {
-                IconButton(
-                    onClick = {
-                        commit(
-                            committed.copy(
-                                quarterTurns = (committed.quarterTurns + 1) % 4,
-                            ),
-                        )
-                    },
-                    enabled = !exporting,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = stringResource(R.string.editor_rotate_left),
-                        tint = MaterialTheme.colorScheme.onBackground,
-                    )
-                }
-                // r32 a11y: both flip toggles are FilterChips. A text
-                // label inside an IconButton overflows the 48dp target, and
-                // a clickable Text was a sub-48dp touch target; a selected
-                // chip gives the proper target, the state highlight AND the
-                // selected/not-selected announcement next to the on/off text.
-                FilterChip(
-                    selected = committed.horizontalFlip,
-                    onClick = {
-                        commit(committed.copy(horizontalFlip = !committed.horizontalFlip))
-                    },
-                    enabled = !exporting,
-                    label = {
-                        Text(
-                            text = stringResource(
-                                R.string.editor_flip_horizontal_toggle,
-                                if (committed.horizontalFlip) {
-                                    stringResource(R.string.editor_on)
-                                } else {
-                                    stringResource(R.string.editor_off)
-                                },
-                            ),
-                        )
-                    },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                FilterChip(
-                    selected = committed.verticalFlip,
-                    onClick = {
-                        commit(committed.copy(verticalFlip = !committed.verticalFlip))
-                    },
-                    enabled = !exporting,
-                    label = {
-                        Text(
-                            text = stringResource(
-                                R.string.editor_flip_vertical_toggle,
-                                if (committed.verticalFlip) {
-                                    stringResource(R.string.editor_on)
-                                } else {
-                                    stringResource(R.string.editor_off)
-                                },
-                            ),
-                        )
-                    },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-            }
-            // r32: the straighten slider follows the drag live (the label,
-            // the thumb, the preview) exactly like the adjustment sliders;
-            // it previously held the committed value until release. The
-            // value stays a Double so a fractional sidecar straighten (e.g.
-            // 7.5) displays exactly, not truncated.
-            val straightenLive = draft?.takeIf { it.first == "straighten" }?.second?.toDouble()
-                ?: committed.straightenDeg
-            val straightenName = stringResource(R.string.editor_a11y_straighten)
-            val straightenState = stringResource(R.string.editor_straighten, straightenLive.toInt())
-            Text(
-                text = straightenState,
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Slider(
-                value = straightenLive.toFloat(),
-                onValueChange = { draft = Pair("straighten", it.toInt()) },
-                onValueChangeFinished = {
-                    draft?.let { d ->
-                        if (d.first == "straighten") {
-                            commit(committed.copy(straightenDeg = d.second.toDouble()))
-                        }
-                    }
-                    draft = null
-                },
-                valueRange = -15f..15f,
-                enabled = !exporting,
-                modifier = Modifier.semantics {
-                    contentDescription = straightenName
-                    stateDescription = straightenState
-                },
-            )
-
-            // ---- Crop aspect presets (centered fits over the post-geometry frame) ----
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                listOf(
-                    null to CropAspect.FREE, // the ratios are locale-neutral; the word is not (r32)
-                    "1:1" to CropAspect.SQUARE,
-                    "4:3" to CropAspect.RATIO_4_3,
-                    "3:4" to CropAspect.RATIO_3_4,
-                    "16:9" to CropAspect.RATIO_16_9,
-                    "9:16" to CropAspect.RATIO_9_16,
-                ).forEach { (label, aspect) ->
-                    AssistChip(
-                        onClick = {
-                            if (aspect == CropAspect.FREE) {
-                                commit(committed.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0)))
-                            } else {
-                                // The preset fits over the post-geometry
-                                // frame (the same plan the overlay draws).
-                                val plan = EditGeometryPlan.plan(
-                                    committed.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0)),
-                                    previewBase?.width ?: 1,
-                                    previewBase?.height ?: 1,
-                                )
-                                val fitted = aspect.fit(plan.cropPixelRect, plan.postGeometryWidth, plan.postGeometryHeight)
-                                // r32: the pixel-rect -> normalized conversion
-                                // is the tested pure inverse (CropRect.fromPixelRect),
-                                // not an inline division that could drift.
-                                commit(
-                                    committed.copy(
-                                        crop = CropRect.fromPixelRect(
-                                            fitted,
-                                            plan.postGeometryWidth,
-                                            plan.postGeometryHeight,
-                                        ),
-                                    ),
-                                )
-                            }
-                        },
-                        label = {
-                            Text(label ?: stringResource(R.string.editor_crop_free))
-                        },
-                        modifier = Modifier.padding(end = 8.dp),
-                        enabled = !exporting,
-                    )
-                }
-            }
-
-            // ---- The adjustment suite ----
-            Text(
-                text = stringResource(R.string.editor_section_adjust),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            for (spec in ADJUST_SLIDERS) {
-                val committedValue = spec.get(committed)
-                val live = if (draft?.first == spec.key) draft!!.second else committedValue
-                val labelText = stringResource(spec.label, live)
-                val a11yName = stringResource(spec.a11yNameRes)
-                Text(
-                    text = labelText,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = live.toFloat(),
-                    onValueChange = { value -> draft = Pair(spec.key, value.toInt()) },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == spec.key) {
-                                commit(spec.set(committed, d.second))
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = -100f..100f,
-                    enabled = !exporting,
-                    // r32 a11y: every slider announces its NAME and its live
-                    // VALUE, not just the default percent-of-range.
-                    modifier = Modifier.semantics {
-                        contentDescription = a11yName
-                        stateDescription = labelText
-                    },
-                )
-            }
-
-            // ---- Filters (r33: the bundled .cube looks at an intensity) ----
-            // One None chip + one chip per look that PARSED; the preview and
-            // the export resolve the selection through the same shared cache,
-            // so what the user sees is what the pipeline exports. A selection
-            // this build cannot resolve (a version-skewed sidecar) selects no
-            // chip --- the tolerance contract, shown honestly.
-            Text(
-                text = stringResource(R.string.editor_section_filters),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            val selection = committed.lut
-            val bundledIds = remember { BundledLuts.ORDERED.map { it.id }.toSet() }
-            val importedIds = looks.keys.filter { it !in bundledIds }.sorted()
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                FilterChip(
-                    selected = selection == null,
-                    onClick = { commit(committed.copy(lut = null)) },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_filter_none)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                BundledLuts.ORDERED
-                    .filter { looks.containsKey(it.id) }
-                    .forEach { entry ->
-                        FilterChip(
-                            selected = selection?.lutId == entry.id,
-                            onClick = {
-                                // A new look keeps the current intensity
-                                // (continuity while auditioning looks).
-                                commit(
-                                    committed.copy(
-                                        lut = LutSelection(
-                                            lutId = entry.id,
-                                            intensity = selection?.intensity ?: 100,
-                                        ),
-                                    ),
-                                )
-                            },
-                            enabled = !exporting,
-                            label = { Text(stringResource(lookNameRes(entry.id))) },
-                            modifier = Modifier.padding(end = 8.dp),
-                        )
-                    }
-                // The user-imported looks (r33 extension), id-sorted; the
-                // store's collision rule makes the subtraction exact.
-                importedIds.forEach { id ->
-                    val look = looks.getValue(id)
-                    FilterChip(
-                        selected = selection?.lutId == id,
-                        onClick = {
-                            commit(
-                                committed.copy(
-                                    lut = LutSelection(
-                                        lutId = id,
-                                        intensity = selection?.intensity ?: 100,
-                                    ),
-                                ),
-                            )
-                        },
-                        enabled = !exporting,
-                        label = { Text(look.title.ifBlank { id }) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                // The import action: SAF-pick a .cube (the zero-network
-                // editor reads local documents only).
-                AssistChip(
-                    onClick = { importLauncher.launch(arrayOf("*/*")) },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_filter_import)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-            }
-            importError?.let { reason ->
-                Text(
-                    text = stringResource(R.string.editor_filter_import_failed, reason),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            if (selection != null && looks.containsKey(selection.lutId)) {
-                // The intensity slider, live-dragged like every other
-                // slider (r32 pattern): the draft previews, release commits.
-                val live =
-                    if (draft?.first == "lut-intensity") draft!!.second else selection.intensity
-                val intensityLabel = stringResource(R.string.editor_filter_intensity, live)
-                val intensityName = stringResource(R.string.editor_a11y_filter_intensity)
-                Text(
-                    text = intensityLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = live.toFloat(),
-                    onValueChange = { draft = Pair("lut-intensity", it.toInt()) },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "lut-intensity" && committed.lut != null) {
-                                commit(committed.copy(lut = committed.lut!!.copy(intensity = d.second)))
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = intensityName
-                        stateDescription = intensityLabel
-                    },
-                )
-                // An IMPORTED look can be removed (bundled looks are part
-                // of the app); removal clears the selection and reloads
-                // the registry. A sidecar still naming the removed look
-                // degrades to no-look by the tolerance contract.
-                if (selection.lutId !in bundledIds) {
-                    TextButton(
-                        onClick = {
-                            val removedId = selection.lutId
-                            uiScope.launch {
-                                withContext(Dispatchers.IO) {
-                                    activity.importedLutStore.delete(removedId)
-                                }
-                                looksVersion++
-                                commit(committed.copy(lut = null))
-                            }
-                        },
-                        enabled = !exporting,
-                    ) {
-                        Text(stringResource(R.string.editor_filter_remove))
-                    }
-                }
-            }
-
-            // ---- Text layers (r34: the OFL-font text tool) ----
-            // The contract's UI shape (text-tool.md decision 5): an Add
-            // chip -> the layer list -> per-layer controls (text field,
-            // font chip row, size/opacity/rotation sliders with the r32
-            // semantics conventions, color swatches). Layer chips show
-            // their text (the fallback labels empty layers); repositioning
-            // is the drag gesture on the preview (documented nit: position
-            // has no slider, so it is not TalkBack-reachable in v1).
-            Text(
-                text = stringResource(R.string.editor_section_text),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                AssistChip(
-                    onClick = {
-                        sweepPendingDrafts()
-                        val existing = committed.textLayers?.layers ?: emptyList()
-                        val newLayer = TextLayer(
-                            id = TextLayer.newId(existing.map { it.id }),
-                            text = "",
-                            fontId = BundledFonts.DEFAULT_ID,
-                        )
-                        commit(
-                            committed.copy(textLayers = TextLayers(existing + newLayer)),
-                        )
-                        selectedTextLayerId = newLayer.id
-                        // r35: the new layer becomes THE selection --- one
-                        // selected layer at a time across the families.
-                        selectedStickerLayerId = null
-                        selectedRegionLayerId = null
-                    },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_text_add)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                committed.textLayers?.layers?.forEachIndexed { index, layer ->
-                    FilterChip(
-                        selected = selectedTextLayerId == layer.id,
-                        onClick = {
-                            if (selectedTextLayerId != layer.id) {
-                                sweepPendingDrafts()
-                                selectedTextLayerId = layer.id
-                                // r35/r37: one selection across the families.
-                                selectedStickerLayerId = null
-                                selectedRegionLayerId = null
-                            }
-                        },
-                        enabled = !exporting,
-                        label = {
-                            val fallback = stringResource(R.string.editor_text_layer, index + 1)
-                            val label = layer.text.ifBlank { fallback }
-                            Text(if (label.length > 16) label.take(15) + "…" else label)
-                        },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-            }
-            val selectedTextLayer = committed.textLayers?.layers
-                ?.firstOrNull { it.id == selectedTextLayerId }
-            if (selectedTextLayer != null) {
-                val layerId = selectedTextLayer.id
-                // -- The text field: drafts locally (per-keystroke commits
-                //    would flood the undo stack); commits on IME Done, on
-                //    target switch, on add/remove and before an export.
-                val fieldText = textDraft?.takeIf { it.first == layerId }?.second
-                    ?: selectedTextLayer.text
-                val textContentName = stringResource(R.string.editor_a11y_text_content)
-                val fieldHint = stringResource(R.string.editor_text_field_hint)
-                OutlinedTextField(
-                    value = fieldText,
-                    onValueChange = { value ->
-                        textDraft = layerId to value.take(TextLayer.MAX_TEXT_LENGTH)
-                    },
-                    enabled = !exporting,
-                    singleLine = true,
-                    placeholder = { Text(fieldHint, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onBackground),
-                    keyboardOptions = KeyboardOptions(
-                        imeAction = ImeAction.Done,
-                        capitalization = KeyboardCapitalization.Sentences,
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { commitTextDraftIfPending() }),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { contentDescription = textContentName },
-                )
-                // -- The font chips: the bundled four; an unresolvable
-                //    fontId selects NO chip (the tolerance contract, shown
-                //    honestly exactly like an unknown look id).
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    BundledFonts.ORDERED.forEach { entry ->
-                        FilterChip(
-                            selected = selectedTextLayer.fontId == entry.id,
-                            onClick = {
-                                commitSelectedLayer { it.copy(fontId = entry.id) }
-                            },
-                            enabled = !exporting,
-                            label = { Text(entry.displayName) },
-                            modifier = Modifier.padding(end = 8.dp),
-                        )
-                    }
-                }
-                // -- size / opacity / rotation: the live-draft pattern.
-                val sizeLive = draft?.takeIf { it.first == "text-size@$layerId" }?.second
-                    ?: selectedTextLayer.sizePct
-                val sizeLabel = stringResource(R.string.editor_text_size, sizeLive)
-                val sizeName = stringResource(R.string.editor_a11y_text_size)
-                Text(
-                    text = sizeLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = sizeLive.toFloat(),
-                    onValueChange = { draft = "text-size@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "text-size@$layerId") {
-                                commitSelectedLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..300f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = sizeName
-                        stateDescription = sizeLabel
-                    },
-                )
-                val opacityLive = draft?.takeIf { it.first == "text-opacity@$layerId" }?.second
-                    ?: selectedTextLayer.opacity
-                val opacityLabel = stringResource(R.string.editor_text_opacity, opacityLive)
-                val opacityName = stringResource(R.string.editor_a11y_text_opacity)
-                Text(
-                    text = opacityLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = opacityLive.toFloat(),
-                    onValueChange = { draft = "text-opacity@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "text-opacity@$layerId") {
-                                commitSelectedLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = opacityName
-                        stateDescription = opacityLabel
-                    },
-                )
-                val rotationLive = draft?.takeIf { it.first == "text-rotation@$layerId" }?.second
-                    ?: selectedTextLayer.rotationDeg
-                val rotationLabel = stringResource(R.string.editor_text_rotation, rotationLive)
-                val rotationName = stringResource(R.string.editor_a11y_text_rotation)
-                Text(
-                    text = rotationLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = rotationLive.toFloat(),
-                    onValueChange = { draft = "text-rotation@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "text-rotation@$layerId") {
-                                commitSelectedLayer {
-                                    it.copy(rotationDeg = d.second.coerceIn(-180, 180))
-                                }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = -180f..180f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = rotationName
-                        stateDescription = rotationLabel
-                    },
-                )
-                // -- The color swatches: a fixed named palette, a11y-labelled
-                //    (TalkBack announces each control; selection is radio
-                //    semantics --- one color at a time).
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    TEXT_COLORS.forEach { (colorArgb, nameRes) ->
-                        ColorSwatch(
-                            colorArgb = colorArgb,
-                            selected = selectedTextLayer.colorArgb == colorArgb,
-                            name = stringResource(nameRes),
-                            enabled = !exporting,
-                            onPick = {
-                                commitSelectedLayer { it.copy(colorArgb = colorArgb) }
-                            },
-                        )
-                    }
-                }
-                TextButton(
-                    onClick = {
-                        sweepPendingDrafts()
-                        val remaining = (committed.textLayers?.layers ?: emptyList())
-                            .filterNot { it.id == layerId }
-                        commit(
-                            committed.copy(
-                                textLayers = if (remaining.isEmpty()) {
-                                    null
-                                } else {
-                                    TextLayers(remaining)
-                                },
-                            ),
-                        )
-                        selectedTextLayerId = remaining.lastOrNull()?.id
-                    },
-                    enabled = !exporting,
-                ) {
-                    Text(stringResource(R.string.editor_text_remove))
-                }
-            }
-
-            // ---- Stickers (r35: the sticker tool) ----
-            // The contract's UI shape (stickers.md decision 6): the
-            // registry chip row (bundled eight, imported id-sorted, the
-            // SAF import chip for image/png + image/webp) --- a chip tap
-            // ADDS a layer at canvas centre; registry chips are ADD
-            // actions, not selections (the layer chips below carry the
-            // selection). One selected layer at a time across the
-            // families; the drag gesture and the per-layer controls
-            // follow the single selection.
-            Text(
-                text = stringResource(R.string.editor_section_stickers),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                BundledStickers.ORDERED.forEach { entry ->
-                    FilterChip(
-                        selected = false,
-                        onClick = {
-                            sweepPendingDrafts()
-                            val existing = committed.stickerLayers?.layers ?: emptyList()
-                            val newLayer = StickerLayer(
-                                id = StickerLayer.newId(existing.map { it.id }),
-                                stickerId = entry.id,
-                            )
-                            commit(
-                                committed.copy(stickerLayers = StickerLayers(existing + newLayer)),
-                            )
-                            selectedStickerLayerId = newLayer.id
-                            selectedTextLayerId = null
-                            selectedRegionLayerId = null
-                        },
-                        enabled = !exporting,
-                        label = { Text(entry.displayName) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                // The user-imported stickers (r35), id-sorted; the store's
-                // collision rule makes the keys disjoint from the bundled set.
-                importedStickers.keys.sorted().forEach { id ->
-                    FilterChip(
-                        selected = false,
-                        onClick = {
-                            sweepPendingDrafts()
-                            val existing = committed.stickerLayers?.layers ?: emptyList()
-                            val newLayer = StickerLayer(
-                                id = StickerLayer.newId(existing.map { it.id }),
-                                stickerId = id,
-                            )
-                            commit(
-                                committed.copy(stickerLayers = StickerLayers(existing + newLayer)),
-                            )
-                            selectedStickerLayerId = newLayer.id
-                            selectedTextLayerId = null
-                            selectedRegionLayerId = null
-                        },
-                        enabled = !exporting,
-                        label = { Text(id) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                // The import action: SAF-pick a PNG/WebP (the zero-network
-                // editor reads local documents only).
-                AssistChip(
-                    onClick = { stickerImportLauncher.launch(arrayOf("image/png", "image/webp")) },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_sticker_import)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-            }
-            stickerImportError?.let { reason ->
-                Text(
-                    text = stringResource(R.string.editor_sticker_import_failed, reason),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            // The layer chips: their sticker's display name (the raw id for
-            // an import or an unresolvable id --- the tolerance contract,
-            // shown honestly exactly like an unknown look id).
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                committed.stickerLayers?.layers?.forEach { layer ->
-                    FilterChip(
-                        selected = selectedStickerLayerId == layer.id,
-                        onClick = {
-                            if (selectedStickerLayerId != layer.id) {
-                                sweepPendingDrafts()
-                                selectedStickerLayerId = layer.id
-                                selectedTextLayerId = null
-                                selectedRegionLayerId = null
-                            }
-                        },
-                        enabled = !exporting,
-                        label = {
-                            val label = BundledStickers.byId(layer.stickerId)?.displayName
-                                ?: layer.stickerId
-                            Text(if (label.length > 16) label.take(15) + "…" else label)
-                        },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-            }
-            val selectedStickerLayer = committed.stickerLayers?.layers
-                ?.firstOrNull { it.id == selectedStickerLayerId }
-            if (selectedStickerLayer != null) {
-                val layerId = selectedStickerLayer.id
-                // -- size / opacity / rotation: the live-draft pattern
-                //    (the r34 conventions; the keys carry the sticker-
-                //    prefix so effectiveRecipe() routes them).
-                val sizeLive = draft?.takeIf { it.first == "sticker-size@$layerId" }?.second
-                    ?: selectedStickerLayer.sizePct
-                val sizeLabel = stringResource(R.string.editor_sticker_size, sizeLive)
-                val sizeName = stringResource(R.string.editor_a11y_sticker_size)
-                Text(
-                    text = sizeLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = sizeLive.toFloat(),
-                    onValueChange = { draft = "sticker-size@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "sticker-size@$layerId") {
-                                commitSelectedStickerLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..300f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = sizeName
-                        stateDescription = sizeLabel
-                    },
-                )
-                val opacityLive = draft?.takeIf { it.first == "sticker-opacity@$layerId" }?.second
-                    ?: selectedStickerLayer.opacity
-                val opacityLabel = stringResource(R.string.editor_sticker_opacity, opacityLive)
-                val opacityName = stringResource(R.string.editor_a11y_sticker_opacity)
-                Text(
-                    text = opacityLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = opacityLive.toFloat(),
-                    onValueChange = { draft = "sticker-opacity@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "sticker-opacity@$layerId") {
-                                commitSelectedStickerLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = opacityName
-                        stateDescription = opacityLabel
-                    },
-                )
-                val rotationLive = draft?.takeIf { it.first == "sticker-rotation@$layerId" }?.second
-                    ?: selectedStickerLayer.rotationDeg
-                val rotationLabel = stringResource(R.string.editor_sticker_rotation, rotationLive)
-                val rotationName = stringResource(R.string.editor_a11y_sticker_rotation)
-                Text(
-                    text = rotationLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = rotationLive.toFloat(),
-                    onValueChange = { draft = "sticker-rotation@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "sticker-rotation@$layerId") {
-                                commitSelectedStickerLayer {
-                                    it.copy(rotationDeg = d.second.coerceIn(-180, 180))
-                                }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = -180f..180f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = rotationName
-                        stateDescription = rotationLabel
-                    },
-                )
-                TextButton(
-                    onClick = {
-                        sweepPendingDrafts()
-                        val remaining = (committed.stickerLayers?.layers ?: emptyList())
-                            .filterNot { it.id == layerId }
-                        commit(
-                            committed.copy(
-                                stickerLayers = if (remaining.isEmpty()) {
-                                    null
-                                } else {
-                                    StickerLayers(remaining)
-                                },
-                            ),
-                        )
-                        selectedStickerLayerId = remaining.lastOrNull()?.id
-                    },
-                    enabled = !exporting,
-                ) {
-                    Text(stringResource(R.string.editor_sticker_remove))
-                }
-            }
-
-            // ---- Drawing (r36: the freehand tool) ----
-            // The contract's UI shape (drawing-tool.md decision 6): the
-            // Draw-mode chip + the stroke layer chips, then the controls
-            // under the duality --- Draw mode ON tunes the NEXT stroke
-            // (the brush, plain state; the live gesture previews through
-            // a transient draft layer); a selected layer re-binds the SAME
-            // controls to it through the live-draft pattern. The two states
-            // are exclusive; ONE selection at a time across ALL the
-            // families (the r35 contract extended).
-            Text(
-                text = stringResource(R.string.editor_section_drawing),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                FilterChip(
-                    selected = drawMode,
-                    onClick = {
-                        sweepPendingDrafts()
-                        drawMode = !drawMode
-                        if (drawMode) {
-                            // Entering paint mode drops every selection ---
-                            // painting owns the gesture; the user keeps
-                            // painting across strokes. The r37 twin grew to
-                            // THREE paint modes in r41 (Draw/Region/Erase):
-                            // mutually exclusive, enforced at every toggle.
-                            regionMode = false
-                            eraseMode = false
-                            selectedTextLayerId = null
-                            selectedStickerLayerId = null
-                            selectedDrawLayerId = null
-                            selectedRegionLayerId = null
-                        }
-                    },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_draw_mode)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                committed.drawLayers?.layers?.forEachIndexed { index, layer ->
-                    FilterChip(
-                        selected = selectedDrawLayerId == layer.id,
-                        onClick = {
-                            if (selectedDrawLayerId != layer.id) {
-                                sweepPendingDrafts()
-                                selectedDrawLayerId = layer.id
-                                drawMode = false // the duality is exclusive
-                                regionMode = false // and so are the paint modes
-                                eraseMode = false // all three of them (r41)
-                                selectedTextLayerId = null
-                                selectedStickerLayerId = null
-                                selectedRegionLayerId = null
-                            }
-                        },
-                        enabled = !exporting,
-                        label = { Text(stringResource(R.string.editor_draw_layer, index + 1)) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-            }
-            val selectedDrawLayer = committed.drawLayers?.layers
-                ?.firstOrNull { it.id == selectedDrawLayerId }
-            if (drawMode) {
-                // -- The brush (tunes the NEXT stroke): the swatches and
-                //    sliders are plain state, applied at commit; the live
-                //    gesture previews them through the draft layer.
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    TEXT_COLORS.forEach { (colorArgb, nameRes) ->
-                        ColorSwatch(
-                            colorArgb = colorArgb,
-                            selected = brushColor == colorArgb,
-                            name = stringResource(nameRes),
-                            enabled = !exporting,
-                            onPick = { brushColor = colorArgb },
-                        )
-                    }
-                }
-                val widthName = stringResource(R.string.editor_a11y_draw_width)
-                val widthLabel = stringResource(R.string.editor_draw_width, brushWidth)
-                Text(
-                    text = widthLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = brushWidth.toFloat(),
-                    onValueChange = { brushWidth = it.toInt().coerceIn(1, 100) },
-                    valueRange = 1f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = widthName
-                        stateDescription = widthLabel
-                    },
-                )
-                val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
-                val opacityLabel = stringResource(R.string.editor_draw_opacity, brushOpacity)
-                Text(
-                    text = opacityLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = brushOpacity.toFloat(),
-                    onValueChange = { brushOpacity = it.toInt().coerceIn(0, 100) },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = opacityName
-                        stateDescription = opacityLabel
-                    },
-                )
-                val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
-                val smoothingLabel = stringResource(R.string.editor_draw_smoothing, brushSmoothing)
-                Text(
-                    text = smoothingLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = brushSmoothing.toFloat(),
-                    onValueChange = { brushSmoothing = it.toInt().coerceIn(0, 100) },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = smoothingName
-                        stateDescription = smoothingLabel
-                    },
-                )
-            } else if (selectedDrawLayer != null) {
-                val layerId = selectedDrawLayer.id
-                // -- Per-layer re-edit (the live-draft pattern; the keys
-                //    carry the draw- prefix so effectiveRecipe() routes
-                //    them). The swatches and sliders re-bind to the layer.
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    TEXT_COLORS.forEach { (colorArgb, nameRes) ->
-                        ColorSwatch(
-                            colorArgb = colorArgb,
-                            selected = selectedDrawLayer.colorArgb == colorArgb,
-                            name = stringResource(nameRes),
-                            enabled = !exporting,
-                            onPick = {
-                                commitSelectedDrawLayer { it.copy(colorArgb = colorArgb) }
-                            },
-                        )
-                    }
-                }
-                val widthLive = draft?.takeIf { it.first == "draw-width@$layerId" }?.second
-                    ?: selectedDrawLayer.widthPct
-                val widthName = stringResource(R.string.editor_a11y_draw_width)
-                val widthLabel = stringResource(R.string.editor_draw_width, widthLive)
-                Text(
-                    text = widthLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = widthLive.toFloat(),
-                    onValueChange = { draft = "draw-width@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "draw-width@$layerId") {
-                                commitSelectedDrawLayer { it.copy(widthPct = d.second.coerceIn(1, 100)) }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 1f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = widthName
-                        stateDescription = widthLabel
-                    },
-                )
-                val opacityLive = draft?.takeIf { it.first == "draw-opacity@$layerId" }?.second
-                    ?: selectedDrawLayer.opacity
-                val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
-                val opacityLabel = stringResource(R.string.editor_draw_opacity, opacityLive)
-                Text(
-                    text = opacityLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = opacityLive.toFloat(),
-                    onValueChange = { draft = "draw-opacity@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "draw-opacity@$layerId") {
-                                commitSelectedDrawLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = opacityName
-                        stateDescription = opacityLabel
-                    },
-                )
-                val smoothingLive = draft?.takeIf { it.first == "draw-smoothing@$layerId" }?.second
-                    ?: selectedDrawLayer.smoothingPct
-                val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
-                val smoothingLabel = stringResource(R.string.editor_draw_smoothing, smoothingLive)
-                Text(
-                    text = smoothingLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = smoothingLive.toFloat(),
-                    onValueChange = { draft = "draw-smoothing@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "draw-smoothing@$layerId") {
-                                commitSelectedDrawLayer {
-                                    it.copy(smoothingPct = d.second.coerceIn(0, 100))
-                                }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = smoothingName
-                        stateDescription = smoothingLabel
-                    },
-                )
-                TextButton(
-                    onClick = {
-                        sweepPendingDrafts()
-                        val remaining = (committed.drawLayers?.layers ?: emptyList())
-                            .filterNot { it.id == layerId }
-                        commit(
-                            committed.copy(
-                                drawLayers = if (remaining.isEmpty()) {
-                                    null
-                                } else {
-                                    DrawLayers(remaining)
-                                },
-                            ),
-                        )
-                        selectedDrawLayerId = remaining.lastOrNull()?.id
-                    },
-                    enabled = !exporting,
-                ) {
-                    Text(stringResource(R.string.editor_draw_remove))
-                }
-            }
-
-            // ---- Regions (r37: the mosaic/blur pixel stage) ----
-            // The r37 UI section, landed here as the recorded debt fix (the
-            // r37 insertion script wrote the gradle file but never the
-            // activity --- the section existed only in a Python variable;
-            // the merged r37 carried the model, the recipe, the pipeline
-            // stage and the gesture scaffolding without this surface, and
-            // regionMode was unreachable. The correction rides r38; the
-            // r37 delivery record gains the note).
-            //
-            // The contract's UI shape (mosaic-regions.md decision 6): the
-            // Region-mode chip (mutually exclusive with Draw mode --- one
-            // paint mode at a time, enforced at both toggles), the region
-            // layer chips, and the controls under the duality: paint mode
-            // tunes the NEXT region (kind chips + strength slider, plain
-            // state, previewed live through the transient draft region);
-            // a selected region re-binds the same controls through the
-            // live-draft pattern. The effect previews AT PAINT TIME: the
-            // draft region rides the effective recipe through the same
-            // pipeline stage the export runs.
-            Text(
-                text = stringResource(R.string.editor_section_regions),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                FilterChip(
-                    selected = regionMode,
-                    onClick = {
-                        sweepPendingDrafts()
-                        regionMode = !regionMode
-                        if (regionMode) {
-                            // Entering region paint mode drops every
-                            // selection and exits the other paint modes;
-                            // the user keeps painting across regions.
-                            drawMode = false
-                            eraseMode = false
-                            selectedTextLayerId = null
-                            selectedStickerLayerId = null
-                            selectedDrawLayerId = null
-                            selectedRegionLayerId = null
-                        }
-                    },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_region_mode)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                committed.mosaicRegions?.layers?.forEachIndexed { index, layer ->
-                    FilterChip(
-                        selected = selectedRegionLayerId == layer.id,
-                        onClick = {
-                            if (selectedRegionLayerId != layer.id) {
-                                sweepPendingDrafts()
-                                selectedRegionLayerId = layer.id
-                                regionMode = false
-                                drawMode = false
-                                eraseMode = false
-                                selectedTextLayerId = null
-                                selectedStickerLayerId = null
-                                selectedDrawLayerId = null
-                            }
-                        },
-                        enabled = !exporting,
-                        label = { Text(stringResource(R.string.editor_region_layer, index + 1)) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-            }
-            val selectedRegionLayer = committed.mosaicRegions?.layers
-                ?.firstOrNull { it.id == selectedRegionLayerId }
-            if (regionMode) {
-                // -- The next region's kind + strength (plain state; the
-                //    live gesture previews them through the draft region).
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    FilterChip(
-                        selected = regionKind == RegionKind.MOSAIC,
-                        onClick = { regionKind = RegionKind.MOSAIC },
-                        enabled = !exporting,
-                        label = { Text(stringResource(R.string.editor_region_mosaic)) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    FilterChip(
-                        selected = regionKind == RegionKind.LINEAR_BLUR,
-                        onClick = { regionKind = RegionKind.LINEAR_BLUR },
-                        enabled = !exporting,
-                        label = { Text(stringResource(R.string.editor_region_blur)) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                val strengthName = stringResource(R.string.editor_a11y_region_strength)
-                val strengthLabel = stringResource(R.string.editor_region_strength, regionStrength)
-                Text(
-                    text = strengthLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = regionStrength.toFloat(),
-                    onValueChange = { regionStrength = it.toInt().coerceIn(1, 100) },
-                    valueRange = 1f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = strengthName
-                        stateDescription = strengthLabel
-                    },
-                )
-            } else if (selectedRegionLayer != null) {
-                val layerId = selectedRegionLayer.id
-                // -- Per-region re-edit (the live-draft pattern; chips
-                //    commit immediately, the strength slider drafts).
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    FilterChip(
-                        selected = selectedRegionLayer.kind == RegionKind.MOSAIC,
-                        onClick = {
-                            commitSelectedRegionLayer { it.copy(kind = RegionKind.MOSAIC) }
-                        },
-                        enabled = !exporting,
-                        label = { Text(stringResource(R.string.editor_region_mosaic)) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    FilterChip(
-                        selected = selectedRegionLayer.kind == RegionKind.LINEAR_BLUR,
-                        onClick = {
-                            commitSelectedRegionLayer { it.copy(kind = RegionKind.LINEAR_BLUR) }
-                        },
-                        enabled = !exporting,
-                        label = { Text(stringResource(R.string.editor_region_blur)) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                val strengthLive = draft?.takeIf { it.first == "region-strength@$layerId" }?.second
-                    ?: selectedRegionLayer.strengthPct
-                val strengthName = stringResource(R.string.editor_a11y_region_strength)
-                val strengthLabel = stringResource(R.string.editor_region_strength, strengthLive)
-                Text(
-                    text = strengthLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = strengthLive.toFloat(),
-                    onValueChange = { draft = "region-strength@$layerId" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "region-strength@$layerId") {
-                                commitSelectedRegionLayer { it.copy(strengthPct = d.second.coerceIn(1, 100)) }
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 1f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = strengthName
-                        stateDescription = strengthLabel
-                    },
-                )
-                TextButton(
-                    onClick = {
-                        sweepPendingDrafts()
-                        val remaining = (committed.mosaicRegions?.layers ?: emptyList())
-                            .filterNot { it.id == layerId }
-                        commit(
-                            committed.copy(
-                                mosaicRegions = if (remaining.isEmpty()) {
-                                    null
-                                } else {
-                                    RegionLayers(remaining)
-                                },
-                            ),
-                        )
-                        selectedRegionLayerId = remaining.lastOrNull()?.id
-                    },
-                    enabled = !exporting,
-                ) {
-                    Text(stringResource(R.string.editor_region_remove))
-                }
-            }
-
-            // ---- Frames (r38: the single mounting; the closing round) ----
-            // The contract's UI shape (frames.md decision 6): the look
-            // row's conventions --- the None chip, the bundled five, the
-            // imported chips, the SAF import chip; the width slider +
-            // colour swatches for a PARAMETRIC selection (the live-draft
-            // pattern, single-selection keys like the intensity slider);
-            // the honest no-controls note for an imported one (the bitmap
-            // is the frame). No paint mode, no gesture: a frame needs no
-            // dragging.
-            Text(
-                text = stringResource(R.string.editor_section_frames),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                FilterChip(
-                    selected = committed.frame == null,
-                    onClick = { sweepPendingDrafts(); commit(committed.copy(frame = null)) },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_frame_none)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                BundledFrames.ORDERED.forEach { entry ->
-                    FilterChip(
-                        selected = committed.frame?.frameId == entry.id,
-                        onClick = {
-                            sweepPendingDrafts()
-                            // A new frame keeps the current width and
-                            // colour (continuity while auditioning, the
-                            // look row's rule).
-                            commit(
-                                committed.copy(
-                                    frame = FrameSelection(
-                                        frameId = entry.id,
-                                        widthPct = committed.frame?.widthPct ?: FrameSelection.DEFAULT_WIDTH_PCT,
-                                        colorArgb = committed.frame?.colorArgb ?: FrameSelection.DEFAULT_COLOR,
-                                    ),
-                                ),
-                            )
-                        },
-                        enabled = !exporting,
-                        label = { Text(entry.displayName) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                // The user-imported frames, id-sorted; the store's collision
-                // rule makes the keys disjoint from the bundled set.
-                importedFrames.keys.sorted().forEach { id ->
-                    FilterChip(
-                        selected = committed.frame?.frameId == id,
-                        onClick = {
-                            sweepPendingDrafts()
-                            commit(
-                                committed.copy(
-                                    frame = FrameSelection(
-                                        frameId = id,
-                                        widthPct = committed.frame?.widthPct ?: FrameSelection.DEFAULT_WIDTH_PCT,
-                                        colorArgb = committed.frame?.colorArgb ?: FrameSelection.DEFAULT_COLOR,
-                                    ),
-                                ),
-                            )
-                        },
-                        enabled = !exporting,
-                        label = { Text(id) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                AssistChip(
-                    onClick = { frameImportLauncher.launch(arrayOf("image/png", "image/webp")) },
-                    enabled = !exporting,
-                    label = { Text(stringResource(R.string.editor_frame_import)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-            }
-            frameImportError?.let { reason ->
-                Text(
-                    text = stringResource(R.string.editor_frame_import_failed, reason),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            val frameSelection = committed.frame
-            if (frameSelection != null) {
-                if (BundledFrames.byId(frameSelection.frameId) != null) {
-                    // -- The parametric controls: width (the single-selection
-                    //    draft key) + the swatches (immediate commits).
-                    val widthLive = draft?.takeIf { it.first == "frame-width" }?.second
-                        ?: frameSelection.widthPct
-                    val widthName = stringResource(R.string.editor_a11y_frame_width)
-                    val widthLabel = stringResource(R.string.editor_frame_width, widthLive)
+            when (screen) {
+                PhotoScreen.Crop -> {
+                    // ---- Geometry row ----
                     Text(
-                        text = widthLabel,
+                        text = stringResource(R.string.editor_section_geometry),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    ) {
+                        IconButton(
+                            onClick = {
+                                commit(
+                                    committed.copy(
+                                        quarterTurns = (committed.quarterTurns + 1) % 4,
+                                    ),
+                                )
+                            },
+                            enabled = !exporting,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = stringResource(R.string.editor_rotate_left),
+                                tint = MaterialTheme.colorScheme.onBackground,
+                            )
+                        }
+                        // r32 a11y: both flip toggles are FilterChips. A text
+                        // label inside an IconButton overflows the 48dp target, and
+                        // a clickable Text was a sub-48dp touch target; a selected
+                        // chip gives the proper target, the state highlight AND the
+                        // selected/not-selected announcement next to the on/off text.
+                        FilterChip(
+                            selected = committed.horizontalFlip,
+                            onClick = {
+                                commit(committed.copy(horizontalFlip = !committed.horizontalFlip))
+                            },
+                            enabled = !exporting,
+                            label = {
+                                Text(
+                                    text = stringResource(
+                                        R.string.editor_flip_horizontal_toggle,
+                                        if (committed.horizontalFlip) {
+                                            stringResource(R.string.editor_on)
+                                        } else {
+                                            stringResource(R.string.editor_off)
+                                        },
+                                    ),
+                                )
+                            },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        FilterChip(
+                            selected = committed.verticalFlip,
+                            onClick = {
+                                commit(committed.copy(verticalFlip = !committed.verticalFlip))
+                            },
+                            enabled = !exporting,
+                            label = {
+                                Text(
+                                    text = stringResource(
+                                        R.string.editor_flip_vertical_toggle,
+                                        if (committed.verticalFlip) {
+                                            stringResource(R.string.editor_on)
+                                        } else {
+                                            stringResource(R.string.editor_off)
+                                        },
+                                    ),
+                                )
+                            },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    // r32: the straighten slider follows the drag live (the label,
+                    // the thumb, the preview) exactly like the adjustment sliders;
+                    // it previously held the committed value until release. The
+                    // value stays a Double so a fractional sidecar straighten (e.g.
+                    // 7.5) displays exactly, not truncated.
+                    val straightenLive = draft?.takeIf { it.first == "straighten" }?.second?.toDouble()
+                        ?: committed.straightenDeg
+                    val straightenName = stringResource(R.string.editor_a11y_straighten)
+                    val straightenState = stringResource(R.string.editor_straighten, straightenLive.toInt())
+                    Text(
+                        text = straightenState,
                         color = MaterialTheme.colorScheme.onBackground,
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Slider(
-                        value = widthLive.toFloat(),
-                        onValueChange = { draft = "frame-width" to it.toInt() },
+                        value = straightenLive.toFloat(),
+                        onValueChange = { draft = Pair("straighten", it.toInt()) },
                         onValueChangeFinished = {
                             draft?.let { d ->
-                                if (d.first == "frame-width" && committed.frame != null) {
-                                    commit(
-                                        committed.copy(
-                                            frame = committed.frame!!.copy(widthPct = d.second.coerceIn(1, 100)),
-                                        ),
-                                    )
+                                if (d.first == "straighten") {
+                                    commit(committed.copy(straightenDeg = d.second.toDouble()))
                                 }
                             }
                             draft = null
                         },
-                        valueRange = 1f..100f,
+                        valueRange = -15f..15f,
                         enabled = !exporting,
                         modifier = Modifier.semantics {
-                            contentDescription = widthName
-                            stateDescription = widthLabel
+                            contentDescription = straightenName
+                            stateDescription = straightenState
                         },
                     )
+
+                    // ---- Crop aspect presets (centered fits over the post-geometry frame) ----
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        TEXT_COLORS.forEach { (colorArgb, nameRes) ->
-                            ColorSwatch(
-                                colorArgb = colorArgb,
-                                selected = frameSelection.colorArgb == colorArgb,
-                                name = stringResource(nameRes),
-                                enabled = !exporting,
-                                onPick = {
-                                    commit(
-                                        committed.copy(
-                                            frame = frameSelection.copy(colorArgb = colorArgb),
-                                        ),
-                                    )
+                        listOf(
+                            null to CropAspect.FREE, // the ratios are locale-neutral; the word is not (r32)
+                            "1:1" to CropAspect.SQUARE,
+                            "4:3" to CropAspect.RATIO_4_3,
+                            "3:4" to CropAspect.RATIO_3_4,
+                            "16:9" to CropAspect.RATIO_16_9,
+                            "9:16" to CropAspect.RATIO_9_16,
+                        ).forEach { (label, aspect) ->
+                            AssistChip(
+                                onClick = {
+                                    if (aspect == CropAspect.FREE) {
+                                        commit(committed.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0)))
+                                    } else {
+                                        // The preset fits over the post-geometry
+                                        // frame (the same plan the overlay draws).
+                                        val plan = EditGeometryPlan.plan(
+                                            committed.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0)),
+                                            previewBase?.width ?: 1,
+                                            previewBase?.height ?: 1,
+                                        )
+                                        val fitted = aspect.fit(plan.cropPixelRect, plan.postGeometryWidth, plan.postGeometryHeight)
+                                        // r32: the pixel-rect -> normalized conversion
+                                        // is the tested pure inverse (CropRect.fromPixelRect),
+                                        // not an inline division that could drift.
+                                        commit(
+                                            committed.copy(
+                                                crop = CropRect.fromPixelRect(
+                                                    fitted,
+                                                    plan.postGeometryWidth,
+                                                    plan.postGeometryHeight,
+                                                ),
+                                            ),
+                                        )
+                                    }
                                 },
+                                label = {
+                                    Text(label ?: stringResource(R.string.editor_crop_free))
+                                },
+                                modifier = Modifier.padding(end = 8.dp),
+                                enabled = !exporting,
                             )
                         }
                     }
-                } else if (importedFrames.containsKey(frameSelection.frameId)) {
-                    // -- An imported frame: the bitmap is the frame; the
-                    //    width/colour controls do not apply, and the UI
-                    //    says so instead of showing dead controls.
-                    Text(
-                        text = stringResource(R.string.editor_frame_imported_note),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
                 }
-                // An unresolvable id (a version skew, a deleted import)
-                // selects NO chip --- the tolerance contract, shown
-                // honestly exactly like an unknown look id.
-            }
+                PhotoScreen.Adjust -> {
 
-            // ---- r41: the Edit v3 AI sections (Phase 10 sub-scope A) ----
-            // The shared honest progress + cancellation line: every AI
-            // commit runs ONCE, off the UI thread, when the user applies
-            // or re-applies a feature; the models never run during a
-            // render or an export. The quality note is honest per
-            // ADR-0010: compact on-device models, bounded results.
-            if (aiBusy) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
+                    // ---- The adjustment suite ----
                     Text(
-                        text = stringResource(R.string.editor_ai_progress, aiProgressPct),
-                        color = MaterialTheme.colorScheme.onBackground,
+                        text = stringResource(R.string.editor_section_adjust),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(horizontal = 8.dp),
                     )
-                    TextButton(
-                        onClick = { aiCancelRequested = true },
-                        enabled = !exporting,
-                    ) {
-                        Text(stringResource(R.string.editor_ai_cancel))
+                    for (spec in ADJUST_SLIDERS) {
+                        val committedValue = spec.get(committed)
+                        val live = if (draft?.first == spec.key) draft!!.second else committedValue
+                        val labelText = stringResource(spec.label, live)
+                        val a11yName = stringResource(spec.a11yNameRes)
+                        Text(
+                            text = labelText,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = live.toFloat(),
+                            onValueChange = { value -> draft = Pair(spec.key, value.toInt()) },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == spec.key) {
+                                        commit(spec.set(committed, d.second))
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = -100f..100f,
+                            enabled = !exporting,
+                            // r32 a11y: every slider announces its NAME and its live
+                            // VALUE, not just the default percent-of-range.
+                            modifier = Modifier.semantics {
+                                contentDescription = a11yName
+                                stateDescription = labelText
+                            },
+                        )
                     }
                 }
-            }
-            aiNotice?.let { noticeRes ->
-                Text(
-                    text = stringResource(noticeRes),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
+                PhotoScreen.Looks -> {
 
-            // ---- Magic erase: the third paint mode ----
-            // The r37 region section's shape: the mode chip (ONE paint
-            // mode at a time across Draw/Region/Erase, enforced at all
-            // three toggles), the layer chips, and the controls under
-            // the mode. The erase gesture paints the seed; the inference
-            // (segmentation + inpainting) runs ONCE at gesture end ---
-            // off the UI thread, cancellable, honest progress --- and the
-            // refined mask + fill persist as ONE derived artifact.
-            Text(
-                text = stringResource(R.string.editor_section_ai_erase),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                FilterChip(
-                    selected = eraseMode,
-                    onClick = {
-                        sweepPendingDrafts()
-                        eraseMode = !eraseMode
-                        if (eraseMode) {
-                            // The duality's rule, third member: entering
-                            // Erase paint mode exits the other two and
-                            // drops every selection.
-                            drawMode = false
-                            regionMode = false
-                            selectedTextLayerId = null
-                            selectedStickerLayerId = null
-                            selectedDrawLayerId = null
-                            selectedRegionLayerId = null
-                        }
-                    },
-                    enabled = !exporting && !aiBusy,
-                    label = { Text(stringResource(R.string.editor_ai_erase_mode)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                committed.aiErase?.layers?.forEachIndexed { index, layer ->
-                    FilterChip(
-                        selected = selectedEraseLayerId == layer.id,
-                        onClick = {
-                            if (selectedEraseLayerId != layer.id) {
-                                sweepPendingDrafts()
-                                selectedEraseLayerId = layer.id
-                                drawMode = false
-                                regionMode = false
-                                eraseMode = false
-                                selectedTextLayerId = null
-                                selectedStickerLayerId = null
-                                selectedDrawLayerId = null
-                                selectedRegionLayerId = null
-                            }
-                        },
-                        enabled = !exporting && !aiBusy,
-                        label = { Text(stringResource(R.string.editor_ai_erase_layer, index + 1)) },
-                        modifier = Modifier.padding(end = 8.dp),
+                    // ---- Filters (r33: the bundled .cube looks at an intensity) ----
+                    // One None chip + one chip per look that PARSED; the preview and
+                    // the export resolve the selection through the same shared cache,
+                    // so what the user sees is what the pipeline exports. A selection
+                    // this build cannot resolve (a version-skewed sidecar) selects no
+                    // chip --- the tolerance contract, shown honestly.
+                    Text(
+                        text = stringResource(R.string.editor_section_filters),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
                     )
-                }
-            }
-            if (eraseMode) {
-                // The honest bounds note (ADR-0010: on-device quality is
-                // bounded; the strings say so without apologising).
-                Text(
-                    text = stringResource(R.string.editor_ai_erase_hint),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            } else {
-                val selectedEraseLayer = committed.aiErase?.layers
-                    ?.firstOrNull { it.id == selectedEraseLayerId }
-                if (selectedEraseLayer != null) {
-                    val layerId = selectedEraseLayer.id
-                    if (selectedEraseLayer.artifactRef.isNotEmpty() &&
-                        !activity.aiStore.contains(
-                            EditAiStore.ArtifactKind.MASK,
-                            selectedEraseLayer.artifactRef,
+                    val selection = committed.lut
+                    val bundledIds = remember { BundledLuts.ORDERED.map { it.id }.toSet() }
+                    val importedIds = looks.keys.filter { it !in bundledIds }.sorted()
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        FilterChip(
+                            selected = selection == null,
+                            onClick = { commit(committed.copy(lut = null)) },
+                            enabled = !exporting,
+                            label = { Text(stringResource(R.string.editor_filter_none)) },
+                            modifier = Modifier.padding(end = 8.dp),
                         )
-                    ) {
-                        // The honest degraded note: the layer's artifact is
-                        // gone, it renders nothing (never dead controls).
+                        BundledLuts.ORDERED
+                            .filter { looks.containsKey(it.id) }
+                            .forEach { entry ->
+                                FilterChip(
+                                    selected = selection?.lutId == entry.id,
+                                    onClick = {
+                                        // A new look keeps the current intensity
+                                        // (continuity while auditioning looks).
+                                        commit(
+                                            committed.copy(
+                                                lut = LutSelection(
+                                                    lutId = entry.id,
+                                                    intensity = selection?.intensity ?: 100,
+                                                ),
+                                            ),
+                                        )
+                                    },
+                                    enabled = !exporting,
+                                    label = { Text(stringResource(lookNameRes(entry.id))) },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                            }
+                        // The user-imported looks (r33 extension), id-sorted; the
+                        // store's collision rule makes the subtraction exact.
+                        importedIds.forEach { id ->
+                            val look = looks.getValue(id)
+                            FilterChip(
+                                selected = selection?.lutId == id,
+                                onClick = {
+                                    commit(
+                                        committed.copy(
+                                            lut = LutSelection(
+                                                lutId = id,
+                                                intensity = selection?.intensity ?: 100,
+                                            ),
+                                        ),
+                                    )
+                                },
+                                enabled = !exporting,
+                                label = { Text(look.title.ifBlank { id }) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        // The import action: SAF-pick a .cube (the zero-network
+                        // editor reads local documents only).
+                        AssistChip(
+                            onClick = { importLauncher.launch(arrayOf("*/*")) },
+                            enabled = !exporting,
+                            label = { Text(stringResource(R.string.editor_filter_import)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    importError?.let { reason ->
                         Text(
-                            text = stringResource(R.string.editor_ai_degraded_layer),
+                            text = stringResource(R.string.editor_filter_import_failed, reason),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
-                    TextButton(
-                        onClick = {
-                            sweepPendingDrafts()
-                            val remaining = (committed.aiErase?.layers ?: emptyList())
-                                .filterNot { it.id == layerId }
-                            commit(
-                                committed.copy(
-                                    aiErase = if (remaining.isEmpty()) {
-                                        null
-                                    } else {
-                                        AiEraseLayers(remaining)
-                                    },
-                                ),
-                            )
-                            selectedEraseLayerId = remaining.lastOrNull()?.id
-                        },
-                        enabled = !exporting,
-                    ) {
-                        Text(stringResource(R.string.editor_ai_erase_remove))
+                    if (selection != null && looks.containsKey(selection.lutId)) {
+                        // The intensity slider, live-dragged like every other
+                        // slider (r32 pattern): the draft previews, release commits.
+                        val live =
+                            if (draft?.first == "lut-intensity") draft!!.second else selection.intensity
+                        val intensityLabel = stringResource(R.string.editor_filter_intensity, live)
+                        val intensityName = stringResource(R.string.editor_a11y_filter_intensity)
+                        Text(
+                            text = intensityLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = live.toFloat(),
+                            onValueChange = { draft = Pair("lut-intensity", it.toInt()) },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "lut-intensity" && committed.lut != null) {
+                                        commit(committed.copy(lut = committed.lut!!.copy(intensity = d.second)))
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = intensityName
+                                stateDescription = intensityLabel
+                            },
+                        )
+                        // An IMPORTED look can be removed (bundled looks are part
+                        // of the app); removal clears the selection and reloads
+                        // the registry. A sidecar still naming the removed look
+                        // degrades to no-look by the tolerance contract.
+                        if (selection.lutId !in bundledIds) {
+                            TextButton(
+                                onClick = {
+                                    val removedId = selection.lutId
+                                    uiScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            activity.importedLutStore.delete(removedId)
+                                        }
+                                        looksVersion++
+                                        commit(committed.copy(lut = null))
+                                    }
+                                },
+                                enabled = !exporting,
+                            ) {
+                                Text(stringResource(R.string.editor_filter_remove))
+                            }
+                        }
                     }
                 }
-            }
+                PhotoScreen.Text -> {
 
-            // ---- Sky replacement: detect once, then the registry ----
-            // The frames section's shape: None, the bundled five
-            // (PROJECT-AUTHORED parametric skies --- no third-party sky
-            // bitmaps ship in this APK), the imports (the
-            // ImportedFrameStore contract verbatim), the import chip. A
-            // sky chip that finds no resolvable mask runs the detection
-            // first (once, cancellable); a re-detect is a deliberate
-            // re-apply. The opacity slider re-renders from the stored
-            // mask --- no re-inference.
-            Text(
-                text = stringResource(R.string.editor_section_ai_sky),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                FilterChip(
-                    selected = committed.sky == null,
-                    onClick = { sweepPendingDrafts(); commit(committed.copy(sky = null)) },
-                    enabled = !exporting && !aiBusy,
-                    label = { Text(stringResource(R.string.editor_ai_sky_none)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                BundledSkies.ORDERED.forEach { entry ->
-                    FilterChip(
-                        selected = committed.sky?.skyId == entry.id,
-                        onClick = {
-                            sweepPendingDrafts()
-                            selectSky(entry.id)
-                        },
-                        enabled = !exporting && !aiBusy,
-                        label = { Text(entry.displayName) },
-                        modifier = Modifier.padding(end = 8.dp),
+                    // ---- Text layers (r34: the OFL-font text tool) ----
+                    // The contract's UI shape (text-tool.md decision 5): an Add
+                    // chip -> the layer list -> per-layer controls (text field,
+                    // font chip row, size/opacity/rotation sliders with the r32
+                    // semantics conventions, color swatches). Layer chips show
+                    // their text (the fallback labels empty layers); repositioning
+                    // is the drag gesture on the preview (documented nit: position
+                    // has no slider, so it is not TalkBack-reachable in v1).
+                    Text(
+                        text = stringResource(R.string.editor_section_text),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
                     )
-                }
-                importedSkies.keys.sorted().forEach { id ->
-                    FilterChip(
-                        selected = committed.sky?.skyId == id,
-                        onClick = {
-                            sweepPendingDrafts()
-                            selectSky(id)
-                        },
-                        enabled = !exporting && !aiBusy,
-                        label = { Text(id) },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                AssistChip(
-                    onClick = { skyImportLauncher.launch(arrayOf("image/png", "image/webp")) },
-                    enabled = !exporting && !aiBusy,
-                    label = { Text(stringResource(R.string.editor_ai_sky_import)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-            }
-            skyImportError?.let { reason ->
-                Text(
-                    text = stringResource(R.string.editor_ai_sky_import_failed, reason),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            val skySelection = committed.sky
-            if (skySelection != null) {
-                val skyOpacityLive = draft?.takeIf { it.first == "sky-opacity" }?.second
-                    ?: skySelection.opacityPct
-                val skyOpacityName = stringResource(R.string.editor_a11y_ai_sky_opacity)
-                val skyOpacityLabel = stringResource(R.string.editor_ai_sky_opacity, skyOpacityLive)
-                Text(
-                    text = skyOpacityLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = skyOpacityLive.toFloat(),
-                    onValueChange = { draft = "sky-opacity" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "sky-opacity" && committed.sky != null) {
-                                commit(
-                                    committed.copy(
-                                        sky = committed.sky!!.copy(opacityPct = d.second.coerceIn(0, 100)),
-                                    ),
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        AssistChip(
+                            onClick = {
+                                sweepPendingDrafts()
+                                val existing = committed.textLayers?.layers ?: emptyList()
+                                val newLayer = TextLayer(
+                                    id = TextLayer.newId(existing.map { it.id }),
+                                    text = "",
+                                    fontId = BundledFonts.DEFAULT_ID,
                                 )
-                            }
-                        }
-                        draft = null
-                    },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = skyOpacityName
-                        stateDescription = skyOpacityLabel
-                    },
-                )
-                if (BundledSkies.byId(skySelection.skyId) == null &&
-                    importedSkies.containsKey(skySelection.skyId)
-                ) {
-                    Text(
-                        text = stringResource(R.string.editor_ai_sky_note),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                if (skySelection.maskRef.isNotEmpty() &&
-                    !activity.aiStore.contains(EditAiStore.ArtifactKind.MASK, skySelection.maskRef)
-                ) {
-                    Text(
-                        text = stringResource(R.string.editor_ai_degraded_layer),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                // A deliberate re-apply: re-detect the sky against the
-                // CURRENT working grid (a changed adjustment means a new
-                // artifact key; the old one stays for the undo stack).
-                TextButton(
-                    onClick = { sweepPendingDrafts(); selectSky(skySelection.skyId, freshDetection = true) },
-                    enabled = !exporting && !aiBusy,
-                ) {
-                    Text(stringResource(R.string.editor_ai_sky_redetect))
-                }
-            }
-
-            // ---- Bokeh: estimate the depth once, then pure re-renders ----
-            Text(
-                text = stringResource(R.string.editor_section_ai_bokeh),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                FilterChip(
-                    selected = committed.bokeh == null,
-                    onClick = { sweepPendingDrafts(); commit(committed.copy(bokeh = null)) },
-                    enabled = !exporting && !aiBusy,
-                    label = { Text(stringResource(R.string.editor_ai_bokeh_none)) },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                AssistChip(
-                    onClick = { sweepPendingDrafts(); runBokehEstimate() },
-                    enabled = !exporting && !aiBusy,
-                    label = {
-                        Text(
-                            stringResource(
-                                if (committed.bokeh == null) {
-                                    R.string.editor_ai_bokeh_estimate
-                                } else {
-                                    R.string.editor_ai_bokeh_reestimate
-                                },
-                            ),
+                                commit(
+                                    committed.copy(textLayers = TextLayers(existing + newLayer)),
+                                )
+                                selectedTextLayerId = newLayer.id
+                                // r35: the new layer becomes THE selection --- one
+                                // selected layer at a time across the families.
+                                selectedStickerLayerId = null
+                                selectedRegionLayerId = null
+                            },
+                            enabled = !exporting,
+                            label = { Text(stringResource(R.string.editor_text_add)) },
+                            modifier = Modifier.padding(end = 8.dp),
                         )
-                    },
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-            }
-            val bokehSelection = committed.bokeh
-            if (bokehSelection != null) {
-                val strengthLive = draft?.takeIf { it.first == "bokeh-strength" }?.second
-                    ?: bokehSelection.blurStrengthPct
-                val strengthName = stringResource(R.string.editor_a11y_ai_bokeh_strength)
-                val strengthLabel = stringResource(R.string.editor_ai_bokeh_strength, strengthLive)
-                Text(
-                    text = strengthLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = strengthLive.toFloat(),
-                    onValueChange = { draft = "bokeh-strength" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "bokeh-strength" && committed.bokeh != null) {
-                                commit(
-                                    committed.copy(
-                                        bokeh = committed.bokeh!!.copy(
-                                            blurStrengthPct = d.second.coerceIn(1, 100),
-                                        ),
-                                    ),
+                        committed.textLayers?.layers?.forEachIndexed { index, layer ->
+                            FilterChip(
+                                selected = selectedTextLayerId == layer.id,
+                                onClick = {
+                                    if (selectedTextLayerId != layer.id) {
+                                        sweepPendingDrafts()
+                                        selectedTextLayerId = layer.id
+                                        // r35/r37: one selection across the families.
+                                        selectedStickerLayerId = null
+                                        selectedRegionLayerId = null
+                                    }
+                                },
+                                enabled = !exporting,
+                                label = {
+                                    val fallback = stringResource(R.string.editor_text_layer, index + 1)
+                                    val label = layer.text.ifBlank { fallback }
+                                    Text(if (label.length > 16) label.take(15) + "…" else label)
+                                },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                    }
+                    val selectedTextLayer = committed.textLayers?.layers
+                        ?.firstOrNull { it.id == selectedTextLayerId }
+                    if (selectedTextLayer != null) {
+                        val layerId = selectedTextLayer.id
+                        // -- The text field: drafts locally (per-keystroke commits
+                        //    would flood the undo stack); commits on IME Done, on
+                        //    target switch, on add/remove and before an export.
+                        val fieldText = textDraft?.takeIf { it.first == layerId }?.second
+                            ?: selectedTextLayer.text
+                        val textContentName = stringResource(R.string.editor_a11y_text_content)
+                        val fieldHint = stringResource(R.string.editor_text_field_hint)
+                        OutlinedTextField(
+                            value = fieldText,
+                            onValueChange = { value ->
+                                textDraft = layerId to value.take(TextLayer.MAX_TEXT_LENGTH)
+                            },
+                            enabled = !exporting,
+                            singleLine = true,
+                            placeholder = { Text(fieldHint, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onBackground),
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Done,
+                                capitalization = KeyboardCapitalization.Sentences,
+                            ),
+                            keyboardActions = KeyboardActions(onDone = { commitTextDraftIfPending() }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { contentDescription = textContentName },
+                        )
+                        // -- The font chips: the bundled four; an unresolvable
+                        //    fontId selects NO chip (the tolerance contract, shown
+                        //    honestly exactly like an unknown look id).
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            BundledFonts.ORDERED.forEach { entry ->
+                                FilterChip(
+                                    selected = selectedTextLayer.fontId == entry.id,
+                                    onClick = {
+                                        commitSelectedLayer { it.copy(fontId = entry.id) }
+                                    },
+                                    enabled = !exporting,
+                                    label = { Text(entry.displayName) },
+                                    modifier = Modifier.padding(end = 8.dp),
                                 )
                             }
                         }
-                        draft = null
-                    },
-                    valueRange = 1f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = strengthName
-                        stateDescription = strengthLabel
-                    },
-                )
-                val focalLive = draft?.takeIf { it.first == "bokeh-focal" }?.second
-                    ?: (bokehSelection.focalDepthNorm * 100).toInt()
-                val focalName = stringResource(R.string.editor_a11y_ai_bokeh_focal)
-                val focalLabel = stringResource(R.string.editor_ai_bokeh_focal, focalLive)
-                Text(
-                    text = focalLabel,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Slider(
-                    value = focalLive.toFloat(),
-                    onValueChange = { draft = "bokeh-focal" to it.toInt() },
-                    onValueChangeFinished = {
-                        draft?.let { d ->
-                            if (d.first == "bokeh-focal" && committed.bokeh != null) {
-                                commit(
-                                    committed.copy(
-                                        bokeh = committed.bokeh!!.copy(
-                                            focalDepthNorm = d.second.coerceIn(0, 100) / 100.0,
-                                        ),
-                                    ),
+                        // -- size / opacity / rotation: the live-draft pattern.
+                        val sizeLive = draft?.takeIf { it.first == "text-size@$layerId" }?.second
+                            ?: selectedTextLayer.sizePct
+                        val sizeLabel = stringResource(R.string.editor_text_size, sizeLive)
+                        val sizeName = stringResource(R.string.editor_a11y_text_size)
+                        Text(
+                            text = sizeLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = sizeLive.toFloat(),
+                            onValueChange = { draft = "text-size@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "text-size@$layerId") {
+                                        commitSelectedLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..300f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = sizeName
+                                stateDescription = sizeLabel
+                            },
+                        )
+                        val opacityLive = draft?.takeIf { it.first == "text-opacity@$layerId" }?.second
+                            ?: selectedTextLayer.opacity
+                        val opacityLabel = stringResource(R.string.editor_text_opacity, opacityLive)
+                        val opacityName = stringResource(R.string.editor_a11y_text_opacity)
+                        Text(
+                            text = opacityLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = opacityLive.toFloat(),
+                            onValueChange = { draft = "text-opacity@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "text-opacity@$layerId") {
+                                        commitSelectedLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = opacityName
+                                stateDescription = opacityLabel
+                            },
+                        )
+                        val rotationLive = draft?.takeIf { it.first == "text-rotation@$layerId" }?.second
+                            ?: selectedTextLayer.rotationDeg
+                        val rotationLabel = stringResource(R.string.editor_text_rotation, rotationLive)
+                        val rotationName = stringResource(R.string.editor_a11y_text_rotation)
+                        Text(
+                            text = rotationLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = rotationLive.toFloat(),
+                            onValueChange = { draft = "text-rotation@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "text-rotation@$layerId") {
+                                        commitSelectedLayer {
+                                            it.copy(rotationDeg = d.second.coerceIn(-180, 180))
+                                        }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = -180f..180f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = rotationName
+                                stateDescription = rotationLabel
+                            },
+                        )
+                        // -- The color swatches: a fixed named palette, a11y-labelled
+                        //    (TalkBack announces each control; selection is radio
+                        //    semantics --- one color at a time).
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                                ColorSwatch(
+                                    colorArgb = colorArgb,
+                                    selected = selectedTextLayer.colorArgb == colorArgb,
+                                    name = stringResource(nameRes),
+                                    enabled = !exporting,
+                                    onPick = {
+                                        commitSelectedLayer { it.copy(colorArgb = colorArgb) }
+                                    },
                                 )
                             }
                         }
-                        draft = null
-                    },
-                    valueRange = 0f..100f,
-                    enabled = !exporting,
-                    modifier = Modifier.semantics {
-                        contentDescription = focalName
-                        stateDescription = focalLabel
-                    },
-                )
-                if (bokehSelection.depthRef.isNotEmpty() &&
-                    !activity.aiStore.contains(EditAiStore.ArtifactKind.DEPTH, bokehSelection.depthRef)
-                ) {
-                    Text(
-                        text = stringResource(R.string.editor_ai_degraded_layer),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+                        TextButton(
+                            onClick = {
+                                sweepPendingDrafts()
+                                val remaining = (committed.textLayers?.layers ?: emptyList())
+                                    .filterNot { it.id == layerId }
+                                commit(
+                                    committed.copy(
+                                        textLayers = if (remaining.isEmpty()) {
+                                            null
+                                        } else {
+                                            TextLayers(remaining)
+                                        },
+                                    ),
+                                )
+                                selectedTextLayerId = remaining.lastOrNull()?.id
+                            },
+                            enabled = !exporting,
+                        ) {
+                            Text(stringResource(R.string.editor_text_remove))
+                        }
+                    }
                 }
-            }
+                PhotoScreen.Stickers -> {
 
-            // ---- Face retouch: OPT-IN (ADR-0010 section 5) ----
-            // Hidden entirely under the permanent kill-switch; before a
-            // grant the only entry is the enable chip that opens the
-            // first-use consent dialog (what it does / on-device only /
-            // no face data leaves the device). Under consent-off the
-            // STAGE refuses even with a restored sidecar --- the layer
-            // stays verbatim in the recipe, the stage skips.
-            if (retouchConsent != RetouchConsent.PERMANENTLY_DISABLED) {
-                Text(
-                    text = stringResource(R.string.editor_section_ai_retouch),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                if (retouchConsent == RetouchConsent.GRANTED) {
+                    // ---- Stickers (r35: the sticker tool) ----
+                    // The contract's UI shape (stickers.md decision 6): the
+                    // registry chip row (bundled eight, imported id-sorted, the
+                    // SAF import chip for image/png + image/webp) --- a chip tap
+                    // ADDS a layer at canvas centre; registry chips are ADD
+                    // actions, not selections (the layer chips below carry the
+                    // selection). One selected layer at a time across the
+                    // families; the drag gesture and the per-layer controls
+                    // follow the single selection.
+                    Text(
+                        text = stringResource(R.string.editor_section_stickers),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        BundledStickers.ORDERED.forEach { entry ->
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    sweepPendingDrafts()
+                                    val existing = committed.stickerLayers?.layers ?: emptyList()
+                                    val newLayer = StickerLayer(
+                                        id = StickerLayer.newId(existing.map { it.id }),
+                                        stickerId = entry.id,
+                                    )
+                                    commit(
+                                        committed.copy(stickerLayers = StickerLayers(existing + newLayer)),
+                                    )
+                                    selectedStickerLayerId = newLayer.id
+                                    selectedTextLayerId = null
+                                    selectedRegionLayerId = null
+                                },
+                                enabled = !exporting,
+                                label = { Text(entry.displayName) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        // The user-imported stickers (r35), id-sorted; the store's
+                        // collision rule makes the keys disjoint from the bundled set.
+                        importedStickers.keys.sorted().forEach { id ->
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    sweepPendingDrafts()
+                                    val existing = committed.stickerLayers?.layers ?: emptyList()
+                                    val newLayer = StickerLayer(
+                                        id = StickerLayer.newId(existing.map { it.id }),
+                                        stickerId = id,
+                                    )
+                                    commit(
+                                        committed.copy(stickerLayers = StickerLayers(existing + newLayer)),
+                                    )
+                                    selectedStickerLayerId = newLayer.id
+                                    selectedTextLayerId = null
+                                    selectedRegionLayerId = null
+                                },
+                                enabled = !exporting,
+                                label = { Text(id) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        // The import action: SAF-pick a PNG/WebP (the zero-network
+                        // editor reads local documents only).
+                        AssistChip(
+                            onClick = { stickerImportLauncher.launch(arrayOf("image/png", "image/webp")) },
+                            enabled = !exporting,
+                            label = { Text(stringResource(R.string.editor_sticker_import)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    stickerImportError?.let { reason ->
+                        Text(
+                            text = stringResource(R.string.editor_sticker_import_failed, reason),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    // The layer chips: their sticker's display name (the raw id for
+                    // an import or an unresolvable id --- the tolerance contract,
+                    // shown honestly exactly like an unknown look id).
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        committed.stickerLayers?.layers?.forEach { layer ->
+                            FilterChip(
+                                selected = selectedStickerLayerId == layer.id,
+                                onClick = {
+                                    if (selectedStickerLayerId != layer.id) {
+                                        sweepPendingDrafts()
+                                        selectedStickerLayerId = layer.id
+                                        selectedTextLayerId = null
+                                        selectedRegionLayerId = null
+                                    }
+                                },
+                                enabled = !exporting,
+                                label = {
+                                    val label = BundledStickers.byId(layer.stickerId)?.displayName
+                                        ?: layer.stickerId
+                                    Text(if (label.length > 16) label.take(15) + "…" else label)
+                                },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                    }
+                    val selectedStickerLayer = committed.stickerLayers?.layers
+                        ?.firstOrNull { it.id == selectedStickerLayerId }
+                    if (selectedStickerLayer != null) {
+                        val layerId = selectedStickerLayer.id
+                        // -- size / opacity / rotation: the live-draft pattern
+                        //    (the r34 conventions; the keys carry the sticker-
+                        //    prefix so effectiveRecipe() routes them).
+                        val sizeLive = draft?.takeIf { it.first == "sticker-size@$layerId" }?.second
+                            ?: selectedStickerLayer.sizePct
+                        val sizeLabel = stringResource(R.string.editor_sticker_size, sizeLive)
+                        val sizeName = stringResource(R.string.editor_a11y_sticker_size)
+                        Text(
+                            text = sizeLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = sizeLive.toFloat(),
+                            onValueChange = { draft = "sticker-size@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "sticker-size@$layerId") {
+                                        commitSelectedStickerLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..300f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = sizeName
+                                stateDescription = sizeLabel
+                            },
+                        )
+                        val opacityLive = draft?.takeIf { it.first == "sticker-opacity@$layerId" }?.second
+                            ?: selectedStickerLayer.opacity
+                        val opacityLabel = stringResource(R.string.editor_sticker_opacity, opacityLive)
+                        val opacityName = stringResource(R.string.editor_a11y_sticker_opacity)
+                        Text(
+                            text = opacityLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = opacityLive.toFloat(),
+                            onValueChange = { draft = "sticker-opacity@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "sticker-opacity@$layerId") {
+                                        commitSelectedStickerLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = opacityName
+                                stateDescription = opacityLabel
+                            },
+                        )
+                        val rotationLive = draft?.takeIf { it.first == "sticker-rotation@$layerId" }?.second
+                            ?: selectedStickerLayer.rotationDeg
+                        val rotationLabel = stringResource(R.string.editor_sticker_rotation, rotationLive)
+                        val rotationName = stringResource(R.string.editor_a11y_sticker_rotation)
+                        Text(
+                            text = rotationLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = rotationLive.toFloat(),
+                            onValueChange = { draft = "sticker-rotation@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "sticker-rotation@$layerId") {
+                                        commitSelectedStickerLayer {
+                                            it.copy(rotationDeg = d.second.coerceIn(-180, 180))
+                                        }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = -180f..180f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = rotationName
+                                stateDescription = rotationLabel
+                            },
+                        )
+                        TextButton(
+                            onClick = {
+                                sweepPendingDrafts()
+                                val remaining = (committed.stickerLayers?.layers ?: emptyList())
+                                    .filterNot { it.id == layerId }
+                                commit(
+                                    committed.copy(
+                                        stickerLayers = if (remaining.isEmpty()) {
+                                            null
+                                        } else {
+                                            StickerLayers(remaining)
+                                        },
+                                    ),
+                                )
+                                selectedStickerLayerId = remaining.lastOrNull()?.id
+                            },
+                            enabled = !exporting,
+                        ) {
+                            Text(stringResource(R.string.editor_sticker_remove))
+                        }
+                    }
+                }
+                PhotoScreen.Draw -> {
+
+                    // ---- Drawing (r36: the freehand tool) ----
+                    // The contract's UI shape (drawing-tool.md decision 6): the
+                    // Draw-mode chip + the stroke layer chips, then the controls
+                    // under the duality --- Draw mode ON tunes the NEXT stroke
+                    // (the brush, plain state; the live gesture previews through
+                    // a transient draft layer); a selected layer re-binds the SAME
+                    // controls to it through the live-draft pattern. The two states
+                    // are exclusive; ONE selection at a time across ALL the
+                    // families (the r35 contract extended).
+                    Text(
+                        text = stringResource(R.string.editor_section_drawing),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                         FilterChip(
-                            selected = committed.retouch == null,
-                            onClick = { sweepPendingDrafts(); commit(committed.copy(retouch = null)) },
-                            enabled = !exporting && !aiBusy,
-                            label = { Text(stringResource(R.string.editor_ai_retouch_none)) },
+                            selected = drawMode,
+                            onClick = {
+                                sweepPendingDrafts()
+                                drawMode = !drawMode
+                                if (drawMode) {
+                                    // Entering paint mode drops every selection ---
+                                    // painting owns the gesture; the user keeps
+                                    // painting across strokes. The r37 twin grew to
+                                    // THREE paint modes in r41 (Draw/Region/Erase):
+                                    // mutually exclusive, enforced at every toggle.
+                                    regionMode = false
+                                    eraseMode = false
+                                    selectedTextLayerId = null
+                                    selectedStickerLayerId = null
+                                    selectedDrawLayerId = null
+                                    selectedRegionLayerId = null
+                                }
+                            },
+                            enabled = !exporting,
+                            label = { Text(stringResource(R.string.editor_draw_mode)) },
                             modifier = Modifier.padding(end = 8.dp),
                         )
-                        AssistChip(
-                            onClick = { sweepPendingDrafts(); runRetouchDetect() },
-                            enabled = !exporting && !aiBusy,
-                            label = { Text(stringResource(R.string.editor_ai_retouch_detect)) },
-                            modifier = Modifier.padding(end = 8.dp),
-                        )
+                        committed.drawLayers?.layers?.forEachIndexed { index, layer ->
+                            FilterChip(
+                                selected = selectedDrawLayerId == layer.id,
+                                onClick = {
+                                    if (selectedDrawLayerId != layer.id) {
+                                        sweepPendingDrafts()
+                                        selectedDrawLayerId = layer.id
+                                        drawMode = false // the duality is exclusive
+                                        regionMode = false // and so are the paint modes
+                                        eraseMode = false // all three of them (r41)
+                                        selectedTextLayerId = null
+                                        selectedStickerLayerId = null
+                                        selectedRegionLayerId = null
+                                    }
+                                },
+                                enabled = !exporting,
+                                label = { Text(stringResource(R.string.editor_draw_layer, index + 1)) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
                     }
-                    val retouchSelection = committed.retouch
-                    if (retouchSelection != null) {
-                        val smoothingLive = draft?.takeIf { it.first == "retouch-smoothing" }?.second
-                            ?: retouchSelection.smoothingPct
-                        val smoothingName = stringResource(R.string.editor_a11y_ai_retouch_smoothing)
-                        val smoothingLabel = stringResource(
-                            R.string.editor_ai_retouch_smoothing,
-                            smoothingLive,
+                    val selectedDrawLayer = committed.drawLayers?.layers
+                        ?.firstOrNull { it.id == selectedDrawLayerId }
+                    if (drawMode) {
+                        // -- The brush (tunes the NEXT stroke): the swatches and
+                        //    sliders are plain state, applied at commit; the live
+                        //    gesture previews them through the draft layer.
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                                ColorSwatch(
+                                    colorArgb = colorArgb,
+                                    selected = brushColor == colorArgb,
+                                    name = stringResource(nameRes),
+                                    enabled = !exporting,
+                                    onPick = { brushColor = colorArgb },
+                                )
+                            }
+                        }
+                        val widthName = stringResource(R.string.editor_a11y_draw_width)
+                        val widthLabel = stringResource(R.string.editor_draw_width, brushWidth)
+                        Text(
+                            text = widthLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
                         )
+                        Slider(
+                            value = brushWidth.toFloat(),
+                            onValueChange = { brushWidth = it.toInt().coerceIn(1, 100) },
+                            valueRange = 1f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = widthName
+                                stateDescription = widthLabel
+                            },
+                        )
+                        val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
+                        val opacityLabel = stringResource(R.string.editor_draw_opacity, brushOpacity)
+                        Text(
+                            text = opacityLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = brushOpacity.toFloat(),
+                            onValueChange = { brushOpacity = it.toInt().coerceIn(0, 100) },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = opacityName
+                                stateDescription = opacityLabel
+                            },
+                        )
+                        val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
+                        val smoothingLabel = stringResource(R.string.editor_draw_smoothing, brushSmoothing)
+                        Text(
+                            text = smoothingLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = brushSmoothing.toFloat(),
+                            onValueChange = { brushSmoothing = it.toInt().coerceIn(0, 100) },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = smoothingName
+                                stateDescription = smoothingLabel
+                            },
+                        )
+                    } else if (selectedDrawLayer != null) {
+                        val layerId = selectedDrawLayer.id
+                        // -- Per-layer re-edit (the live-draft pattern; the keys
+                        //    carry the draw- prefix so effectiveRecipe() routes
+                        //    them). The swatches and sliders re-bind to the layer.
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                                ColorSwatch(
+                                    colorArgb = colorArgb,
+                                    selected = selectedDrawLayer.colorArgb == colorArgb,
+                                    name = stringResource(nameRes),
+                                    enabled = !exporting,
+                                    onPick = {
+                                        commitSelectedDrawLayer { it.copy(colorArgb = colorArgb) }
+                                    },
+                                )
+                            }
+                        }
+                        val widthLive = draft?.takeIf { it.first == "draw-width@$layerId" }?.second
+                            ?: selectedDrawLayer.widthPct
+                        val widthName = stringResource(R.string.editor_a11y_draw_width)
+                        val widthLabel = stringResource(R.string.editor_draw_width, widthLive)
+                        Text(
+                            text = widthLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = widthLive.toFloat(),
+                            onValueChange = { draft = "draw-width@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "draw-width@$layerId") {
+                                        commitSelectedDrawLayer { it.copy(widthPct = d.second.coerceIn(1, 100)) }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 1f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = widthName
+                                stateDescription = widthLabel
+                            },
+                        )
+                        val opacityLive = draft?.takeIf { it.first == "draw-opacity@$layerId" }?.second
+                            ?: selectedDrawLayer.opacity
+                        val opacityName = stringResource(R.string.editor_a11y_draw_opacity)
+                        val opacityLabel = stringResource(R.string.editor_draw_opacity, opacityLive)
+                        Text(
+                            text = opacityLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = opacityLive.toFloat(),
+                            onValueChange = { draft = "draw-opacity@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "draw-opacity@$layerId") {
+                                        commitSelectedDrawLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = opacityName
+                                stateDescription = opacityLabel
+                            },
+                        )
+                        val smoothingLive = draft?.takeIf { it.first == "draw-smoothing@$layerId" }?.second
+                            ?: selectedDrawLayer.smoothingPct
+                        val smoothingName = stringResource(R.string.editor_a11y_draw_smoothing)
+                        val smoothingLabel = stringResource(R.string.editor_draw_smoothing, smoothingLive)
                         Text(
                             text = smoothingLabel,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -4268,17 +3635,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                         Slider(
                             value = smoothingLive.toFloat(),
-                            onValueChange = { draft = "retouch-smoothing" to it.toInt() },
+                            onValueChange = { draft = "draw-smoothing@$layerId" to it.toInt() },
                             onValueChangeFinished = {
                                 draft?.let { d ->
-                                    if (d.first == "retouch-smoothing" && committed.retouch != null) {
-                                        commit(
-                                            committed.copy(
-                                                retouch = committed.retouch!!.copy(
-                                                    smoothingPct = d.second.coerceIn(0, 100),
-                                                ),
-                                            ),
-                                        )
+                                    if (d.first == "draw-smoothing@$layerId") {
+                                        commitSelectedDrawLayer {
+                                            it.copy(smoothingPct = d.second.coerceIn(0, 100))
+                                        }
                                     }
                                 }
                                 draft = null
@@ -4290,77 +3653,690 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 stateDescription = smoothingLabel
                             },
                         )
-                        val eyesLive = draft?.takeIf { it.first == "retouch-eyes" }?.second
-                            ?: retouchSelection.eyeBrightenPct
-                        val eyesName = stringResource(R.string.editor_a11y_ai_retouch_eyes)
-                        val eyesLabel = stringResource(R.string.editor_ai_retouch_eyes, eyesLive)
-                        Text(
-                            text = eyesLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
-                            value = eyesLive.toFloat(),
-                            onValueChange = { draft = "retouch-eyes" to it.toInt() },
-                            onValueChangeFinished = {
-                                draft?.let { d ->
-                                    if (d.first == "retouch-eyes" && committed.retouch != null) {
-                                        commit(
-                                            committed.copy(
-                                                retouch = committed.retouch!!.copy(
-                                                    eyeBrightenPct = d.second.coerceIn(0, 100),
-                                                ),
-                                            ),
-                                        )
-                                    }
-                                }
-                                draft = null
+                        TextButton(
+                            onClick = {
+                                sweepPendingDrafts()
+                                val remaining = (committed.drawLayers?.layers ?: emptyList())
+                                    .filterNot { it.id == layerId }
+                                commit(
+                                    committed.copy(
+                                        drawLayers = if (remaining.isEmpty()) {
+                                            null
+                                        } else {
+                                            DrawLayers(remaining)
+                                        },
+                                    ),
+                                )
+                                selectedDrawLayerId = remaining.lastOrNull()?.id
                             },
-                            valueRange = 0f..100f,
                             enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = eyesName
-                                stateDescription = eyesLabel
-                            },
-                        )
-                        val slimLive = draft?.takeIf { it.first == "retouch-slim" }?.second
-                            ?: retouchSelection.faceSlimPct
-                        val slimName = stringResource(R.string.editor_a11y_ai_retouch_slim)
-                        val slimLabel = stringResource(R.string.editor_ai_retouch_slim, slimLive)
-                        Text(
-                            text = slimLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
-                            value = slimLive.toFloat(),
-                            onValueChange = { draft = "retouch-slim" to it.toInt() },
-                            onValueChangeFinished = {
-                                draft?.let { d ->
-                                    if (d.first == "retouch-slim" && committed.retouch != null) {
-                                        commit(
-                                            committed.copy(
-                                                retouch = committed.retouch!!.copy(
-                                                    faceSlimPct = d.second.coerceIn(0, 100),
-                                                ),
-                                            ),
-                                        )
-                                    }
+                        ) {
+                            Text(stringResource(R.string.editor_draw_remove))
+                        }
+                    }
+                }
+                PhotoScreen.Regions -> {
+
+                    // ---- Regions (r37: the mosaic/blur pixel stage) ----
+                    // The r37 UI section, landed here as the recorded debt fix (the
+                    // r37 insertion script wrote the gradle file but never the
+                    // activity --- the section existed only in a Python variable;
+                    // the merged r37 carried the model, the recipe, the pipeline
+                    // stage and the gesture scaffolding without this surface, and
+                    // regionMode was unreachable. The correction rides r38; the
+                    // r37 delivery record gains the note).
+                    //
+                    // The contract's UI shape (mosaic-regions.md decision 6): the
+                    // Region-mode chip (mutually exclusive with Draw mode --- one
+                    // paint mode at a time, enforced at both toggles), the region
+                    // layer chips, and the controls under the duality: paint mode
+                    // tunes the NEXT region (kind chips + strength slider, plain
+                    // state, previewed live through the transient draft region);
+                    // a selected region re-binds the same controls through the
+                    // live-draft pattern. The effect previews AT PAINT TIME: the
+                    // draft region rides the effective recipe through the same
+                    // pipeline stage the export runs.
+                    Text(
+                        text = stringResource(R.string.editor_section_regions),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        FilterChip(
+                            selected = regionMode,
+                            onClick = {
+                                sweepPendingDrafts()
+                                regionMode = !regionMode
+                                if (regionMode) {
+                                    // Entering region paint mode drops every
+                                    // selection and exits the other paint modes;
+                                    // the user keeps painting across regions.
+                                    drawMode = false
+                                    eraseMode = false
+                                    selectedTextLayerId = null
+                                    selectedStickerLayerId = null
+                                    selectedDrawLayerId = null
+                                    selectedRegionLayerId = null
                                 }
-                                draft = null
                             },
-                            valueRange = 0f..100f,
                             enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = slimName
-                                stateDescription = slimLabel
-                            },
+                            label = { Text(stringResource(R.string.editor_region_mode)) },
+                            modifier = Modifier.padding(end = 8.dp),
                         )
-                        if (retouchSelection.boxesRef.isNotEmpty() &&
-                            !activity.aiStore.contains(
-                                EditAiStore.ArtifactKind.BOXES,
-                                retouchSelection.boxesRef,
+                        committed.mosaicRegions?.layers?.forEachIndexed { index, layer ->
+                            FilterChip(
+                                selected = selectedRegionLayerId == layer.id,
+                                onClick = {
+                                    if (selectedRegionLayerId != layer.id) {
+                                        sweepPendingDrafts()
+                                        selectedRegionLayerId = layer.id
+                                        regionMode = false
+                                        drawMode = false
+                                        eraseMode = false
+                                        selectedTextLayerId = null
+                                        selectedStickerLayerId = null
+                                        selectedDrawLayerId = null
+                                    }
+                                },
+                                enabled = !exporting,
+                                label = { Text(stringResource(R.string.editor_region_layer, index + 1)) },
+                                modifier = Modifier.padding(end = 8.dp),
                             )
+                        }
+                    }
+                    val selectedRegionLayer = committed.mosaicRegions?.layers
+                        ?.firstOrNull { it.id == selectedRegionLayerId }
+                    if (regionMode) {
+                        // -- The next region's kind + strength (plain state; the
+                        //    live gesture previews them through the draft region).
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            FilterChip(
+                                selected = regionKind == RegionKind.MOSAIC,
+                                onClick = { regionKind = RegionKind.MOSAIC },
+                                enabled = !exporting,
+                                label = { Text(stringResource(R.string.editor_region_mosaic)) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                            FilterChip(
+                                selected = regionKind == RegionKind.LINEAR_BLUR,
+                                onClick = { regionKind = RegionKind.LINEAR_BLUR },
+                                enabled = !exporting,
+                                label = { Text(stringResource(R.string.editor_region_blur)) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        val strengthName = stringResource(R.string.editor_a11y_region_strength)
+                        val strengthLabel = stringResource(R.string.editor_region_strength, regionStrength)
+                        Text(
+                            text = strengthLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = regionStrength.toFloat(),
+                            onValueChange = { regionStrength = it.toInt().coerceIn(1, 100) },
+                            valueRange = 1f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = strengthName
+                                stateDescription = strengthLabel
+                            },
+                        )
+                    } else if (selectedRegionLayer != null) {
+                        val layerId = selectedRegionLayer.id
+                        // -- Per-region re-edit (the live-draft pattern; chips
+                        //    commit immediately, the strength slider drafts).
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            FilterChip(
+                                selected = selectedRegionLayer.kind == RegionKind.MOSAIC,
+                                onClick = {
+                                    commitSelectedRegionLayer { it.copy(kind = RegionKind.MOSAIC) }
+                                },
+                                enabled = !exporting,
+                                label = { Text(stringResource(R.string.editor_region_mosaic)) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                            FilterChip(
+                                selected = selectedRegionLayer.kind == RegionKind.LINEAR_BLUR,
+                                onClick = {
+                                    commitSelectedRegionLayer { it.copy(kind = RegionKind.LINEAR_BLUR) }
+                                },
+                                enabled = !exporting,
+                                label = { Text(stringResource(R.string.editor_region_blur)) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        val strengthLive = draft?.takeIf { it.first == "region-strength@$layerId" }?.second
+                            ?: selectedRegionLayer.strengthPct
+                        val strengthName = stringResource(R.string.editor_a11y_region_strength)
+                        val strengthLabel = stringResource(R.string.editor_region_strength, strengthLive)
+                        Text(
+                            text = strengthLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = strengthLive.toFloat(),
+                            onValueChange = { draft = "region-strength@$layerId" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "region-strength@$layerId") {
+                                        commitSelectedRegionLayer { it.copy(strengthPct = d.second.coerceIn(1, 100)) }
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 1f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = strengthName
+                                stateDescription = strengthLabel
+                            },
+                        )
+                        TextButton(
+                            onClick = {
+                                sweepPendingDrafts()
+                                val remaining = (committed.mosaicRegions?.layers ?: emptyList())
+                                    .filterNot { it.id == layerId }
+                                commit(
+                                    committed.copy(
+                                        mosaicRegions = if (remaining.isEmpty()) {
+                                            null
+                                        } else {
+                                            RegionLayers(remaining)
+                                        },
+                                    ),
+                                )
+                                selectedRegionLayerId = remaining.lastOrNull()?.id
+                            },
+                            enabled = !exporting,
+                        ) {
+                            Text(stringResource(R.string.editor_region_remove))
+                        }
+                    }
+                }
+                PhotoScreen.Frames -> {
+
+                    // ---- Frames (r38: the single mounting; the closing round) ----
+                    // The contract's UI shape (frames.md decision 6): the look
+                    // row's conventions --- the None chip, the bundled five, the
+                    // imported chips, the SAF import chip; the width slider +
+                    // colour swatches for a PARAMETRIC selection (the live-draft
+                    // pattern, single-selection keys like the intensity slider);
+                    // the honest no-controls note for an imported one (the bitmap
+                    // is the frame). No paint mode, no gesture: a frame needs no
+                    // dragging.
+                    Text(
+                        text = stringResource(R.string.editor_section_frames),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        FilterChip(
+                            selected = committed.frame == null,
+                            onClick = { sweepPendingDrafts(); commit(committed.copy(frame = null)) },
+                            enabled = !exporting,
+                            label = { Text(stringResource(R.string.editor_frame_none)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        BundledFrames.ORDERED.forEach { entry ->
+                            FilterChip(
+                                selected = committed.frame?.frameId == entry.id,
+                                onClick = {
+                                    sweepPendingDrafts()
+                                    // A new frame keeps the current width and
+                                    // colour (continuity while auditioning, the
+                                    // look row's rule).
+                                    commit(
+                                        committed.copy(
+                                            frame = FrameSelection(
+                                                frameId = entry.id,
+                                                widthPct = committed.frame?.widthPct ?: FrameSelection.DEFAULT_WIDTH_PCT,
+                                                colorArgb = committed.frame?.colorArgb ?: FrameSelection.DEFAULT_COLOR,
+                                            ),
+                                        ),
+                                    )
+                                },
+                                enabled = !exporting,
+                                label = { Text(entry.displayName) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        // The user-imported frames, id-sorted; the store's collision
+                        // rule makes the keys disjoint from the bundled set.
+                        importedFrames.keys.sorted().forEach { id ->
+                            FilterChip(
+                                selected = committed.frame?.frameId == id,
+                                onClick = {
+                                    sweepPendingDrafts()
+                                    commit(
+                                        committed.copy(
+                                            frame = FrameSelection(
+                                                frameId = id,
+                                                widthPct = committed.frame?.widthPct ?: FrameSelection.DEFAULT_WIDTH_PCT,
+                                                colorArgb = committed.frame?.colorArgb ?: FrameSelection.DEFAULT_COLOR,
+                                            ),
+                                        ),
+                                    )
+                                },
+                                enabled = !exporting,
+                                label = { Text(id) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        AssistChip(
+                            onClick = { frameImportLauncher.launch(arrayOf("image/png", "image/webp")) },
+                            enabled = !exporting,
+                            label = { Text(stringResource(R.string.editor_frame_import)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    frameImportError?.let { reason ->
+                        Text(
+                            text = stringResource(R.string.editor_frame_import_failed, reason),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    val frameSelection = committed.frame
+                    if (frameSelection != null) {
+                        if (BundledFrames.byId(frameSelection.frameId) != null) {
+                            // -- The parametric controls: width (the single-selection
+                            //    draft key) + the swatches (immediate commits).
+                            val widthLive = draft?.takeIf { it.first == "frame-width" }?.second
+                                ?: frameSelection.widthPct
+                            val widthName = stringResource(R.string.editor_a11y_frame_width)
+                            val widthLabel = stringResource(R.string.editor_frame_width, widthLive)
+                            Text(
+                                text = widthLabel,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Slider(
+                                value = widthLive.toFloat(),
+                                onValueChange = { draft = "frame-width" to it.toInt() },
+                                onValueChangeFinished = {
+                                    draft?.let { d ->
+                                        if (d.first == "frame-width" && committed.frame != null) {
+                                            commit(
+                                                committed.copy(
+                                                    frame = committed.frame!!.copy(widthPct = d.second.coerceIn(1, 100)),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                    draft = null
+                                },
+                                valueRange = 1f..100f,
+                                enabled = !exporting,
+                                modifier = Modifier.semantics {
+                                    contentDescription = widthName
+                                    stateDescription = widthLabel
+                                },
+                            )
+                            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                TEXT_COLORS.forEach { (colorArgb, nameRes) ->
+                                    ColorSwatch(
+                                        colorArgb = colorArgb,
+                                        selected = frameSelection.colorArgb == colorArgb,
+                                        name = stringResource(nameRes),
+                                        enabled = !exporting,
+                                        onPick = {
+                                            commit(
+                                                committed.copy(
+                                                    frame = frameSelection.copy(colorArgb = colorArgb),
+                                                ),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        } else if (importedFrames.containsKey(frameSelection.frameId)) {
+                            // -- An imported frame: the bitmap is the frame; the
+                            //    width/colour controls do not apply, and the UI
+                            //    says so instead of showing dead controls.
+                            Text(
+                                text = stringResource(R.string.editor_frame_imported_note),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        // An unresolvable id (a version skew, a deleted import)
+                        // selects NO chip --- the tolerance contract, shown
+                        // honestly exactly like an unknown look id.
+                    }
+                }
+                PhotoScreen.Ai -> {
+                    // ---- Magic erase: the third paint mode ----
+                    // The r37 region section's shape: the mode chip (ONE paint
+                    // mode at a time across Draw/Region/Erase, enforced at all
+                    // three toggles), the layer chips, and the controls under
+                    // the mode. The erase gesture paints the seed; the inference
+                    // (segmentation + inpainting) runs ONCE at gesture end ---
+                    // off the UI thread, cancellable, honest progress --- and the
+                    // refined mask + fill persist as ONE derived artifact.
+                    Text(
+                        text = stringResource(R.string.editor_section_ai_erase),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        FilterChip(
+                            selected = eraseMode,
+                            onClick = {
+                                sweepPendingDrafts()
+                                eraseMode = !eraseMode
+                                if (eraseMode) {
+                                    // The duality's rule, third member: entering
+                                    // Erase paint mode exits the other two and
+                                    // drops every selection.
+                                    drawMode = false
+                                    regionMode = false
+                                    selectedTextLayerId = null
+                                    selectedStickerLayerId = null
+                                    selectedDrawLayerId = null
+                                    selectedRegionLayerId = null
+                                }
+                            },
+                            enabled = !exporting && !aiBusy,
+                            label = { Text(stringResource(R.string.editor_ai_erase_mode)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        committed.aiErase?.layers?.forEachIndexed { index, layer ->
+                            FilterChip(
+                                selected = selectedEraseLayerId == layer.id,
+                                onClick = {
+                                    if (selectedEraseLayerId != layer.id) {
+                                        sweepPendingDrafts()
+                                        selectedEraseLayerId = layer.id
+                                        drawMode = false
+                                        regionMode = false
+                                        eraseMode = false
+                                        selectedTextLayerId = null
+                                        selectedStickerLayerId = null
+                                        selectedDrawLayerId = null
+                                        selectedRegionLayerId = null
+                                    }
+                                },
+                                enabled = !exporting && !aiBusy,
+                                label = { Text(stringResource(R.string.editor_ai_erase_layer, index + 1)) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                    }
+                    if (eraseMode) {
+                        // The honest bounds note (ADR-0010: on-device quality is
+                        // bounded; the strings say so without apologising).
+                        Text(
+                            text = stringResource(R.string.editor_ai_erase_hint),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    } else {
+                        val selectedEraseLayer = committed.aiErase?.layers
+                            ?.firstOrNull { it.id == selectedEraseLayerId }
+                        if (selectedEraseLayer != null) {
+                            val layerId = selectedEraseLayer.id
+                            if (selectedEraseLayer.artifactRef.isNotEmpty() &&
+                                !activity.aiStore.contains(
+                                    EditAiStore.ArtifactKind.MASK,
+                                    selectedEraseLayer.artifactRef,
+                                )
+                            ) {
+                                // The honest degraded note: the layer's artifact is
+                                // gone, it renders nothing (never dead controls).
+                                Text(
+                                    text = stringResource(R.string.editor_ai_degraded_layer),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    sweepPendingDrafts()
+                                    val remaining = (committed.aiErase?.layers ?: emptyList())
+                                        .filterNot { it.id == layerId }
+                                    commit(
+                                        committed.copy(
+                                            aiErase = if (remaining.isEmpty()) {
+                                                null
+                                            } else {
+                                                AiEraseLayers(remaining)
+                                            },
+                                        ),
+                                    )
+                                    selectedEraseLayerId = remaining.lastOrNull()?.id
+                                },
+                                enabled = !exporting,
+                            ) {
+                                Text(stringResource(R.string.editor_ai_erase_remove))
+                            }
+                        }
+                    }
+
+                    // ---- Sky replacement: detect once, then the registry ----
+                    // The frames section's shape: None, the bundled five
+                    // (PROJECT-AUTHORED parametric skies --- no third-party sky
+                    // bitmaps ship in this APK), the imports (the
+                    // ImportedFrameStore contract verbatim), the import chip. A
+                    // sky chip that finds no resolvable mask runs the detection
+                    // first (once, cancellable); a re-detect is a deliberate
+                    // re-apply. The opacity slider re-renders from the stored
+                    // mask --- no re-inference.
+                    Text(
+                        text = stringResource(R.string.editor_section_ai_sky),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        FilterChip(
+                            selected = committed.sky == null,
+                            onClick = { sweepPendingDrafts(); commit(committed.copy(sky = null)) },
+                            enabled = !exporting && !aiBusy,
+                            label = { Text(stringResource(R.string.editor_ai_sky_none)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        BundledSkies.ORDERED.forEach { entry ->
+                            FilterChip(
+                                selected = committed.sky?.skyId == entry.id,
+                                onClick = {
+                                    sweepPendingDrafts()
+                                    selectSky(entry.id)
+                                },
+                                enabled = !exporting && !aiBusy,
+                                label = { Text(entry.displayName) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        importedSkies.keys.sorted().forEach { id ->
+                            FilterChip(
+                                selected = committed.sky?.skyId == id,
+                                onClick = {
+                                    sweepPendingDrafts()
+                                    selectSky(id)
+                                },
+                                enabled = !exporting && !aiBusy,
+                                label = { Text(id) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                        AssistChip(
+                            onClick = { skyImportLauncher.launch(arrayOf("image/png", "image/webp")) },
+                            enabled = !exporting && !aiBusy,
+                            label = { Text(stringResource(R.string.editor_ai_sky_import)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    skyImportError?.let { reason ->
+                        Text(
+                            text = stringResource(R.string.editor_ai_sky_import_failed, reason),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    val skySelection = committed.sky
+                    if (skySelection != null) {
+                        val skyOpacityLive = draft?.takeIf { it.first == "sky-opacity" }?.second
+                            ?: skySelection.opacityPct
+                        val skyOpacityName = stringResource(R.string.editor_a11y_ai_sky_opacity)
+                        val skyOpacityLabel = stringResource(R.string.editor_ai_sky_opacity, skyOpacityLive)
+                        Text(
+                            text = skyOpacityLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = skyOpacityLive.toFloat(),
+                            onValueChange = { draft = "sky-opacity" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "sky-opacity" && committed.sky != null) {
+                                        commit(
+                                            committed.copy(
+                                                sky = committed.sky!!.copy(opacityPct = d.second.coerceIn(0, 100)),
+                                            ),
+                                        )
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = skyOpacityName
+                                stateDescription = skyOpacityLabel
+                            },
+                        )
+                        if (BundledSkies.byId(skySelection.skyId) == null &&
+                            importedSkies.containsKey(skySelection.skyId)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.editor_ai_sky_note),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        if (skySelection.maskRef.isNotEmpty() &&
+                            !activity.aiStore.contains(EditAiStore.ArtifactKind.MASK, skySelection.maskRef)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.editor_ai_degraded_layer),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        // A deliberate re-apply: re-detect the sky against the
+                        // CURRENT working grid (a changed adjustment means a new
+                        // artifact key; the old one stays for the undo stack).
+                        TextButton(
+                            onClick = { sweepPendingDrafts(); selectSky(skySelection.skyId, freshDetection = true) },
+                            enabled = !exporting && !aiBusy,
+                        ) {
+                            Text(stringResource(R.string.editor_ai_sky_redetect))
+                        }
+                    }
+
+                    // ---- Bokeh: estimate the depth once, then pure re-renders ----
+                    Text(
+                        text = stringResource(R.string.editor_section_ai_bokeh),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        FilterChip(
+                            selected = committed.bokeh == null,
+                            onClick = { sweepPendingDrafts(); commit(committed.copy(bokeh = null)) },
+                            enabled = !exporting && !aiBusy,
+                            label = { Text(stringResource(R.string.editor_ai_bokeh_none)) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        AssistChip(
+                            onClick = { sweepPendingDrafts(); runBokehEstimate() },
+                            enabled = !exporting && !aiBusy,
+                            label = {
+                                Text(
+                                    stringResource(
+                                        if (committed.bokeh == null) {
+                                            R.string.editor_ai_bokeh_estimate
+                                        } else {
+                                            R.string.editor_ai_bokeh_reestimate
+                                        },
+                                    ),
+                                )
+                            },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    val bokehSelection = committed.bokeh
+                    if (bokehSelection != null) {
+                        val strengthLive = draft?.takeIf { it.first == "bokeh-strength" }?.second
+                            ?: bokehSelection.blurStrengthPct
+                        val strengthName = stringResource(R.string.editor_a11y_ai_bokeh_strength)
+                        val strengthLabel = stringResource(R.string.editor_ai_bokeh_strength, strengthLive)
+                        Text(
+                            text = strengthLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = strengthLive.toFloat(),
+                            onValueChange = { draft = "bokeh-strength" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "bokeh-strength" && committed.bokeh != null) {
+                                        commit(
+                                            committed.copy(
+                                                bokeh = committed.bokeh!!.copy(
+                                                    blurStrengthPct = d.second.coerceIn(1, 100),
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 1f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = strengthName
+                                stateDescription = strengthLabel
+                            },
+                        )
+                        val focalLive = draft?.takeIf { it.first == "bokeh-focal" }?.second
+                            ?: (bokehSelection.focalDepthNorm * 100).toInt()
+                        val focalName = stringResource(R.string.editor_a11y_ai_bokeh_focal)
+                        val focalLabel = stringResource(R.string.editor_ai_bokeh_focal, focalLive)
+                        Text(
+                            text = focalLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Slider(
+                            value = focalLive.toFloat(),
+                            onValueChange = { draft = "bokeh-focal" to it.toInt() },
+                            onValueChangeFinished = {
+                                draft?.let { d ->
+                                    if (d.first == "bokeh-focal" && committed.bokeh != null) {
+                                        commit(
+                                            committed.copy(
+                                                bokeh = committed.bokeh!!.copy(
+                                                    focalDepthNorm = d.second.coerceIn(0, 100) / 100.0,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                }
+                                draft = null
+                            },
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            modifier = Modifier.semantics {
+                                contentDescription = focalName
+                                stateDescription = focalLabel
+                            },
+                        )
+                        if (bokehSelection.depthRef.isNotEmpty() &&
+                            !activity.aiStore.contains(EditAiStore.ArtifactKind.DEPTH, bokehSelection.depthRef)
                         ) {
                             Text(
                                 text = stringResource(R.string.editor_ai_degraded_layer),
@@ -4369,155 +4345,455 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             )
                         }
                     }
-                } else {
-                    // Default-off: the single opt-in entry. A deny keeps
-                    // it (the next use re-asks); the never is the
-                    // Settings kill-switch.
-                    AssistChip(
-                        onClick = { retouchConsentDialog = true },
-                        enabled = !exporting,
-                        label = { Text(stringResource(R.string.editor_ai_retouch_enable)) },
-                    )
-                }
 
-                // The first-use consent dialog (ADR-0010 section 5): the
-                // text states what the model does, that it runs on-device
-                // only, and that no face data leaves the device. A grant
-                // persists per install; a deny re-asks on the next use.
-                if (retouchConsentDialog && retouchConsent == RetouchConsent.NOT_GRANTED) {
-                    AlertDialog(
-                        onDismissRequest = { retouchConsentDialog = false },
-                        title = { Text(stringResource(R.string.editor_ai_retouch_consent_title)) },
-                        text = { Text(stringResource(R.string.editor_ai_retouch_consent_body)) },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    val next = RetouchConsentMachine.onGrant(retouchConsent)
-                                    if (activity.retouchConsentStore.save(next)) {
-                                        retouchConsent = next
+                    // ---- Face retouch: OPT-IN (ADR-0010 section 5) ----
+                    // Hidden entirely under the permanent kill-switch; before a
+                    // grant the only entry is the enable chip that opens the
+                    // first-use consent dialog (what it does / on-device only /
+                    // no face data leaves the device). Under consent-off the
+                    // STAGE refuses even with a restored sidecar --- the layer
+                    // stays verbatim in the recipe, the stage skips.
+                    if (retouchConsent != RetouchConsent.PERMANENTLY_DISABLED) {
+                        Text(
+                            text = stringResource(R.string.editor_section_ai_retouch),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        if (retouchConsent == RetouchConsent.GRANTED) {
+                            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                FilterChip(
+                                    selected = committed.retouch == null,
+                                    onClick = { sweepPendingDrafts(); commit(committed.copy(retouch = null)) },
+                                    enabled = !exporting && !aiBusy,
+                                    label = { Text(stringResource(R.string.editor_ai_retouch_none)) },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                                AssistChip(
+                                    onClick = { sweepPendingDrafts(); runRetouchDetect() },
+                                    enabled = !exporting && !aiBusy,
+                                    label = { Text(stringResource(R.string.editor_ai_retouch_detect)) },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                            }
+                            val retouchSelection = committed.retouch
+                            if (retouchSelection != null) {
+                                val smoothingLive = draft?.takeIf { it.first == "retouch-smoothing" }?.second
+                                    ?: retouchSelection.smoothingPct
+                                val smoothingName = stringResource(R.string.editor_a11y_ai_retouch_smoothing)
+                                val smoothingLabel = stringResource(
+                                    R.string.editor_ai_retouch_smoothing,
+                                    smoothingLive,
+                                )
+                                Text(
+                                    text = smoothingLabel,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                Slider(
+                                    value = smoothingLive.toFloat(),
+                                    onValueChange = { draft = "retouch-smoothing" to it.toInt() },
+                                    onValueChangeFinished = {
+                                        draft?.let { d ->
+                                            if (d.first == "retouch-smoothing" && committed.retouch != null) {
+                                                commit(
+                                                    committed.copy(
+                                                        retouch = committed.retouch!!.copy(
+                                                            smoothingPct = d.second.coerceIn(0, 100),
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                        }
+                                        draft = null
+                                    },
+                                    valueRange = 0f..100f,
+                                    enabled = !exporting,
+                                    modifier = Modifier.semantics {
+                                        contentDescription = smoothingName
+                                        stateDescription = smoothingLabel
+                                    },
+                                )
+                                val eyesLive = draft?.takeIf { it.first == "retouch-eyes" }?.second
+                                    ?: retouchSelection.eyeBrightenPct
+                                val eyesName = stringResource(R.string.editor_a11y_ai_retouch_eyes)
+                                val eyesLabel = stringResource(R.string.editor_ai_retouch_eyes, eyesLive)
+                                Text(
+                                    text = eyesLabel,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                Slider(
+                                    value = eyesLive.toFloat(),
+                                    onValueChange = { draft = "retouch-eyes" to it.toInt() },
+                                    onValueChangeFinished = {
+                                        draft?.let { d ->
+                                            if (d.first == "retouch-eyes" && committed.retouch != null) {
+                                                commit(
+                                                    committed.copy(
+                                                        retouch = committed.retouch!!.copy(
+                                                            eyeBrightenPct = d.second.coerceIn(0, 100),
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                        }
+                                        draft = null
+                                    },
+                                    valueRange = 0f..100f,
+                                    enabled = !exporting,
+                                    modifier = Modifier.semantics {
+                                        contentDescription = eyesName
+                                        stateDescription = eyesLabel
+                                    },
+                                )
+                                val slimLive = draft?.takeIf { it.first == "retouch-slim" }?.second
+                                    ?: retouchSelection.faceSlimPct
+                                val slimName = stringResource(R.string.editor_a11y_ai_retouch_slim)
+                                val slimLabel = stringResource(R.string.editor_ai_retouch_slim, slimLive)
+                                Text(
+                                    text = slimLabel,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                Slider(
+                                    value = slimLive.toFloat(),
+                                    onValueChange = { draft = "retouch-slim" to it.toInt() },
+                                    onValueChangeFinished = {
+                                        draft?.let { d ->
+                                            if (d.first == "retouch-slim" && committed.retouch != null) {
+                                                commit(
+                                                    committed.copy(
+                                                        retouch = committed.retouch!!.copy(
+                                                            faceSlimPct = d.second.coerceIn(0, 100),
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                        }
+                                        draft = null
+                                    },
+                                    valueRange = 0f..100f,
+                                    enabled = !exporting,
+                                    modifier = Modifier.semantics {
+                                        contentDescription = slimName
+                                        stateDescription = slimLabel
+                                    },
+                                )
+                                if (retouchSelection.boxesRef.isNotEmpty() &&
+                                    !activity.aiStore.contains(
+                                        EditAiStore.ArtifactKind.BOXES,
+                                        retouchSelection.boxesRef,
+                                    )
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.editor_ai_degraded_layer),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+                        } else {
+                            // Default-off: the single opt-in entry. A deny keeps
+                            // it (the next use re-asks); the never is the
+                            // Settings kill-switch.
+                            AssistChip(
+                                onClick = { retouchConsentDialog = true },
+                                enabled = !exporting,
+                                label = { Text(stringResource(R.string.editor_ai_retouch_enable)) },
+                            )
+                        }
+
+                        // The first-use consent dialog (ADR-0010 section 5): the
+                        // text states what the model does, that it runs on-device
+                        // only, and that no face data leaves the device. A grant
+                        // persists per install; a deny re-asks on the next use.
+                        if (retouchConsentDialog && retouchConsent == RetouchConsent.NOT_GRANTED) {
+                            AlertDialog(
+                                onDismissRequest = { retouchConsentDialog = false },
+                                title = { Text(stringResource(R.string.editor_ai_retouch_consent_title)) },
+                                text = { Text(stringResource(R.string.editor_ai_retouch_consent_body)) },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            val next = RetouchConsentMachine.onGrant(retouchConsent)
+                                            if (activity.retouchConsentStore.save(next)) {
+                                                retouchConsent = next
+                                            }
+                                            retouchConsentDialog = false
+                                        },
+                                    ) {
+                                        Text(stringResource(R.string.editor_ai_retouch_consent_grant))
                                     }
-                                    retouchConsentDialog = false
                                 },
-                            ) {
-                                Text(stringResource(R.string.editor_ai_retouch_consent_grant))
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = {
-                                    // A deny stays NOT_GRANTED (the next
-                                    // use re-asks); nothing persists.
-                                    retouchConsent = RetouchConsentMachine.onDeny(retouchConsent)
-                                    retouchConsentDialog = false
+                                dismissButton = {
+                                    TextButton(
+                                        onClick = {
+                                            // A deny stays NOT_GRANTED (the next
+                                            // use re-asks); nothing persists.
+                                            retouchConsent = RetouchConsentMachine.onDeny(retouchConsent)
+                                            retouchConsentDialog = false
+                                        },
+                                    ) {
+                                        Text(stringResource(R.string.editor_ai_retouch_consent_deny))
+                                    }
                                 },
-                            ) {
-                                Text(stringResource(R.string.editor_ai_retouch_consent_deny))
-                            }
-                        },
-                    )
+                            )
+                        }
+                    }
                 }
-            }
+                PhotoScreen.Color -> {
 
-            // ---- Per-channel HSL: band selector + three sliders ----
-            Text(
-                text = stringResource(R.string.editor_section_hsl),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                HSL_BANDS.forEach { (name, _) ->
-                    FilterChip(
-                        selected = selectedBand == name,
-                        onClick = { selectedBand = name },
-                        // r47 ux fix: the band chips stayed live during an
-                        // export while every other control disables --- one
-                        // consistent frozen state.
+                    // ---- Per-channel HSL: band selector + three sliders ----
+                    Text(
+                        text = stringResource(R.string.editor_section_hsl),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        HSL_BANDS.forEach { (name, _) ->
+                            FilterChip(
+                                selected = selectedBand == name,
+                                onClick = { selectedBand = name },
+                                // r47 ux fix: the band chips stayed live during an
+                                // export while every other control disables --- one
+                                // consistent frozen state.
+                                enabled = !exporting,
+                                label = { Text(stringResource(bandNameRes(name))) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                    }
+                    val band = HSL_BANDS.first { it.first == selectedBand }.second(committed.hslBands)
+                    val bandLabel = stringResource(bandNameRes(selectedBand))
+                    HslBandSlider(
+                        name = stringResource(
+                            R.string.editor_a11y_band_control,
+                            bandLabel,
+                            stringResource(R.string.editor_a11y_hue),
+                        ),
+                        label = stringResource(R.string.editor_hsl_hue, band.hue),
+                        value = band.hue.toFloat(),
+                        range = -180f..180f,
                         enabled = !exporting,
-                        label = { Text(stringResource(bandNameRes(name))) },
-                        modifier = Modifier.padding(end = 8.dp),
+                        onCommit = { v ->
+                            commit(
+                                committed.copy(
+                                    hslBands = committed.hslBands.withBand(
+                                        selectedBand,
+                                        band.copy(hue = v),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    HslBandSlider(
+                        name = stringResource(
+                            R.string.editor_a11y_band_control,
+                            bandLabel,
+                            stringResource(R.string.editor_a11y_saturation),
+                        ),
+                        label = stringResource(R.string.editor_hsl_saturation, band.saturation),
+                        value = band.saturation.toFloat(),
+                        range = -100f..100f,
+                        enabled = !exporting,
+                        onCommit = { v ->
+                            commit(
+                                committed.copy(
+                                    hslBands = committed.hslBands.withBand(
+                                        selectedBand,
+                                        band.copy(saturation = v),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    HslBandSlider(
+                        name = stringResource(
+                            R.string.editor_a11y_band_control,
+                            bandLabel,
+                            stringResource(R.string.editor_a11y_luminance),
+                        ),
+                        label = stringResource(R.string.editor_hsl_luminance, band.luminance),
+                        value = band.luminance.toFloat(),
+                        range = -100f..100f,
+                        enabled = !exporting,
+                        onCommit = { v ->
+                            commit(
+                                committed.copy(
+                                    hslBands = committed.hslBands.withBand(
+                                        selectedBand,
+                                        band.copy(luminance = v),
+                                    ),
+                                ),
+                            )
+                        },
                     )
                 }
+                PhotoScreen.Main -> Unit
             }
-            val band = HSL_BANDS.first { it.first == selectedBand }.second(committed.hslBands)
-            val bandLabel = stringResource(bandNameRes(selectedBand))
-            HslBandSlider(
-                name = stringResource(
-                    R.string.editor_a11y_band_control,
-                    bandLabel,
-                    stringResource(R.string.editor_a11y_hue),
-                ),
-                label = stringResource(R.string.editor_hsl_hue, band.hue),
-                value = band.hue.toFloat(),
-                range = -180f..180f,
-                enabled = !exporting,
-                onCommit = { v ->
-                    commit(
-                        committed.copy(
-                            hslBands = committed.hslBands.withBand(
-                                selectedBand,
-                                band.copy(hue = v),
-                            ),
-                        ),
-                    )
-                },
-            )
-            HslBandSlider(
-                name = stringResource(
-                    R.string.editor_a11y_band_control,
-                    bandLabel,
-                    stringResource(R.string.editor_a11y_saturation),
-                ),
-                label = stringResource(R.string.editor_hsl_saturation, band.saturation),
-                value = band.saturation.toFloat(),
-                range = -100f..100f,
-                enabled = !exporting,
-                onCommit = { v ->
-                    commit(
-                        committed.copy(
-                            hslBands = committed.hslBands.withBand(
-                                selectedBand,
-                                band.copy(saturation = v),
-                            ),
-                        ),
-                    )
-                },
-            )
-            HslBandSlider(
-                name = stringResource(
-                    R.string.editor_a11y_band_control,
-                    bandLabel,
-                    stringResource(R.string.editor_a11y_luminance),
-                ),
-                label = stringResource(R.string.editor_hsl_luminance, band.luminance),
-                value = band.luminance.toFloat(),
-                range = -100f..100f,
-                enabled = !exporting,
-                onCommit = { v ->
-                    commit(
-                        committed.copy(
-                            hslBands = committed.hslBands.withBand(
-                                selectedBand,
-                                band.copy(luminance = v),
-                            ),
-                        ),
-                    )
-                },
-            )
+            // ---- The value tools' session Reset (the video footer's
+            // Reset, adapted honestly): the photo tools commit LIVE on
+            // release, so there is no draft to Apply and deliberately no
+            // dead Apply button --- Reset reverts the tool session as ONE
+            // undoable commit against the entry snapshot. ----
+            if (screen in PHOTO_VALUE_TOOLS) {
+                val entry = entryRecipe
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(
+                        onClick = { entry?.let { commit(it) } },
+                        enabled = !exporting && entry != null && committed != entry,
+                    ) {
+                        Text(stringResource(R.string.editor_v2_reset))
+                    }
+                }
+            }
 
-            // ---- The always-visible honesty line ----
-            // Reflects the policy this export would apply: the pending
-            // per-export choice resolved against the request's floor.
-            Text(
-                text = stringResource(
-                    R.string.editor_policy_line,
-                    policyLabel(
-                        ExportPolicyChoice.effectivePolicy(policy, exportChoice?.metadataPolicy),
+            // ---- The always-visible honesty line (the r54 chassis's Main
+            // home: the export decision surface; tool screens don't repeat
+            // it) ----
+            if (screen == PhotoScreen.Main) {
+                Text(
+                    text = stringResource(
+                        R.string.editor_policy_line,
+                        policyLabel(
+                            ExportPolicyChoice.effectivePolicy(policy, exportChoice?.metadataPolicy),
+                        ),
                     ),
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Start,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Start,
+                )
+            }
+        }
+
+        // ---- The r54 main-screen tab bar (full-bleed: outside the
+        // controls' padding, docked below the canvas column) ----
+        if (screen == PhotoScreen.Main) {
+            PhotoTabBar(
+                current = screen,
+                enabled = !exporting,
+                onSelect = { enterTool(it) },
             )
+        }
+    }
+}
+
+/**
+ * The r54 tool-screen header: back on the left, the tool's title (the
+ * heading anchor), and the confirm check on the right --- the video
+ * chassis's header shape on the photo surface's r53 theme roles. Both
+ * actions sweep-and-exit honestly: the photo tools commit LIVE on
+ * release, so there is no draft to apply or discard --- the check is the
+ * chassis's signature, not a fake apply.
+ */
+@Composable
+private fun PhotoToolHeader(
+    title: String,
+    backA11y: String,
+    confirmA11y: String,
+    onBack: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.semantics { contentDescription = backA11y },
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+        Text(
+            text = title,
+            color = MaterialTheme.colorScheme.onBackground,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() },
+        )
+        IconButton(
+            onClick = onConfirm,
+            modifier = Modifier.semantics { contentDescription = confirmA11y },
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/**
+ * The r54 bottom tab bar: the ten tools, horizontally scrollable (the
+ * video bar's six fit a row; ten do not), active = the accent + the
+ * underline, inactive = the secondary tint --- the video chassis's bar
+ * construction on the photo surface's theme roles. The Main screen is
+ * never a tab; it is the chassis the tabs navigate FROM.
+ */
+@Composable
+private fun PhotoTabBar(
+    current: PhotoScreen,
+    enabled: Boolean,
+    onSelect: (PhotoScreen) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .horizontalScroll(rememberScrollState()),
+    ) {
+        for (tab in PhotoScreen.entries) {
+            if (tab == PhotoScreen.Main) continue
+            val selected = tab == current
+            val tint = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Column(
+                modifier = Modifier
+                    .widthIn(min = 64.dp)
+                    .clickable(enabled = enabled) { onSelect(tab) }
+                    .padding(top = 8.dp, bottom = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    painter = painterResource(tab.iconRes),
+                    contentDescription = null,
+                    tint = tint,
+                )
+                Text(
+                    text = stringResource(tab.labelRes),
+                    color = tint,
+                    fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier
+                        .width(24.dp)
+                        .height(2.dp)
+                        .background(
+                            if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color.Transparent
+                            },
+                        ),
+                )
+            }
         }
     }
 }

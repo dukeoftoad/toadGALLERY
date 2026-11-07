@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r54 photo editor tab icon: color (the HSL droplet). House style = the
+     gallery ic_nav_*.xml vectors: 24dp viewport, white fill, tinted in Compose. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- A droplet: the point, the two slopes, the round bottom -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2.6L17.6,10.2A5.6,5.6 0 1,0 6.4,10.2Z" />
+</vector>

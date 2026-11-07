@@ -4,6 +4,78 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r54 round (editor versionCode 19; edit `0.4.14-edit-alpha`; gallery unchanged)
+
+The photo editor's re-chassis: the maintainer's "Of course same
+design for photo editor as like video Editor. So do implement now"
+instruction (2026-11-07, the PAT re-supplied) — the direct answer to
+F-51, the IA question r53 flagged as a maintainer decision owed
+BEFORE any restructure — lands the r52 chassis's ARCHITECTURE on the
+photo surface. One app, one design language, one information
+architecture: the canvas stays on top (never recomposed away), a
+horizontally scrollable ten-tool bottom tab bar replaces the
+long-scroll sectioned page, each tool's block re-hosts VERBATIM
+behind its tab, tool screens carry the back/title/check header, and
+the value tools get the session-Reset footer. The behavior contracts
+(commit-on-release, the draft machinery, the cross-family layer
+exclusivity, undo/redo, the a11y conventions) are untouched — the
+review diff confirms 3,670 indent-only lines and 354 real-change
+lines. CI is the compile judge per ADR-0013 (PR #146,
+`ui/r54-photo-chassis` off main `6d43fd5`).
+
+### Added
+
+- **[edit] The ten-tool bottom tab bar** (`EditActivity.kt`):
+  Adjust, Color, Looks, Frames, Text, Stickers, Draw, Regions, AI,
+  Crop — horizontally scrollable (the video bar's six fit a row; ten
+  do not), active = the accent + the 2dp underline, inactive = the
+  secondary tint; the video chassis's bar construction on the photo
+  surface's r53 theme roles. Labels reuse the section-header strings
+  wherever one exists; the Adjust tab reuses the video surface's
+  `ic_vt_adjust` (one app, one icon vocabulary); `Color` and `AI`
+  are the only new labels (`strings_r54.xml`, `editor_pt_*`); nine
+  new `ic_pt_*` drawables in the house `ic_nav_*` vector style.
+- **[edit] The tool screens** (`PhotoToolHeader`): back on the left,
+  the tool's title (the heading anchor), the confirm check on the
+  right — the video header shape on theme roles. Both actions
+  sweep-and-exit honestly: the photo tools commit LIVE on release,
+  so there is no draft to apply or discard — the check is the
+  chassis's signature, not a fake apply (documented in the PR).
+- **[edit] The session-Reset footer** (the value tools Adjust/Color/
+  Looks/Frames/Crop — the recipe-field editors): the video footer's
+  Reset adapted honestly — reverting the tool session is ONE
+  undoable commit against the recipe snapshot taken at screen entry;
+  deliberately NO dead Apply button (live-commit leaves nothing to
+  apply). Layer tools and the AI screen carry no footer (their
+  panels have their own action rows — the video Extract-screen
+  precedent).
+- **[edit] The system-back contract**: `BackHandler` pops a tool
+  screen to the main chassis (the gallery app's three selection
+  screens set the in-repo precedent); the main screen keeps the
+  default back = the activity's cancel path.
+
+### Changed
+
+- **[edit] The long-scroll sectioned IA retires**: the fourteen
+  Controls blocks re-host VERBATIM into a `when (screen)` — geometry
+  + crop presets under the Crop tab, the four r41 AI sections under
+  the AI tab, everything else one tab per block. The panel is capped
+  at 300dp with its own scroll so the canvas stays dominant; the
+  Main screen shows only the honesty line + the tab bar.
+- **[edit] The r41 AI progress/notice machinery hoists** out of the
+  controls (a RUNNING job stays visible + cancellable from EVERY
+  screen — the video chassis hoisted its still-export progress block
+  for exactly this reason).
+- **[edit] Paint modes auto-off on tool exit** (Draw/Region/Erase):
+  the ONE deliberate behavior change — the scroll era kept the modes
+  alive across sections, which the tab chassis deliberately replaces
+  (the modes were unreachable from other sections' controls anyway);
+  drafts sweep on every navigation, exactly as on export/undo.
+- **[edit] The honesty line's home**: Main-only (the export decision
+  surface); tool screens don't repeat it.
+- **[edit] `apps/edit/build.gradle.kts`**: versionCode 19
+  (`0.4.14-edit-alpha`) + the per-round comment.
+
 ## [Unreleased] — the r53 round (editor versionCode 18; edit `0.4.13-edit-alpha`; gallery unchanged)
 
 The photo editor's design-language unification: the maintainer's

@@ -281,3 +281,29 @@ any restructure); F-52 the derived violet neutrals (documented
 derivations, not design-pinned tokens; the theme file is the single
 edit point). Carried: D-1 root fix, R51-3 waves, PR #134, the r52
 video follow-ups.
+
+## r54 checkpoint — the photo editor's re-chassis round (2026-11-07)
+
+**Round state (branch `ui/r54-photo-chassis` off main `6d43fd5`; CI is the compile judge):**
+- [x] The three-agent inventory (states/sections/chassis-templates/
+  strings/drawables) + the round spec (agent-ctx r54-photo-chassis):
+  the ten-tool tab map, the when-branch seam plan with verified
+  line anchors, the canvas-alive constraint, the Reset semantics.
+- [x] The transformation — ONE audited Python seam script (47
+  fail-loud anchors, phase-1 indents, 25 bottom-up structural ops):
+  the header Main/tool swap, the when(screen) re-host of all
+  fourteen blocks VERBATIM, the AI-progress hoist, the Reset footer,
+  the honesty re-home, the tab bar + PhotoToolHeader/PhotoTabBar
+  composables, enterTool/exitToMain + BackHandler, ten new imports.
+- [x] The resources: strings_r54.xml (editor_pt_tab_color/_ai — the
+  only new labels; everything else reuses section-header or r52
+  editor_v2 strings), nine ic_pt_* drawables, versionCode 19
+  (`0.4.14-edit-alpha`) + the per-round comment.
+- [x] The local gates: braces/parens delta 0; lex OK; 10/10 XML
+  well-formed; resource parity NONE missing; the full diff reviewed
+  hunk-by-hunk (3,670 indent-only / 354 real-change lines).
+- [x] Ledgers: CHANGELOG r54, roadmap v2.20, worklog Run #28,
+  follow-up F-53/F-54 (+ F-51 closed by this round), this
+  checkpoint.
+- [ ] Commit → push → PR #146 → CI poll → this cell updates with
+  the 7-check outcome (fix-forward if red, per ADR-0013).

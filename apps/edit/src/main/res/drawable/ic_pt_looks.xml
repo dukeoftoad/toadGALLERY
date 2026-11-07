@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r54 photo editor tab icon: looks (the LUT sparkle). House style = the
+     gallery ic_nav_*.xml vectors: 24dp viewport, white fill, tinted in Compose. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- The four-point sparkle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2L14.1,9.9L22,12L14.1,14.1L12,22L9.9,14.1L2,12L9.9,9.9Z" />
+</vector>

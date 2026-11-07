@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r54: the photo editor's re-chassis (the video editor's tab-bar
+     architecture on the photo surface: canvas top, ten tool tabs, per-tool
+     screens with the back/title/check header). Only NEW concepts live
+     here: eight tab labels reuse the section-header strings in their
+     original files, the Reset footer and the header a11y reuse the r52
+     video strings (editor_v2_*), and the Adjust tab reuses the video
+     icon. These two are the only labels with no existing home (names
+     prefixed editor_pt_ to avoid collisions). -->
+<resources>
+    <!-- The two tool tabs with no section-header string to reuse -->
+    <string name="editor_pt_tab_color">Color</string>
+    <string name="editor_pt_tab_ai">AI</string>
+</resources>

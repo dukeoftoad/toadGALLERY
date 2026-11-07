@@ -355,6 +355,25 @@ android {
         // conventions are verbatim --- NOT restructured.
         versionCode = 18
         versionName = "0.4.13-edit-alpha"
+
+        // versionCode 19 (r54 round): the photo editor's re-chassis --- the
+        // maintainer's "same design as the video editor" instruction lands
+        // the r52 chassis's ARCHITECTURE on the photo surface: the canvas
+        // stays on top (never recomposed away), a horizontally scrollable
+        // ten-tool bottom tab bar replaces the long-scroll sectioned page,
+        // each tool re-hosts its block VERBATIM behind its tab (the
+        // r30-r41 behavior contracts --- commit-on-release, the draft
+        // machinery, the cross-family layer exclusivity --- untouched),
+        // tool screens carry the back/title/check header, the value tools
+        // (Adjust/Color/Looks/Frames/Crop) get the session-Reset footer
+        // (ONE undoable commit against the entry snapshot --- live-commit
+        // leaves nothing to Apply, so no dead Apply button), the r41 AI
+        // progress hoists out of the panel (a running job stays visible +
+        // cancellable from every screen), and system back pops a tool
+        // screen to the main chassis (the gallery app's BackHandler
+        // precedent). Paint modes now auto-off on tool exit.
+        versionCode = 19
+        versionName = "0.4.14-edit-alpha"
     }
 
     buildFeatures {

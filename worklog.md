@@ -2284,3 +2284,54 @@ discipline: only theme-role assignments and color-argument swaps,
 zero new APIs). Remaining: the maintainer's review/merge; then the
 rebase onto main after #144 merges (the duplicated r52 commits drop
 — the house stacked-PR pattern).
+
+### Run #28 — 2026-11-07 (the r54 window: the photo editor's re-chassis — the maintainer's "same design as the video editor" instruction)
+
+**The task.** The maintainer's chat instruction of 2026-11-07 —
+"Of course same design for photo editor as like video Editor. So do
+implement now" — with the PAT re-supplied. It arrives directly after
+the r53 report flagged F-51 (the per-tool-screen IA question) as the
+maintainer decision owed BEFORE any restructure: the instruction IS
+that decision, answered in the affirmative and with an explicit
+"go".
+
+**The shape of the round.** r53 unified the design LANGUAGE (the
+violet theme); r54 unifies the ARCHITECTURE: the r52 video chassis
+(canvas top, never recomposed away; bottom tool tab bar; per-tool
+screens with the back/title/check header; the value tools' Reset
+footer) lands on the photo surface. The fourteen long-scroll blocks
+re-host VERBATIM into a when(screen) — zero behavior change inside
+them (the r30–r41 contracts: commit-on-release, the draft
+machinery, the cross-family exclusivity, undo/redo, a11y).
+
+**The method (the r53 MultiEdit lesson applied).** The 4,643-line
+EditActivity transformation ran as ONE audited Python seam script
+(/home/z/scripts/r54_transform.py, kept outside the repo): 47
+fail-loud anchor assertions, then phase-1 indent shifts (+4 header
+wrap, +8 block re-hosting), then 25 structural ops applied
+bottom-up. The local gates: braces/parens delta 0, the lex check
+OK, all 10 new XML resources well-formed (one `---`-in-comment
+catch, fixed), resource-reference parity NONE missing, the full
+diff reviewed hunk-by-hunk — 3,670 lines indent-only, 354
+real-change lines, exactly the spec'd seams.
+
+**The honest adaptations (flagged in the PR, none silent).** The
+r41 AI progress hoists out of the panel (a running job stays
+cancellable from every screen — the video still-export precedent);
+paint modes auto-off on tool exit (the ONE deliberate behavior
+change; the scroll-era cross-section persistence had no reachable
+controls from other sections anyway); the value tools' Reset
+footer reverts the session as ONE undoable commit with deliberately
+no dead Apply button; back and the check both sweep-and-exit (no
+draft to discard — nothing is silently dropped); the honesty line
+lives on Main (the export decision surface); BackHandler pops a
+tool screen (the gallery app's in-repo precedent — F-54 records
+that the VIDEO editor still lacks this).
+
+**The catch log.** None yet — CI is the compile judge (PR #146);
+this cell updates with the outcome.
+
+**Remaining.** The maintainer's review/merge; F-53 (the AI
+one-tab-vs-four question), F-54 (the video BackHandler port), the
+carried items (D-1 root fix, R51-3 waves, PR #134, the r52 video
+follow-ups), PAT revocation advised again after this round's push.

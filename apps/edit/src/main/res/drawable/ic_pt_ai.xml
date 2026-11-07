@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r54 photo editor tab icon: ai (the double sparkle). House style = the
+     gallery ic_nav_*.xml vectors: 24dp viewport, white fill, tinted in Compose. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- The big four-point sparkle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M11,2L13,8.5L19.5,10.5L13,12.5L11,19L9,12.5L2.5,10.5L9,8.5Z" />
+    <!-- The small companion sparkle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18.5,15L19.5,18L22.5,19L19.5,20L18.5,23L17.5,20L14.5,19L17.5,18Z" />
+</vector>

@@ -883,3 +883,26 @@ the public remote each time.
   #134, the r52 video follow-ups (the text/effects pipeline,
   video-session undo/redo, the waveform strip, the volume device
   rows), PAT revocation (advised once this round's push lands).
+
+## 2026-11-07 — r54 window (the photo editor's re-chassis: the video editor's tab-bar architecture on the photo surface)
+
+- **F-53 (2026-11-07, open)** — The AI tab's granularity. r54 puts
+  the four r41 AI tools (magic erase, sky, bokeh, retouch) behind
+  ONE AI tab — they share the job machinery (the hoisted
+  progress/cancel line, runAiCommit, the notice slot) and one tab
+  keeps the bar at ten; four separate tabs would make it thirteen.
+  If the maintainer prefers four top-level AI tabs, the when-branch
+  split is mechanical (the branch boundaries already exist).
+- **F-54 (2026-11-07, open)** — The VIDEO editor still lacks the
+  BackHandler (r54 added it to the photo tool screens; on the video
+  surface, system back on a tool screen exits the whole editor).
+  Port the one-liner when the video surface is next touched.
+- **F-51 (2026-11-07, CLOSED by r54)** — The photo-editor IA
+  question is answered: the maintainer's "Of course same design for
+  photo editor as like video Editor. So do implement now" is the
+  affirmative decision r53 waited for; r54 shipped the re-chassis.
+- **Carried** — D-1 root fix (§5.1 decision), R51-3 waves 3a–3d, PR
+  #134, the r52 video follow-ups (F-40 the text/effects pipeline,
+  F-41 video-session undo/redo, F-42 the waveform strip, F-43 the
+  volume device rows), F-52 (pin the derived violet neutrals), PAT
+  revocation (advised again after this round's push).

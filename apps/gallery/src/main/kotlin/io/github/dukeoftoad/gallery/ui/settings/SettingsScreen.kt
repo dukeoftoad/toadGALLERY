@@ -69,7 +69,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Context
 import io.github.dukeoftoad.gallery.BuildConfig
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.buildshape.BuildShape

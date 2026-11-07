@@ -4,7 +4,6 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-<<<<<<< HEAD
 ## [Unreleased] — the r58 round (edit panel slider craft, F-58b; `0.4.14-edit-alpha`; gallery unchanged)
 
 The r56 ledger scheduled F-58b as the per-panel `LabeledSlider` conversion +
@@ -163,7 +162,6 @@ cause-less fallback message; this round removes the cause itself.
 - Coordination: PR is gallery + engine only; the open editor PRs
   (#150, #151) touch `apps/edit` and do not collide. A coordination
   comment is posted on the PR for the other agents working the editor.
->>>>>>> origin/main
 
 ## [Unreleased] — the r55 round (gallery versionCode 40; `0.4.5-alpha`; edit unchanged)
 

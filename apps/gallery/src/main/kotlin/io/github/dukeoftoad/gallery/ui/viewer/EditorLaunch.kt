@@ -107,11 +107,6 @@ object EditorResolver {
     }
 }
 
-
-/** r59: the calling app's own package (the unified build self-matches its embedded editor). */
-private fun PackageManager.ownPackageOrNull(): String? =
-    runCatching { packageName }.getOrNull()
-
 /** The package-visible resolution (the thin Android adapter over [EditorResolver]). */
 fun resolveEditor(context: Context): EditorResolution =
     resolveEditor(context, EDITOR_IMAGE_MIME)
@@ -331,7 +326,7 @@ private fun probeEditorCandidates(
  */
 fun resolveEditor(context: Context, mimeType: String): EditorResolution {
     val pm = context.packageManager
-    val candidates = queryEditorCandidates(pm, mimeType, ownPackage = pm.ownPackageOrNull())
+    val candidates = queryEditorCandidates(pm, mimeType, ownPackage = context.packageName)
     val effective = if (candidates.isEmpty() && mimeType.endsWith("/*")) {
         // The concrete-mime retry: exactly the shapes apps/edit's own
         // manifest filters declare (see the constants' KDoc).
@@ -342,16 +337,16 @@ fun resolveEditor(context: Context, mimeType: String): EditorResolution {
         }
         var retried = candidates
         for (concreteMime in concreteMimes) {
-            retried = queryEditorCandidates(pm, concreteMime, ownPackage = pm.ownPackageOrNull())
+            retried = queryEditorCandidates(pm, concreteMime, ownPackage = context.packageName)
             if (retried.isNotEmpty()) break
         }
         retried
     } else {
         candidates
     }
-    val resolution = EditorResolver.resolve(effective, ownPackage = pm.ownPackageOrNull())
+    val resolution = EditorResolver.resolve(effective, ownPackage = context.packageName)
     if (resolution !is EditorResolution.NotInstalled) return resolution
-    val probed = EditorResolver.resolve(probeEditorCandidates(pm, mimeType, ownPackage = pm.ownPackageOrNull()))
+    val probed = EditorResolver.resolve(probeEditorCandidates(pm, mimeType, ownPackage = context.packageName))
     if (probed !is EditorResolution.NotInstalled) return probed
     // A disabled app contributes no query hits, so "not installed" from
     // the query must be refined: an installed-but-disabled editor is the

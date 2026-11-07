@@ -856,3 +856,30 @@ the public remote each time.
   skips it).
 - **Carried** — D-1 root fix (§5.1 decision), R51-3 waves 3a–3d, PR
   #134, PAT revocation (advised again after this round's push).
+
+## 2026-11-07 — r53 window (the photo editor's design-language round: the EditorTheme violet swap + the chrome restyle)
+
+- **F-51 (2026-11-07, open)** — The photo-editor IA unification
+  question. The r53 round restyles the photo editor's chrome but
+  keeps its long-scroll sectioned page and the commit-on-release
+  draft semantics verbatim, while the video editor (r52) runs the
+  tab-screen chassis with the Reset|Apply flow over the
+  committed/draft session. One design language now, two information
+  architectures — deliberate for this round (no photo mockups exist;
+  every design image is a video screen, and the long-scroll IA is
+  the battle-tested r30–r41 contract), but the per-tool-screen
+  question for the photo editor is a maintainer decision owed BEFORE
+  any restructure. No fake redesign ships in the meantime.
+- **F-52 (2026-11-07, open)** — The derived violet neutrals are
+  documented derivations, not design-approved tokens. `EditorTheme`'s
+  ten pinned tokens ride the maintainer-approved r52 approval; the
+  six derived roles in the KDoc (primaryContainer #2E2347,
+  onPrimaryContainer #EDE7FA, inversePrimary #7C5CE0,
+  tertiaryContainer #3A2D55, onTertiaryContainer #E6DFF7,
+  outlineVariant #2E2740) are this round's documented derivations.
+  If the maintainer pins exact values later, the theme file is the
+  single edit point.
+- **Carried** — D-1 root fix (§5.1 decision), R51-3 waves 3a–3d, PR
+  #134, the r52 video follow-ups (the text/effects pipeline,
+  video-session undo/redo, the waveform strip, the volume device
+  rows), PAT revocation (advised once this round's push lands).

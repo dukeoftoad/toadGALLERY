@@ -13,6 +13,44 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
+### v2.19 (2026-11-07, latest) --- the r53 photo-editor design round: the violet family scheme on EditorTheme + the EditActivity chrome restyle
+
+- **The flagged interpretation** --- the maintainer's "Same ux design
+  also" instruction (2026-11-07, the PAT re-supplied): apply the r52
+  design language (the Image-2 dark+violet chassis approved and
+  shipped for the video editor) to the photo editor --- the remaining
+  old-UI part of the edit app (the r47 toad-green `EditorTheme`).
+  The interpretation is flagged in the round report and the PR
+  description, never silent; what the instruction does NOT cover
+  (the photo IA) is recorded as a maintainer decision owed (F-51).
+- **The EditorTheme swap** --- the same ten pinned tokens as
+  `VideoEditTheme` (Bg #0D0A14, Surface #17131F, SurfaceHigh #221B2E,
+  Outline #3A3148, Accent #A78BFA, OnAccent #171126, AccentSoft
+  #8B72E8, TextPrimary #F3F0FA, TextSecondary #A99FBF, Error
+  #F2B8B5) with `secondaryContainer = accent` so the selected
+  FilterChips render accent-filled with zero per-chip overrides (the
+  r52 trick); a few derived neutrals documented in the KDoc ---
+  derivations, not design-pinned tokens (F-52 tracks the single edit
+  point).
+- **The chrome restyle** --- `EditActivity`'s hardcoded white/black
+  chrome maps to theme roles: the section labels and secondary text
+  → `onSurfaceVariant`, the primary text and icons → `onBackground`,
+  the header spinner → `primary`, the export-sheet tiles 0xEE101010
+  → 0xEE17131F, the color-swatch selection ring → the accent.
+  Behavior, state machine, information architecture (the long-scroll
+  sectioned page), commit-on-release draft slots, undo/redo and the
+  a11y conventions are verbatim --- deliberately NOT restructured
+  (no photo mockups exist; the IA is the battle-tested r30--r41
+  contract).
+- **versionCode 18** --- `0.4.13-edit-alpha`; no new strings,
+  drawables, dependencies, manifest, pipeline/layer, or test
+  changes; CI is the compile judge (no gradle in the sandbox --- the
+  lex check + the host-literal scan are the local gates).
+- **Still open** --- the D-1 root fix, the R51-3 waves, PR #134, the
+  r52 video follow-ups (all carried); new follow-ups: the
+  photo-editor IA-unification decision (F-51) and the derived-neutral
+  pinning (F-52).
+
 ### v2.18 (2026-11-06, latest) --- the r52 video-editor redesign round: the Image-2 base surface + the mute+volume bundle
 
 - **The maintainer's approved bundle** --- "Image 2 base + option 2(a) +

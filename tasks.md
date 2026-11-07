@@ -240,3 +240,44 @@ R51-3 waves, PR #134.
 **Human-only device rows owed by this round:** TalkBack over the new
 surface; the audible volume gain; filmstrip decode cost on long clips;
 the trim-handle drag ergonomics.
+
+## r53 checkpoint — the photo editor's design-language round (2026-11-07)
+
+**Round state (branch `ui/r53-photo-redesign`, stacked on PR #144 head `e6c5a7a`; CI is the compile judge):**
+- [x] Branch created off the r52 PR #144 head `e6c5a7a` (the
+  stacked-PR pattern); the round spec written to agent-ctx (the ten
+  pinned tokens + the derived neutrals, the chrome-role map, the
+  honest-scope line).
+- [x] The theme swap (`EditorTheme.kt`: the r47 toad-green → the r52
+  violet scheme — the same ten pinned tokens as `VideoEditTheme` +
+  `secondaryContainer = accent` so the selected FilterChips render
+  accent-filled with zero per-chip overrides; the derived neutrals
+  documented in KDoc) — DONE by the code task.
+- [x] The chrome restyle (`EditActivity.kt` ONLY: the hardcoded
+  white/black chrome mapped to theme roles; behavior, state machine,
+  the long-scroll sectioned IA, commit-on-release draft slots,
+  undo/redo and the a11y conventions verbatim) — DONE (63 hunks,
+  every one a `color =`/`tint =` argument swap; the canvas matting
+  black and the crop-rect stroke + canvas spinner white kept).
+- [x] `apps/edit/build.gradle.kts` — versionCode 18
+  (`0.4.13-edit-alpha`) + the per-round comment.
+- [x] Ledgers: CHANGELOG r53, roadmap v2.19, worklog Run #27 (+ the
+  ledger row), follow-up F-51/F-52, this checkpoint.
+- [x] The local gates (the lex check + the host-literal scan over the
+  touched Kotlin files) + the line-by-line review — DONE (lex OK ×2,
+  literal scan CLEAN, the full diff reviewed hunk-by-hunk).
+- [x] Commit → push → PR #145 (head `8e9e59f`) → CI poll — ALL 7
+  CHECKS GREEN on the first run (Build + lint + test = compileDebugKotlin
+  + lintDebug + the JVM suites incl. the privacy scan, CodeQL, both
+  vendored-engine jobs, the approval + actions analyzes); the ledgers'
+  `pending` cells recorded. Remaining: the maintainer's review/merge;
+  then the rebase onto main after #144 merges (the duplicated
+  r52 commits drop).
+
+**Open (decisions, not defects):** F-51 the photo-editor IA
+unification (the long-scroll page + commit-on-release vs the video
+tab-screen + Reset|Apply chassis — a maintainer decision owed before
+any restructure); F-52 the derived violet neutrals (documented
+derivations, not design-pinned tokens; the theme file is the single
+edit point). Carried: D-1 root fix, R51-3 waves, PR #134, the r52
+video follow-ups.

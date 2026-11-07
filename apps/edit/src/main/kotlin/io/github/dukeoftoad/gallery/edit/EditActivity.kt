@@ -2087,12 +2087,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = stringResource(R.string.editor_close),
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
             Text(
                 text = stringResource(R.string.editor_app_name),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.titleMedium,
                 // r40 a11y: the editor's title is the heading anchor (the
                 // gallery screens' r40 heading convention, editor side).
@@ -2129,7 +2129,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             if (exporting) {
                 CircularProgressIndicator(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             } else {
                 Button(
@@ -2379,24 +2379,24 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xEE101010))
+                    .background(Color(0xEE17131F))
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 Text(
                     text = stringResource(R.string.editor_settings),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.semantics { heading() },
                 )
                 Text(
                     text = stringResource(R.string.editor_settings_retouch_title),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (retouchConsent == RetouchConsent.PERMANENTLY_DISABLED) {
                     Text(
                         text = stringResource(R.string.editor_settings_retouch_disabled),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 } else {
@@ -2421,7 +2421,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xEE101010))
+                    .background(Color(0xEE17131F))
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -2438,7 +2438,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 if (choice.format != ExportFormat.PNG) {
                     Text(
                         text = stringResource(R.string.editor_quality, choice.quality),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         style = MaterialTheme.typography.labelLarge,
                     )
                     val qualityName = stringResource(R.string.editor_a11y_quality)
@@ -2455,7 +2455,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 } else {
                     Text(
                         text = stringResource(R.string.editor_png_lossless),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -2466,7 +2466,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 // editor respects the requested policy exactly, contract 4.4).
                 Text(
                     text = stringResource(R.string.editor_section_metadata),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 4.dp),
                 )
@@ -2488,13 +2488,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             R.string.editor_metadata_floor,
                             policyLabel(policy),
                         ),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
                 Text(
                     text = stringResource(R.string.editor_metadata_note),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                 )
                 Button(onClick = { requestSave() }, modifier = Modifier.padding(top = 4.dp)) {
@@ -2514,7 +2514,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // ---- Geometry row ----
             Text(
                 text = stringResource(R.string.editor_section_geometry),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(
@@ -2534,7 +2534,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     Icon(
                         imageVector = Icons.Filled.Refresh,
                         contentDescription = stringResource(R.string.editor_rotate_left),
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
                 // r32 a11y: both flip toggles are FilterChips. A text
@@ -2594,7 +2594,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             val straightenState = stringResource(R.string.editor_straighten, straightenLive.toInt())
             Text(
                 text = straightenState,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.labelLarge,
             )
             Slider(
@@ -2665,7 +2665,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // ---- The adjustment suite ----
             Text(
                 text = stringResource(R.string.editor_section_adjust),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             for (spec in ADJUST_SLIDERS) {
@@ -2675,7 +2675,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val a11yName = stringResource(spec.a11yNameRes)
                 Text(
                     text = labelText,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -2708,7 +2708,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // chip --- the tolerance contract, shown honestly.
             Text(
                 text = stringResource(R.string.editor_section_filters),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             val selection = committed.lut
@@ -2777,7 +2777,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             importError?.let { reason ->
                 Text(
                     text = stringResource(R.string.editor_filter_import_failed, reason),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -2790,7 +2790,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val intensityName = stringResource(R.string.editor_a11y_filter_intensity)
                 Text(
                     text = intensityLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -2844,7 +2844,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // has no slider, so it is not TalkBack-reachable in v1).
             Text(
                 text = stringResource(R.string.editor_section_text),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -2910,8 +2910,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     },
                     enabled = !exporting,
                     singleLine = true,
-                    placeholder = { Text(fieldHint, color = Color.White.copy(alpha = 0.5f)) },
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                    placeholder = { Text(fieldHint, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onBackground),
                     keyboardOptions = KeyboardOptions(
                         imeAction = ImeAction.Done,
                         capitalization = KeyboardCapitalization.Sentences,
@@ -2944,7 +2944,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val sizeName = stringResource(R.string.editor_a11y_text_size)
                 Text(
                     text = sizeLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -2971,7 +2971,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val opacityName = stringResource(R.string.editor_a11y_text_opacity)
                 Text(
                     text = opacityLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -2998,7 +2998,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val rotationName = stringResource(R.string.editor_a11y_text_rotation)
                 Text(
                     text = rotationLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3070,7 +3070,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // follow the single selection.
             Text(
                 text = stringResource(R.string.editor_section_stickers),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -3132,7 +3132,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             stickerImportError?.let { reason ->
                 Text(
                     text = stringResource(R.string.editor_sticker_import_failed, reason),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -3174,7 +3174,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val sizeName = stringResource(R.string.editor_a11y_sticker_size)
                 Text(
                     text = sizeLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3201,7 +3201,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val opacityName = stringResource(R.string.editor_a11y_sticker_opacity)
                 Text(
                     text = opacityLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3228,7 +3228,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val rotationName = stringResource(R.string.editor_a11y_sticker_rotation)
                 Text(
                     text = rotationLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3284,7 +3284,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // families (the r35 contract extended).
             Text(
                 text = stringResource(R.string.editor_section_drawing),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -3353,7 +3353,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val widthLabel = stringResource(R.string.editor_draw_width, brushWidth)
                 Text(
                     text = widthLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3370,7 +3370,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val opacityLabel = stringResource(R.string.editor_draw_opacity, brushOpacity)
                 Text(
                     text = opacityLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3387,7 +3387,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val smoothingLabel = stringResource(R.string.editor_draw_smoothing, brushSmoothing)
                 Text(
                     text = smoothingLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3424,7 +3424,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val widthLabel = stringResource(R.string.editor_draw_width, widthLive)
                 Text(
                     text = widthLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3451,7 +3451,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val opacityLabel = stringResource(R.string.editor_draw_opacity, opacityLive)
                 Text(
                     text = opacityLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3478,7 +3478,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val smoothingLabel = stringResource(R.string.editor_draw_smoothing, smoothingLive)
                 Text(
                     text = smoothingLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3544,7 +3544,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // pipeline stage the export runs.
             Text(
                 text = stringResource(R.string.editor_section_regions),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -3615,7 +3615,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val strengthLabel = stringResource(R.string.editor_region_strength, regionStrength)
                 Text(
                     text = strengthLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3658,7 +3658,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val strengthLabel = stringResource(R.string.editor_region_strength, strengthLive)
                 Text(
                     text = strengthLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -3712,7 +3712,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // dragging.
             Text(
                 text = stringResource(R.string.editor_section_frames),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -3778,7 +3778,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             frameImportError?.let { reason ->
                 Text(
                     text = stringResource(R.string.editor_frame_import_failed, reason),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -3793,7 +3793,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     val widthLabel = stringResource(R.string.editor_frame_width, widthLive)
                     Text(
                         text = widthLabel,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Slider(
@@ -3841,7 +3841,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     //    says so instead of showing dead controls.
                     Text(
                         text = stringResource(R.string.editor_frame_imported_note),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -3860,11 +3860,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
                         text = stringResource(R.string.editor_ai_progress, aiProgressPct),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
@@ -3879,7 +3879,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             aiNotice?.let { noticeRes ->
                 Text(
                     text = stringResource(noticeRes),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -3894,7 +3894,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // refined mask + fill persist as ONE derived artifact.
             Text(
                 text = stringResource(R.string.editor_section_ai_erase),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -3946,7 +3946,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 // bounded; the strings say so without apologising).
                 Text(
                     text = stringResource(R.string.editor_ai_erase_hint),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                 )
             } else {
@@ -3964,7 +3964,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         // gone, it renders nothing (never dead controls).
                         Text(
                             text = stringResource(R.string.editor_ai_degraded_layer),
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -4002,7 +4002,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // mask --- no re-inference.
             Text(
                 text = stringResource(R.string.editor_section_ai_sky),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -4047,7 +4047,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             skyImportError?.let { reason ->
                 Text(
                     text = stringResource(R.string.editor_ai_sky_import_failed, reason),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -4059,7 +4059,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val skyOpacityLabel = stringResource(R.string.editor_ai_sky_opacity, skyOpacityLive)
                 Text(
                     text = skyOpacityLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -4089,7 +4089,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ) {
                     Text(
                         text = stringResource(R.string.editor_ai_sky_note),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -4098,7 +4098,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ) {
                     Text(
                         text = stringResource(R.string.editor_ai_degraded_layer),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -4116,7 +4116,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // ---- Bokeh: estimate the depth once, then pure re-renders ----
             Text(
                 text = stringResource(R.string.editor_section_ai_bokeh),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -4152,7 +4152,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val strengthLabel = stringResource(R.string.editor_ai_bokeh_strength, strengthLive)
                 Text(
                     text = strengthLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -4185,7 +4185,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 val focalLabel = stringResource(R.string.editor_ai_bokeh_focal, focalLive)
                 Text(
                     text = focalLabel,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Slider(
@@ -4217,7 +4217,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ) {
                     Text(
                         text = stringResource(R.string.editor_ai_degraded_layer),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -4233,7 +4233,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             if (retouchConsent != RetouchConsent.PERMANENTLY_DISABLED) {
                 Text(
                     text = stringResource(R.string.editor_section_ai_retouch),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 if (retouchConsent == RetouchConsent.GRANTED) {
@@ -4263,7 +4263,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                         Text(
                             text = smoothingLabel,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Slider(
@@ -4296,7 +4296,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         val eyesLabel = stringResource(R.string.editor_ai_retouch_eyes, eyesLive)
                         Text(
                             text = eyesLabel,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Slider(
@@ -4329,7 +4329,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         val slimLabel = stringResource(R.string.editor_ai_retouch_slim, slimLive)
                         Text(
                             text = slimLabel,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Slider(
@@ -4364,7 +4364,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         ) {
                             Text(
                                 text = stringResource(R.string.editor_ai_degraded_layer),
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         }
@@ -4421,7 +4421,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // ---- Per-channel HSL: band selector + three sliders ----
             Text(
                 text = stringResource(R.string.editor_section_hsl),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge,
             )
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -4514,7 +4514,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         ExportPolicyChoice.effectivePolicy(policy, exportChoice?.metadataPolicy),
                     ),
                 ),
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Start,
             )
@@ -4534,7 +4534,7 @@ private fun HslBandSlider(
     var dragValue by remember(label) { mutableStateOf<Float?>(null) }
     Text(
         text = label,
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onBackground,
         style = MaterialTheme.typography.labelLarge,
     )
     Slider(
@@ -4615,7 +4615,7 @@ private fun ColorSwatch(
             .background(Color(colorArgb.toInt()))
             .border(
                 width = if (selected) 3.dp else 1.dp,
-                color = if (selected) Color.White else Color.White.copy(alpha = 0.4f),
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 shape = CircleShape,
             )
             // toggleable is not on this foundation build's API surface

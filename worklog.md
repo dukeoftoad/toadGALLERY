@@ -661,6 +661,7 @@
 | — | `r32` (Phase 6) | RIDES PR **#106** (same branch `tg-p6-edit-v1-exit`, no separate PR — the window-end job's "push whatever the tip is" clause covers it): the Phase 6 hardening pass — the accessibility sweep over the whole editor surface (13 sliders with name + live-value semantics, "BAND: CONTROL" HSL announcements, the flip toggles as proper FilterChips with 48dp targets and selected-state announcements), the straighten live-drag fix (thumb + preview follow the drag; no more wasted per-tick renders), and the tested pure `CropRect.fromPixelRect` inverse replacing the preset UI's inline division | rides #106 | Commits `32a6e6a`/`2bd8ee6`/`dce74c4` + the docs commit; editor `versionCode 4` (`0.3.1-edit-alpha`); 5 new JVM tests (GeometryTest 19 → 24); recorded against the #106 merge sha `938effa` |
 | **#107** | `r33` (Phase 7) | `tg-p7-lut-engine` (stacked on `tg-p6-edit-v1-exit`): the Phase 7 opener — the LUT `.cube` filter system COMPLETE with the user-import flow: the pure parser + trilinear sampler + intensity blend, the recipe's additive `LutSelection` with the unresolvable-id tolerance contract, pipeline stage 10 between the HSL bands and the spatial effects, the five project-authored bundled looks (deterministic committed generator; license record `docs/phase-7/bundled-luts.md`), the Filters chip row + intensity slider over the ONE shared look cache (preview ≡ export), and the extension — `ImportedLutStore` (parse-before-write, verbatim bytes, collision-suffixed ids that can never shadow the bundled set) + the SAF import chip + the merged registry + the remove-look affordance | `314bd9c` | **Squash-merged; CI green** (dispatch 41781166155 on the rebased head `ceb731b`); editor `versionCode 6` (`0.4.1-edit-alpha`); **51 new JVM tests** (edit module 158 → 209); the branch carries the external r29 manifest XML-comment CI fix (`a0a0b41`) + this session's window-end fast-forward (wave 8 cherry-picked back as `063e1e3` after the interleaving reset, + the docs recovery); the rebase onto post-#106 main landed 16 commits with the five code waves byte-identical to the pre-rebase tip |
 | **#109** | `r34` (Phase 7) | `tg-p7-text-tool`: the text tool round — the OFL licensing gate (four verbatim-bundled SIL OFL 1.1 faces, 1,260,724 bytes, `OFL.txt` beside each TTF, sha256-pinned, four §5 provenance rows + `docs/phase-7/bundled-fonts.md`), the additive `TextLayers` recipe (absent-key clean, unresolvable-fontId-degrades), the pure `TextLayout` + the ONE shared `TextCompositor` after the whole pixel pipeline (preview ≡ export, offset identity test-pinned), the editor surface (add/layer chips, per-commit drafts, font chips, sliders, eight named swatches with radio semantics, drag-to-position, remove; editor `versionCode 7`), the string recount 74 → 94; F-1 rides (the in-app Compose progress screen over the build-time `progress.json` mirror, gallery `versionCode 34`) + F-2 rides (the `toad-setup` composite action across all six workflows) | `6bb17a4` | **Squash-merged; CI green** (merge-gate run 41822887363 on head `699fd03` after the seven-iteration first-execution window: 41816563434 the F-1 mirror's Provider-in-SourceSet config failure → 41817387618 the three ProgressSnapshotTest locator paths → 41818233484 the editor's nine first-compile errors → 41819615881 the semantics-lambda shadowing → 41820303404 the dotted backticked test name → 41821587083 the two wrong assertions → green); **PR #108 closed** by the merge keyword; the edit module at **241 JVM tests** (+32, the r34 families' first execution; the delivery record's "22" corrected in roadmap v2.6) |
+| — | `r53` (the photo-editor design round) | `ui/r53-photo-redesign` (stacked on PR #144, the r52 branch, head `e6c5a7a`): the photo editor's design-language round — the maintainer's "Same ux design also" instruction (2026-11-07) interpreted (flagged in the PR and the round report) as applying the r52 Image-2 dark+violet design language to the photo editor surface: the `EditorTheme.kt` palette swap (the r47 toad-green retires to the violet family scheme — the same ten pinned tokens as `VideoEditTheme`, with `secondaryContainer = accent` so the selected FilterChips render accent-filled with zero per-chip overrides; a few derived neutrals documented in KDoc) + the `EditActivity.kt` chrome restyle (the hardcoded white/black chrome mapped to theme roles; behavior, state machine, the long-scroll sectioned IA, commit-on-release draft slots, undo/redo and the a11y conventions verbatim — deliberately NOT restructured) | `8e9e59f` (the PR head; the squash sha lands at merge) | `pending` → PR #145 open (head `8e9e59f`); ALL 7 CI CHECKS GREEN on the first run (Build + lint + test = compileDebugKotlin + lintDebug + the JVM suites incl. the privacy scan, CodeQL, both vendored-engine jobs, the approval + actions analyzes); awaiting maintainer review/merge; rebase onto main after #144 merges (the duplicated r52 commits drop — the house stacked-PR pattern); editor `versionCode 18` (`0.4.13-edit-alpha`); NO new strings/drawables/dependencies/manifest/pipeline/test changes; CI is the compile judge (no gradle in the sandbox — the lex check + the host-literal scan are the local gates) |
 
 ## Architecture Decision Records (ADR) Registry
 
@@ -2229,3 +2230,57 @@ rides the next release-engineering pass, not this PR.
    `AspectRatioFrameLayout`, not `PlayerView`. All three fixed in one
    commit; the ledgers' setVolume mentions were corrected in the same
    pass rather than left lying.
+
+### Run #27 — 2026-11-07 (the r53 window: the photo editor's design-language round — the maintainer's "Same ux design also" instruction)
+
+**The task.** The maintainer's chat instruction of 2026-11-07 —
+"Same ux design also" — with the PAT re-supplied for the push/PR
+steps. No mockups accompanied the instruction: every design image in
+the session is a video screen (the r52 sheets), so the photo surface
+has no design image of its own.
+
+**The interpretation (flagged, never silent).** Apply the r52 design
+language — the Image-2 dark+violet chassis approved and shipped for
+the video editor — to the photo editor surface, the remaining old-UI
+part of the edit app (the r47 toad-green `EditorTheme`). The
+interpretation is flagged in the round report and the PR description;
+what the instruction does NOT cover (the photo editor's information
+architecture) is recorded as a maintainer decision owed (F-51), not
+assumed.
+
+**The change set.** Branch `ui/r53-photo-redesign` off the r52 PR
+#144 head `e6c5a7a` (the stacked-PR pattern); the spec pinned first
+to agent-ctx. Three files: `EditorTheme.kt` — the palette swap to
+the same ten pinned tokens as `VideoEditTheme` (Bg #0D0A14, Surface
+#17131F, SurfaceHigh #221B2E, Outline #3A3148, Accent #A78BFA,
+OnAccent #171126, AccentSoft #8B72E8, TextPrimary #F3F0FA,
+TextSecondary #A99FBF, Error #F2B8B5) with `secondaryContainer =
+accent` so the selected FilterChips render accent-filled with zero
+per-chip overrides (the r52 trick) and a few derived neutrals
+documented in the KDoc; `EditActivity.kt` — chrome restyle ONLY (the
+section labels + secondary text → onSurfaceVariant, the primary
+text/icons → onBackground, the header spinner → primary, the
+export-sheet tiles 0xEE101010 → 0xEE17131F, the color-swatch
+selection ring → accent); `apps/edit/build.gradle.kts` — versionCode
+18 (`0.4.13-edit-alpha`) with the per-round comment. NO new strings,
+drawables, dependencies, manifest, pipeline/layer, or test changes.
+
+**Honest scope.** The photo editor's information architecture (the
+long-scroll sectioned page), the commit-on-release draft slots,
+undo/redo and the a11y conventions are verbatim — deliberately NOT
+restructured to the video editor's tab-screen + Reset|Apply chassis:
+the photo mockups do not exist, and the IA is the battle-tested
+r30–r41 contract. The derived violet neutrals are documented
+derivations, not design-approved tokens (F-52). No gradle in the
+sandbox (ADR-0013): CI is the compile judge; the local gates are the
+lex check and the host-literal scan.
+
+**Next steps.** DONE: committed `8e9e59f` → pushed → **PR #145**
+opened → the CI poll — **ALL 7 CHECKS GREEN on the first run** (Build
++ lint + test = compileDebugKotlin + lintDebug + the JVM suites incl.
+the privacy scan, CodeQL, both vendored-engine jobs, the approval +
+actions analyzes) — no fix cycle this round (the boring-API
+discipline: only theme-role assignments and color-argument swaps,
+zero new APIs). Remaining: the maintainer's review/merge; then the
+rebase onto main after #144 merges (the duplicated r52 commits drop
+— the house stacked-PR pattern).

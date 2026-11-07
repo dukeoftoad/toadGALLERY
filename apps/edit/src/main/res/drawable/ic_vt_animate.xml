@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r52 video editor tab icon: animate (filmstrip). House style = the
+     gallery ic_nav_*.xml vectors: 24dp viewport, white fill, tinted in
+     Compose. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Filmstrip body (outer rect + counter-wound inner rect = the hole) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,5h18v14H3V5zM5,7v10h14V7H5z" />
+    <!-- Left perforation column -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M7,7h2v2H7V7zM7,11h2v2H7v-2zM7,15h2v2H7v-2z" />
+    <!-- Right perforation column -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15,7h2v2H15V7zM15,11h2v2H15v-2zM15,15h2v2H15v-2z" />
+</vector>

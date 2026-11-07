@@ -820,3 +820,66 @@ validation on the workflow PRs, and CI green at every head (34 wave
 runs + 12 completion-round runs + CI/CodeQL on merged main). The
 sandbox was recycled twice mid-campaign; the clone was rebuilt from
 the public remote each time.
+
+---
+
+## 2026-11-06 — r52 window (the video editor UI/UX redesign + the mute+volume bundle)
+
+- **F-40 (2026-11-06, open)** — Video text/effects pipeline. The
+  approved design includes a Text & Effects tab; the video pipeline
+  has no text/sticker/filter capability (ADR-0012 §2 excludes titles)
+  and the approved bundle's navigation resolution shipped real tool
+  tabs instead. IF the maintainer expands scope, the honest path is
+  media3's `OverlayEffect` (bitmap overlays previewed via the same
+  effect chain, export-realized by Transformer) + a font/color/
+  placement model shaped like the photo editor's `TextLayers`; a
+  follow-up design contract is owed before any code. No fake UI ships
+  in the meantime.
+- **F-41 (2026-11-06, open)** — Video-session undo/redo. The mock's
+  header shows undo/redo; the redesign deferred them (session-undo
+  semantics over the committed/draft model is its own design: what
+  commits a history step, how drafts interact, the export-busy edge).
+  The session state is one data class, so a snapshot stack is cheap
+  when the semantics are decided.
+- **F-42 (2026-11-06, open)** — Audio waveform strip. The mock shows a
+  waveform under the main filmstrip; no honest cheap decode path
+  exists (full audio decode via MediaExtractor for one decoration).
+  Options recorded for later: decode-once with progress + cache keyed
+  by media identity, or drop permanently. The filmstrip thumbnails are
+  real and shipped.
+- **F-43 (2026-11-06, open)** — Volume realization verification. The
+  export path rides `EditedMediaItem.Builder.setVolume` (media3
+  1.11.1). CI compiles it; the AUDIBLE gain and the >1f boost behavior
+  on device codecs are device-matrix rows (human-only per the
+  standing rule). If lint flags the `@FloatRange` shape on a 0f gain,
+  the recorded fix is a one-line gate change (strip-audio already
+  skips it).
+- **Carried** — D-1 root fix (§5.1 decision), R51-3 waves 3a–3d, PR
+  #134, PAT revocation (advised again after this round's push).
+
+## 2026-11-07 — r53 window (the photo editor's design-language round: the EditorTheme violet swap + the chrome restyle)
+
+- **F-51 (2026-11-07, open)** — The photo-editor IA unification
+  question. The r53 round restyles the photo editor's chrome but
+  keeps its long-scroll sectioned page and the commit-on-release
+  draft semantics verbatim, while the video editor (r52) runs the
+  tab-screen chassis with the Reset|Apply flow over the
+  committed/draft session. One design language now, two information
+  architectures — deliberate for this round (no photo mockups exist;
+  every design image is a video screen, and the long-scroll IA is
+  the battle-tested r30–r41 contract), but the per-tool-screen
+  question for the photo editor is a maintainer decision owed BEFORE
+  any restructure. No fake redesign ships in the meantime.
+- **F-52 (2026-11-07, open)** — The derived violet neutrals are
+  documented derivations, not design-approved tokens. `EditorTheme`'s
+  ten pinned tokens ride the maintainer-approved r52 approval; the
+  six derived roles in the KDoc (primaryContainer #2E2347,
+  onPrimaryContainer #EDE7FA, inversePrimary #7C5CE0,
+  tertiaryContainer #3A2D55, onTertiaryContainer #E6DFF7,
+  outlineVariant #2E2740) are this round's documented derivations.
+  If the maintainer pins exact values later, the theme file is the
+  single edit point.
+- **Carried** — D-1 root fix (§5.1 decision), R51-3 waves 3a–3d, PR
+  #134, the r52 video follow-ups (the text/effects pipeline,
+  video-session undo/redo, the waveform strip, the volume device
+  rows), PAT revocation (advised once this round's push lands).

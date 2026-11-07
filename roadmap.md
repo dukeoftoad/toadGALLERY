@@ -13,7 +13,82 @@ designs. No Flutter. CI is GitHub Actions.**
 
 ## Change log
 
-### v2.17 (2026-11-06, latest) --- the r51 audit-verification round: the r50 audit's fix plan executed and merged
+### v2.19 (2026-11-07, latest) --- the r53 photo-editor design round: the violet family scheme on EditorTheme + the EditActivity chrome restyle
+
+- **The flagged interpretation** --- the maintainer's "Same ux design
+  also" instruction (2026-11-07, the PAT re-supplied): apply the r52
+  design language (the Image-2 dark+violet chassis approved and
+  shipped for the video editor) to the photo editor --- the remaining
+  old-UI part of the edit app (the r47 toad-green `EditorTheme`).
+  The interpretation is flagged in the round report and the PR
+  description, never silent; what the instruction does NOT cover
+  (the photo IA) is recorded as a maintainer decision owed (F-51).
+- **The EditorTheme swap** --- the same ten pinned tokens as
+  `VideoEditTheme` (Bg #0D0A14, Surface #17131F, SurfaceHigh #221B2E,
+  Outline #3A3148, Accent #A78BFA, OnAccent #171126, AccentSoft
+  #8B72E8, TextPrimary #F3F0FA, TextSecondary #A99FBF, Error
+  #F2B8B5) with `secondaryContainer = accent` so the selected
+  FilterChips render accent-filled with zero per-chip overrides (the
+  r52 trick); a few derived neutrals documented in the KDoc ---
+  derivations, not design-pinned tokens (F-52 tracks the single edit
+  point).
+- **The chrome restyle** --- `EditActivity`'s hardcoded white/black
+  chrome maps to theme roles: the section labels and secondary text
+  → `onSurfaceVariant`, the primary text and icons → `onBackground`,
+  the header spinner → `primary`, the export-sheet tiles 0xEE101010
+  → 0xEE17131F, the color-swatch selection ring → the accent.
+  Behavior, state machine, information architecture (the long-scroll
+  sectioned page), commit-on-release draft slots, undo/redo and the
+  a11y conventions are verbatim --- deliberately NOT restructured
+  (no photo mockups exist; the IA is the battle-tested r30--r41
+  contract).
+- **versionCode 18** --- `0.4.13-edit-alpha`; no new strings,
+  drawables, dependencies, manifest, pipeline/layer, or test
+  changes; CI is the compile judge (no gradle in the sandbox --- the
+  lex check + the host-literal scan are the local gates).
+- **Still open** --- the D-1 root fix, the R51-3 waves, PR #134, the
+  r52 video follow-ups (all carried); new follow-ups: the
+  photo-editor IA-unification decision (F-51) and the derived-neutral
+  pinning (F-52).
+
+### v2.18 (2026-11-06, latest) --- the r52 video-editor redesign round: the Image-2 base surface + the mute+volume bundle
+
+- **The maintainer's approved bundle** --- "Image 2 base + option 2(a) +
+  2x + Mute+Volume": the crafted dark+violet design (Image 2) is the
+  chassis for every screen; the navigation resolution (option 2(a))
+  turns the mock's placeholder Effects tab into the two real tool tabs
+  (Extract, Animate) --- a six-tab bar where every tab is a real
+  capability, since text/stickers/filters stay off-video per
+  ADR-0012 §2; the speed factor is capped at the real 0.25x--2x plan
+  bounds (the mock's 4x endpoint dropped); and the Audio screen ships
+  Mute + a 0--200% Volume slider.
+- **Volume is the round's only new capability** ---
+  `VideoEditPlan.volume` (default 1f keeps every pre-r52 plan/test
+  byte-compatible) with structured validation (bounds [0..2] + the NaN
+  gate), realized as media3's `GainProcessor` in the export
+  effects chain (the first attempt rode `EditedMediaItem.Builder
+  .setVolume`, which the CI compile judge proved does not exist at the
+  pinned 1.11.1 --- corrected against the real artifacts) and
+  `player.volume` in the preview; five JVM tests pin it.
+  This extends the ADR-0012 §5 "no gain" boundary BY MAINTAINER
+  DECISION (2026-11-06); the phase-10 contract doc carries the record.
+- **The surface** --- one scaffold (header / preview+fit-zoom /
+  transport / timestamps / real-frame filmstrip / six-tab bar), tool
+  screens with the draft Reset/Apply + ✓-confirm flow, the two-handle
+  trim filmstrip with the live cut preview, the big-value speed screen
+  with presets, the nine-real-adjustment selector, the paused-player
+  frame preview, and the chips + width-dropdown animation screen with
+  the honest preflight. The palette is LOCAL to the video surface; the
+  r47 toad-green photo-editor theme is untouched.
+- **Recorded omissions (no fake UI)** --- text/stickers/filters on
+  video (ADR-0012), the mock's waveform strip (no honest cheap decode
+  path), header undo/redo (deferred with its own semantics question).
+- **Still open** --- the D-1 root fix, the R51-3 waves, PR #134 (all
+  carried from v2.17); new follow-ups: the video text/effects pipeline
+  (media3 OverlayEffect path) if the maintainer expands scope, and the
+  video-session undo/redo design.
+
+### v2.17 (2026-11-06) --- the r51 audit-verification round: the r50 audit's fix plan executed and merged
 
 - **The campaign** --- the r50 backend/ente audit's fix plan (PR #134)
   executed as eight disjoint fix/ci PRs (#135--#142, squash-merged to

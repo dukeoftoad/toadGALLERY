@@ -326,6 +326,35 @@ android {
         // shared EditorVersionMetadata rule and EditorLaunch.kt.
         versionCode = 16
         versionName = "0.4.11-edit-alpha"
+
+        // versionCode 17 (r52 round): the video editor's UI/UX redesign ---
+        // the maintainer-approved Image-2 base chassis (dark+violet fixed
+        // palette local to the video surface, preview top, transport row,
+        // real-frame filmstrip, six-tab bottom bar, per-tab screens with
+        // the confirm/reset/apply flow) over the UNCHANGED r42 plan
+        // semantics, plus the maintainer-approved mute+volume bundle (the
+        // 0..200 percent slider realized as VideoEditPlan.volume at export
+        // and player.volume in the preview). The photo editor's r47
+        // toad-green EditorTheme is untouched.
+        versionCode = 17
+        versionName = "0.4.12-edit-alpha"
+
+        // versionCode 18 (r53 round): the photo editor's design-language
+        // round --- the maintainer's "Same ux design also" instruction
+        // (2026-11-07) interpreted (and flagged in the PR) as applying the
+        // r52 Image-2 design language to the photo editor surface: the
+        // r47 toad-green EditorTheme retires to the violet family scheme
+        // (the same ten pinned tokens as VideoEditTheme --- Bg, Surface,
+        // SurfaceHigh, Outline, Accent, OnAccent, AccentSoft, TextPrimary,
+        // TextSecondary, Error --- with secondaryContainer = accent so the
+        // selected FilterChips render accent-filled with zero per-chip
+        // overrides), and the EditActivity chrome maps its hardcoded
+        // white/black chrome to theme roles. Behavior, state machine,
+        // information architecture (the long-scroll sectioned page),
+        // commit-on-release draft slots, undo/redo and the a11y
+        // conventions are verbatim --- NOT restructured.
+        versionCode = 18
+        versionName = "0.4.13-edit-alpha"
     }
 
     buildFeatures {

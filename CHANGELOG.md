@@ -4,6 +4,114 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r53 round (editor versionCode 18; edit `0.4.13-edit-alpha`; gallery unchanged)
+
+The photo editor's design-language unification: the maintainer's
+"Same ux design also" instruction (2026-11-07, the PAT re-supplied)
+is interpreted — the interpretation flagged in the round report and
+the PR description — as applying the r52 design language (the
+Image-2 dark+violet chassis approved and shipped for the video
+editor) to the photo editor surface, the remaining old-UI part of
+the edit app (the r47 toad-green `EditorTheme`). The chrome restyle
+maps the activity's hardcoded white/black to theme roles; the
+behavior, state machine, information architecture (the long-scroll
+sectioned page), commit-on-release draft slots, undo/redo and the
+a11y conventions are verbatim — deliberately NOT restructured (the
+photo mockups do not exist; every design image is a video screen,
+and the IA is the battle-tested r30–r41 contract). One PR (**#145**,
+`ui/r53-photo-redesign`, stacked on the r52 PR #144 per the house
+stacked-PR pattern, head `8e9e59f`); CI is the compile judge per
+ADR-0013 — ALL 7 CHECKS GREEN on the first run (Build + lint + test,
+CodeQL, both vendored-engine jobs, the approval + actions analyzes).
+
+### Changed
+
+- **[edit] The EditorTheme palette swap (the toad-green retires)**
+  (branch `ui/r53-photo-redesign`): the photo editor's r47 theme
+  carries the same ten pinned tokens as the video surface's
+  `VideoEditTheme` — Bg #0D0A14, Surface #17131F, SurfaceHigh
+  #221B2E, Outline #3A3148, Accent #A78BFA, OnAccent #171126,
+  AccentSoft #8B72E8, TextPrimary #F3F0FA, TextSecondary #A99FBF,
+  Error #F2B8B5 — with `secondaryContainer = accent` so the selected
+  FilterChips render accent-filled with zero per-chip overrides (the
+  r52 trick). A few derived neutrals are documented in the KDoc
+  (primaryContainer #2E2347, onPrimaryContainer #EDE7FA,
+  inversePrimary #7C5CE0, tertiaryContainer #3A2D55,
+  onTertiaryContainer #E6DFF7, outlineVariant #2E2740) — documented
+  derivations, not design-pinned tokens (F-52 tracks the single edit
+  point if the maintainer pins exact values later).
+- **[edit] The chrome restyle (`EditActivity.kt` only)** (same
+  branch): the hardcoded white/black chrome maps to theme roles —
+  the section labels and secondary text read `onSurfaceVariant`, the
+  primary text and icons read `onBackground`, the header spinner
+  reads `primary`, the export-sheet tiles drop `0xEE101010` for
+  `0xEE17131F`, and the color-swatch selection ring reads the
+  accent. No behavior change: the state machine, the long-scroll
+  sectioned information architecture, the commit-on-release draft
+  slots, undo/redo and the a11y conventions are verbatim; the IA is
+  NOT restructured to the video editor's tab-screen chassis (the
+  honest-scope line above; F-51 records the unification question).
+- **[edit] versionCode 18** (`0.4.13-edit-alpha`): the per-round
+  version-line comment in `apps/edit/build.gradle.kts` documents the
+  round. No new strings, no new drawables, no dependencies, no
+  manifest changes, no pipeline/layer changes, no test changes.
+
+## [Unreleased] — the r52 round (editor versionCode 17; edit `0.4.12-edit-alpha`; gallery unchanged)
+
+The video editor's UI/UX redesign: the maintainer-approved Image-2 base
+chassis replaces the r42 long-scroll surface, with the maintainer's
+bundle decisions applied — Image 2 as the base design, the approved
+navigation resolution for the tab bar, the speed factor capped at the
+real 0.25x–2x plan bounds (the mock's 4x slider endpoint dropped), and
+the mute+volume audio screen. The r42 plan semantics are otherwise
+unchanged; the only new capability is the audio gain. One PR
+(`ui/r52-video-redesign`); CI is the compile judge per ADR-0013.
+
+### Added
+
+- **[video] Volume — the mute+volume bundle.** `VideoEditPlan.volume`
+  (default 1f = unchanged, so every pre-r52 plan and test is
+  byte-compatible) with structured validation: bounds [0..2] and a NaN
+  gate (every comparison against NaN is false, so the bounds check
+  alone would let it through). The export applies it via media3's
+  `GainProcessor` in the effects chain's audio-processor slot — skipped on
+  the strip-audio path (mute wins by construction) and at the exact 1f identity (the
+  neutral-adjustment rule: a no-op pass is never attached) --- the CI
+  compile judge caught the first attempt (`EditedMediaItem.Builder
+  .setVolume` does not exist at the pinned 1.11.1; the real surface was
+  verified against the downloaded artifacts, not guessed again); the
+  preview realizes the same gain as `player.volume`. The Audio screen carries the 0–200%
+  step-5 slider; five JVM tests pin the rules (PR: this round).
+
+### Changed
+
+- **[video] The surface redesign (Image 2 base).** A dark+violet fixed
+  palette LOCAL to the video surface (the photo editor's r47 toad-green
+  `EditorTheme` untouched) over a single-scaffold chassis: the header
+  (back / title / Export pill on main, ✓ confirm on tool screens), the
+  preview with the fit/zoom toggle, the transport row (±1 s / play-pause),
+  the timestamp row, and a REAL-frame filmstrip (ten decoded thumbnails,
+  drag-to-scrub). A six-tab bottom bar — Trim, Speed, Audio, Adjust,
+  Extract, Animate — the maintainer-approved navigation resolution in
+  place of the mock's placeholder Effects tab (text/stickers/filters are
+  off-video per ADR-0012 §2; every tab that ships is a real tool). Tool
+  screens run the draft flow: edits stay drafts with Reset (back to
+  committed) and Apply / ✓ (commit); Trim gets the two-handle filmstrip
+  with the live cut preview and the duration read; Speed gets the big
+  factor display + preset chips inside the real bounds; Audio gets
+  Mute + Volume (the honest no-audio note replaces both on a silent
+  clip); Adjust exposes the real nine ADR-0012 adjustments as a
+  selectable chip row with the live-preview slider; Extract previews the
+  frame through the paused player; Animate moves to frame-rate chips
+  (8/12/15/24/30), a fixed-choice width dropdown (inside the
+  round-pinned 64..1280 caps), and the honest preflight estimate.
+  **Recorded omissions (no fake UI):** text/stickers/filters on video
+  (ADR-0012), the mock's audio waveform strip (decorative; no honest
+  cheap decode path), and header undo/redo (deferred with its own
+  semantics question). The activity keeps every r42 behavior: the
+  plan building, validators, permission gate, preflight, progress +
+  cancellation, and the non-destructive MediaStore publish.
+
 ## [Unreleased] — the r51 round (versionCode 38 unchanged; gallery `0.4.5-alpha`)
 
 The audit-verification round: the r50 backend/ente audit's fix plan

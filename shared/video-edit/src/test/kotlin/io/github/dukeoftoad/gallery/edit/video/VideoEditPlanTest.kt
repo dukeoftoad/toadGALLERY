@@ -7,9 +7,9 @@ import org.junit.Test
 
 /**
  * The VideoEditPlan rules (r42, decisions 1-4): the trim validation matrix,
- * the speed-plan rules, the monotonicity rule, the derived-duration math
- * and the audio-fact handling. Every rule is a structured failure with an
- * honest message --- never a silent clamp.
+ * the speed-plan rules, the monotonicity rule, the derived-duration math,
+ * the audio-fact handling and the r52 volume-gain bounds. Every rule is a
+ * structured failure with an honest message --- never a silent clamp.
  */
 class VideoEditPlanTest {
 
@@ -20,6 +20,7 @@ class VideoEditPlanTest {
         segments: List<SpeedSegment> = emptyList(),
         audioTrackPresent: Boolean = true,
         mute: Boolean = false,
+        volume: Float = 1f,
         adjustments: VideoAdjustParams = VideoAdjustParams(),
     ) = VideoEditPlan(
         durationMs = durationMs,
@@ -29,6 +30,7 @@ class VideoEditPlanTest {
         speedSegments = segments,
         audioTrackPresent = audioTrackPresent,
         mute = mute,
+        volume = volume,
         adjustments = adjustments,
     )
 
@@ -353,5 +355,49 @@ class VideoEditPlanTest {
         val reason = (result as VideoPlanValidation.Invalid).reason
         assertTrue(reason.contains("brightness"))
         assertTrue(reason.contains("101"))
+    }
+
+    // ---- the r52 volume gain ----
+
+    @Test
+    fun `a plan without a volume argument validates and carries the 1f unchanged default`() {
+        val defaultPlan = plan()
+        assertTrue(VideoEditPlanValidator.validate(defaultPlan) is VideoPlanValidation.Valid)
+        assertTrue("volume must default to the 1f identity", defaultPlan.volume == 1f)
+    }
+
+    @Test
+    fun `volume at the 0f and 2f bounds is valid`() {
+        for (volume in listOf(0f, 2f)) {
+            val result = VideoEditPlanValidator.validate(plan(volume = volume))
+            assertTrue("volume $volume must be valid", result is VideoPlanValidation.Valid)
+        }
+    }
+
+    @Test
+    fun `volume below 0f and above 2f is a structured failure`() {
+        for (volume in listOf(-0.5f, 2.5f)) {
+            val result = VideoEditPlanValidator.validate(plan(volume = volume))
+            assertTrue("volume $volume must be refused", result is VideoPlanValidation.Invalid)
+            assertTrue(
+                (result as VideoPlanValidation.Invalid).reason.contains("outside"),
+            )
+        }
+    }
+
+    @Test
+    fun `a NaN volume is a structured failure`() {
+        val result = VideoEditPlanValidator.validate(plan(volume = Float.NaN))
+        assertTrue(result is VideoPlanValidation.Invalid)
+        assertTrue(
+            (result as VideoPlanValidation.Invalid).reason.contains("not a number"),
+        )
+    }
+
+    @Test
+    fun `mute and volume coexist in one valid plan`() {
+        val coexistPlan = plan(mute = true, volume = 0.5f)
+        assertTrue(VideoEditPlanValidator.validate(coexistPlan) is VideoPlanValidation.Valid)
+        assertEquals(MuteDecision.STRIP_AUDIO, coexistPlan.muteDecision())
     }
 }

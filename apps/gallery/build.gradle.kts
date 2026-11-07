@@ -438,6 +438,13 @@ android {
         // 0.4.5-alpha. All four flavors share this one versionCode.
         versionCode = 40
         versionName = "0.4.5-alpha"
+        // The launcher-alias consolidation's default: the canonical
+        // basic build keeps its MAIN/LAUNCHER entry (the ONE family
+        // icon). The engine-family flavors override this to false in
+        // their blocks below. (The placeholder lives here in
+        // defaultConfig --- the android block itself has no
+        // manifestPlaceholders receiver in the Kotlin DSL.)
+        manifestPlaceholders["launcherAliasEnabled"] = true
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // issue #20 privacy suite
     }
 
@@ -537,14 +544,15 @@ android {
     //
     // r55 (the one-launcher unification round): the MAIN/LAUNCHER entry
     // lives on an activity-alias (main manifest, .LauncherAlias) whose
-    // enabled state is THIS placeholder. defaultConfig pins true (the
-    // canonical basic build keeps its icon); every engine-family flavor
-    // below overrides it to false, so exactly ONE toadGALLERY icon can
+    // enabled state is the launcherAliasEnabled placeholder
+    // (defaultConfig pins true --- the canonical basic build keeps its
+    // icon); every engine-family flavor below overrides it to false, so
+    // exactly ONE toadGALLERY icon can
     // exist on a device no matter how many family members install side
     // by side --- the launcher-less builds open from the Settings
     // "Installed components" section instead. The launcher test
-    // (LauncherConsolidationTest) pins the contract per flavor.
-    manifestPlaceholders["launcherAliasEnabled"] = true
+    // (LauncherConsolidationTest) pins the contract per flavor. The
+    // default (basic's) value lives in defaultConfig above.
     flavorDimensions += "engine"
     productFlavors {
         // The canonical gallery: no engine library, no engine UI, the

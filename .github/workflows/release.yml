@@ -521,7 +521,7 @@ jobs:
           fail_on_unmatched_files: true
           files: ${{ env.RELEASE_STAGE }}/*
           body: |
-            **TESTING pre-release --- the r46 APK matrix.** The gallery now
+            **TESTING pre-release --- the r${{ env.ROUND }} APK matrix.** The gallery
             ships as FOUR flavors and the companion editor as the fifth
             artifact, all built and published from the same commit. Not a
             stable release; the device-verification matrix stays human-only

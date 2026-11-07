@@ -2411,3 +2411,90 @@ APK carried a permission r46's did not. Fix `fix/r54-release-permission-gate`: a
 corrections + the record appended to `docs/phase-11/permissions-and-privacy.md`. The release
 re-cuts as `v0.4.5-alpha-r55` (the r54 tag never published; r55's content rides the same cut)
 once the fix and PR #148 are green.
+
+### Run #30 — 2026-11-08 (the r56 window: the face-index directory fix — SQLITE_CANTOPEN on the r55 device failure)
+
+**The task.** The maintainer's chat instruction of 2026-11-08 —
+"bugs on latest build, find the root cause and proposed solution for
+my approval" — with two r55 device screenshots attached: BOTH engine
+flavors of the gallery APK failing at "Start face/semantic index"
+with `face index store did not open: unable to open database file:
+/data/user/0/io.github.dukeoftoad.gallery.{semantic,face}/files/face-index/ml-index.sqlite`.
+The maintainer's follow-up "approved all -- proceed" authorized the
+two-layer fix proposed in the root-cause report.
+
+**The root cause.** NOBODY created `filesDir/face-index/` before
+opening the shared `ml-index.sqlite` store. SQLite does NOT create
+parent directories itself and returns `SQLITE_CANTOPEN` ("unable to
+open database file") when the parent of the requested db path is
+missing. Reproduced locally with the system SQLite (3.53) on both
+trigger conditions: a fresh install (the dir had never been created)
+AND right after `AiEngineViewModel.resetFaceIndex()`'s
+`faceIndexDir().deleteRecursively()` (the next Start of EITHER queue
+fails, because the CLIP queue writes through the same `ml-index.sqlite`
+the face queue opens — the r48 comment at `ClipIndexWorker.kt:143-146`
+pins this sharing). The r47 "honesty" round surfaced the cause-less
+fallback message; this round removes the cause itself. The error
+appeared on the r55 build (v0.4.5-alpha-r55, published 2026-11-07
+11:26 UTC) because the maintainer's fresh install of the r55 APK
+hit the fresh-install case directly.
+
+**The shape of the round.** Defense in depth, two layers, each
+independently sufficient:
+(1) **Rust half** (`engine/crates/toad-ml-jni/src/store.rs::open`):
+`std::fs::create_dir_all(dir)` before joining `ml-index.sqlite`. The
+JNI contract is "pass a directory path, get an open store"; pre-r56
+it silently required the caller to have `mkdirs()`'d. The Rust half
+is the single source of truth for the contract — any future caller
+cannot regress. Pinned by the new
+`store::tests::store_open_creates_missing_directory` regression test
+(the existing `open_temp_store` test helper pre-creates the dir, so
+the missing-parent case was uncovered).
+(2) **Kotlin half** (`apps/gallery/.../ml/index/FaceIndexWorker.kt`):
+every face-index directory access routes through ONE `internal`
+`faceIndexDirFor(filesDir)` helper that `mkdirs()`s on access. The
+r55 bug was NINE duplicated `File(app.filesDir, FACE_INDEX_DIR_NAME)`
+call sites — four production open paths (`FaceIndexWorker`,
+`ClipIndexWorker`, `PeopleEngineAdapter`, `MagicSearchEngineAdapter`),
+the `AiEngineViewModel.faceIndexDir()` reset helper, and four
+state-file paths (`PeopleViewModel`, `PersonDetailViewModel`,
+`AlbumsViewModel`'s People + Things repos, `ThingsDetailViewModel`)
+— each without the mkdirs; consolidating to one helper removes the
+duplication that let the mkdirs slip through every site. The four
+engine adapter call sites ALSO keep a runtime `.also { it.mkdirs() }`
+for defense in depth (a direct constructor call bypassing the
+factory cannot regress). Pinned by the new `FaceIndexDirForTest`
+JVM regression suite (three cases: fresh-install creation,
+post-Reset recreation, idempotency on an existing dir with a
+sentinel file).
+
+**The gates.** No `versionCode`/`versionName` bump (the r55 APKs
+update in place over the testing devices once this lands and
+re-cuts as `v0.4.5-alpha-r56`); no schema migration; no new
+permissions; no new dependencies. Defense in depth: the Kotlin half
+(idiomatic source of truth) and the Rust half (the JNI contract
+source of truth) each independently prevent the regression. The
+Rust regression test could not be run locally (the sandbox has
+3.9 GiB RAM, no swap; the workspace's `ort` + `jxl-oxide` +
+`nalgebra` deps OOM-Kill the release build) — CI will verify on
+push (F-59).
+
+**Coordination.** The PR is gallery + engine only; the open editor
+PRs (#150 `feat/r56-editor-craft`, #151 `refactor/r57-panel-seam`)
+touch `apps/edit` exclusively and do not collide. A coordination
+comment is posted on the PR for the other agents working the
+editor. The local clone was on `edit/r57-panel-seam` (the r57 WIP);
+that work was `git stash`ed before branching `fix/r56-face-index-mkdirs`
+off `origin/main` so the r57 WIP is preserved for the editor agents'
+continuation.
+
+**Remaining.** The maintainer's review/merge; the re-cut as
+`v0.4.5-alpha-r56`; the carried items (D-1 root fix, R51-3 waves,
+PR #134, the r52 video follow-ups, F-52 the derived neutrals,
+F-53 the AI tab granularity, F-54 the video BackHandler port,
+F-55 the beta naming, F-56 the deeper AI/ML unification, F-57 the
+components probe freshness), the new F-58 (the post-Reset re-index
+UX wrinkle: a face-only Reset silently resets the CLIP bookkeeping
+too, because the dir is shared — defer to a maintainer taste call)
+and F-59 (the Rust test local-run OOM, defer to CI), PAT revocation
+advised again after this round's push.

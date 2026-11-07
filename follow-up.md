@@ -940,3 +940,34 @@ the public remote each time.
   volume device rows), F-52 (pin the derived violet neutrals),
   F-53 (AI tab granularity), F-54 (video BackHandler port), PAT
   revocation (advised again after this round's push).
+
+## 2026-11-08 — r56 window (the face-index directory fix: SQLITE_CANTOPEN on fresh install + after Reset)
+
+- **F-58 (2026-11-08, open)** — The post-Reset re-index UX. r56 fixes
+  the open so the next Start works after Reset, but the Reset-then-
+  Start path still hits a UX wrinkle: `resetFaceIndex`'s
+  `deleteRecursively()` runs on a directory the helper ALSO touches
+  (so the dir is recreated empty before the next Start's open);
+  however, the CLIP queue's `clip-index-state.json` is also gone (the
+  face Reset deletes the WHOLE shared dir), so a face-only Reset
+  silently resets the CLIP bookkeeping too. The r50 F-38 comment
+  flagged this (the dir is shared); r56 does not change the scope,
+  but if the maintainer wants a face-only reset that preserves the
+  CLIP index, the reset needs to delete `ml-index.sqlite` + the
+  face state file selectively, not the whole directory. Defer to a
+  maintainer taste call.
+- **F-59 (2026-11-08, open)** — The Rust regression test
+  (`store::tests::store_open_creates_missing_directory`) could not be
+  run locally (the sandbox has 3.9 GiB RAM, no swap; the workspace's
+  `ort` + `jxl-oxide` + `nalgebra` deps OOM-Kill the release build).
+  CI will verify on push. If CI is green the test is good; if not,
+  the next iteration trims the test's transitive build cost (the test
+  is correct, but the workspace is heavy).
+- **Carried** — D-1 root fix (§5.1 decision), R51-3 waves 3a–3d, PR
+  #134, the r52 video follow-ups (F-40 the text/effects pipeline,
+  F-41 video-session undo/redo, F-42 the waveform strip, F-43 the
+  volume device rows), F-52 (pin the derived violet neutrals),
+  F-53 (AI tab granularity), F-54 (video BackHandler port),
+  F-55 (beta naming), F-56 (deeper AI/ML unification), F-57
+  (components probe freshness), PAT revocation (advised again after
+  this round's push).

@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.github.dukeoftoad.gallery.data.MediaItem
-import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.index.faceIndexDirFor
 import io.github.dukeoftoad.gallery.ml.search.MagicSearchEngineAdapter
 import io.github.dukeoftoad.gallery.ml.search.queryMagicSearchMedia
 import io.github.dukeoftoad.gallery.ml.things.ThingsCollection
@@ -84,8 +84,9 @@ class ThingsDetailViewModel(
 
     private val repository = ThingsRepository(
         engine = engineAdapter,
+        // r56: faceIndexDirFor mkdirs()s --- see FaceIndexWorker.
         store = ThingsStateFile(
-            File(File(app.filesDir, FACE_INDEX_DIR_NAME), THINGS_STATE_FILE_NAME),
+            File(faceIndexDirFor(app.filesDir), THINGS_STATE_FILE_NAME),
         ),
         queryMedia = { fileIds -> queryMagicSearchMedia(app.contentResolver, fileIds) },
     )

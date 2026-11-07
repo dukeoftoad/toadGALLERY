@@ -119,7 +119,17 @@ class FaceIndexWorker(
             }
         }
 
-        val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
+        // r56: the face-index directory MUST exist before the JNI store
+        // open --- SQLite returns SQLITE_CANTOPEN ("unable to open
+        // database file") when the parent of the requested db path is
+        // missing, which is exactly the r55 device failure on a fresh
+        // install AND after Reset (which deleteRecursively()'d the
+        // dir). Routes through the single `faceIndexDirFor` helper so
+        // the mkdirs() contract lives in one place (the r55 bug was the
+        // four-way duplication that let it slip through every site).
+        // The Rust half in `toad-ml-jni::store::open` also
+        // `create_dir_all()`s for defense in depth.
+        val faceIndexDir = faceIndexDirFor(app.filesDir)
         // r47 honesty fix, part 2: the JNI store open THROWS
             // IllegalStateException on a native failure --- it does not
             // only return false (the facade's contract propagates the
@@ -309,6 +319,31 @@ const val FACE_INDEX_WORK_NAME = "face-index-queue"
 
 /** The app-private directory the ML store, the state file and the reset share. */
 const val FACE_INDEX_DIR_NAME = "face-index"
+
+/**
+ * The app-private face-index directory under [filesDir], CREATED on access.
+ *
+ * r56: the directory MUST exist before the JNI store open or SQLite returns
+ * SQLITE_CANTOPEN ("unable to open database file") for the requested
+ * `<dir>/ml-index.sqlite` path. The r55 device failure (both flavors:
+ * `io.github.dukeoftoad.gallery.semantic` and `io.github.dukeoftoad.gallery.face`)
+ * traced to nobody creating `filesDir/face-index/` before the open --- on a
+ * fresh install AND right after `AiEngineViewModel.resetFaceIndex()`'s
+ * `deleteRecursively()`. The four production open paths
+ * ([FaceIndexWorker], [ClipIndexWorker], `PeopleEngineAdapter`,
+ * `MagicSearchEngineAdapter`) and the Settings card's reset helper ALL route
+ * through this single function so the directory-creation contract lives in
+ * ONE place --- the r55 bug was the four-way duplication that let the
+ * mkdirs() slip through every site. The Rust half of the fix lives in
+ * `toad-ml-jni::store::open` (`create_dir_all` before the join) for defense
+ * in depth, so a future caller cannot regress; this Kotlin half is the
+ * idiomatic source of truth.
+ *
+ * `filesDir` is the parameter (not `Application`) so the function is testable
+ * against a JVM temporary folder without Robolectric or the engine stack.
+ */
+internal fun faceIndexDirFor(filesDir: java.io.File): java.io.File =
+    java.io.File(filesDir, FACE_INDEX_DIR_NAME).also { it.mkdirs() }
 
 /** The queue's state file, inside [FACE_INDEX_DIR_NAME]. */
 const val FACE_INDEX_STATE_FILE_NAME = "index-state.json"

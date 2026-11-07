@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r56: the edit app's craft round (the honest-thumbnail chips, the
+     crafted slider rows, the press-and-hold compare, the real bottom
+     sheets, the chrome extraction + the screenshot harness). Only NEW
+     concepts live here; everything else reuses the r30-r54 strings in
+     their original files. -->
+<resources>
+    <!-- The canvas compare: the pill naming what the user is looking at
+         while the press-and-hold compare shows the untouched decode. -->
+    <string name="editor_r56_compare_badge">Original</string>
+</resources>

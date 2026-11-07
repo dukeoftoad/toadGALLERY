@@ -20,18 +20,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,12 +44,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -60,6 +60,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -965,26 +966,9 @@ private fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = whe
     else -> copy(magenta = band)
 }
 
-/**
- * The r54 photo surface's screens: the main chassis plus the ten tool
- * tabs (the video editor's EditorScreen adapted). Labels reuse the
- * section-header strings wherever one exists; the Adjust tab reuses the
- * video surface's slider icon --- one app, one icon vocabulary.
- */
-private enum class PhotoScreen(val labelRes: Int, val iconRes: Int) {
-    /** The main chassis; never a tab (the tab bar shows the ten tools only). */
-    Main(R.string.editor_app_name, 0),
-    Adjust(R.string.editor_section_adjust, R.drawable.ic_vt_adjust),
-    Color(R.string.editor_pt_tab_color, R.drawable.ic_pt_color),
-    Looks(R.string.editor_section_filters, R.drawable.ic_pt_looks),
-    Frames(R.string.editor_section_frames, R.drawable.ic_pt_frames),
-    Text(R.string.editor_section_text, R.drawable.ic_pt_text),
-    Stickers(R.string.editor_section_stickers, R.drawable.ic_pt_sticker),
-    Draw(R.string.editor_section_drawing, R.drawable.ic_pt_draw),
-    Regions(R.string.editor_section_regions, R.drawable.ic_pt_region),
-    Ai(R.string.editor_pt_tab_ai, R.drawable.ic_pt_ai),
-    Crop(R.string.editor_section_geometry, R.drawable.ic_pt_crop),
-}
+// The r56 move: the PhotoScreen enum, the tool header and the tab bar now
+// live in `PhotoChrome.kt` (composable in isolation --- the edit screenshot
+// harness renders them); this file keeps the chassis logic.
 
 /**
  * The recipe-field editors --- the tools whose whole surface is a set of
@@ -2259,6 +2243,20 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // Keyed on the selections AND both modes: the handler restarts
         // when any of them changes, and every value it reads is a LIVE
         // delegated state so long-lived closures never see stale data.
+        // r56: the press-and-hold BEFORE/AFTER compare --- the untouched
+        // decode (previewBase) under the finger while held, the pipelined
+        // preview on release. The original is ALREADY in memory for the
+        // render loop, so the compare costs nothing. Gated to the Main
+        // chassis with no paint mode and no layer selection (those gestures
+        // own the canvas); everywhere else the modifier is inert.
+        val compareEligible = screen == PhotoScreen.Main && !drawMode && !regionMode && !eraseMode &&
+            selectedTextLayerId == null && selectedStickerLayerId == null && !exporting
+        var showOriginal by remember { mutableStateOf(false) }
+        // The compare renders the SAME compose type the pipeline preview uses:
+        // previewBase is the platform decode, wrapped once per decode (the
+        // wrapper is a view of the same pixel buffer, not a copy).
+        val originalImage = remember(previewBase) { previewBase?.asImageBitmap() }
+
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -2417,10 +2415,28 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             paintingErase = false
                         },
                     )
+                }
+                // r56: the compare gesture --- a second, INDEPENDENT pointer
+                // observer alongside the drag handler above (drag still owns
+                // movement; the compare only watches press/release, and only
+                // where the drag handler is inert anyway).
+                .pointerInput(compareEligible) {
+                    if (compareEligible) {
+                        detectTapGestures(
+                            onPress = {
+                                showOriginal = true
+                                try {
+                                    awaitRelease()
+                                } finally {
+                                    showOriginal = false
+                                }
+                            },
+                        )
+                    }
                 },
             contentAlignment = Alignment.Center,
         ) {
-            val image = previewImage
+            val image = if (showOriginal) originalImage else previewImage
             if (image != null) {
                 Image(
                     bitmap = image,
@@ -2465,6 +2481,25 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             } else {
                 CircularProgressIndicator(color = Color.White)
             }
+            // r56: the compare badge --- while the original shows, a small
+            // pill names what the user is looking at (honesty: the canvas
+            // must never silently swap content).
+            if (showOriginal) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.editor_r56_compare_badge),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
         }
 
         // ---- The r41 settings sheet (the editor's FIRST, one row) ----
@@ -2472,130 +2507,148 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // permanent disable hides the entry AND the stage refuses even
         // with a restored sidecar (the layer stays verbatim, the stage
         // skips --- pinned in RetouchConsentTest + AiRenderTest).
+        // r56: a real bottom sheet (the gallery ViewerScreen's M3 pattern)
+        // --- the sheet renders in its own window, so the canvas no longer
+        // shrinks under the rows while it is open. Same content, same
+        // consent machine.
         if (settingsOpen && !exporting) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xEE17131F))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ModalBottomSheet(
+                onDismissRequest = { settingsOpen = false },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                Text(
-                    text = stringResource(R.string.editor_settings),
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.semantics { heading() },
-                )
-                Text(
-                    text = stringResource(R.string.editor_settings_retouch_title),
-                    color = MaterialTheme.colorScheme.onBackground,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                if (retouchConsent == RetouchConsent.PERMANENTLY_DISABLED) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 24.dp),
+                ) {
                     Text(
-                        text = stringResource(R.string.editor_settings_retouch_disabled),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
+                        text = stringResource(R.string.editor_settings),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.semantics { heading() },
                     )
-                } else {
-                    TextButton(
-                        onClick = {
-                            val next = RetouchConsentMachine.onPermanentlyDisable(retouchConsent)
-                            if (activity.retouchConsentStore.save(next)) {
-                                retouchConsent = next
-                            }
-                        },
-                        enabled = !exporting && !aiBusy,
-                    ) {
-                        Text(stringResource(R.string.editor_settings_retouch_disable))
+                    Text(
+                        text = stringResource(R.string.editor_settings_retouch_title),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (retouchConsent == RetouchConsent.PERMANENTLY_DISABLED) {
+                        Text(
+                            text = stringResource(R.string.editor_settings_retouch_disabled),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    } else {
+                        TextButton(
+                            onClick = {
+                                val next = RetouchConsentMachine.onPermanentlyDisable(retouchConsent)
+                                if (activity.retouchConsentStore.save(next)) {
+                                    retouchConsent = next
+                                }
+                            },
+                            enabled = !exporting && !aiBusy,
+                        ) {
+                            Text(stringResource(R.string.editor_settings_retouch_disable))
+                        }
                     }
                 }
             }
         }
 
         // ---- The export sheet (format + quality) ----
+        // r56: a real bottom sheet (the settings sheet's rationale) --- the
+        // format/quality/policy rows overlay the canvas instead of squeezing
+        // it; same content, same policy floor, same requestSave().
         val choice = exportChoice
         if (choice != null && !exporting) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xEE17131F))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ModalBottomSheet(
+                onDismissRequest = { exportChoice = null },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    ExportFormat.entries.forEach { format ->
-                        FilterChip(
-                            selected = choice.format == format,
-                            onClick = { exportChoice = choice.copy(format = format) },
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 24.dp),
+                ) {
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        ExportFormat.entries.forEach { format ->
+                            FilterChip(
+                                selected = choice.format == format,
+                                onClick = { exportChoice = choice.copy(format = format) },
+                                enabled = !exporting,
+                                label = { Text(format.name) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                    }
+                    if (choice.format != ExportFormat.PNG) {
+                        Text(
+                            text = stringResource(R.string.editor_quality, choice.quality),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        val qualityName = stringResource(R.string.editor_a11y_quality)
+                        val qualityState = stringResource(R.string.editor_quality, choice.quality)
+                        LabeledSlider(
+                            name = qualityName,
+                            label = qualityState,
+                            valueText = choice.quality.toString(),
+                            value = choice.quality.toFloat(),
+                            valueRange = 1f..100f,
                             enabled = !exporting,
-                            label = { Text(format.name) },
-                            modifier = Modifier.padding(end = 8.dp),
+                            onChange = { exportChoice = choice.copy(quality = it) },
+                            resetValue = ExportPlan.DEFAULT_QUALITY,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.editor_png_lossless),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
-                }
-                if (choice.format != ExportFormat.PNG) {
-                    Text(
-                        text = stringResource(R.string.editor_quality, choice.quality),
-                        color = MaterialTheme.colorScheme.onBackground,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    val qualityName = stringResource(R.string.editor_a11y_quality)
-                    val qualityState = stringResource(R.string.editor_quality, choice.quality)
-                    Slider(
-                        value = choice.quality.toFloat(),
-                        onValueChange = { exportChoice = choice.copy(quality = it.toInt()) },
-                        valueRange = 1f..100f,
-                        modifier = Modifier.semantics {
-                            contentDescription = qualityName
-                            stateDescription = qualityState
-                        },
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.editor_png_lossless),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
 
-                // ---- The per-export metadata-policy choice (r31) ----
-                // The launch request's policy is the privacy floor: options
-                // that would strip LESS than the request are disabled (the
-                // editor respects the requested policy exactly, contract 4.4).
-                Text(
-                    text = stringResource(R.string.editor_section_metadata),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    MetadataPolicy.entries.forEach { option ->
-                        FilterChip(
-                            selected = (choice.metadataPolicy ?: policy) == option,
-                            onClick = { exportChoice = choice.copy(metadataPolicy = option) },
-                            enabled = !exporting &&
-                                !ExportPolicyChoice.isBlockedByFloor(policy, option),
-                            label = { Text(policyLabel(option)) },
-                            modifier = Modifier.padding(end = 8.dp),
+                    // ---- The per-export metadata-policy choice (r31) ----
+                    // The launch request's policy is the privacy floor: options
+                    // that would strip LESS than the request are disabled (the
+                    // editor respects the requested policy exactly, contract 4.4).
+                    Text(
+                        text = stringResource(R.string.editor_section_metadata),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        MetadataPolicy.entries.forEach { option ->
+                            FilterChip(
+                                selected = (choice.metadataPolicy ?: policy) == option,
+                                onClick = { exportChoice = choice.copy(metadataPolicy = option) },
+                                enabled = !exporting &&
+                                    !ExportPolicyChoice.isBlockedByFloor(policy, option),
+                                label = { Text(policyLabel(option)) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                    }
+                    if (policy != MetadataPolicy.PRESERVE) {
+                        Text(
+                            text = stringResource(
+                                R.string.editor_metadata_floor,
+                                policyLabel(policy),
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
-                }
-                if (policy != MetadataPolicy.PRESERVE) {
                     Text(
-                        text = stringResource(
-                            R.string.editor_metadata_floor,
-                            policyLabel(policy),
-                        ),
+                        text = stringResource(R.string.editor_metadata_note),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
-                }
-                Text(
-                    text = stringResource(R.string.editor_metadata_note),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                Button(onClick = { requestSave() }, modifier = Modifier.padding(top = 4.dp)) {
-                    Text(stringResource(R.string.editor_save_copy))
+                    Button(onClick = { requestSave() }, modifier = Modifier.padding(top = 4.dp)) {
+                        Text(stringResource(R.string.editor_save_copy))
+                    }
                 }
             }
         }
@@ -2651,7 +2704,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            when (screen) {
+            // r56: the tool swap gets a crossfade (the video chassis's screen
+            // feel) --- the canvas above is untouched (ONE preview, never
+            // recomposed away); only the panel content fades.
+            Crossfade(targetState = screen, label = "photo-tool-panel") { tool ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    when (tool) {
                 PhotoScreen.Crop -> {
                     // ---- Geometry row ----
                     Text(
@@ -2817,15 +2875,19 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         val live = if (draft?.first == spec.key) draft!!.second else committedValue
                         val labelText = stringResource(spec.label, live)
                         val a11yName = stringResource(spec.a11yNameRes)
-                        Text(
-                            text = labelText,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        // r56: the crafted slider row (label + live value pill);
+                        // the r32 draft contract is verbatim --- every tick writes
+                        // the draft (the preview re-renders), release commits, and
+                        // the double-tap returns the control to its neutral.
+                        LabeledSlider(
+                            name = a11yName,
+                            label = labelText,
+                            valueText = live.toString(),
                             value = live.toFloat(),
-                            onValueChange = { value -> draft = Pair(spec.key, value.toInt()) },
-                            onValueChangeFinished = {
+                            valueRange = -100f..100f,
+                            enabled = !exporting,
+                            onChange = { value -> draft = Pair(spec.key, value) },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == spec.key) {
                                         commit(spec.set(committed, d.second))
@@ -2833,14 +2895,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = -100f..100f,
-                            enabled = !exporting,
-                            // r32 a11y: every slider announces its NAME and its live
-                            // VALUE, not just the default percent-of-range.
-                            modifier = Modifier.semantics {
-                                contentDescription = a11yName
-                                stateDescription = labelText
-                            },
+                            resetValue = 0,
                         )
                     }
                 }
@@ -2860,20 +2915,28 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     val selection = committed.lut
                     val bundledIds = remember { BundledLuts.ORDERED.map { it.id }.toSet() }
                     val importedIds = looks.keys.filter { it !in bundledIds }.sorted()
+                    // r56: the look chips carry HONEST thumbnails --- the
+                    // reference strip rendered through the SAME pipeline the
+                    // preview and the export use (renderLookThumb), so what a
+                    // chip shows is what the look does. No bitmap asset, no
+                    // second rendering path.
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        FilterChip(
+                        LookThumbChip(
+                            label = stringResource(R.string.editor_filter_none),
                             selected = selection == null,
-                            onClick = { commit(committed.copy(lut = null)) },
                             enabled = !exporting,
-                            label = { Text(stringResource(R.string.editor_filter_none)) },
-                            modifier = Modifier.padding(end = 8.dp),
+                            lut = null,
+                            onPick = { commit(committed.copy(lut = null)) },
                         )
                         BundledLuts.ORDERED
                             .filter { looks.containsKey(it.id) }
                             .forEach { entry ->
-                                FilterChip(
+                                LookThumbChip(
+                                    label = stringResource(lookNameRes(entry.id)),
                                     selected = selection?.lutId == entry.id,
-                                    onClick = {
+                                    enabled = !exporting,
+                                    lut = looks[entry.id],
+                                    onPick = {
                                         // A new look keeps the current intensity
                                         // (continuity while auditioning looks).
                                         commit(
@@ -2885,18 +2948,19 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                             ),
                                         )
                                     },
-                                    enabled = !exporting,
-                                    label = { Text(stringResource(lookNameRes(entry.id))) },
-                                    modifier = Modifier.padding(end = 8.dp),
                                 )
                             }
                         // The user-imported looks (r33 extension), id-sorted; the
-                        // store's collision rule makes the subtraction exact.
+                        // store's collision rule makes the subtraction exact. The
+                        // imported CubeLut renders through the same thumb path.
                         importedIds.forEach { id ->
                             val look = looks.getValue(id)
-                            FilterChip(
+                            LookThumbChip(
+                                label = look.title.ifBlank { id },
                                 selected = selection?.lutId == id,
-                                onClick = {
+                                enabled = !exporting,
+                                lut = look,
+                                onPick = {
                                     commit(
                                         committed.copy(
                                             lut = LutSelection(
@@ -2906,9 +2970,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                         ),
                                     )
                                 },
-                                enabled = !exporting,
-                                label = { Text(look.title.ifBlank { id }) },
-                                modifier = Modifier.padding(end = 8.dp),
                             )
                         }
                         // The import action: SAF-pick a .cube (the zero-network
@@ -2934,15 +2995,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             if (draft?.first == "lut-intensity") draft!!.second else selection.intensity
                         val intensityLabel = stringResource(R.string.editor_filter_intensity, live)
                         val intensityName = stringResource(R.string.editor_a11y_filter_intensity)
-                        Text(
-                            text = intensityLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        // r56: the crafted slider row (the live value pill; the
+                        // r32 draft contract verbatim, plus the double-tap reset
+                        // to full intensity).
+                        LabeledSlider(
+                            name = intensityName,
+                            label = intensityLabel,
+                            valueText = live.toString(),
                             value = live.toFloat(),
-                            onValueChange = { draft = Pair("lut-intensity", it.toInt()) },
-                            onValueChangeFinished = {
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            onChange = { draft = Pair("lut-intensity", it) },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == "lut-intensity" && committed.lut != null) {
                                         commit(committed.copy(lut = committed.lut!!.copy(intensity = d.second)))
@@ -2950,12 +3014,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = 0f..100f,
-                            enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = intensityName
-                                stateDescription = intensityLabel
-                            },
+                            resetValue = 100,
                         )
                         // An IMPORTED look can be removed (bundled looks are part
                         // of the app); removal clears the selection and reloads
@@ -3069,19 +3128,19 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 .fillMaxWidth()
                                 .semantics { contentDescription = textContentName },
                         )
-                        // -- The font chips: the bundled four; an unresolvable
-                        //    fontId selects NO chip (the tolerance contract, shown
-                        //    honestly exactly like an unknown look id).
+                        // -- The font chips: the bundled four, each previewed in the
+                        //    REAL bundled Typeface the canvas renderer uses (one code
+                        //    path); an unresolvable fontId selects NO chip (the
+                        //    tolerance contract, shown honestly exactly like an
+                        //    unknown look id).
                         Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                             BundledFonts.ORDERED.forEach { entry ->
-                                FilterChip(
+                                FontPreviewChip(
+                                    label = entry.displayName,
                                     selected = selectedTextLayer.fontId == entry.id,
-                                    onClick = {
-                                        commitSelectedLayer { it.copy(fontId = entry.id) }
-                                    },
                                     enabled = !exporting,
-                                    label = { Text(entry.displayName) },
-                                    modifier = Modifier.padding(end = 8.dp),
+                                    typeface = activity.fontFor(entry.id),
+                                    onPick = { commitSelectedLayer { it.copy(fontId = entry.id) } },
                                 )
                             }
                         }
@@ -3090,15 +3149,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             ?: selectedTextLayer.sizePct
                         val sizeLabel = stringResource(R.string.editor_text_size, sizeLive)
                         val sizeName = stringResource(R.string.editor_a11y_text_size)
-                        Text(
-                            text = sizeLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        // r56: the crafted slider row (the live value pill; the
+                        // r34 draft contract verbatim, double-tap back to the
+                        // layer default).
+                        LabeledSlider(
+                            name = sizeName,
+                            label = sizeLabel,
+                            valueText = sizeLive.toString(),
                             value = sizeLive.toFloat(),
-                            onValueChange = { draft = "text-size@$layerId" to it.toInt() },
-                            onValueChangeFinished = {
+                            valueRange = 0f..300f,
+                            enabled = !exporting,
+                            onChange = { draft = "text-size@$layerId" to it },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == "text-size@$layerId") {
                                         commitSelectedLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
@@ -3106,26 +3168,21 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = 0f..300f,
-                            enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = sizeName
-                                stateDescription = sizeLabel
-                            },
+                            resetValue = TextLayer.DEFAULT_SIZE_PCT,
                         )
                         val opacityLive = draft?.takeIf { it.first == "text-opacity@$layerId" }?.second
                             ?: selectedTextLayer.opacity
                         val opacityLabel = stringResource(R.string.editor_text_opacity, opacityLive)
                         val opacityName = stringResource(R.string.editor_a11y_text_opacity)
-                        Text(
-                            text = opacityLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        LabeledSlider(
+                            name = opacityName,
+                            label = opacityLabel,
+                            valueText = opacityLive.toString(),
                             value = opacityLive.toFloat(),
-                            onValueChange = { draft = "text-opacity@$layerId" to it.toInt() },
-                            onValueChangeFinished = {
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            onChange = { draft = "text-opacity@$layerId" to it },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == "text-opacity@$layerId") {
                                         commitSelectedLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
@@ -3133,26 +3190,21 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = 0f..100f,
-                            enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = opacityName
-                                stateDescription = opacityLabel
-                            },
+                            resetValue = 100,
                         )
                         val rotationLive = draft?.takeIf { it.first == "text-rotation@$layerId" }?.second
                             ?: selectedTextLayer.rotationDeg
                         val rotationLabel = stringResource(R.string.editor_text_rotation, rotationLive)
                         val rotationName = stringResource(R.string.editor_a11y_text_rotation)
-                        Text(
-                            text = rotationLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        LabeledSlider(
+                            name = rotationName,
+                            label = rotationLabel,
+                            valueText = rotationLive.toString(),
                             value = rotationLive.toFloat(),
-                            onValueChange = { draft = "text-rotation@$layerId" to it.toInt() },
-                            onValueChangeFinished = {
+                            valueRange = -180f..180f,
+                            enabled = !exporting,
+                            onChange = { draft = "text-rotation@$layerId" to it },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == "text-rotation@$layerId") {
                                         commitSelectedLayer {
@@ -3162,12 +3214,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = -180f..180f,
-                            enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = rotationName
-                                stateDescription = rotationLabel
-                            },
+                            resetValue = 0,
                         )
                         // -- The color swatches: a fixed named palette, a11y-labelled
                         //    (TalkBack announces each control; selection is radio
@@ -3322,15 +3369,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             ?: selectedStickerLayer.sizePct
                         val sizeLabel = stringResource(R.string.editor_sticker_size, sizeLive)
                         val sizeName = stringResource(R.string.editor_a11y_sticker_size)
-                        Text(
-                            text = sizeLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        // r56: the crafted slider row (the live value pill; the
+                        // r35 draft contract verbatim, double-tap back to the
+                        // layer default).
+                        LabeledSlider(
+                            name = sizeName,
+                            label = sizeLabel,
+                            valueText = sizeLive.toString(),
                             value = sizeLive.toFloat(),
-                            onValueChange = { draft = "sticker-size@$layerId" to it.toInt() },
-                            onValueChangeFinished = {
+                            valueRange = 0f..300f,
+                            enabled = !exporting,
+                            onChange = { draft = "sticker-size@$layerId" to it },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == "sticker-size@$layerId") {
                                         commitSelectedStickerLayer { it.copy(sizePct = d.second.coerceIn(0, 300)) }
@@ -3338,26 +3388,21 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = 0f..300f,
-                            enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = sizeName
-                                stateDescription = sizeLabel
-                            },
+                            resetValue = StickerLayer.DEFAULT_SIZE_PCT,
                         )
                         val opacityLive = draft?.takeIf { it.first == "sticker-opacity@$layerId" }?.second
                             ?: selectedStickerLayer.opacity
                         val opacityLabel = stringResource(R.string.editor_sticker_opacity, opacityLive)
                         val opacityName = stringResource(R.string.editor_a11y_sticker_opacity)
-                        Text(
-                            text = opacityLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        LabeledSlider(
+                            name = opacityName,
+                            label = opacityLabel,
+                            valueText = opacityLive.toString(),
                             value = opacityLive.toFloat(),
-                            onValueChange = { draft = "sticker-opacity@$layerId" to it.toInt() },
-                            onValueChangeFinished = {
+                            valueRange = 0f..100f,
+                            enabled = !exporting,
+                            onChange = { draft = "sticker-opacity@$layerId" to it },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == "sticker-opacity@$layerId") {
                                         commitSelectedStickerLayer { it.copy(opacity = d.second.coerceIn(0, 100)) }
@@ -3365,26 +3410,21 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = 0f..100f,
-                            enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = opacityName
-                                stateDescription = opacityLabel
-                            },
+                            resetValue = 100,
                         )
                         val rotationLive = draft?.takeIf { it.first == "sticker-rotation@$layerId" }?.second
                             ?: selectedStickerLayer.rotationDeg
                         val rotationLabel = stringResource(R.string.editor_sticker_rotation, rotationLive)
                         val rotationName = stringResource(R.string.editor_a11y_sticker_rotation)
-                        Text(
-                            text = rotationLabel,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Slider(
+                        LabeledSlider(
+                            name = rotationName,
+                            label = rotationLabel,
+                            valueText = rotationLive.toString(),
                             value = rotationLive.toFloat(),
-                            onValueChange = { draft = "sticker-rotation@$layerId" to it.toInt() },
-                            onValueChangeFinished = {
+                            valueRange = -180f..180f,
+                            enabled = !exporting,
+                            onChange = { draft = "sticker-rotation@$layerId" to it },
+                            onFinish = {
                                 draft?.let { d ->
                                     if (d.first == "sticker-rotation@$layerId") {
                                         commitSelectedStickerLayer {
@@ -3394,12 +3434,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 }
                                 draft = null
                             },
-                            valueRange = -180f..180f,
-                            enabled = !exporting,
-                            modifier = Modifier.semantics {
-                                contentDescription = rotationName
-                                stateDescription = rotationLabel
-                            },
+                            resetValue = 0,
                         )
                         TextButton(
                             onClick = {
@@ -3871,18 +3906,27 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelLarge,
                     )
+                    // r56: the frame chips carry HONEST thumbnails --- the REAL
+                    // parametric geometry composited by FrameCompositor (the
+                    // preview/export path) over the reference strip, tinted with
+                    // the CURRENT frame color so auditioning a color re-renders
+                    // every thumb. Imported frames show their own bitmap.
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        FilterChip(
+                        FrameThumbChip(
+                            label = stringResource(R.string.editor_frame_none),
                             selected = committed.frame == null,
-                            onClick = { sweepPendingDrafts(); commit(committed.copy(frame = null)) },
                             enabled = !exporting,
-                            label = { Text(stringResource(R.string.editor_frame_none)) },
-                            modifier = Modifier.padding(end = 8.dp),
+                            thumb = null,
+                            onPick = { sweepPendingDrafts(); commit(committed.copy(frame = null)) },
                         )
                         BundledFrames.ORDERED.forEach { entry ->
-                            FilterChip(
+                            val thumbColor = committed.frame?.colorArgb ?: FrameSelection.DEFAULT_COLOR
+                            FrameThumbChip(
+                                label = entry.displayName,
                                 selected = committed.frame?.frameId == entry.id,
-                                onClick = {
+                                enabled = !exporting,
+                                thumb = remember(entry.id, thumbColor) { renderFrameThumb(entry.id, thumbColor) },
+                                onPick = {
                                     sweepPendingDrafts()
                                     // A new frame keeps the current width and
                                     // colour (continuity while auditioning, the
@@ -3897,17 +3941,17 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                         ),
                                     )
                                 },
-                                enabled = !exporting,
-                                label = { Text(entry.displayName) },
-                                modifier = Modifier.padding(end = 8.dp),
                             )
                         }
                         // The user-imported frames, id-sorted; the store's collision
                         // rule makes the keys disjoint from the bundled set.
                         importedFrames.keys.sorted().forEach { id ->
-                            FilterChip(
+                            FrameThumbChip(
+                                label = id,
                                 selected = committed.frame?.frameId == id,
-                                onClick = {
+                                enabled = !exporting,
+                                thumb = importedFrames[id],
+                                onPick = {
                                     sweepPendingDrafts()
                                     commit(
                                         committed.copy(
@@ -3919,9 +3963,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                         ),
                                     )
                                 },
-                                enabled = !exporting,
-                                label = { Text(id) },
-                                modifier = Modifier.padding(end = 8.dp),
                             )
                         }
                         AssistChip(
@@ -3947,15 +3988,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                 ?: frameSelection.widthPct
                             val widthName = stringResource(R.string.editor_a11y_frame_width)
                             val widthLabel = stringResource(R.string.editor_frame_width, widthLive)
-                            Text(
-                                text = widthLabel,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            Slider(
+                            // r56: the crafted slider row (the live value pill; the
+                            // draft contract verbatim, double-tap back to the default
+                            // width).
+                            LabeledSlider(
+                                name = widthName,
+                                label = widthLabel,
+                                valueText = widthLive.toString(),
                                 value = widthLive.toFloat(),
-                                onValueChange = { draft = "frame-width" to it.toInt() },
-                                onValueChangeFinished = {
+                                valueRange = 1f..100f,
+                                enabled = !exporting,
+                                onChange = { draft = "frame-width" to it },
+                                onFinish = {
                                     draft?.let { d ->
                                         if (d.first == "frame-width" && committed.frame != null) {
                                             commit(
@@ -3967,12 +4011,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                     }
                                     draft = null
                                 },
-                                valueRange = 1f..100f,
-                                enabled = !exporting,
-                                modifier = Modifier.semantics {
-                                    contentDescription = widthName
-                                    stateDescription = widthLabel
-                                },
+                                resetValue = FrameSelection.DEFAULT_WIDTH_PCT,
                             )
                             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                                 TEXT_COLORS.forEach { (colorArgb, nameRes) ->
@@ -4630,6 +4669,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     )
                 }
                 PhotoScreen.Main -> Unit
+                    }
+                }
             }
             // ---- The value tools' session Reset (the video footer's
             // Reset, adapted honestly): the photo tools commit LIVE on
@@ -4683,153 +4724,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 }
 
-/**
- * The r54 tool-screen header: back on the left, the tool's title (the
- * heading anchor), and the confirm check on the right --- the video
- * chassis's header shape on the photo surface's r53 theme roles. Both
- * actions sweep-and-exit honestly: the photo tools commit LIVE on
- * release, so there is no draft to apply or discard --- the check is the
- * chassis's signature, not a fake apply.
- */
-@Composable
-private fun PhotoToolHeader(
-    title: String,
-    backA11y: String,
-    confirmA11y: String,
-    onBack: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier.semantics { contentDescription = backA11y },
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-        Text(
-            text = title,
-            color = MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier
-                .weight(1f)
-                .semantics { heading() },
-        )
-        IconButton(
-            onClick = onConfirm,
-            modifier = Modifier.semantics { contentDescription = confirmA11y },
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
+// The r56 move: PhotoToolHeader and PhotoTabBar live in `PhotoChrome.kt`
+// (same package, internal --- the call sites in this file are unchanged).
 
-/**
- * The r54 bottom tab bar: the ten tools, horizontally scrollable (the
- * video bar's six fit a row; ten do not), active = the accent + the
- * underline, inactive = the secondary tint --- the video chassis's bar
- * construction on the photo surface's theme roles. The Main screen is
- * never a tab; it is the chassis the tabs navigate FROM.
- */
-@Composable
-private fun PhotoTabBar(
-    current: PhotoScreen,
-    enabled: Boolean,
-    onSelect: (PhotoScreen) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .horizontalScroll(rememberScrollState()),
-    ) {
-        for (tab in PhotoScreen.entries) {
-            if (tab == PhotoScreen.Main) continue
-            val selected = tab == current
-            val tint = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            Column(
-                modifier = Modifier
-                    .widthIn(min = 64.dp)
-                    .clickable(enabled = enabled) { onSelect(tab) }
-                    .padding(top = 8.dp, bottom = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(
-                    painter = painterResource(tab.iconRes),
-                    contentDescription = null,
-                    tint = tint,
-                )
-                Text(
-                    text = stringResource(tab.labelRes),
-                    color = tint,
-                    fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(2.dp))
-                Box(
-                    modifier = Modifier
-                        .width(24.dp)
-                        .height(2.dp)
-                        .background(
-                            if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                Color.Transparent
-                            },
-                        ),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HslBandSlider(
-    name: String,
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    enabled: Boolean,
-    onCommit: (Int) -> Unit,
-) {
-    var dragValue by remember(label) { mutableStateOf<Float?>(null) }
-    Text(
-        text = label,
-        color = MaterialTheme.colorScheme.onBackground,
-        style = MaterialTheme.typography.labelLarge,
-    )
-    Slider(
-        value = dragValue ?: value,
-        onValueChange = { dragValue = it },
-        onValueChangeFinished = {
-            dragValue?.let { onCommit(it.toInt()) }
-            dragValue = null
-        },
-        valueRange = range,
-        enabled = enabled,
-        // r32 a11y: the band control announces "BAND: CONTROL" as its name
-        // and the formatted label (with the value) as its state.
-        modifier = Modifier.semantics {
-            contentDescription = name
-            stateDescription = label
-        },
-    )
-}
+// The r56 move: HslBandSlider lives in `PhotoControls.kt` (the r56 control
+// kit --- same signature, live value pill added).
 
 private fun bandNameRes(name: String): Int = when (name) {
     "red" -> R.string.editor_band_red

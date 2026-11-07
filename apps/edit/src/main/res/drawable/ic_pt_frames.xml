@@ -10,6 +10,6 @@
     <!-- An outer square with an even-odd cut for the inner window -->
     <path
         android:fillColor="#FFFFFF"
-        android:fillType="evenodd"
+        android:fillType="evenOdd"
         android:pathData="M3,3h18v18h-18Z M7,7h10v10h-10Z" />
 </vector>

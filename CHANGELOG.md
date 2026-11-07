@@ -18,9 +18,11 @@ behavior, state machine, information architecture (the long-scroll
 sectioned page), commit-on-release draft slots, undo/redo and the
 a11y conventions are verbatim — deliberately NOT restructured (the
 photo mockups do not exist; every design image is a video screen,
-and the IA is the battle-tested r30–r41 contract). One PR
-(`ui/r53-photo-redesign`, stacked on the r52 PR #144 per the house
-stacked-PR pattern); CI is the compile judge per ADR-0013.
+and the IA is the battle-tested r30–r41 contract). One PR (**#145**,
+`ui/r53-photo-redesign`, stacked on the r52 PR #144 per the house
+stacked-PR pattern, head `8e9e59f`); CI is the compile judge per
+ADR-0013 — ALL 7 CHECKS GREEN on the first run (Build + lint + test,
+CodeQL, both vendored-engine jobs, the approval + actions analyzes).
 
 ### Changed
 

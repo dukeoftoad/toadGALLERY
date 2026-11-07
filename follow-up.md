@@ -1016,3 +1016,26 @@ the public remote each time.
 - **Carried**: F-52/F-53/F-54, PR #134, PAT revocation (advised after
   every round; the PAT in the 2026-11-06/07 chats should be treated as
   burned the moment the round lands).
+
+## 2026-11-08 — r58 window (F-58b: the per-panel LabeledSlider conversions + the Crop/Draw/Regions screenshot pins)
+
+- **F-58b-2 (2026-11-08, open)** — The AiPanel per-panel screenshot pin.
+  The 6 AI slider conversions (sky-opacity, bokeh-strength, bokeh-focal,
+  retouch-smoothing, retouch-eyes, retouch-slim) landed in this round,
+  but the panel's per-panel Roborazzi capture could not --- `AiPanel`'s
+  first parameter is `activity: EditActivity`, so it cannot compose
+  standalone in a `createComposeRule` test without a real Activity
+  fixture. The fix is to extract the three `activity.aiStore.contains`
+  reads (and any other activity-only reads the panel makes) behind an
+  explicit parameter, the same state-hoisting pattern the r57 seam used
+  for every other chassis dependency. A focused follow-up round
+  (`edit/r58b-2-ai-panel-seam` or similar) does the extraction + the
+  screenshot pin.
+- **F-58c (2026-11-08, open, carried from r56)** — The compare gesture's
+  TalkBack custom action (press-and-hold is not switch-accessible). Now
+  the next editor follow-up after this round and F-58b-2.
+- **F-58d (2026-11-08, open, carried from r56)** — The font-chip API
+  upgrade path (waiting on a compose BOM that ships the
+  android.graphics Typeface bridge).
+- **Carried**: F-52/F-53/F-54, PR #134, PAT revocation (advised after
+  every round).

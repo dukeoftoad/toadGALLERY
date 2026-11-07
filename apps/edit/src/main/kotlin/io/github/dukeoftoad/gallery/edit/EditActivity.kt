@@ -2710,6 +2710,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             Crossfade(targetState = screen, label = "photo-tool-panel") { tool ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
                     PhotoPanelHost(
                         tool = tool,
                         committed = committed,
@@ -2779,6 +2782,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         selectSky = { id, fresh -> selectSky(id, fresh) },
                         selectedBand = selectedBand,
                         onSelectedBandChange = { selectedBand = it },
+<<<<<<< HEAD
+                    )
+                }
+=======
                     )
                 }
 =======
@@ -4745,6 +4752,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     }
                 }
 >>>>>>> origin/main
+>>>>>>> origin/main
             }
             // ---- The value tools' session Reset (the video footer's
             // Reset, adapted honestly): the photo tools commit LIVE on
@@ -4804,6 +4812,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 // The r56 move: HslBandSlider lives in `PhotoControls.kt` (the r56 control
 // kit --- same signature, live value pill added).
 
+<<<<<<< HEAD
+=======
 <<<<<<< HEAD
 =======
 private fun bandNameRes(name: String): Int = when (name) {
@@ -4884,6 +4894,7 @@ private fun ColorSwatch(
             },
     )
 }
+>>>>>>> origin/main
 >>>>>>> origin/main
 
 @Composable

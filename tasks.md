@@ -351,4 +351,11 @@ kotlin, edit gallery app, etc."
   comment.
 - [x] Ledgers: CHANGELOG r55 (top), roadmap v2.21, worklog Run #29,
   follow-up F-55/F-56/F-57, this checkpoint.
-- [ ] Commit → push → PR → CI → the maintainer's review/merge.
+- [x] Commit → push → PR #148 → two compile-judge catches fixed
+  (the `manifestPlaceholders` DSL receiver; the dropped
+  `settings_components_open` string) → CI 8/8 GREEN on `0c4decd` →
+  squash-merged as main `2ea157f`. The r54 release cut rides the same
+  window: the failed `v0.4.5-alpha-r54` tag (the F-14 gate catch,
+  fixed by PR #149, merged as `73244da`) re-lands as the
+  `v0.4.5-alpha-r55` tag — ONE cut carrying r47-r55 (gallery
+  versionCode 40 + edit versionCode 19).

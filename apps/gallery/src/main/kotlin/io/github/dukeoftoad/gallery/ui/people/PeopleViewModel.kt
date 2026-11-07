@@ -15,7 +15,7 @@ import io.github.dukeoftoad.gallery.ml.people.PeopleStateFile
 import io.github.dukeoftoad.gallery.ml.people.VisiblePerson
 import io.github.dukeoftoad.gallery.ml.people.PEOPLE_STATE_FILE_NAME
 import io.github.dukeoftoad.gallery.ml.people.queryPersonPhotos
-import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.index.faceIndexDirFor
 import io.github.dukeoftoad.gallery.ui.settings.KEY_PEOPLE_ALBUM_ENABLED
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -73,7 +73,10 @@ import java.io.File
 class PeopleViewModel(app: Application) : AndroidViewModel(app) {
 
     private val engineAdapter = PeopleEngineAdapter.fromApplication(app)
-    private val faceIndexDir = File(app.filesDir, FACE_INDEX_DIR_NAME)
+    // r56: faceIndexDirFor mkdirs()s the dir on access so the
+    // PeopleStateFile's writes cannot hit a missing parent (the same
+    // SQLITE_CANTOPEN class the workers fixed, on the state-file surface).
+    private val faceIndexDir = faceIndexDirFor(app.filesDir)
     private val repository = PeopleRepository(
         engine = engineAdapter,
         stateStore = PeopleStateFile(File(faceIndexDir, PEOPLE_STATE_FILE_NAME)),

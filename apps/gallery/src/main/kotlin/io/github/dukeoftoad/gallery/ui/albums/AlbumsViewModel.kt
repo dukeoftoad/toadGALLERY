@@ -13,7 +13,7 @@ import io.github.dukeoftoad.gallery.data.MediaStoreSource
 import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
-import io.github.dukeoftoad.gallery.ml.index.FACE_INDEX_DIR_NAME
+import io.github.dukeoftoad.gallery.ml.index.faceIndexDirFor
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentPolicy
 import io.github.dukeoftoad.gallery.ml.people.PeopleContentState
 import io.github.dukeoftoad.gallery.ml.index.EngineSessionGuard
@@ -134,8 +134,9 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val peopleRepository = PeopleRepository(
         engine = engineAdapter,
+        // r56: faceIndexDirFor mkdirs()s --- see FaceIndexWorker.
         stateStore = PeopleStateFile(
-            File(File(app.filesDir, FACE_INDEX_DIR_NAME), PEOPLE_STATE_FILE_NAME),
+            File(faceIndexDirFor(app.filesDir), PEOPLE_STATE_FILE_NAME),
         ),
     )
 
@@ -166,8 +167,9 @@ class AlbumsViewModel(app: Application) : AndroidViewModel(app) {
      * section shows chips, the detail screen derives members). */
     private val thingsRepository = ThingsRepository(
         engine = thingsEngineAdapter,
+        // r56: faceIndexDirFor mkdirs()s --- see FaceIndexWorker.
         store = ThingsStateFile(
-            File(File(app.filesDir, FACE_INDEX_DIR_NAME), THINGS_STATE_FILE_NAME),
+            File(faceIndexDirFor(app.filesDir), THINGS_STATE_FILE_NAME),
         ),
     )
 

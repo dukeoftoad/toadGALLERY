@@ -4,6 +4,68 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r56 round (gallery indexing fix; `0.4.5-alpha`; edit unchanged)
+
+The r55 device failure root cause: BOTH engine flavors of the gallery
+APK (`io.github.dukeoftoad.gallery.semantic` and
+`io.github.dukeoftoad.gallery.face`) failed at "Start face/semantic index"
+with `face index store did not open: unable to open database file:
+…/files/face-index/ml-index.sqlite`. The maintainer's 2026-11-07 device
+screenshots caught it on the freshly-installed r55 build.
+
+The cause: NOBODY created `filesDir/face-index/` before opening the
+shared `ml-index.sqlite` store. SQLite does NOT create parent
+directories itself and returns `SQLITE_CANTOPEN` ("unable to open
+database file") when the parent of the requested db path is missing.
+The bug fired in two cases: a FRESH install (the directory had never
+been created) AND right after `AiEngineViewModel.resetFaceIndex()`'s
+`faceIndexDir().deleteRecursively()` (the next Start of EITHER queue
+failed, because the CLIP queue writes through the same `ml-index.sqlite`
+the face queue opens). The r47 "honesty" round only surfaced the
+cause-less fallback message; this round removes the cause itself.
+
+### Fixed
+
+- **[engine] `toad-ml-jni::store::open` now `create_dir_all`s `dir`
+  before joining `ml-index.sqlite`** (`engine/crates/toad-ml-jni/
+  src/store.rs`): the JNI contract is "pass a directory path, get an
+  open store"; pre-r56 it silently required the caller to have
+  `mkdirs()`'d the directory. The Rust half is the single source of
+  truth for the contract --- any future caller cannot regress into the
+  same `SQLITE_CANTOPEN`. Pinned by the new
+  `store::tests::store_open_creates_missing_directory` regression test
+  (the existing `open_temp_store` test helper pre-creates the dir, so
+  the missing-parent case was uncovered).
+- **[gallery] Every face-index directory access routes through one
+  `internal` `faceIndexDirFor(filesDir)` helper** (`FaceIndexWorker.kt`)
+  that `mkdirs()`s on access. The r55 bug was nine duplicated
+  `File(app.filesDir, FACE_INDEX_DIR_NAME)` call sites --- four
+  production open paths (`FaceIndexWorker`, `ClipIndexWorker`,
+  `PeopleEngineAdapter`, `MagicSearchEngineAdapter`), the
+  `AiEngineViewModel.faceIndexDir()` reset helper, and four state-file
+  paths (`PeopleViewModel`, `PersonDetailViewModel`, `AlbumsViewModel`'s
+  People + Things repos, `ThingsDetailViewModel`) --- each without the
+  mkdirs; consolidating to one helper removes the duplication that let
+  the mkdirs slip through every site. The four engine adapter call
+  sites ALSO keep a runtime `.also { it.mkdirs() }` for defense in
+  depth (a direct constructor call bypassing the factory cannot regress).
+  Pinned by the new `FaceIndexDirForTest` JVM regression suite
+  (three cases: fresh-install creation, post-Reset recreation, and
+  idempotency on an existing dir with a sentinel file).
+
+### Notes
+
+- No schema migration; no new permissions; no new dependencies; no
+  `versionCode`/`versionName` bump (the r55 APKs update in place over
+  the testing devices once this lands and re-cuts as
+  `v0.4.5-alpha-r56`).
+- Defense in depth: the Kotlin half (idiomatic source of truth) and
+  the Rust half (the JNI contract source of truth) each independently
+  prevent the regression.
+- Coordination: PR is gallery + engine only; the open editor PRs
+  (#150, #151) touch `apps/edit` and do not collide. A coordination
+  comment is posted on the PR for the other agents working the editor.
+
 ## [Unreleased] — the r55 round (gallery versionCode 40; `0.4.5-alpha`; edit unchanged)
 
 The one-launcher unification: the maintainer's "About toadGALLERY(2)

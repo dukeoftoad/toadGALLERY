@@ -111,12 +111,26 @@ fn with_store<T>(operation: impl FnOnce(&MlStore) -> Result<T, String>) -> Resul
 /// Opens the face-index store at `<dir>/ml-index.sqlite` (created through
 /// `MlDb`'s own migrations). Idempotent: an already-open store succeeds
 /// without reopening.
+///
+/// r56: `dir` (and any missing ancestors) is created via
+/// `std::fs::create_dir_all` before the join. SQLite does NOT create
+/// parent directories itself and returns `SQLITE_CANTOPEN`
+/// ("unable to open database file") when the parent of the requested db
+/// path is missing --- which was the r55 device failure on a fresh
+/// install AND after a Reset that `deleteRecursively()`'d the dir. The
+/// four Kotlin call sites also `mkdirs()` for cheap correctness, but the
+/// Rust half is the single source of truth for the JNI contract: "pass
+/// a directory path, get an open store", with no implicit caller-side
+/// requirement that the directory already exist (so a future caller
+/// cannot regress into the same CANTOPEN).
 pub(crate) fn open(dir: &str) -> Result<(), String> {
     let mut guard = lock();
     if guard.is_some() {
         return Ok(());
     }
-    let path: PathBuf = Path::new(dir).join(ML_INDEX_FILE_NAME);
+    let dir_path = Path::new(dir);
+    std::fs::create_dir_all(dir_path).map_err(|error| format!("create face index dir: {error}"))?;
+    let path: PathBuf = dir_path.join(ML_INDEX_FILE_NAME);
     let store = MlStore::open(&path).map_err(|error| format!("open face index store: {error}"))?;
     *guard = Some(StoreState { store });
     Ok(())
@@ -731,6 +745,58 @@ mod tests {
     /// Serializes store-state tests across the process's test threads
     /// (the store cell is process-global).
     static STORE_TESTS: Mutex<()> = Mutex::new(());
+
+    /// r56 regression: the production JNI open path used to require the
+    /// caller to have `mkdirs()`'d the directory before calling
+    /// `nativeStoreOpen`; SQLite does NOT create parent dirs and returns
+    /// SQLITE_CANTOPEN ("unable to open database file") when the parent
+    /// of the requested db path is missing. The r55 device failure on a
+    /// fresh install AND after a Reset that deleteRecursively()'d the
+    /// dir both traced to this. The Rust `open` now `create_dir_all`s
+    /// before joining the db path; this test pins that the open succeeds
+    /// against a nonexistent parent (and ancestors), and that the file
+    /// exists afterwards. The Kotlin call sites also `mkdirs()` for
+    /// defense in depth (this Rust half is the single source of truth
+    /// for the JNI contract).
+    #[test]
+    fn store_open_creates_missing_directory() {
+        let _guard = STORE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        close();
+
+        // A parent path whose final segment AND its parent do NOT exist
+        // yet (mirrors the fresh-install case: filesDir/face-index/ has
+        // never been touched).
+        let root = std::env::temp_dir().join(format!(
+            "toad-ml-jni-store-missing-{id}",
+            id = std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let nested_dir = root.join("nested").join("face-index");
+        // Sanity: the directory truly does not exist before the call.
+        assert!(!nested_dir.exists());
+
+        // The open MUST succeed --- the Rust half creates the directory
+        // (and any missing ancestors) before joining the db path.
+        assert!(open(nested_dir.to_str().expect("utf8 path")).is_ok());
+
+        // The directory AND the ml-index.sqlite file both now exist on
+        // disk (the SQLite open creates the file).
+        assert!(nested_dir.exists(), "face-index dir was not created");
+        assert!(
+            nested_dir.join(ML_INDEX_FILE_NAME).exists(),
+            "ml-index.sqlite was not created"
+        );
+
+        // The store is genuinely open: a face count read returns Ok (it
+        // is empty, but it works --- not the NOT_OPEN error the
+        // pre-r56 path would have surfaced).
+        assert_eq!(face_count().unwrap(), 0);
+
+        // Cleanup: close the process-global store and remove the test
+        // tree so the next test starts from a clean slate.
+        assert!(close());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn store_lifecycle_open_put_count_cluster_close() {

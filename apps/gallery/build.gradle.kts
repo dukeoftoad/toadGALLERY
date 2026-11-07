@@ -598,12 +598,39 @@ android {
             buildConfigField("boolean", "INDEX_FACE", "true")
             buildConfigField("boolean", "INDEX_SEMANTIC", "false")
         }
+        // r59 (the unified-app round, the maintainer's manual-workflow
+        // directive): EVERYTHING in one installable --- the gallery shell,
+        // the engine native libraries, BOTH index pipelines (People +
+        // Magic Search + Things), AND the editor app's sources merged
+        // in-process (the r29 separate-install contract stays the
+        // cross-app default; the unified flavor embeds the SAME editor
+        // code under its own applicationId so the contract resolver's
+        // self-match path launches it without any second install).
+        // Distinct applicationId so the unified build coexists with the
+        // whole family; launcher alias ENABLED (it is a launcher app).
+        create("unified") {
+            dimension = "engine"
+            applicationIdSuffix = ".unified"
+            versionNameSuffix = "-unified"
+            // launcherAliasEnabled inherits the defaultConfig's true.
+            buildConfigField("boolean", "WITH_ENGINE", "true")
+            buildConfigField("boolean", "INDEX_FACE", "true")
+            buildConfigField("boolean", "INDEX_SEMANTIC", "true")
+        }
     }
 
     sourceSets {
         getByName("main").java.directories.add("src/main/kotlin")
         getByName("test").java.directories.add("src/test/kotlin")
         getByName("androidTest").java.directories.add("src/androidTest/kotlin")
+        // r59: the unified flavor compiles the EDITOR app's Kotlin sources,
+        // assets and resources in-process (single source of truth: the same
+        // files the standalone edit app builds from --- no copies). The
+        // editor's icon resources were renamed editor_* (r59) so the only
+        // launcher icon in the unified APK is the gallery's own.
+        getByName("unified").java.srcDirs("../../edit/src/main/kotlin")
+        getByName("unified").assets.srcDirs("../../edit/src/main/assets")
+        getByName("unified").res.srcDirs("../../edit/src/main/res")
     }
 
     compileOptions {
@@ -1019,6 +1046,25 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+
+    // --- r59 (the unified-app round): the EDITOR app's runtime dependencies,
+    // flavor-scoped so ONLY the unified build pays for them (the standalone
+    // edit app keeps its own module's dependency set; the other gallery
+    // flavors never compile the editor sources). Mirrors apps/edit's
+    // implementation list verbatim; the compose stack is already on the
+    // gallery's classpath. The editor holds NO network capability (contract
+    // section 4.5) --- media3's manifest merges are permission-gate
+    // allowlisted for the unified id in the release gate (F-14 family).
+    add("unifiedImplementation", project(":shared:editor-contract"))
+    add("unifiedImplementation", project(":shared:video-edit"))
+    add("unifiedImplementation", libs.media3.exoplayer)
+    add("unifiedImplementation", libs.media3.ui)
+    add("unifiedImplementation", libs.media3.transformer)
+    add("unifiedImplementation", libs.media3.effect)
+    add("unifiedImplementation", libs.androidx.exifinterface)
+    add("unifiedImplementation", libs.material)
+    add("unifiedImplementation", libs.onnxruntime.android)
+
 
     // --- Compose (ADR-0009) --- canonical UI toolkit for all screens
     implementation(platform(libs.compose.bom))

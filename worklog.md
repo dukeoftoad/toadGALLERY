@@ -2681,3 +2681,53 @@ its screenshot pin); F-58c (the compare gesture's TalkBack custom
 action); F-58d (the font-chip API upgrade, waiting on the compose
 BOM); the carried items (F-52/F-53/F-54, PR #134, PAT revocation —
 advised again after this round's push).
+
+### Run #32 — 2026-11-08 (the r59 window: the unified app + the debug tools + the #150/#151/#152/#153 merge execution)
+
+**The task.** The maintainer's 2026-11-08 directive: one manual workflow
+building one app that unifies every currently-split feature, a debug-tool
+option, the real ente-port verdict, then merge the PRs and run it.
+
+**The merge execution.** All four PRs squash-merged in stack order: #152
+-> #150 -> #151 (retargeted to main post-#150) -> #153 (retargeted
+post-#151). Ledger appends collided at each stacked step; resolved locally
+(both sides kept, chronological) and pushed to the PR branch before each
+API squash-merge. One resolution error (conflict markers briefly pushed to
+edit/r57-panel-seam) was fixed before #151 landed. Post-merge audit: the
+r56-edit and r57 CHANGELOG entries were dropped by clean-merge
+coincidence; r59 restores both (compact forms; full text lives in the
+worklog).
+
+**The ente verdict (the maintainer's "correct me if I am wrong").** The
+model is essentially RIGHT: the engine crates were copied whole (ml,
+assets, image, vecdb) and the photos stack is exactly the four needed
+modules, byte-identical except the ONE documented crypto seam. Completeness
+is proven by construction --- the crates compile standalone and run
+upstream's own vendored tests green. The REAL causes of the device issues
+were NOT missing files: (1) the CANTOPEN bug lived in the NET-NEW glue
+(toad-ml-jni's open + the Kotlin call sites --- upstream creates its db
+directory in its own Kotlin layer, glue outside the vendored crates; fixed
+in #152); (2) deliberate documented adaptations (the crypto seam; ADR-0020
+local model pack replacing ente's server delivery); (3) integration
+semantics debt (F-58) and honest deferrals (F-59). Nothing is left to
+copy.
+
+**The unified app.** The `unified` flavor: gallery + engine .so + face +
+semantic + the editor's sources compiled in-process (sourceSets at
+apps/edit verbatim), own applicationId (.unified), launcher icon on,
+versionName 0.4.5-alpha-unified. Editor launcher resources renamed
+editor_* (de-collision). EditorIdentity self-match so the embedded editor
+launches through the SAME contract. The unified manifest declares the two
+contract activities and deliberately omits edit's INTERNET strip.
+
+**The debug tools.** Developer diagnostics in Settings, gated
+BuildConfig.DEBUG: the DiagLog ring tail, build-shape flags, applicationId,
+face-index dir listing, clipboard export, ring clear. Zero new deps; the
+release surface is untouched by construction.
+
+**The workflow.** unified-apk.yml, dispatch-only: variant debug/release
+(TG_* signing when secrets exist) + bundled_models input. Outside the tag
+pipeline (F-60 records the promotion path).
+
+**Remaining.** The maintainer's review; F-60/F-61; carried items
+(F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d), PAT revocation advised.

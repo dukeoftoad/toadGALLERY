@@ -8,6 +8,11 @@
      label, rename its mirror here in the same commit so the section
      never disagrees with what the system shows in App info. -->
 <resources>
+    <!-- r59 developer diagnostics (debug builds only; see SettingsScreen) -->
+    <string name="settings_devtools_title">Developer diagnostics</string>
+    <string name="settings_devtools_body">Debug-build-only tools for fixing bugs and flaws: the in-process diagnostics ring, the build shape, and the on-device ML index state. Nothing here ships in a signed release build.</string>
+    <string name="settings_devtools_copy">Copy diagnostics</string>
+    <string name="settings_devtools_clear">Clear ring</string>
     <string name="settings_components_title">Installed components</string>
     <string name="settings_components_body">The toadGALLERY family ships as separate installable apps — the gallery builds and the editor. One launcher icon; this page is the family\'s home.</string>
     <string name="settings_components_app_gallery">toadGALLERY</string>

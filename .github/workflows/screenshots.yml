@@ -60,6 +60,7 @@ on:
   pull_request:
     paths:
       - 'apps/gallery/**'
+      - 'apps/edit/**'
       - 'gradle/libs.versions.toml'
       - '.github/workflows/screenshots.yml'
 
@@ -173,5 +174,83 @@ jobs:
         with:
           name: roborazzi-test-reports
           path: apps/gallery/build/reports/tests/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # --- The edit app's chassis suite (r56) -------------------------------------
+  # The gallery job's structure verbatim, module-for-module: the edit app
+  # carries the same plugin wiring (apps/edit/build.gradle.kts), the same
+  # committed-baseline location (apps/edit/src/test/resources/roborazzi) and
+  # the same honesty halves --- record until baselines are committed, then
+  # the verify task becomes the drift gate. No flavors on this module, so
+  # the task pair is recordRoborazziDebug / verifyRoborazziDebug.
+  edit-chassis:
+    name: Record / verify edit-app chassis screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up the toolchain (Android)
+        uses: ./.github/actions/toad-setup
+
+      - name: Detect committed baselines
+        id: baselines
+        run: |
+          count=$(git ls-files 'apps/edit/src/test/resources/roborazzi/*.png' | wc -l)
+          echo "Committed Roborazzi baselines (edit): ${count}"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Record edit-app chassis screenshots
+        if: >
+          (github.event_name == 'workflow_dispatch' && inputs.mode == 'record')
+          || steps.baselines.outputs.count == 0
+        run: ./gradlew :apps:edit:recordRoborazziDebug --stacktrace --no-daemon
+
+      - name: Verify edit-app chassis screenshots (the drift gate)
+        if: >
+          !(github.event_name == 'workflow_dispatch' && inputs.mode == 'record')
+          && steps.baselines.outputs.count > 0
+        run: ./gradlew :apps:edit:verifyRoborazziDebug --stacktrace --no-daemon
+
+      - name: Verify skipped --- no committed baselines yet
+        if: >
+          !(github.event_name == 'workflow_dispatch' && inputs.mode == 'record')
+          && steps.baselines.outputs.count == 0
+        run: |
+          {
+            echo "### Edit-app Roborazzi verify skipped --- baselines not committed yet"
+            echo ""
+            echo "No PNGs exist under \`apps/edit/src/test/resources/roborazzi/\`"
+            echo "in this ref, so verifyRoborazziDebug has nothing to compare"
+            echo "against. The screenshots are still documentation (this run's"
+            echo "artifact is the baseline source), not a drift gate."
+            echo ""
+            echo "**Follow-up:** download the edit-chassis-baselines artifact"
+            echo "from a green record run, unzip it at the repo root so the PNGs"
+            echo "land at apps/edit/src/test/resources/roborazzi/, and commit"
+            echo "them. The verify gate then activates on the next run."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Edit-app Roborazzi verify skipped: 0 committed baselines under apps/edit/src/test/resources/roborazzi --- record + commit the artifact's PNGs to activate the gate."
+
+      - name: Upload edit screenshots artifact (the baseline source)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: edit-chassis-baselines
+          path: |
+            apps/edit/src/test/resources/roborazzi/**
+            apps/edit/build/outputs/roborazzi/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload edit test reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: edit-chassis-test-reports
+          path: apps/edit/build/reports/tests/
           if-no-files-found: warn
           retention-days: 14

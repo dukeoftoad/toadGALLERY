@@ -2411,3 +2411,60 @@ APK carried a permission r46's did not. Fix `fix/r54-release-permission-gate`: a
 corrections + the record appended to `docs/phase-11/permissions-and-privacy.md`. The release
 re-cuts as `v0.4.5-alpha-r55` (the r54 tag never published; r55's content rides the same cut)
 once the fix and PR #148 are green.
+
+**Run #30 addendum — r56: the edit app's craft round (the maintainer's "generic
+and flawed ... fix it and improve and redesign if necessary" directive, taken
+as the lead role).** The audit first: the photo editor's r54 chassis was
+structurally sound (the video surface's tab architecture, honestly ported) but
+its CONTROLS were the r30-r41 panels re-hosted verbatim — bare label-over-
+Slider pairs with no value readout, TEXT-ONLY chips for the looks/frames/fonts
+(no preview of the effect a chip applies — the "settings form" feel), inline
+sheets that squeezed the canvas whenever settings/export opened, no way to see
+the original under an adjustment, and zero visual test coverage. The fixes, in
+one isolated branch (`edit/r56-editor-craft`, touching ONLY apps/edit + the
+screenshot workflow + the ledgers — no collision with #148/#149):
+
+- **The honest-thumbnail chips.** Looks/frames/font chips now PREVIEW their
+  effect: the looks render the reference strip through the SAME
+  `EditPipeline.apply` the preview and export use (`renderLookThumb` — the lut
+  rides the recipe so the identity short-circuit can't skip it), the frames
+  composite the REAL parametric geometry through `FrameCompositor.draw`
+  (tinted with the CURRENT frame color), and the font chips set "Ag" in the
+  REAL bundled `Typeface` the canvas renderer uses (`AndroidView(TextView)` —
+  compose-ui 1.7 has no public android.graphics bridge). No bitmap assets, no
+  second rendering path — what a chip shows is what the tool does (F-14's
+  honesty rule, applied to UI).
+- **The crafted slider row** (`LabeledSlider`): label + LIVE value pill on one
+  line, double-tap returns to the control's neutral (0 / full intensity / the
+  layer default). The r32 draft contract is verbatim — every tick writes the
+  caller's draft (the preview re-renders live), release commits. Applied to
+  the Adjust suite, looks intensity, frames width, the text/sticker triples
+  and the export quality; `HslBandSlider` keeps its internal-drag contract and
+  gains the pill.
+- **The press-and-hold compare**: on the Main chassis (no paint mode, no
+  selection) pressing the canvas shows `previewBase` — the untouched decode
+  ALREADY in memory for the render loop — with an "Original" badge; release
+  restores. Costs nothing; the #1 question every editor user has ("what did
+  this actually change?") finally has a one-finger answer.
+- **Real bottom sheets** (`ModalBottomSheet`, the gallery ViewerScreen's M3
+  pattern): the r41 settings rows and the export format/quality/policy sheet
+  now overlay their own window instead of shrinking the canvas. Same content,
+  same policy floor, same consent machine.
+- **The chrome extraction + the screenshot harness**: `PhotoChrome.kt` (the
+  PhotoScreen enum, tool header, tab bar — with a hairline top edge, taller
+  touch columns and a selected-pill accent) and `PhotoControls.kt` (the control
+  kit + the pure reference strip, JVM-pinned in `PhotoControlsTest`) now
+  compose in isolation, and the module has its FIRST Roborazzi suite
+  (`EditChassisScreenshotTest`: the tab bar, the header, the slider rows) on
+  the gallery's r47 plugin wiring module-for-module — the
+  `edit-chassis` workflow job records/verifies with the same honest halves.
+  `strings_r56.xml` carries the one new label (the compare badge); a
+  `Crossfade` eases the tool swaps (the canvas itself is never recomposed
+  away — the chassis rule).
+
+**Remaining.** The full ten-branch tool-screen extraction (each branch reads
+~40 closure locals — it wants a `PhotoPanelHost` seam and is its own round;
+F-58a), the Draw/Region/AI slider conversions (F-58b), the compare's TalkBack
+custom action (F-58c), the font-chip API upgrade path (F-58d), the maintainer's
+review, the baseline-commit flip for the edit verify gate, and the carried
+items (F-52/F-53/F-54, PR #134, PAT revocation — advised again).

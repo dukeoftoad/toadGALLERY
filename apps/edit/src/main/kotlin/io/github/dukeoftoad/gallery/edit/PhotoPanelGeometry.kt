@@ -15,22 +15,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-<<<<<<< HEAD
-=======
-import androidx.compose.material3.Slider
->>>>>>> origin/main
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-<<<<<<< HEAD
-=======
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
->>>>>>> origin/main
 import androidx.compose.ui.unit.dp
 
 // ---------------------------------------------------------------------------
@@ -43,14 +32,11 @@ import androidx.compose.ui.unit.dp
 // arrives as explicit value + `on...Change` pairs (the state-hoisting
 // pattern), so every commit-on-release behavior is bit-identical --- the
 // committed Roborazzi chassis baselines are the regression proof.
-<<<<<<< HEAD
 //
 // r58b (F-58b): the straighten slider converts to the r56 `LabeledSlider`
 // --- label + live value pill + double-tap-to-neutral (0 deg). The r32
 // live-draft contract is verbatim (tick writes the "straighten" draft,
 // release commits through `commit`).
-=======
->>>>>>> origin/main
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -139,7 +125,6 @@ internal fun CropPanel(
     // it previously held the committed value until release. The
     // value stays a Double so a fractional sidecar straighten (e.g.
     // 7.5) displays exactly, not truncated.
-<<<<<<< HEAD
     // r58b: the crafted LabeledSlider (r56) --- label + live value pill
     // + double-tap-to-neutral (0 deg). The r32 live-draft contract is
     // verbatim (tick writes the "straighten" draft, release commits).
@@ -154,21 +139,6 @@ internal fun CropPanel(
         enabled = !exporting,
         onChange = { onDraftChange(Pair("straighten", it)) },
         onFinish = {
-=======
-    val straightenLive = draft?.takeIf { it.first == "straighten" }?.second?.toDouble()
-        ?: committed.straightenDeg
-    val straightenName = stringResource(R.string.editor_a11y_straighten)
-    val straightenState = stringResource(R.string.editor_straighten, straightenLive.toInt())
-    Text(
-        text = straightenState,
-        color = MaterialTheme.colorScheme.onBackground,
-        style = MaterialTheme.typography.labelLarge,
-    )
-    Slider(
-        value = straightenLive.toFloat(),
-        onValueChange = { onDraftChange(Pair("straighten", it.toInt()))},
-        onValueChangeFinished = {
->>>>>>> origin/main
             draft?.let { d ->
                 if (d.first == "straighten") {
                     commit(committed.copy(straightenDeg = d.second.toDouble()))
@@ -176,16 +146,7 @@ internal fun CropPanel(
             }
             onDraftChange(null)
         },
-<<<<<<< HEAD
         resetValue = 0,
-=======
-        valueRange = -15f..15f,
-        enabled = !exporting,
-        modifier = Modifier.semantics {
-            contentDescription = straightenName
-            stateDescription = straightenState
-        },
->>>>>>> origin/main
     )
 
     // ---- Crop aspect presets (centered fits over the post-geometry frame) ----

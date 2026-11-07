@@ -940,8 +940,6 @@ the public remote each time.
   volume device rows), F-52 (pin the derived violet neutrals),
   F-53 (AI tab granularity), F-54 (video BackHandler port), PAT
   revocation (advised again after this round's push).
-<<<<<<< HEAD
-=======
 
 ## 2026-11-08 — r56 window (the face-index directory fix: SQLITE_CANTOPEN on fresh install + after Reset)
 
@@ -974,7 +972,6 @@ the public remote each time.
   (components probe freshness), PAT revocation (advised again after
   this round's push).
 
->>>>>>> origin/main
 - **F-58 (2026-11-07, open)** — The edit app's craft round, part two: the
   remaining structural debt the r56 round deliberately left. (a) The ten
   tool screens still live inline in `EditActivity`'s `when` — the r56
@@ -991,7 +988,6 @@ the public remote each time.
   `AndroidView(TextView)` because compose-ui 1.7 has no public
   android.graphics.Typeface bridge; if a later BOM ships one, swap the
   chip to a pure Compose `Text` and delete the interop.
-<<<<<<< HEAD
 
 ## 2026-11-07 — the r57 panel seam (F-58a closure)
 
@@ -1020,5 +1016,3 @@ the public remote each time.
 - **Carried**: F-52/F-53/F-54, PR #134, PAT revocation (advised after
   every round; the PAT in the 2026-11-06/07 chats should be treated as
   burned the moment the round lands).
-=======
->>>>>>> origin/main

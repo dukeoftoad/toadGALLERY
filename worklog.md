@@ -2412,8 +2412,6 @@ corrections + the record appended to `docs/phase-11/permissions-and-privacy.md`.
 re-cuts as `v0.4.5-alpha-r55` (the r54 tag never published; r55's content rides the same cut)
 once the fix and PR #148 are green.
 
-<<<<<<< HEAD
-=======
 ### Run #30 — 2026-11-08 (the r56 window: the face-index directory fix — SQLITE_CANTOPEN on the r55 device failure)
 
 **The task.** The maintainer's chat instruction of 2026-11-08 —
@@ -2501,7 +2499,6 @@ too, because the dir is shared — defer to a maintainer taste call)
 and F-59 (the Rust test local-run OOM, defer to CI), PAT revocation
 advised again after this round's push.
 
->>>>>>> origin/main
 **Run #30 addendum — r56: the edit app's craft round (the maintainer's "generic
 and flawed ... fix it and improve and redesign if necessary" directive, taken
 as the lead role).** The audit first: the photo editor's r54 chassis was
@@ -2558,7 +2555,6 @@ F-58a), the Draw/Region/AI slider conversions (F-58b), the compare's TalkBack
 custom action (F-58c), the font-chip API upgrade path (F-58d), the maintainer's
 review, the baseline-commit flip for the edit verify gate, and the carried
 items (F-52/F-53/F-54, PR #134, PAT revocation — advised again).
-<<<<<<< HEAD
 
 ## r57 — the edit app's panel seam (the ten-tool extraction, F-58a)
 
@@ -2603,5 +2599,3 @@ isolation), F-58c (the compare gesture's TalkBack custom action), F-58d
 (the font-chip API upgrade path, waiting on the compose BOM), the
 maintainer's review of #150 + this round, and the carried items
 (F-52/F-53/F-54, PR #134, PAT revocation — advised again).
-=======
->>>>>>> origin/main

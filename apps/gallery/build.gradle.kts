@@ -1055,15 +1055,15 @@ dependencies {
     // gallery's classpath. The editor holds NO network capability (contract
     // section 4.5) --- media3's manifest merges are permission-gate
     // allowlisted for the unified id in the release gate (F-14 family).
-    unifiedImplementation(project(":shared:editor-contract"))
-    unifiedImplementation(project(":shared:video-edit"))
-    unifiedImplementation(libs.media3.exoplayer)
-    unifiedImplementation(libs.media3.ui)
-    unifiedImplementation(libs.media3.transformer)
-    unifiedImplementation(libs.media3.effect)
-    unifiedImplementation(libs.androidx.exifinterface)
-    unifiedImplementation(libs.material)
-    unifiedImplementation(libs.onnxruntime.android)
+    add("unifiedImplementation", project(":shared:editor-contract"))
+    add("unifiedImplementation", project(":shared:video-edit"))
+    add("unifiedImplementation", libs.media3.exoplayer)
+    add("unifiedImplementation", libs.media3.ui)
+    add("unifiedImplementation", libs.media3.transformer)
+    add("unifiedImplementation", libs.media3.effect)
+    add("unifiedImplementation", libs.androidx.exifinterface)
+    add("unifiedImplementation", libs.material)
+    add("unifiedImplementation", libs.onnxruntime.android)
 
 
     // --- Compose (ADR-0009) --- canonical UI toolkit for all screens

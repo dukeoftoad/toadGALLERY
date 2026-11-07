@@ -19,6 +19,7 @@
     <string name="settings_components_flavor_engine">engine — People + Magic Search + Things</string>
     <string name="settings_components_flavor_semantic">semantic — Magic Search + Things</string>
     <string name="settings_components_flavor_face">face — People</string>
+    <string name="settings_components_open">Open</string>
     <string name="settings_components_not_installed">Not installed</string>
     <string name="settings_components_edit_hint">Opens from the viewer\'s Edit action</string>
 </resources>

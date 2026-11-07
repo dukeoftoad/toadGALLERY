@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.widget.TextView
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
 
 // ---------------------------------------------------------------------------
 // The r56 control kit --- the crafted control surfaces for the photo editor's
@@ -412,5 +419,69 @@ internal fun FontPreviewChip(
             }
         },
         modifier = Modifier.padding(end = 8.dp),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// The r57 move: the r34 swatch palette + its swatch control live in the
+// control kit now (their only readers are the extracted tool panels; same
+// package, internal --- the panel call sites are unchanged).
+// ---------------------------------------------------------------------------
+
+/**
+ * The r34 swatch palette: fixed, named, TalkBack-labelled (one of N radio
+ * semantics). ARGB Longs; the layer keeps the exact value it picked.
+ */
+internal val TEXT_COLORS: List<Pair<Long, Int>> = listOf(
+    0xFFFFFFFFL to R.string.editor_color_white,
+    0xFF111111L to R.string.editor_color_black,
+    0xFFF44336L to R.string.editor_color_red,
+    0xFFFF9800L to R.string.editor_color_orange,
+    0xFFFDD835L to R.string.editor_color_yellow,
+    0xFF43A047L to R.string.editor_color_green,
+    0xFF00ACC1L to R.string.editor_color_cyan,
+    0xFF1E88E5L to R.string.editor_color_blue,
+)
+
+/** One color swatch: a bordered circle with radio selection semantics. */
+@Composable
+internal fun ColorSwatch(
+    colorArgb: Long,
+    selected: Boolean,
+    name: String,
+    enabled: Boolean,
+    onPick: () -> Unit,
+) {
+    // A local with a distinct name: inside the semantics {} lambda the
+    // receiver's own `selected` property shadows this parameter, so an
+    // unqualified `selected = selected` reads as self-assignment.
+    val isSelected = selected
+    Box(
+        modifier = Modifier
+            .padding(end = 10.dp)
+            // r47 ux fix: 36dp was under the 48dp touch-target floor
+            // (design-tokens.md section 2.5, WCAG 2.5.5); the swatch circle
+            // grows to meet it.
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(Color(colorArgb.toInt()))
+            .border(
+                width = if (selected) 3.dp else 1.dp,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                shape = CircleShape,
+            )
+            // toggleable is not on this foundation build's API surface
+            // (unresolved at the r34 head's first compile); clickable +
+            // explicit semantics carries the same a11y contract --- the
+            // repo-wide clickable convention, role + selected stated here.
+            .clickable(
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = { onPick() },
+            )
+            .semantics {
+                this.selected = isSelected
+                contentDescription = name
+            },
     )
 }

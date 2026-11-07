@@ -956,3 +956,31 @@ the public remote each time.
   `AndroidView(TextView)` because compose-ui 1.7 has no public
   android.graphics.Typeface bridge; if a later BOM ships one, swap the
   chip to a pure Compose `Text` and delete the interop.
+
+## 2026-11-07 — the r57 panel seam (F-58a closure)
+
+- **F-58a CLOSED (2026-11-07, this round)** — the ten tool panels are out of
+  `EditActivity`: one `PhotoPanelHost` seam (the explicit state-hoisting
+  contract, value + `on...Change` pairs, nothing captured) dispatching to
+  ten extracted panel composables grouped by tool family
+  (`PhotoPanelGeometry/Tone/Media/Layers/Paint/Ai.kt`), with the r34 swatch
+  palette + `ColorSwatch` moved verbatim into the control kit
+  (`PhotoControls.kt`) and the branch-private helpers (`bandNameRes`,
+  `lookNameRes`, `withBand`) moved into the panel files that read them,
+  and the two spec constants the chassis still routes
+  (`ADJUST_SLIDERS`, `HSL_BANDS`) widened private -> internal. The bodies
+  moved verbatim; the only edits inside them are the closure-state
+  assignments becoming setter calls (120 rewrites, each in the round's
+  audit log). Verification: `:apps:edit` compile + lint + the full JVM
+  suite (459/459) + the committed Roborazzi chassis baselines re-render
+  bit-identical (the zero-drift gate did its job — a refactor round's
+  proof is that the pixels did not move).
+- **F-58 (b/c/d, open, unchanged)** — the Draw/Region/AI/crop slider
+  conversions (b), the compare's TalkBack custom action (c) and the
+  font-chip API upgrade path (d) are now EASIER: the panels compose in
+  isolation, so (b) is a per-file `LabeledSlider` swap with a per-panel
+  screenshot pin, and (c) is one custom-semantics-action on the canvas
+  seam. (d) unchanged (waiting on the compose BOM).
+- **Carried**: F-52/F-53/F-54, PR #134, PAT revocation (advised after
+  every round; the PAT in the 2026-11-06/07 chats should be treated as
+  burned the moment the round lands).

@@ -161,3 +161,37 @@ gallery app only; the edit app's four ONNX models ship **in the APK**
   sideload pre-releases; F-Droid metadata is prepared in this window
   (`fdroid/metadata/`, see `docs/phase-11/fdroid-metadata.md`) and
   submission is a maintainer action after review.
+
+## r54 release cut (2026-11-07) — the F-14 gate's first real-tag exercise: three allowlist corrections
+
+The r51 supply-chain round (#140) authored the release-stage
+uses-permission gate with allowlists derived from the source
+manifests; the `v0.4.5-alpha-r54` tag push was the gate's FIRST run
+against real merged APKs (release.yml runs only on tag/dispatch —
+no PR had ever exercised it), and it failed exactly as designed:
+the merged APKs carry documented library merges the allowlists
+omitted. The observed sets (aapt2, printed per APK in the run log):
+
+- **all four gallery flavors**: androidx.biometric's merges are TWO —
+  `android.permission.USE_BIOMETRIC` (the allowlist had misspelled it
+  `USE_BIOMETIC`, missing the R, so the correctly-merged permission
+  flagged as unexpected) plus the legacy
+  `android.permission.USE_FINGERPRINT` (never allowlisted); and
+  androidx.core (1.9+) injects a per-applicationId
+  `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` signature-class guard
+  into every merged manifest on U+ (harmless, auto-granted, name
+  embeds the applicationId — each flavor's allowlist carries its own
+  spelling).
+- **the edit app**: media3's AARs merge `WAKE_LOCK`,
+  `ACCESS_NETWORK_STATE` and the legacy uncapped
+  `READ_EXTERNAL_STORAGE` (the source manifest requests only the
+  pre-Q capped `WRITE_EXTERNAL_STORAGE`), plus the same androidx.core
+  dynamic-receiver guard. The r41 hard strip still holds: NO
+  `INTERNET` anywhere in the merged APK (ACCESS_NETWORK_STATE is a
+  connectivity-STATE read, not a socket grant; the editor's own
+  build-time gate still fails on any INTERNET).
+
+The fix is allowlist-only (release.yml): no APK carries a permission
+it did not already carry at r46; the gate now describes the merged
+reality instead of the source-manifest wish. The rule itself is
+unchanged — an unexpected permission still refuses the publish.

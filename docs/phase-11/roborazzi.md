@@ -327,3 +327,31 @@ gitignored `build/outputs/roborazzi/` --- the r47 round solved the same
 problem at the CONFIG level (`roborazzi { outputDir.set(...) }` pins the
 no-path captures to `src/test/resources/roborazzi`), so the r48 rebase
 keeps r47's shape and the state-card tests stay no-path.
+
+## r56 --- the edit app joins the harness (apps/edit)
+
+Until r56 the edit app shipped with ZERO visual coverage: the gallery had
+the plugin pair since r47, the edit module had 38 JVM tests and not one
+pixel gate --- which is exactly how a chassis round could re-shape every
+editor screen with nothing catching the drift. The r56 craft round wires
+the SAME plugin pair module-for-module (the gallery's r47/r48 blocks are
+the template; `apps/edit/build.gradle.kts` carries the plugin, the
+`testOptions` NATIVE/resource blocks and the `roborazzi { outputDir }`
+pin, and `.github/workflows/screenshots.yml` gained the `edit-chassis`
+job with the same record/verify/honest-skip halves).
+
+What changed for the module with no product flavors: the task pair is
+`recordRoborazziDebug` / `verifyRoborazziDebug` (flavor-less names), the
+committed-baseline location is `apps/edit/src/test/resources/roborazzi/`,
+and the baseline-source artifact is `edit-chassis-baselines`. The PR
+trigger now also fires on `apps/edit/**` paths.
+
+The first suite (`EditChassisScreenshotTest`, same package as the
+composables it renders) captures the r56-extracted CHROME and the control
+kit --- `PhotoTabBar`, `PhotoToolHeader`, the `LabeledSlider` rows ---
+each param-light (no Activity, no ViewModel, no bitmap decode, no
+indeterminate animation) and clock-frozen per the gallery suite's
+convention, so the baselines are stable by construction. The flow for
+activation is the gallery's F-34 flow verbatim: the first green record
+run produces the artifact; committing its PNGs at the pinned path flips
+the verify gate live on the next run.

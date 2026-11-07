@@ -67,8 +67,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import io.github.dukeoftoad.gallery.BuildConfig
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.buildshape.BuildShape
+import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
@@ -1428,6 +1433,74 @@ fun SettingsScreen(
                 }
             } // BuildShape.semanticIndex
         } // BuildShape.withEngine
+
+        // ---- Developer diagnostics (r59, the debug-tools round) ----
+        // The maintainer's "add option to add debug tool ... for fixing
+        // bugs and flaws" directive. DEBUG-BUILDS ONLY (BuildConfig.DEBUG):
+        // the signed release surface stays exactly as before --- the gate
+        // is the standard Android debug flag, zero flavor plumbing, and
+        // the section simply does not compose in a release build. Zero new
+        // dependencies: the diagnostics ring (DiagLog.snapshot()), the
+        // build-shape flags, the face-index directory state and a
+        // clipboard export of the whole bundle --- the same data the F5
+        // dogfood rounds wished for in the "indexing failed, no logs" reports.
+        if (BuildConfig.DEBUG) {
+            Spacer(Modifier.height(24.dp))
+            Text(
+                text = stringResource(R.string.settings_devtools_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                text = stringResource(R.string.settings_devtools_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            val context = LocalContext.current
+            val diagText = remember {
+                buildString {
+                    appendLine("toadGALLERY dev diagnostics")
+                    appendLine("version: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ") debug")
+                    appendLine("buildShape: withEngine=" + BuildShape.withEngine +
+                        " faceIndex=" + BuildShape.faceIndex +
+                        " semanticIndex=" + BuildShape.semanticIndex)
+                    appendLine("applicationId: " + context.packageName)
+                    appendLine()
+                    appendLine("[diagnostics ring] (newest last)")
+                    DiagLog.snapshot().takeLast(40).forEach { appendLine(it) }
+                    appendLine()
+                    val faceIndexDir = java.io.File(context.filesDir, "face-index")
+                    appendLine("[face-index dir] " + faceIndexDir.absolutePath)
+                    if (faceIndexDir.isDirectory) {
+                        faceIndexDir.listFiles()?.sortedBy { it.name }?.forEach {
+                            appendLine("  " + it.name + "  " + it.length() + " B")
+                        }
+                    } else {
+                        appendLine("  (absent)")
+                    }
+                }
+            }
+            Text(
+                text = diagText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Row(modifier = Modifier.padding(top = 8.dp)) {
+                TextButton(onClick = {
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("toadGALLERY diagnostics", diagText))
+                    DiagLog.i("SettingsScreen", "dev diagnostics copied to clipboard")
+                }) {
+                    Text(stringResource(R.string.settings_devtools_copy))
+                }
+                TextButton(onClick = { DiagLog.clear() }) {
+                    Text(stringResource(R.string.settings_devtools_clear))
+                }
+            }
+        } // BuildConfig.DEBUG
 
         // ---- Installed components (r55: the one-launcher unification) ----
         // The maintainer's "toadGALLERY(2) need to unify under setting

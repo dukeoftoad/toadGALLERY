@@ -1,0 +1,126 @@
+name: Unified APK (manual)
+
+# r59 (the unified-app round) --- the maintainer's 2026-11-08 directive:
+# "create one new workflow for manual run which contains app[unifies] all
+# features which are currently splited and add option to add debug tool
+# ... after this merge the pr's and run this manual workflow for single
+# unified app[signed or debug apk]".
+#
+# ONE manual-dispatch build of the UNIFIED app: the gallery shell + the
+# engine native libraries (-PwithEngine) + BOTH index pipelines (People,
+# Magic Search, Things) + the editor app's code embedded in-process (the
+# r59 `unified` flavor compiles apps/edit's sources verbatim --- see
+# apps/gallery/build.gradle.kts). applicationId io.github.dukeoftoad.gallery.unified,
+# versionName 0.4.5-alpha-unified; it coexists with the whole family.
+#
+# Inputs:
+#   variant = debug (default)  -> :apps:gallery:assembleUnifiedDebug
+#   variant = release          -> :apps:gallery:assembleUnifiedRelease
+#           signed with the SAME TG_* release-key env vars the release.yml
+#           convention pins (ADR-0018) when the secrets exist; otherwise
+#           the APK stays UNSIGNED BY DESIGN (the repo's documented local
+#           fallback) --- the step summary says which happened.
+#   bundled_models = true      -> -PwithBundledModels (the ADR-0020 staged
+#           model pack rides IN the APK; much larger download, zero
+#           first-run model provisioning)
+#
+# NOT part of the tag-driven release pipeline (release.yml's five-APK
+# matrix + the F-14 permission gate stay exactly as they are): this is a
+# maintainer-facing verification/dogfood surface. If a future round
+# promotes the unified app to a tagged release, the release.yml gate MUST
+# gain the unified allowlist entry first (gallery-engine's set + edit's
+# set + io.github.dukeoftoad.gallery.unified.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION).
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "debug = signed-with-debug-key dev build (includes the Developer diagnostics section); release = release-key-signed (or unsigned) production build"
+        required: false
+        default: debug
+        type: choice
+        options:
+          - debug
+          - release
+      bundled_models:
+        description: "stage the ADR-0020 model pack inside the APK (much larger; zero first-run model downloads)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  unified-apk:
+    name: Unified app (assemble${{ inputs.variant == 'release' && 'Release' || 'Debug' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up the toolchain (Android)
+        uses: ./.github/actions/toad-setup
+
+      # The ADR-0018 signing convention (release.yml verbatim): wire the
+      # TG_* env ONLY for the release variant; Gradle falls back to the
+      # documented unsigned local build when the secrets are absent.
+      - name: Assemble the unified APK
+        env:
+          TG_KEYSTORE_BASE64: ${{ secrets.TG_KEYSTORE_BASE64 }}
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_KEY_PASSWORD }}
+        run: |
+          VARIANT="${{ inputs.variant }}"
+          MODEL_FLAG=""
+          if [[ "${{ inputs.bundled_models }}" == "true" ]]; then
+            MODEL_FLAG="-PwithBundledModels"
+          fi
+          if [[ "$VARIANT" == "release" ]]; then
+            ./gradlew :apps:gallery:assembleUnifiedRelease -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
+          else
+            ./gradlew :apps:gallery:assembleUnifiedDebug -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
+          fi
+
+      - name: Collect + rename the APK
+        run: |
+          VARIANT="${{ inputs.variant }}"
+          VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' apps/gallery/build.gradle.kts | tail -n1)"
+          OUT="apps/gallery/build/outputs/apk/unified/${VARIANT}"
+          ls -la "$OUT"
+          SRC="$(find "$OUT" -name "*.apk" | head -n1)"
+          if [[ -z "$SRC" ]]; then
+            echo "::error::no unified APK under $OUT"; exit 1
+          fi
+          DEST="toadGALLERY-unified-${VERSION_NAME}-${VARIANT}.apk"
+          cp "$SRC" "$DEST"
+          sha256sum "$DEST" | tee "${DEST}.sha256"
+          echo "APK=$DEST" >> "$GITHUB_ENV"
+
+      - name: Upload the unified APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unified-apk
+          path: |
+            toadGALLERY-unified-*.apk
+            toadGALLERY-unified-*.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Job summary
+        run: |
+          {
+            echo "### Unified APK"
+            echo ""
+            echo "- applicationId: \`io.github.dukeoftoad.gallery.unified\`"
+            echo "- variant: \`${{ inputs.variant }}\` (bundled models: \`${{ inputs.bundled_models }}\`)"
+            echo "- artifact: \`unified-apk\` --- \`$APK\`"
+            if [[ "${{ inputs.variant }}" == "debug" ]]; then
+              echo "- Developer diagnostics: **included** (Settings > Developer diagnostics --- debug builds only)"
+            else
+              echo "- Developer diagnostics: **not included** (debug-builds-only surface)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

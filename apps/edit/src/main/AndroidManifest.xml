@@ -37,7 +37,8 @@
     <application
         android:allowBackup="false"
         android:appCategory="image"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/editor_ic_launcher"
+        android:roundIcon="@mipmap/editor_ic_launcher_round"
         android:label="@string/editor_app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Material3.DayNight.NoActionBar">

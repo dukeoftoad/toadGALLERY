@@ -91,8 +91,8 @@ object EditorResolver {
      * editor resolving from one query in practice, and the first hit is
      * the launcher's own order).
      */
-    fun resolve(candidates: List<EditorCandidate>): EditorResolution {
-        val matching = candidates.filter { EditorIdentity.matches(it.packageName) }
+    fun resolve(candidates: List<EditorCandidate>, ownPackage: String? = null): EditorResolution {
+        val matching = candidates.filter { EditorIdentity.matches(it.packageName, ownPackage) }
         val first = matching.firstOrNull() ?: return EditorResolution.NotInstalled
         if (!first.enabled) return EditorResolution.Disabled
         return when (val decision = EditorVersionNegotiator.negotiate(first.declaredVersion)) {
@@ -106,6 +106,11 @@ object EditorResolver {
         }
     }
 }
+
+
+/** r59: the calling app's own package (the unified build self-matches its embedded editor). */
+private fun PackageManager.ownPackageOrNull(): String? =
+    runCatching { packageName }.getOrNull()
 
 /** The package-visible resolution (the thin Android adapter over [EditorResolver]). */
 fun resolveEditor(context: Context): EditorResolution =
@@ -216,7 +221,7 @@ private fun declaredContractVersion(
  * populated in the first place. Candidates are identity-filtered to the
  * contract editor exactly as before; only the version read hardened.
  */
-private fun queryEditorCandidates(pm: PackageManager, mimeType: String): List<EditorCandidate> =
+private fun queryEditorCandidates(pm: PackageManager, mimeType: String, ownPackage: String? = null): List<EditorCandidate> =
     pm.queryIntentActivities(
         Intent(EditContract.ACTION_EDIT)
             .addCategory(Intent.CATEGORY_DEFAULT)
@@ -224,7 +229,7 @@ private fun queryEditorCandidates(pm: PackageManager, mimeType: String): List<Ed
         PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_META_DATA,
     ).mapNotNull { info ->
         val packageName = info.activityInfo.packageName
-        if (!EditorIdentity.matches(packageName)) return@mapNotNull null
+        if (!EditorIdentity.matches(packageName, ownPackage)) return@mapNotNull null
         EditorCandidate(
             packageName = packageName,
             activityClassName = info.activityInfo.name,
@@ -258,9 +263,15 @@ private fun queryEditorCandidates(pm: PackageManager, mimeType: String): List<Ed
  * a video probe orders the higher declaration first; everything else
  * keeps manifest order, where the v1 image surface declares first.
  */
-private fun probeEditorCandidates(pm: PackageManager, mimeType: String): List<EditorCandidate> {
+private fun probeEditorCandidates(
+    pm: PackageManager,
+    mimeType: String,
+    ownPackage: String? = null,
+): List<EditorCandidate> {
     val candidates = mutableListOf<EditorCandidate>()
-    for (packageName in EditorIdentity.acceptedPackageNames()) {
+    val probePackages = EditorIdentity.acceptedPackageNames() +
+        (ownPackage?.takeIf { it !in EditorIdentity.acceptedPackageNames() }?.let { listOf(it) } ?: emptyList())
+    for (packageName in probePackages) {
         val packageInfo = try {
             pm.getPackageInfo(
                 packageName,
@@ -320,7 +331,7 @@ private fun probeEditorCandidates(pm: PackageManager, mimeType: String): List<Ed
  */
 fun resolveEditor(context: Context, mimeType: String): EditorResolution {
     val pm = context.packageManager
-    val candidates = queryEditorCandidates(pm, mimeType)
+    val candidates = queryEditorCandidates(pm, mimeType, ownPackage = pm.ownPackageOrNull())
     val effective = if (candidates.isEmpty() && mimeType.endsWith("/*")) {
         // The concrete-mime retry: exactly the shapes apps/edit's own
         // manifest filters declare (see the constants' KDoc).
@@ -331,16 +342,16 @@ fun resolveEditor(context: Context, mimeType: String): EditorResolution {
         }
         var retried = candidates
         for (concreteMime in concreteMimes) {
-            retried = queryEditorCandidates(pm, concreteMime)
+            retried = queryEditorCandidates(pm, concreteMime, ownPackage = pm.ownPackageOrNull())
             if (retried.isNotEmpty()) break
         }
         retried
     } else {
         candidates
     }
-    val resolution = EditorResolver.resolve(effective)
+    val resolution = EditorResolver.resolve(effective, ownPackage = pm.ownPackageOrNull())
     if (resolution !is EditorResolution.NotInstalled) return resolution
-    val probed = EditorResolver.resolve(probeEditorCandidates(pm, mimeType))
+    val probed = EditorResolver.resolve(probeEditorCandidates(pm, mimeType, ownPackage = pm.ownPackageOrNull()))
     if (probed !is EditorResolution.NotInstalled) return probed
     // A disabled app contributes no query hits, so "not installed" from
     // the query must be refined: an installed-but-disabled editor is the

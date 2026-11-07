@@ -1,6 +1,11 @@
 package io.github.dukeoftoad.gallery.edit
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -26,7 +31,10 @@ import org.robolectric.annotation.GraphicsMode
  * Robolectric SDK (34), the fixed w411dp-h891dp-420dpi viewport and the
  * r53 theme. The frame clock is frozen before setContent and advanced one
  * fixed 16ms frame (the gallery suite's convention) so the captures are
- * stable by construction.
+ * stable by construction. Every capture paints the theme's background
+ * first --- the app renders the editor on the fixed dark surface, and a
+ * transparent-root capture would gate near-white ink against white
+ * (invisible ghosts), not the contrast the user actually sees.
  *
  * The PNG names are pinned by the module's
  * `roborazzi.record.namingStrategy = fullyQualifiedName` property:
@@ -48,7 +56,13 @@ class EditChassisScreenshotTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             EditorTheme {
-                PhotoTabBar(current = PhotoScreen.Main, enabled = true, onSelect = {})
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    PhotoTabBar(current = PhotoScreen.Main, enabled = true, onSelect = {})
+                }
             }
         }
         rule.mainClock.advanceTimeBy(16L)
@@ -61,13 +75,19 @@ class EditChassisScreenshotTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             EditorTheme {
-                PhotoToolHeader(
-                    title = "Adjust",
-                    backA11y = "Back",
-                    confirmA11y = "Done",
-                    onBack = {},
-                    onConfirm = {},
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    PhotoToolHeader(
+                        title = "Adjust",
+                        backA11y = "Back",
+                        confirmA11y = "Done",
+                        onBack = {},
+                        onConfirm = {},
+                    )
+                }
             }
         }
         rule.mainClock.advanceTimeBy(16L)
@@ -80,29 +100,35 @@ class EditChassisScreenshotTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             EditorTheme {
-                Column {
-                    LabeledSlider(
-                        name = "Brightness",
-                        label = "Brightness: 12",
-                        valueText = "12",
-                        value = 12f,
-                        valueRange = -100f..100f,
-                        enabled = true,
-                        onChange = {},
-                        onFinish = {},
-                        resetValue = 0,
-                    )
-                    LabeledSlider(
-                        name = "Contrast",
-                        label = "Contrast: -8",
-                        valueText = "-8",
-                        value = -8f,
-                        valueRange = -100f..100f,
-                        enabled = true,
-                        onChange = {},
-                        onFinish = null,
-                        resetValue = 0,
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    Column {
+                        LabeledSlider(
+                            name = "Brightness",
+                            label = "Brightness: 12",
+                            valueText = "12",
+                            value = 12f,
+                            valueRange = -100f..100f,
+                            enabled = true,
+                            onChange = {},
+                            onFinish = {},
+                            resetValue = 0,
+                        )
+                        LabeledSlider(
+                            name = "Contrast",
+                            label = "Contrast: -8",
+                            valueText = "-8",
+                            value = -8f,
+                            valueRange = -100f..100f,
+                            enabled = true,
+                            onChange = {},
+                            onFinish = null,
+                            resetValue = 0,
+                        )
+                    }
                 }
             }
         }

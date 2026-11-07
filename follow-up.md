@@ -1016,3 +1016,17 @@ the public remote each time.
 - **Carried**: F-52/F-53/F-54, PR #134, PAT revocation (advised after
   every round; the PAT in the 2026-11-06/07 chats should be treated as
   burned the moment the round lands).
+
+## 2026-11-08 — r59 window (the unified app + the debug tools + the four-PR merge)
+
+- **F-60 (2026-11-08, open)** — The unified app's release promotion: the
+  unified flavor ships via unified-apk.yml (manual, artifact) only; a
+  tagged release requires the F-14 gate to gain the unified allowlist
+  (gallery-engine's set + edit's set + the unified DYNAMIC_RECEIVER
+  permission) and release.yml to build a sixth APK. Maintainer taste call.
+- **F-61 (2026-11-08, open)** — Components-row honesty on the unified
+  build: the Installed-components probe reports the edit app by its
+  standalone id, so the unified build's edit row reads "not installed"
+  even though the editor is embedded; the row could special-case self.
+- **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, PAT
+  revocation (advised again).

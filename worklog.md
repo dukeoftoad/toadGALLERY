@@ -2341,3 +2341,17 @@ analyzes). Recorded here per the r42 convention.
 one-tab-vs-four question), F-54 (the video BackHandler port), the
 carried items (D-1 root fix, R51-3 waves, PR #134, the r52 video
 follow-ups), PAT revocation advised again after this round's push.
+
+**Run #29 addendum — the r54 release cut's F-14 gate catch (fixed in the same window).** The
+`v0.4.5-alpha-r54` tag push FAILED at the release-stage uses-permission gate — its first
+real-tag exercise since r51 authored it (#140); PR CI never runs this step (release.yml is
+tag/dispatch-only), so three allowlist defects surfaced exactly as the gate designed them to:
+(1) `USE_BIOMETIC` misspelled in `GALLERY_BASE` (missing the R; the real merged permission is
+`USE_BIOMETRIC`), (2) androidx.biometric's legacy `USE_FINGERPRINT` merge never allowlisted,
+(3) androidx.core's per-applicationId `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` injection
+missing from every allowlist, and edit's allowlist ignored media3's merges (`WAKE_LOCK`,
+`ACCESS_NETWORK_STATE`, the legacy uncapped `READ_EXTERNAL_STORAGE`). Nothing published; no
+APK carried a permission r46's did not. Fix `fix/r54-release-permission-gate`: allowlist-only
+corrections + the record appended to `docs/phase-11/permissions-and-privacy.md`. The release
+re-cuts as `v0.4.5-alpha-r55` (the r54 tag never published; r55's content rides the same cut)
+once the fix and PR #148 are green.

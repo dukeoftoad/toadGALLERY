@@ -2397,3 +2397,17 @@ F-53 the AI tab granularity, F-54 the video BackHandler port), the
 new F-55/F-56/F-57 (the beta unification roadmap the directive
 sketches: deeper AI/ML bridging, the Rust engine version surfacing,
 the edit-app deep unification), PAT revocation advised again.
+
+**Run #29 addendum — the r54 release cut's F-14 gate catch (fixed in the same window).** The
+`v0.4.5-alpha-r54` tag push FAILED at the release-stage uses-permission gate — its first
+real-tag exercise since r51 authored it (#140); PR CI never runs this step (release.yml is
+tag/dispatch-only), so three allowlist defects surfaced exactly as the gate designed them to:
+(1) `USE_BIOMETIC` misspelled in `GALLERY_BASE` (missing the R; the real merged permission is
+`USE_BIOMETRIC`), (2) androidx.biometric's legacy `USE_FINGERPRINT` merge never allowlisted,
+(3) androidx.core's per-applicationId `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` injection
+missing from every allowlist, and edit's allowlist ignored media3's merges (`WAKE_LOCK`,
+`ACCESS_NETWORK_STATE`, the legacy uncapped `READ_EXTERNAL_STORAGE`). Nothing published; no
+APK carried a permission r46's did not. Fix `fix/r54-release-permission-gate`: allowlist-only
+corrections + the record appended to `docs/phase-11/permissions-and-privacy.md`. The release
+re-cuts as `v0.4.5-alpha-r55` (the r54 tag never published; r55's content rides the same cut)
+once the fix and PR #148 are green.

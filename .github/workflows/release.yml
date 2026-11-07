@@ -357,18 +357,36 @@ jobs:
       #     (READ_MEDIA_IMAGES / READ_MEDIA_VIDEO / READ_EXTERNAL_STORAGE /
       #     ACCESS_MEDIA_LOCATION + the ADR-0020 model-fetch INTERNET);
       #   - androidx.work merges WAKE_LOCK + RECEIVE_BOOT_COMPLETED,
-      #     androidx.biometric merges USE_BIOMETIC (both documented and
-      #     pinned by PrivacyPolicyTest); the ACCESS_NETWORK_STATE and
+      #     androidx.biometric merges USE_BIOMETRIC (API 28+) AND the
+      #     legacy USE_FINGERPRINT (both documented and pinned by
+      #     PrivacyPolicyTest); the ACCESS_NETWORK_STATE and
       #     FOREGROUND_SERVICE injections are stripped at merge time
       #     (tools:node="remove") and never reach a merged manifest;
+      #   - androidx.core (1.9+) injects a per-applicationId
+      #     DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION signature-class
+      #     permission into EVERY merged manifest (gallery flavors AND
+      #     the edit app) to guard dynamically-registered receivers on
+      #     U+ --- harmless, auto-granted, but its NAME is per-app, so
+      #     each APK's allowlist carries its own flavor's spelling
+      #     (the r54 release cut's first tag exercise caught all three
+      #     omissions here: the USE_BIOMETIC misspelling, the
+      #     USE_FINGERPRINT gap, and the dynamic-receiver injection ---
+      #     the gate had never run on a real tag before; docs/
+      #     phase-11/permissions-and-privacy.md is the record);
       #   - the BASIC flavor's r50 overlay strips INTERNET, so INTERNET is
       #     not in basic's allowlist: its presence fails below as an
       #     unexpected permission (the hard fail F-14 asks for);
-      #   - the edit app's only request is its own pre-Q capped
-      #     WRITE_EXTERNAL_STORAGE; its r41 hard strip keeps the merged
-      #     manifest INTERNET-free (onnxruntime's AAR declaration is removed
-      #     at merge time), so edit's allowlist excludes INTERNET the same
-      #     way.
+      #   - the edit app's only REQUESTED permission is its own pre-Q
+      #     capped WRITE_EXTERNAL_STORAGE; the merged APK additionally
+      #     carries media3's library merges (WAKE_LOCK +
+      #     ACCESS_NETWORK_STATE + the legacy uncapped
+      #     READ_EXTERNAL_STORAGE) and androidx.core's per-app dynamic
+      #     receiver guard; the r41 hard strip keeps the merged manifest
+      #     INTERNET-free (onnxruntime's AAR declaration is removed at
+      #     merge time), so edit's allowlist still excludes INTERNET ---
+      #     ACCESS_NETWORK_STATE is a connectivity-STATE read, not a
+      #     socket grant, and the editor's own INTERNET gate keeps the
+      #     zero-network story intact.
       # aapt2 is resolved exactly like the signature gate's apksigner: the
       # pinned build-tools dir first, glob fallback if the runner layout
       # differs. The found set is printed per APK for auditability.
@@ -387,8 +405,12 @@ jobs:
           fi
 
           # The gallery's manifest-derived base set: the source manifest's
-          # declared five minus INTERNET, plus the documented library merges.
-          GALLERY_BASE="android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_VIDEO android.permission.READ_EXTERNAL_STORAGE android.permission.ACCESS_MEDIA_LOCATION android.permission.USE_BIOMETIC android.permission.WAKE_LOCK android.permission.RECEIVE_BOOT_COMPLETED"
+          # declared five minus INTERNET, plus the documented library
+          # merges (biometric: USE_BIOMETRIC + legacy USE_FINGERPRINT;
+          # work: WAKE_LOCK + RECEIVE_BOOT_COMPLETED). The per-app
+          # androidx.core dynamic-receiver guard rides each flavor's
+          # check call below (the name embeds the applicationId).
+          GALLERY_BASE="android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_VIDEO android.permission.READ_EXTERNAL_STORAGE android.permission.ACCESS_MEDIA_LOCATION android.permission.USE_BIOMETRIC android.permission.USE_FINGERPRINT android.permission.WAKE_LOCK android.permission.RECEIVE_BOOT_COMPLETED"
 
           # One gate per APK; UNEXPECTED accumulates across all five.
           check_permissions() {
@@ -419,12 +441,15 @@ jobs:
 
           UNEXPECTED=0
           # The engine family keeps the main manifest's ADR-0020
-          # model-fetch INTERNET (the flavors download models).
-          check_permissions "gallery-basic"    "$BASIC_APK"    "$GALLERY_BASE"
-          check_permissions "gallery-engine"   "$ENGINE_APK"   "$GALLERY_BASE android.permission.INTERNET"
-          check_permissions "gallery-semantic" "$SEMANTIC_APK" "$GALLERY_BASE android.permission.INTERNET"
-          check_permissions "gallery-face"     "$FACE_APK"     "$GALLERY_BASE android.permission.INTERNET"
-          check_permissions "edit"             "$EDIT_APK"     "android.permission.WRITE_EXTERNAL_STORAGE"
+          # model-fetch INTERNET (the flavors download models). Every
+          # allowlist carries its OWN applicationId's
+          # DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION (androidx.core's
+          # per-app injection --- see the gate comment above).
+          check_permissions "gallery-basic"    "$BASIC_APK"    "$GALLERY_BASE io.github.dukeoftoad.gallery.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          check_permissions "gallery-engine"   "$ENGINE_APK"   "$GALLERY_BASE android.permission.INTERNET io.github.dukeoftoad.gallery.engine.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          check_permissions "gallery-semantic" "$SEMANTIC_APK" "$GALLERY_BASE android.permission.INTERNET io.github.dukeoftoad.gallery.semantic.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          check_permissions "gallery-face"     "$FACE_APK"     "$GALLERY_BASE android.permission.INTERNET io.github.dukeoftoad.gallery.face.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          check_permissions "edit"             "$EDIT_APK"     "android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE android.permission.ACCESS_NETWORK_STATE android.permission.WAKE_LOCK io.github.dukeoftoad.gallery.edit.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 
           if [[ "$UNEXPECTED" != 0 ]]; then
             echo "::error::permission gate FAILED --- at least one release APK carries a uses-permission outside its manifest-derived allowlist; nothing is published"

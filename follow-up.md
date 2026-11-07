@@ -906,3 +906,37 @@ the public remote each time.
   F-41 video-session undo/redo, F-42 the waveform strip, F-43 the
   volume device rows), F-52 (pin the derived violet neutrals), PAT
   revocation (advised again after this round's push).
+
+## 2026-11-07 — r55 window (the one-launcher unification round: the alias consolidation + the Settings "Installed components" section)
+
+- **F-55 (2026-11-07, open)** — The BETA naming decision. The
+  maintainer's directive says "build the app for beta release"; r55
+  keeps `versionName 0.4.5-alpha` (gallery versionCode 40) because a
+  versionName change is a maintainer-owned product decision (the
+  ADR-0018 rule: the stable cut is human-made; the same taste governs
+  a beta label). When the maintainer names the beta cut, the edit is
+  one line in each app's gradle file + the tag
+  (`v<galleryVersionName>-r<round>` convention).
+- **F-56 (2026-11-07, open)** — Deeper AI/ML unification. The
+  directive's "Then like that we will do for Ai/ml, rust, kotlin,
+  edit gallery app, etc" sketches the next unification layer beyond
+  the Components section: candidates include surfacing the Rust
+  engine version + ABI + the ONNX runtime version in the components
+  rows (a BuildConfig/BuildShape-driven detail line), and an
+  in-basic "toadAI" discovery surface that deep-links the engine
+  build's consent + model cards instead of only opening the app.
+  Needs a maintainer taste call before any build-shape rework.
+- **F-57 (2026-11-07, open)** — The components probe freshness. The
+  section probes in a `remember` (re-probed per Settings entry, no
+  lifecycle observer): an install/uninstall that happens WHILE the
+  user stares at the page does not refresh the rows until they leave
+  and return. Deliberate for r55 (five cheap reads, zero state). If
+  device feedback wants live updates, the fix is a
+  `registerPackageInstall/removeReceiver`-fed state line — a small,
+  contained change.
+- **Carried** — D-1 root fix (§5.1 decision), R51-3 waves 3a–3d, PR
+  #134, the r52 video follow-ups (F-40 the text/effects pipeline,
+  F-41 video-session undo/redo, F-42 the waveform strip, F-43 the
+  volume device rows), F-52 (pin the derived violet neutrals),
+  F-53 (AI tab granularity), F-54 (video BackHandler port), PAT
+  revocation (advised again after this round's push).

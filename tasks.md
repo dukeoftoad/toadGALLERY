@@ -313,3 +313,42 @@ video follow-ups.
   approval + actions analyzes) — the Kotlin transformation itself
   compiled clean on the first attempt. Remaining: the maintainer's
   review/merge.
+
+## r55 checkpoint — the one-launcher unification round (2026-11-07)
+
+**Directive (maintainer chat, 2026-11-07):** "Continue build the app
+for beta release, focus on gallery app for now. refine, polish,
+ui/ux all the components refine. About toadGALLERY(2) need to unify
+under setting page. Then like that we will do for Ai/ml, rust,
+kotlin, edit gallery app, etc."
+
+**Round state (branch `ui/r55-gallery-unification` off main `3cf3f34`; CI is the compile judge):**
+- [x] The inventory (the Explore agent): the four gallery
+  applicationIds each carrying the same MAIN/LAUNCHER filter + shared
+  icon (the "(2)" duplication), the r50 suffixed-label band-aid, the
+  SettingsScreen house idiom + section seams, the edit app's
+  launcher-less contract shape, the 05-settings.png baseline
+  viewport.
+- [x] The launcher consolidation: `.LauncherAlias`
+  (`android:enabled="${launcherAliasEnabled}"`) carries MAIN/LAUNCHER;
+  MainActivity stays exported with no intent-filter; defaultConfig
+  true + three flavor overrides false in `apps/gallery/build.gradle.kts`.
+- [x] The Settings "Installed components" section: the five-row
+  family probe (self + BuildShape flavor copy, engine siblings with
+  Open, the editor with the viewer hint), explicit-component intent
+  open path, `settings_components_*` test tags, all copy in
+  strings_r55.xml.
+- [x] The `<queries>` additions: four family `<package>` entries +
+  the video-mime contract mirrors (the r42 gap).
+- [x] The CI gate: LauncherConsolidationTest (Robolectric, sdk 34,
+  every flavor's unit-test task).
+- [x] The local gates: brace/paren/bracket delta 0, lex OK, both XML
+  files well-formed (one `---`-in-XML-comment catch, fixed), strings
+  uniqueness clean, PrivacyPolicyTest permission pins untouched,
+  screenshot-baseline safety documented (section strictly below the
+  captured viewport).
+- [x] versionCode 40 (`0.4.5-alpha` unchanged) + the per-round
+  comment.
+- [x] Ledgers: CHANGELOG r55 (top), roadmap v2.21, worklog Run #29,
+  follow-up F-55/F-56/F-57, this checkpoint.
+- [ ] Commit → push → PR → CI → the maintainer's review/merge.

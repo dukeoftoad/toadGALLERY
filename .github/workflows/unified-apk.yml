@@ -196,11 +196,14 @@ jobs:
       # MUST be present in the produced APK, or the job dies before upload.
       - name: Verify the embedded editor + engine classes (hard gate)
         run: |
-          for CLASS in \
+          # Scan EVERY dex file (classes*.dex --- the editor sources push
+          # the build past the single-dex limit; run #11's gate failure was
+          # single-dex exclusivity-blind, not a compile failure).
+          for CLS in \
             "io/github/dukeoftoad/gallery/edit/EditActivity" \
             "io/github/dukeoftoad/gallery/edit/video/VideoEditActivity"; do
-            if ! unzip -p "$APK" classes.dex | strings | grep -q "$CLASS"; then
-              echo "::error::unified APK is missing the embedded editor class $CLASS --- the unified flavor no longer compiles the editor sources in-process; check apps/gallery/build.gradle.kts sourceSets (the r63 java.directories fix)"
+            if ! unzip -p "$APK" 'classes*.dex' | strings | grep -q "$CLS"; then
+              echo "::error::unified APK is missing the embedded editor class $CLS --- the unified flavor no longer compiles the editor sources in-process; check apps/gallery/build.gradle.kts sourceSets (the r63 kotlin.srcDirs fix)"
               exit 1
             fi
           done

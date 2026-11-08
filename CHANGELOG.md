@@ -32,17 +32,22 @@ them authored by parallel agents on disjoint files.
   No device ever caught it because the separately-installed edit APK always
   answered the contract launch; a fresh install of only the unified app
   finally hit the gap. Three fixes, each pinning a different layer:
-  (1) the unified java registration now rides the SAME
-  `.java.directories.add(...)` API the main source set uses (the one the
-  built-in Kotlin compiler provably consumes --- the config-phase probe
-  shows `../edit/src/main/kotlin` on the unified source set's new-API
-  directories); (2) unified-apk.yml gains the embedded-code hard gate: the
-  two manifest-declared editor entry classes and
-  `lib/arm64-v8a/libtoad_ml_jni.so` MUST be present in the produced APK or
-  the job fails before upload; (3) the packaging-discipline guard regex now
-  covers `Unified`, so an engine-less unified assemble fails fast like its
-  engine-family siblings. versionCode 44 so the fixed APK installs over
-  vc43 in place.
+  (1) the operative fix: the unified source set now registers
+  `../edit/src/main/kotlin` on its KOTLIN directory set
+  (`.kotlin.srcDirs(...)`), because the offline config probe proved AGP
+  9.2.1 built-in Kotlin seeds its compile task from the per-source-set
+  kotlin directory set (main compiles only because src/main/kotlin is its
+  DEFAULT seed --- the java registrations were never the compiler's
+  input). The first attempt registered the java directory set instead and
+  CI run #11's own gate caught it: assemble green, classes still absent.
+  (2) unified-apk.yml gains the embedded-code hard gate: the two
+  manifest-declared editor entry classes and
+  `lib/arm64-v8a/libtoad_ml_jni.so` MUST be present in the produced APK
+  (scanning EVERY classes*.dex, multi-dex safe --- run #11's gate was
+  single-dex blind) or the job fails before upload. (3) the
+  packaging-discipline guard regex now covers `Unified`, so an engine-less
+  unified assemble fails fast like its engine-family siblings. versionCode
+  44 so the fixed APK installs over vc43 in place.
 
 ### Fixed (r63a --- the fix-first round, zero design change)
 

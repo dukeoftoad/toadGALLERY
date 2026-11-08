@@ -1154,11 +1154,17 @@ the public remote each time.
   the AGP 9 built-in Kotlin compiler while the same legacy API on
   res/assets kept merging (resources shipped, classes never did). Older
   devices never noticed because the separately-installed edit APK answered
-  the contract. Fixed in three layers: the unified java registration
-  rides `.java.directories.add(...)` (the main source set's proven API),
-  unified-apk.yml hard-gates the embedded editor classes + the engine JNI
-  library before upload, and the packaging-discipline guard covers
-  `Unified`. versionCode 44 rides the fix.
+  the contract. Fixed in three layers: the operative one registers
+  `../edit/src/main/kotlin` on the unified source set's KOTLIN directory
+  set (the offline probe proved AGP 9.2.1 built-in Kotlin seeds its
+  compile task from the per-source-set kotlin set --- main compiles only
+  because src/main/kotlin is its DEFAULT seed; the first attempt used the
+  java directory set and CI run #11's own embedded-code gate caught the
+  miss: assemble green, classes still absent), unified-apk.yml hard-gates
+  the embedded editor classes + the engine JNI library before upload
+  (scanning every classes*.dex --- the editor sources push the build
+  multi-dex), and the packaging-discipline guard covers `Unified`.
+  versionCode 44 rides the fix.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69 (the
   EditorPalette registry the r63b re-pin landed IS its plug-in point),

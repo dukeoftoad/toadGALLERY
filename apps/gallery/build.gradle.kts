@@ -718,22 +718,43 @@ android {
         // resource link failed).
         //
         // r63 FIX (the device round: "the unified build doesn't contain the
-        // editor"): the java line above used the LEGACY .java.srcDirs(...)
-        // API while the main/test lines use the AGP 9 new .java.directories
-        // API. Under AGP 9 built-in Kotlin the legacy call SILENTLY stopped
-        // feeding the Kotlin compilation --- resources and assets (legacy
-        // .srcDirs on res/assets) still merged, so four unified releases
-        // (r59-r63, the dex probe on the shipped vc42/vc43 APKs: ZERO
-        // io/github/dukeoftoad/gallery/edit strings) shipped with the
-        // contract activities DECLARED in the manifest but ABSENT from the
-        // dex. The device never saw it because the separate edit APK was
-        // always installed alongside and the resolver launched THAT. The
-        // unified java registration now uses the SAME new-API call the
-        // main source set uses --- the one the built-in Kotlin compiler
-        // provably consumes. The unified-apk.yml embedded-code gate fails
-        // the job before upload if the editor classes ever go missing
-        // again, so this can never silently regress.
+        // editor") --- TWO CI rounds to pin the real wiring, both kept here
+        // because each layer taught something:
+        //
+        // The r59 symptom: four unified releases (r59-r63; the dex probe on
+        // the shipped vc42/vc43 APKs: ZERO io/github/dukeoftoad/gallery/edit
+        // strings) shipped with the contract activities DECLARED in the
+        // manifest but ABSENT from the dex --- resources and assets (legacy
+        // .srcDirs on res/assets) still merged, the Kotlin sources never
+        // compiled. Older devices never noticed because the separate edit
+        // APK always answered the contract launch; the fresh-install device
+        // round finally hit it (Edit tap -> nothing).
+        //
+        // Fix attempt 1 (run #11): register ../edit on the unified JAVA
+        // directory set (.java.directories, the API the main/test lines
+        // use). The assemble SUCCEEDED (the classpath wiring below was
+        // always complete) but the embedded-code gate STILL failed: the
+        // AGP 9 built-in Kotlin compile task does NOT consume
+        // sourceSets[].java at all.
+        //
+        // The real wiring (the offline config probe, probe-sourcesets2):
+        // AGP 9.2.1 gives every Android source set a dedicated KOTLIN
+        // directory set, and that is what the built-in Kotlin task seeds
+        // from: main carries [src/main/java, src/main/kotlin] by DEFAULT
+        // (which is why the java registrations above were never actually
+        // needed for Kotlin), and unified carries only
+        // [src/unified/java, src/unified/kotlin]. The operative fix is the
+        // .kotlin.srcDirs registration below; the java.directories line
+        // stays as belt-and-braces for any Java-consumer path (javac
+        // filters .kt out of its own inputs --- run #11's assemble proved
+        // the mixed build tolerates it).
+        //
+        // The unified-apk.yml embedded-code gate (scanning EVERY dex file,
+        // multi-dex safe) fails the job before upload if the editor
+        // classes ever go missing again, so this can never silently
+        // regress.
         getByName("unified").java.directories.add("../edit/src/main/kotlin")
+        getByName("unified").kotlin.srcDirs("../edit/src/main/kotlin")
         getByName("unified").assets.srcDirs("../edit/src/main/assets")
         getByName("unified").res.srcDirs("../edit/src/main/res")
     }

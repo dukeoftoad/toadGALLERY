@@ -213,6 +213,50 @@ jobs:
           fi
           echo "embedded-code gate OK --- both editor entry classes + the engine JNI library are in the APK."
 
+      # r63 fix F-74 DIAGNOSTIC (round 5): the editor sources compile but
+      # every R.string/R.drawable member lookup fails while the gallery's own
+      # sources compile clean in the SAME task --- so the R class the editor
+      # sources resolve is NOT the gallery's generated R. The source-level
+      # typealias seam (EditorRAlias) compiles yet loses the resolution.
+      # This step captures the generated R jars (the compile classpath's R
+      # surface) so the shadowing class --- if any --- is visible by name.
+      - name: Diagnostic --- capture the generated R jars (always)
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/rjar-diagnostic"
+          FOUND=0
+          for JAR in $(find apps/gallery/build/intermediates apps/gallery/build/generated -name "*.jar" 2>/dev/null); do
+            if unzip -l "$JAR" 2>/dev/null | grep -qE "R(class)?\.class|/R\.class|edit/R"; then
+              cp "$JAR" "$RUNNER_TEMP/rjar-diagnostic/$(echo "$JAR" | tr '/' '_')"
+              FOUND=1
+            fi
+          done
+          for RTXT in $(find apps/gallery/build -name "R.txt" 2>/dev/null); do
+            cp "$RTXT" "$RUNNER_TEMP/rjar-diagnostic/$(echo "$RTXT" | tr '/' '_')"
+            FOUND=1
+          done
+          {
+            echo "### R-jar diagnostic"
+            echo ""
+            for J in "$RUNNER_TEMP"/rjar-diagnostic/*.jar; do
+              [ -e "$J" ] || continue
+              echo "#### $(basename "$J")"
+              echo '```'
+              unzip -l "$J" | grep -E "edit/R|R\.class" | head -40 || true
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "diagnostic jars found: $FOUND"
+      - name: Upload the R-jar diagnostic
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rjar-diagnostic
+          path: |
+            /home/runner/work/_temp/rjar-diagnostic/**
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload the unified APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

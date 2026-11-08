@@ -66,10 +66,33 @@ data class AiDogfoodState(
     val note: Note? = null,
     /** The last self-test outcome, or null. */
     val selfTest: SelfTestResult? = null,
+    /**
+     * The r60 live download progress (the Settings bars), or null when no
+     * provisioning transfer is running. Light-weight by design: the byte
+     * events NEVER re-derive the disk-backed presence rows (that stays on
+     * the per-asset callback) --- they only move the fraction + the label.
+     */
+    val downloadProgress: DownloadProgress? = null,
 ) {
 
     /** One model asset's presence row. */
     data class AssetStatus(val fileName: String, val installed: Boolean)
+
+    /**
+     * The r60 progress line the AI card renders while a model transfer is
+     * in flight: which capability, which file (of how many), how many
+     * bytes arrived of the pinned total, and whether the file is already
+     * fully downloaded and in its size + SHA-256 verification pass.
+     */
+    data class DownloadProgress(
+        val capability: ModelManifest.Capability,
+        val fileName: String,
+        val fileIndex: Int,
+        val fileCount: Int,
+        val bytesSoFar: Long,
+        val totalBytes: Long,
+        val verifying: Boolean = false,
+    )
 
     /** Last download/delete action outcome. */
     sealed interface Note {
@@ -92,7 +115,10 @@ data class AiDogfoodState(
         object SemanticDeleted : Note
     }
 
-    /** The engine self-test outcome (one JPEG, one inference, timed). */
+    /**
+     * The engine self-test outcome (a bounded multi-photo scan, one
+     * engine init, timed --- r60).
+     */
     sealed interface SelfTestResult {
         /** No `libtoad_ml_jni.so` in this build --- the honest answer. */
         object LibraryMissing : SelfTestResult
@@ -100,8 +126,28 @@ data class AiDogfoodState(
         /** Library present but no JPEG exists on the device to test with. */
         object NoJpegFound : SelfTestResult
 
-        /** "<file>: N faces in X ms --- engine OK". */
-        data class Ok(val fileName: String, val faces: Int, val elapsedMs: Long) : SelfTestResult
+        /**
+         * Faces were found: [faces] hits across [scanned] photos in
+         * [elapsedMs], the first hit in [firstFaceFile]. The scan stops at
+         * the first photo with a face, so [scanned] can be below the
+         * scan budget.
+         */
+        data class Ok(
+            val scanned: Int,
+            val faces: Int,
+            val elapsedMs: Long,
+            val firstFaceFile: String,
+        ) : SelfTestResult
+
+        /**
+         * r60: the scan ran clean over [scanned] photos in [elapsedMs] and
+         * found NO faces --- which on a library of UI screenshots is the
+         * detector WORKING, not failing. This state exists so "0 faces"
+         * can never again read as "the engine is broken": the models
+         * provably load and run (init + every inference succeeded), the
+         * scanned photos just contain no detectable faces.
+         */
+        data class Zero(val scanned: Int, val elapsedMs: Long) : SelfTestResult
 
         /** Init or inference failed; [message] is the engine's own text. */
         data class Failed(val message: String) : SelfTestResult
@@ -204,9 +250,14 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                     // The per-asset callback (r21 contract) fires after each
                     // verified install; re-deriving the rows there gives the
                     // section live per-asset updates while the run continues.
-                    provisioner.provision(ModelManifest.Capability.FACE) {
-                        _state.value = snapshot().copy(busy = true)
-                    }
+                    // The r60 listener feeds the byte-level bars (light
+                    // StateFlow copies ONLY --- never the disk-backed
+                    // snapshot; see [progressListener]).
+                    provisioner.provision(
+                        ModelManifest.Capability.FACE,
+                        { _state.value = snapshot().copy(busy = true) },
+                        progressListener(ModelManifest.Capability.FACE),
+                    )
                     AiDogfoodState.Note.Downloaded
                 } catch (e: CancellationException) {
                     throw e
@@ -216,7 +267,7 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                     // (e.g. the model dir cannot be created) is narrated too.
                     AiDogfoodState.Note.DownloadFailed(e.message ?: e.javaClass.simpleName)
                 }
-                snapshot().copy(note = note)
+                snapshot().copy(note = note, downloadProgress = null)
             }
         }
     }
@@ -255,9 +306,11 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.value = withContext(Dispatchers.IO) {
                 val note = try {
-                    provisioner.provision(ModelManifest.Capability.SEMANTIC) {
-                        _state.value = snapshot().copy(busy = true)
-                    }
+                    provisioner.provision(
+                        ModelManifest.Capability.SEMANTIC,
+                        { _state.value = snapshot().copy(busy = true) },
+                        progressListener(ModelManifest.Capability.SEMANTIC),
+                    )
                     AiDogfoodState.Note.SemanticDownloaded
                 } catch (e: CancellationException) {
                     throw e
@@ -266,7 +319,7 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                         e.message ?: e.javaClass.simpleName,
                     )
                 }
-                snapshot().copy(note = note)
+                snapshot().copy(note = note, downloadProgress = null)
             }
         }
     }
@@ -281,6 +334,47 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                 snapshot().copy(note = AiDogfoodState.Note.SemanticDeleted)
             }
         }
+    }
+
+    /**
+     * The r60 byte-level listener both download actions share: it moves
+     * ONLY the [AiDogfoodState.downloadProgress] line (read-copy-write of
+     * the current state, NO disk access --- the events arrive every 128 KiB
+     * and [snapshot()]'s receipt walk must stay off that hot path; the
+     * per-asset presence re-derivation keeps riding the r21 callback).
+     * The listener never throws into the provisioning path: the whole body
+     * is a state copy, and even an out-of-order event falls back to a sane
+     * progress line rather than killing the download.
+     */
+    private fun progressListener(
+        capability: ModelManifest.Capability,
+    ): ProvisionListener = ProvisionListener { event ->
+        val current = _state.value
+        val progress = when (event) {
+            is ProvisionEvent.DownloadStart -> AiDogfoodState.DownloadProgress(
+                capability = capability,
+                fileName = event.spec.fileName,
+                fileIndex = event.index,
+                fileCount = event.count,
+                bytesSoFar = 0L,
+                totalBytes = event.spec.sizeBytes,
+            )
+            is ProvisionEvent.DownloadBytes ->
+                (current.downloadProgress?.takeIf { it.capability == capability }
+                    ?: AiDogfoodState.DownloadProgress(
+                        capability, event.spec.fileName, 1, 1, event.bytesSoFar, event.totalBytes,
+                    ))
+                    .copy(
+                        fileName = event.spec.fileName,
+                        bytesSoFar = event.bytesSoFar,
+                        totalBytes = event.totalBytes,
+                        verifying = false,
+                    )
+            is ProvisionEvent.Verifying ->
+                current.downloadProgress?.copy(verifying = true)
+            is ProvisionEvent.Installed -> null
+        }
+        _state.value = current.copy(downloadProgress = progress)
     }
 
     /**
@@ -459,16 +553,24 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
      * The self-test body, already on a worker thread. Fails honestly at
      * every gate (no library, no JPEG, init failure, engine exception)
      * instead of pretending an engine result.
+     *
+     * r60: the scan is no longer the FIRST JPEG only. A library whose
+     * newest photos are UI screenshots made the old single-photo test
+     * report "0 faces" for a perfectly healthy engine --- the maintainer's
+     * 2026-11-08 device round caught exactly that. Now up to
+     * [SELF_TEST_MAX_PHOTOS] eligible JPEGs run through the SAME engine
+     * session; the scan stops at the first photo with a face (bounded
+     * work) and the outcome states which photos were scanned, so a clean
+     * zero is an honest "these photos contain no faces", never a bare
+     * "0 faces".
      */
     private fun runSelfTestBlocking(): AiDogfoodState.SelfTestResult {
         if (!engine.available) return AiDogfoodState.SelfTestResult.LibraryMissing
-        val jpeg = source.queryTimeline()
-            .firstOrNull { !it.isVideo && it.mimeType.equals("image/jpeg", ignoreCase = true) }
-            ?: return AiDogfoodState.SelfTestResult.NoJpegFound
-        val displayName = displayNameOf(jpeg.uri) ?: "JPEG ${jpeg.id}"
+        val candidates = source.queryTimeline()
+            .filter { !it.isVideo && it.mimeType.equals("image/jpeg", ignoreCase = true) }
+            .take(SELF_TEST_MAX_PHOTOS)
+        if (candidates.isEmpty()) return AiDogfoodState.SelfTestResult.NoJpegFound
         return try {
-            val bytes = resolver.openInputStream(jpeg.uri)?.use { it.readBytes() }
-                ?: return AiDogfoodState.SelfTestResult.Failed("cannot open $displayName")
             when (val init = engine.initialize(provisioner.modelsDir.absolutePath)) {
                 is MlEngine.State.Ready -> Unit
                 is MlEngine.State.Error ->
@@ -477,9 +579,42 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                     return AiDogfoodState.SelfTestResult.Failed("engine init: $init")
             }
             val startedAt = SystemClock.elapsedRealtime()
-            val faces = engine.detectFacesJpeg(bytes)
+            var facesTotal = 0
+            var scanned = 0
+            var firstFaceFile: String? = null
+            var firstOpenError: String? = null
+            for (item in candidates) {
+                val displayName = displayNameOf(item.uri) ?: "JPEG ${item.id}"
+                val bytes = try {
+                    resolver.openInputStream(item.uri)?.use { it.readBytes() }
+                } catch (e: Exception) {
+                    null
+                }
+                if (bytes == null) {
+                    // One unreadable photo does not end the scan --- but it
+                    // is not silently swallowed either: if EVERY candidate
+                    // fails this way, the first reason becomes the answer.
+                    if (firstOpenError == null) firstOpenError = "cannot open $displayName"
+                    continue
+                }
+                val faces = engine.detectFacesJpeg(bytes)
+                scanned++
+                if (faces.isNotEmpty()) {
+                    facesTotal += faces.size
+                    if (firstFaceFile == null) firstFaceFile = displayName
+                    break // bounded work: one hit proves the pipeline end-to-end
+                }
+            }
             val elapsedMs = SystemClock.elapsedRealtime() - startedAt
-            AiDogfoodState.SelfTestResult.Ok(displayName, faces.size, elapsedMs)
+            if (scanned == 0) {
+                return AiDogfoodState.SelfTestResult.Failed(firstOpenError ?: "no scannable photo")
+            }
+            val hitFile = firstFaceFile
+            if (hitFile != null) {
+                AiDogfoodState.SelfTestResult.Ok(scanned, facesTotal, elapsedMs, hitFile)
+            } else {
+                AiDogfoodState.SelfTestResult.Zero(scanned, elapsedMs)
+            }
         } catch (e: IllegalStateException) {
             // The engine's own failure shape (Rust panics surface here);
             // its message is the honest diagnostic, not a paraphrase.
@@ -553,5 +688,13 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
 
         /** [queueState]'s WhileSubscribed stop timeout (house milliseconds). */
         const val STOP_TIMEOUT_MILLIS = 5_000L
+
+        /**
+         * The r60 self-test's scan budget (newest-first eligible JPEGs).
+         * Twelve detections at device speed stay in the low seconds even
+         * on a cold session, and twelve consecutive faceless photos are
+         * strong evidence the LIBRARY (not the engine) has no faces.
+         */
+        const val SELF_TEST_MAX_PHOTOS = 12
     }
 }

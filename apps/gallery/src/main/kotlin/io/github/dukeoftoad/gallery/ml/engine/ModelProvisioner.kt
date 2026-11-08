@@ -7,6 +7,58 @@ import java.util.Properties
 import java.util.concurrent.CancellationException
 
 /**
+ * The r60 live provisioning progress event stream (the Settings download
+ * bars). The r21 contract deliberately shipped per-asset-only progress
+ * ("byte-level progress is deliberately NOT added"); the maintainer's
+ * 2026-11-08 device round reverses that call --- a ~207 MiB SEMANTIC pack
+ * with zero feedback read as a frozen app on a real connection.
+ *
+ * Order per asset: [ProvisionEvent.DownloadStart] exactly once, zero or
+ * more monotonically increasing [ProvisionEvent.DownloadBytes] (the LAST
+ * one always carries the file's full byte count), exactly one
+ * [ProvisionEvent.Verifying] (the SHA-256 + size pass), exactly one
+ * [ProvisionEvent.Installed] --- then the next asset's DownloadStart.
+ * Events fire on the CALLER'S thread (the provisioner is blocking IO;
+ * the Settings card calls in from Dispatchers.IO).
+ */
+sealed interface ProvisionEvent {
+
+    /** A new asset's transfer begins; [index]/[count] are 1-based. */
+    data class DownloadStart(
+        val spec: ModelManifest.Model,
+        val index: Int,
+        val count: Int,
+    ) : ProvisionEvent
+
+    /**
+     * Byte progress within one asset's transfer. [totalBytes] is the
+     * manifest's pinned [ModelManifest.Model.sizeBytes] --- the HTTP layer
+     * already fails fast when a present Content-Length disagrees with it,
+     * so the pin IS the honest denominator.
+     */
+    data class DownloadBytes(
+        val spec: ModelManifest.Model,
+        val bytesSoFar: Long,
+        val totalBytes: Long,
+    ) : ProvisionEvent
+
+    /** The asset's bytes are fully on disk; the size + SHA-256 pass runs. */
+    data class Verifying(val spec: ModelManifest.Model) : ProvisionEvent
+
+    /** The asset passed verification and is atomically in place + receipted. */
+    data class Installed(
+        val spec: ModelManifest.Model,
+        val index: Int,
+        val count: Int,
+    ) : ProvisionEvent
+}
+
+/** The sink [ModelProvisioner.provision] reports [ProvisionEvent]s to. */
+fun interface ProvisionListener {
+    fun on(event: ProvisionEvent)
+}
+
+/**
  * Downloads, verifies and atomically installs the pinned models of
  * [ModelManifest] into an app-private directory --- the Ente asset-manager
  * flow, reimplemented in Kotlin (upstream reference:
@@ -140,26 +192,63 @@ class ModelProvisioner(
      * Idempotent: already-installed assets are skipped without transport
      * calls. Throws the first [ProvisionException]; completed installs stay
      * installed (per-item failure isolation).
+     *
+     * [onProgress] stays the r21 per-asset callback (fired after each
+     * verified install; the Settings presence rows re-derive on it).
+     * [listener] is the r60 byte-level event stream (see [ProvisionEvent]);
+     * it is OPTIONAL and never throws into the provisioning path --- a
+     * sinking UI must not be able to fail a download.
      */
     fun provision(
         capability: ModelManifest.Capability,
         onProgress: ((ModelManifest.Model) -> Unit)? = null,
+        listener: ProvisionListener? = null,
     ) {
         ensureDir()
-        for (spec in forCapability(capability)) {
+        val specs = forCapability(capability)
+        for ((offset, spec) in specs.withIndex()) {
             if (installedFile(spec) != null) continue
-            installOne(spec)
+            installOne(spec, offset + 1, specs.size, listener)
             onProgress?.invoke(spec)
         }
     }
 
-    private fun installOne(spec: ModelManifest.Model) {
+    private fun installOne(
+        spec: ModelManifest.Model,
+        index: Int,
+        count: Int,
+        listener: ProvisionListener?,
+    ) {
         val final = finalFile(spec)
         val temp = tempFile(spec)
         try {
+            listener emit ProvisionEvent.DownloadStart(spec, index, count)
             downloader.open(spec).use { stream ->
-                temp.outputStream().buffered().use { out -> stream.copyTo(out) }
+                temp.outputStream().buffered().use { out ->
+                    // r60: the manual copy loop replaces copyTo --- byte
+                    // progress for the Settings bars. The throttle is a
+                    // plain byte budget (never a clock: no scheduling
+                    // dependency inside a blocking IO loop); the final
+                    // emission is UNCONDITIONAL so a short-but-complete
+                    // transfer still reports its exact total.
+                    val buffer = ByteArray(COPY_BUFFER_BYTES)
+                    var bytesSoFar = 0L
+                    var sinceEmit = 0L
+                    while (true) {
+                        val read = stream.read(buffer)
+                        if (read == -1) break
+                        out.write(buffer, 0, read)
+                        bytesSoFar += read
+                        sinceEmit += read
+                        if (sinceEmit >= EMIT_CHUNK_BYTES) {
+                            listener emit ProvisionEvent.DownloadBytes(spec, bytesSoFar, spec.sizeBytes)
+                            sinceEmit = 0
+                        }
+                    }
+                    listener emit ProvisionEvent.DownloadBytes(spec, bytesSoFar, spec.sizeBytes)
+                }
             }
+            listener emit ProvisionEvent.Verifying(spec)
             val error = ModelVerifier.verifyFile(temp, spec)
             if (error != null) throw ProvisionException.VerificationFailed(spec.fileName, error)
             // Atomic promotion: same-directory rename. Replace any orphan
@@ -169,6 +258,7 @@ class ModelProvisioner(
                 throw IOException("rename to ${final.name} failed")
             }
             writeReceipt(spec)
+            listener emit ProvisionEvent.Installed(spec, index, count)
         } catch (e: ProvisionException.VerificationFailed) {
             throw e
         } catch (e: CancellationException) {
@@ -177,6 +267,20 @@ class ModelProvisioner(
             throw ProvisionException.DownloadFailure(spec.fileName, e)
         } finally {
             if (temp.exists()) temp.delete()
+        }
+    }
+
+    /**
+     * The guarded emission: a listener is EXTERNAL UI code, so a throw
+     * inside it must never fail the download it is reporting on (the
+     * contract "never throws into the provisioning path"). Swallowing
+     * is honest here --- the download's own failure surface is untouched.
+     */
+    private infix fun ProvisionListener?.emit(event: ProvisionEvent) {
+        try {
+            this?.on(event)
+        } catch (_: Exception) {
+            // a sinking UI never fails the download
         }
     }
 
@@ -237,6 +341,12 @@ class ModelProvisioner(
         const val PART_SUFFIX = ".part"
         const val SHA_SUFFIX = ".sha256"
         const val TIME_SUFFIX = ".installedAtMillis"
+
+        /** The copy loop's read buffer (64 KiB --- streamed, never whole-file). */
+        const val COPY_BUFFER_BYTES = 64 * 1024
+
+        /** Byte budget between two [ProvisionEvent.DownloadBytes] emissions. */
+        const val EMIT_CHUNK_BYTES = 128L * 1024
     }
 }
 

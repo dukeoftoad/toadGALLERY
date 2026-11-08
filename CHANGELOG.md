@@ -4,6 +4,65 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r60 round (the device-feedback fixes: download progress bars, the honest face self-test, the Stories/Settings UI flaws; gallery unchanged versions, unified APK rebuilt)
+
+The maintainer's 2026-11-08 device round on the unified APK (build 40)
+reported: the "found 0 faces" scare on a screenshot-heavy library, no
+download feedback on multi-megabyte model fetches, a duplicated
+"About toadGALLERY" row, and Stories date labels painting over each
+other. Four fixes, all in `apps/gallery`.
+
+### Added
+
+- **Byte-level model-download progress** (reverses the r21 contract's
+  "deliberately NOT added" call): `ModelProvisioner.provision` gains an
+  optional `ProvisionListener` streaming `ProvisionEvent`s per asset —
+  `DownloadStart` (file i of n) → throttled `DownloadBytes` (a 128 KiB
+  emission budget; the last emission always exact) → `Verifying` (the
+  size + SHA-256 pass) → `Installed`. The denominator is the manifest
+  pin (the HTTP layer already fails fast on a disagreeing
+  Content-Length). A guarded-emission contract: a throwing UI listener
+  can never fail the download. `AiEngineViewModel` mirrors the events
+  into a light `DownloadProgress` state (read-copy-write only — the
+  disk-backed presence re-derivation stays on the r21 per-asset
+  callback), and the Settings AI card swaps its indeterminate spinner
+  for a determinate `LinearProgressIndicator` + live line
+  (`<file> · 12.4 MiB / 30.9 MiB · file 1 of 2`, then
+  `verifying size + SHA-256…`) while a download runs.
+- **The multi-photo face self-test** (r60 honesty): the self-test no
+  longer runs ONE JPEG — it scans up to 12 newest-first JPEGs through
+  one engine session, stops at the first photo with a face, and
+  reports `N faces in X ms across M scanned photos — first hit:
+  <file>` (`settings_ai_selftest_hit`), or the new clean-zero outcome:
+  `No faces in M scanned photos — engine verified OK (the models load
+  and run; those photos contain no detectable faces)`
+  (`settings_ai_selftest_no_faces`). A bare "0 faces" can no longer
+  read as a broken engine.
+
+### Fixed
+
+- **[ui] Stories date labels overlapped** (StoriesShelf.kt): the
+  StoryCard `Column` and both label texts were width-unconstrained, so
+  a long single-line range label ("1 November 2026 – 7 November 2026")
+  measured ~2.5x the 96.dp cover and painted over the neighbouring
+  cards and off the screen edge. The card now pins its geometry
+  (`width(96.dp)`), the range label wraps to 2 centered lines with
+  ellipsis, the count line stays 1.
+- **[ui] The About entry row repeated its heading** (SettingsScreen.kt):
+  the row rendered `settings_about_title` — the same string as the
+  "About toadGALLERY" heading directly above it — which reads as a
+  duplication bug. New `settings_about_entry`
+  ("Version, privacy and credits"), matching the Project progress
+  section's heading/entry split.
+
+### Tests
+
+- `ModelProvisionerTest` +4: the event-order/monotonic-bytes/exact-total
+  contract over a two-asset capability (with the legacy `onProgress`
+  callback still verified), the 128 KiB throttle on a 300 KiB transfer,
+  the zero-event idempotent re-provision (no transport call either),
+  and the throwing-listener resilience.
+
 ## [Unreleased] — the r58 round (edit panel slider craft, F-58b; `0.4.14-edit-alpha`; gallery unchanged)
 
 The r56 ledger scheduled F-58b as the per-panel `LabeledSlider` conversion +

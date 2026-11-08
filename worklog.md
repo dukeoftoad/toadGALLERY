@@ -2731,3 +2731,60 @@ pipeline (F-60 records the promotion path).
 
 **Remaining.** The maintainer's review; F-60/F-61; carried items
 (F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d), PAT revocation advised.
+
+### Run #33 — 2026-11-08 (the r60 window: the device-feedback fixes — download progress bars, the honest face self-test, the Stories/Settings screenshot flaws)
+
+**The task.** The maintainer's 2026-11-08 device round on the unified
+APK (build 40) with two screenshots: "fix the flaws in app based on my
+attached screenshots. Add progress bar for downloading ml models. Face
+models are not working — saying found 0 faces."
+
+**The face verdict (the honest root cause).** The detection pipeline was
+audited end to end before writing a fix: `detect_faces_jpeg` hard-errors
+on a not-ready engine and on missing models (`FACE_MODELS_NOT_INSTALLED`,
+validated file sizes at init, warm-up inference at init — a broken model
+can never silently return zero); the vendored ente-ml detector is
+YOLOv5s-face at the pinned 0.5 confidence; decode failures are loud. So
+"0 faces" with a drained queue means the detector genuinely ran and found
+nothing — and the maintainer's own Photos screenshot shows WHY: the
+library is edit-app screenshots and a TV photo. The self-test's old
+contract made this look like a failure: it scanned exactly ONE JPEG (the
+newest), so a screenshot as photo #1 answered "0 faces" for a healthy
+engine. The r60 fix is honesty, not a threshold hack: the self-test scans
+up to 12 newest-first JPEGs in one session, stops at the first face, and
+a clean zero now says "the models load and run; those photos contain no
+detectable faces" — verified-OK, not broken. (A real face photo is the
+end-to-end proof: first hit reported with its file name.)
+
+**The progress bars.** The r21 contract's "byte-level progress is
+deliberately NOT added" call is reversed by the directive: a ~207 MiB
+SEMANTIC pack with only an indeterminate spinner read as a frozen app.
+`ProvisionEvent` (Start/Bytes/Verifying/Installed per asset, 128 KiB
+emission budget, exact final emission, the manifest pin as denominator)
+streams through an optional `ProvisionListener`; emission is guarded (a
+throwing UI cannot fail a download). `AiEngineViewModel` mirrors events
+into `DownloadProgress` (read-copy-write only — `snapshot()`'s receipt
+walk stays off the hot path), and the AI card renders a determinate
+`LinearProgressIndicator` + live line during transfers; the r50 spinner
+keeps covering delete/self-test. Legacy `onProgress` callback untouched.
+
+**The screenshot flaws.** (1) Stories: the StoryCard Column and labels
+were width-unconstrained — a long date-range label measured ~2.5x the
+96.dp cover and painted over neighbouring cards; geometry now pinned,
+2-line ellipsized centered labels. (2) Settings: the About entry row
+rendered the heading's own string ("About toadGALLERY" stacked twice);
+new `settings_about_entry` ("Version, privacy and credits").
+
+**Verification.** Local: `tools/kotlin_lex_check.py` green on all five
+touched Kotlin files. CI: gallery JVM suite (+4 provisioner progress
+tests: order/monotonic/exact totals, throttle, zero-event idempotence,
+throwing-listener resilience) + the screenshot verify gate (no gallery
+goldens touch Stories or the AI card). Branch `fix/r60-device-feedback`
+off `unified-app`; PR to main; after merge `unified-app` fast-forwards
+and unified-apk.yml rebuilds the unified APK with the fixes.
+
+**Remaining.** F-62 (self-test could surface per-photo engine timings),
+F-63 (the components page's "separate installable apps" copy on the
+unified build), F-64 (People empty-state could distinguish "index ran,
+zero faces" from "index never ran"); carried items unchanged, PAT
+revocation advised again.

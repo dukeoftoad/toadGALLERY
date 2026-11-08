@@ -1169,7 +1169,20 @@ the public remote each time.
   (`variant.sources.kotlin.addStaticSourceDirectory(...)` for ../edit and
   src/unified/kotlin, the compile task's direct documented input; the
   method name pinned by javap of gradle-api-9.2.1), and r59's
-  EditorRAlias R-seam is public.
+  EditorRAlias R-seam is public. Rounds 5-6: the alias seam turned out to
+  be a dead end --- the round-5 diagnostic artifact (the generated R jars
+  captured from the failing build) proves the compile R.jar carries all
+  277 editor entries under io.github.dukeoftoad.gallery.R$string, no
+  edit-package R exists on any classpath, and yet K2 refuses to resolve
+  the editor sources' bare R references through the source-level
+  typealias. The seam is now a GENERATED source class instead:
+  generateEditRCompat produces io/github/dukeoftoad/gallery/edit/R.java
+  from the unified variant's compile symbol list (build/intermediates/
+  compile_symbol_list), delegating every resource field to
+  io.github.dukeoftoad.gallery.R --- a source CLASS wins resolution
+  unambiguously, the delegation keeps runtime values correct (non-final
+  fields, the same non-final contract the runtime R replacement relies
+  on), and apps/edit stays untouched.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69 (the
   EditorPalette registry the r63b re-pin landed IS its plug-in point),

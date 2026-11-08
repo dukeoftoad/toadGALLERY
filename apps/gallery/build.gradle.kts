@@ -900,12 +900,12 @@ tasks.matching {
     dependsOn(generateEditRCompat)
 }
 // Explicit ordering: the generator reads the R.txt the variant's R-file
-// generation produces (a build-dir path read inside doLast carries no
-// automatic task dependency --- this makes it one).
-tasks.matching {
-    it.name == "generateUnifiedReleaseRFile" || it.name == "generateUnifiedDebugRFile"
-}.configureEach {
-    generateEditRCompat.configure { dependsOn(this@configureEach) }
+// generation produces. Lazy STRING dependencies (a provider .configure{}
+// call from inside another task's realization context is a Gradle 9
+// configuration-time error --- run #16) resolve in the task graph without
+// forcing container mutation here.
+generateEditRCompat.configure {
+    dependsOn("generateUnifiedReleaseRFile")
 }
 
 // --- Optional Rust engine packaging (r22, ADR-0020) ---

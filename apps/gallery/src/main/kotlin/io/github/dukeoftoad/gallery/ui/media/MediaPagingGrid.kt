@@ -172,7 +172,9 @@ fun MediaPagingGrid(
         header?.let { headerContent ->
             item(
                 key = "paging_header",
-                span = { StaggeredGridItemSpan.FullLine },
+                // The staggered item DSL takes the span as a VALUE (unlike
+                // LazyVerticalGrid's lambda form).
+                span = StaggeredGridItemSpan.FullLine,
             ) { headerContent() }
         }
         // Every lambda below reads `rows`/the snapshot defensively: the

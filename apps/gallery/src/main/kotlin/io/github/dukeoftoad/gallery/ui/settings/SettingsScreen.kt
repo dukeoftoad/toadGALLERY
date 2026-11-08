@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -2273,3 +2274,96 @@ private val GroupBy.labelRes: Int
         GroupBy.WEEK -> R.string.settings_group_by_week
         GroupBy.MONTH -> R.string.settings_group_by_month
     }
+
+/**
+ * r62: the Settings tab's segmented control scopes (the maintainer's IA
+ * call: "General | AI | System --- flatter, fewer taps, longer pages").
+ * One screen, three scopes; [labelRes] feeds the segment labels. The AI
+ * scope renders nothing on non-engine builds (the r46 gate hides the
+ * whole AI surface there), the same hide-not-crash posture the section
+ * always had.
+ */
+enum class SettingsTab(val labelRes: Int) {
+    GENERAL(R.string.settings_tab_general),
+    AI(R.string.settings_tab_ai),
+    SYSTEM(R.string.settings_tab_system),
+}
+
+/**
+ * r62 polish: the evolved section header --- the pre-r62 shape (title,
+ * primary color, heading anchor) shared by the NEW sections so they can
+ * never drift from the house pattern. The existing sections keep their
+ * inline headers untouched.
+ */
+@Composable
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() },
+    )
+}
+
+/**
+ * r62 polish: the evolved group card --- a 16dp ([ToadShapes.large])
+ * rounded container over a softened `surfaceVariant`, wrapping the new
+ * sections' rows so the Settings page reads as cards-with-headers instead
+ * of bare rows on the background. Padding vertical is 4dp so a row's own
+ * 12dp vertical padding makes the rhythm; horizontal 16dp matches the
+ * screen margin.
+ */
+@Composable
+private fun SettingsGroupCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(ToadShapes.large))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        content = content,
+    )
+}
+
+/**
+ * r62: one Privacy center row --- label left, status right. [ok] picks
+ * the status color: the primary (toad green) for the explicitly-safe
+ * state, `onSurfaceVariant` otherwise (a neutral, non-alarming gray ---
+ * the page narrates posture, it does not alarm).
+ */
+@Composable
+private fun PrivacyStatusRow(
+    label: String,
+    status: String,
+    ok: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = status,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (ok) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}

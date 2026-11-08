@@ -6,13 +6,16 @@
      photo surface's base strings (names prefixed editor_v2_ to avoid
      collisions with the older rounds). -->
 <resources>
-    <!-- The six tool tabs (also the sub-screen titles) -->
+    <!-- The six tool tabs (also the sub-screen titles). r63a V6: the
+         honest labels (the Extract tool saves a still FRAME, the
+         Animate tool exports a GIF segment; behavior unchanged, display
+         strings only). -->
     <string name="editor_v2_tab_trim">Trim</string>
     <string name="editor_v2_tab_speed">Speed</string>
     <string name="editor_v2_tab_audio">Audio</string>
     <string name="editor_v2_tab_adjust">Adjust</string>
-    <string name="editor_v2_tab_extract">Extract</string>
-    <string name="editor_v2_tab_animate">Animate</string>
+    <string name="editor_v2_tab_extract">Frame</string>
+    <string name="editor_v2_tab_animate">GIF</string>
 
     <!-- Header actions -->
     <string name="editor_v2_export">Export</string>
@@ -21,17 +24,23 @@
     <string name="editor_v2_confirm">Confirm changes</string>
     <string name="editor_v2_back">Back</string>
 
-    <!-- Transport -->
+    <!-- Transport. r63d: the three-button row retired; the canvas is
+         the transport now (tap = play/pause, double-tap half = seek). The
+         play/pause labels ride the overlay chip verbatim; the seek labels
+         name the chip's custom accessibility actions honestly (the retired
+         buttons sought one second; the double-tap seeks ten). -->
     <string name="editor_v2_play">Play</string>
     <string name="editor_v2_pause">Pause</string>
-    <string name="editor_v2_seek_back">Back one second</string>
-    <string name="editor_v2_seek_forward">Forward one second</string>
+    <string name="editor_v2_seek_back">Back ten seconds</string>
+    <string name="editor_v2_seek_forward">Forward ten seconds</string>
+    <string name="editor_v2_transport_hint">drag handles to trim · tap to seek</string>
 
     <!-- Preview + filmstrip -->
     <string name="editor_v2_fullscreen">Toggle fullscreen preview</string>
     <string name="editor_v2_fullscreen_fit">Preview fitted</string>
     <string name="editor_v2_fullscreen_zoom">Preview zoomed to fill</string>
     <string name="editor_v2_filmstrip">Filmstrip of the clip; drag to scrub</string>
+    <string name="editor_v2_trim_strip">Clip filmstrip; drag the handles to trim, tap to seek</string>
     <string name="editor_v2_filmstrip_state">Position %1$s</string>
     <string name="editor_v2_filmstrip_mini">Frame picker strip; drag to choose the frame</string>
     <string name="editor_v2_duration">Duration: %1$s</string>

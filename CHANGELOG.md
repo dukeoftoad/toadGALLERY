@@ -4,6 +4,94 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r63 round (the editor craft: the fix-first round, violet retires to toad-green, the Ente-style tune-rail, trim-on-filmstrip; unified versionCode 43, versionName stays 0.4.5-alpha)
+
+The maintainer's 2026-11-08 directive: "Coming to editor - you can see
+flaws and generic feel, buggy old ux design. craft proposed solution with
+visual design for approval. Take help from open source projects like ente,
+editor apps." The r63 proposal (built from code @ d1da449 + device
+screenshots; references read live: the ente/ente mobile editor sources,
+burhanrashid52/PhotoEditor, Fossify Gallery) was approved IN FULL (items
+1-8) before any code. Four phases on one branch sequence: r63a fixes
+(zero design), r63b chrome + re-pin, r63c panels, r63d video --- three of
+them authored by parallel agents on disjoint files.
+
+### Fixed (r63a --- the fix-first round, zero design change)
+
+- **P1 / F-71, the mid-screen header**: the audit's mystery --- the code
+  composes the header as the FIRST child of the `fillMaxSize` root
+  Column with exactly one inset payment, yet the device screenshot
+  showed it floating ~26-30% down with ~630px of pure black above.
+  The root-cause hunt (root container arrangement, inset payments,
+  composition order, the unified entry point, scroll parents)
+  exonerated the composition tree; the cross-editor evidence (the video
+  editor --- same device, same root pattern --- rendered top-anchored)
+  points to a device-side window state at capture time (a mid-launch
+  window-transition frame or a compat/windowed placement). The verdict
+  + the evidence chain live as a comment at the fix site, and a JVM pin
+  (`EditHeaderPinningTest`) asserts the header is the top-most element
+  (`boundsInRoot.top == 0`) so a real regression has a signature.
+- **P3, the Save-copy CTA**: `maxLines = 1` + ellipsis so longer locales
+  can never wrap the pill (JVM-pinned under label starvation).
+- **V1 + V5, the video dead space**: the preview Box's hardcoded
+  `height(220.dp)` becomes caller-owned (`weight(1f)` on Main --- the
+  preview fills the screen; the fixed 220dp stays on tool screens so
+  their scrolling bodies keep their room), and the dead
+  `Spacer(weight(1f))` band below the filmstrip is retired.
+- **V2, the orphan fullscreen icon**: re-homed from floating inside the
+  preview Box into the TransportRow playback cluster (r63d then
+  re-anchors it top-trailing inside the preview frame, a11y strings
+  verbatim).
+- **V6, honest renames**: the video Extract tab (saves a still frame) is
+  now "Frame"; Animate (exports a GIF) is now "GIF"; "Export animation"
+  becomes "Export GIF". Identifiers and behavior untouched.
+
+### Changed (r63b / r63c / r63d --- the approved redesign)
+
+- **The violet retires (r63b)**: `EditorTheme.kt` is rebuilt around an
+  `EditorPalette` registry with the toad-green family as the fixed
+  default (the §3 re-pin: primary `#9CD8A2` on `#00390F`, the warm
+  surfaces `#151512`/`#3A3830`, the full container/outline family) and
+  `VideoEditTheme`'s local hex fork re-points to the same registry. The
+  r47 fixed-dark, non-dynamic contract STANDS (no Material You in the
+  editor); the r52 `secondaryContainer = primary` selection mechanism
+  survives re-colored (8.0:1). The registry is the F-69 plug-in point
+  (the future Settings accent tri-state); no UI switches palettes yet.
+- **The photo chrome (r63b)**: the three-TextButtons header becomes icon
+  chrome (undo / redo / settings, 48dp targets) + the Save-copy pill;
+  the tab bar renders the approved grouped order Adjust · Looks · Color
+  ‖ Crop · AI · Text · Stickers · Draw · Regions ‖ Frames with hairline
+  group separators, a selected halo, auto-scroll to selection and fade
+  edge padders (68dp rows); the r54 honesty text line becomes a
+  tappable honesty chip opening the export-policy sheet, and a
+  hold-to-compare chip rides the canvas (the r56 gesture's compare
+  flag, unchanged).
+- **The Ente tune-rail (r63c)**: the Adjust panel's stacked
+  LabeledSliders become a chip rail with circular progress rings,
+  exactly one active slider, and tap-the-active-chip-to-zero (the Ente
+  last-values trick, UI-local memory); Reset is promoted into the tool
+  header across all ten tools, one shape; the r32 a11y contract ports
+  verbatim (chips announce name + value state exactly like the sliders
+  did). The non-tonal panels keep the LabeledSlider kit.
+- **The video chassis (r63d)**: the Main filmstrip becomes the PRIMARY
+  trim surface (16dp accent handles on a 28dp grab radius, the dim
+  scrim outside the trim window, a 2px white playhead clamped inside
+  it, the adaptive `(width/72).clamp(4,12)` frame count,
+  pause/resume-on-drag, commit-on-release through the same Apply path
+  the Trim tab uses); the transport simplifies to canvas-tap
+  play/pause + double-tap ±10s seek with the retired seek buttons
+  surviving as the chip's custom actions; TimestampRow retires into the
+  mono TimeRow; the tab bar adopts the photo rail's selected-halo
+  language as six flex columns. The Trim tab stays byte-identical as
+  the precision surface; player / GL / export paths untouched.
+
+### Follow-up ledger
+
+- **F-71** recorded with the r63a verdict (stays open pending the vc43
+  device check); **F-72** opened (photo canvas pinch-zoom +
+  double-tap-fit); **F-73** opened (Regions→Draw merge candidate, needs
+  its own consent-free UX pass).
+
 ## [Unreleased] — the r62 round (the Settings craft: segmented tabs General/AI/System, the Stories shelf scrolls away + toggle, Storage dashboard, Privacy center, Material You toggle, Models group; gallery versionCode 42, versionName stays 0.4.5-alpha)
 
 The maintainer's 2026-11-08 directive: "stories features is fixed on home

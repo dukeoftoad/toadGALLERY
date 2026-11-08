@@ -436,7 +436,22 @@ android {
         // surface) and the video-mime contract mirrors (the r42 gap).
         // No new permissions; no new dependencies; versionName stays
         // 0.4.5-alpha. All four flavors share this one versionCode.
-        versionCode = 40
+        //
+        // versionCode 41 (r61 round): the stable-signing round. The
+        // maintainer's 2026-11-08 directive: "any next release should be
+        // signed as currently every time I need to uninstall". Two root
+        // causes fixed: (1) unified-apk.yml's release path read secret
+        // names that do not exist in this repo (TG_KEYSTORE_BASE64 vs the
+        // real TG_RELEASE_KEYSTORE_BASE64 ADR-0018 set) and never fed
+        // Gradle the TG_KEYSTORE_FILE it checks, so unified release
+        // builds were silently UNSIGNED; (2) CI debug builds signed with
+        // the runner-local, random-per-run ~/.android/debug.keystore, so
+        // every fresh debug APK was a different signer and Android
+        // demanded an uninstall before install. r61 wires the real
+        // ADR-0018 contract for release and a public-by-design CI debug
+        // key for debug (see signingConfigs below); versionCode rides its
+        // per-round bump again so in-place updates work.
+        versionCode = 41
         versionName = "0.4.5-alpha"
         // The launcher-alias consolidation's default: the canonical
         // basic build keeps its MAIN/LAUNCHER entry (the ONE family
@@ -490,6 +505,21 @@ android {
     // deliberately left unwired and assembleRelease falls back to the
     // unsigned APK as before; only the release pipeline (issue #59) signs.
     val releaseKeystoreFile = providers.environmentVariable("TG_KEYSTORE_FILE")
+    // r61: a PUBLIC-by-design CI debug key. Unlike the release key
+    // above, this one is deliberately COMMITTED to the repo at
+    // tools/ci-signing/ci-debug.p12 (a .p12, so the .gitignore guard on
+    // *.jks / *.keystore --- which protects the RELEASE key --- does not
+    // match it, by design, not by accident): Android debug keys carry no
+    // trust, and a shared stable identity is the entire point --- the
+    // ephemeral runner-local ~/.android/debug.keystore is regenerated
+    // randomly per CI run, so every CI debug APK signed with it lands as
+    // a DIFFERENT signer and the device demands an uninstall before
+    // every install (the maintainer's r61 complaint). Wired ONLY when
+    // TG_DEBUG_KEYSTORE_FILE points at it (unified-apk.yml's debug path
+    // does); local dev builds and every other CI job keep the standard
+    // per-developer debug key, unchanged. Not the ADR-0018 release key:
+    // release signing still flows only through the secrets above.
+    val ciDebugKeystoreFile = providers.environmentVariable("TG_DEBUG_KEYSTORE_FILE")
     signingConfigs {
         if (releaseKeystoreFile.isPresent) {
             create("release") {
@@ -499,11 +529,27 @@ android {
                 keyPassword = providers.environmentVariable("TG_KEY_PASSWORD").get()
             }
         }
+        if (ciDebugKeystoreFile.isPresent) {
+            create("ciDebug") {
+                storeFile = file(ciDebugKeystoreFile.get())
+                storeType = "PKCS12"
+                // Public by design (see the comment above the block).
+                storePassword = "android"
+                keyAlias = "ci-debug"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            // r61: CI debug builds sign with the public CI debug key when
+            // the env points at it, so successive CI debug APKs share one
+            // stable signer and install as in-place updates.
+            if (ciDebugKeystoreFile.isPresent) {
+                signingConfig = signingConfigs.getByName("ciDebug")
+            }
         }
         release {
             isMinifyEnabled = true

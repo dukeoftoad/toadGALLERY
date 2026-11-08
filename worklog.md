@@ -2802,3 +2802,63 @@ the outage and directed the round to skip CI. Merge stays gated on that
 one job going green when Actions recovers (the repo's own gate
 discipline); then `unified-app` fast-forwards and unified-apk.yml
 rebuilds the unified APK with the fixes.
+
+### Run #34 — 2026-11-08 (the r61 window: stable unified-APK signing — the ADR-0018 release contract actually wired, the public CI debug key, the hard signature gates)
+
+**Directive.** The maintainer's 2026-11-08 follow-up: "Note any next
+release should be signed as currently every time I need to uninstall. So
+keep in mind to fix. Follow up next steps to do." (Run #33's merge gate
+also closed this session: the ninth check went green post-outage, PR
+#156 squash-merged as `29f57d4`, `unified-app` fast-forwarded to match,
+and unified-apk run #3 (debug) rebuilt green at 128.9 MiB.)
+
+**Root causes (two, both real).** (1) The unified RELEASE path was dead
+wiring: unified-apk.yml's assemble step passed `secrets.TG_KEYSTORE_BASE64`
+& friends — secret names that do not exist in this repo (the ADR-0018
+set is TG_RELEASE_*) — as base64 env values, while the Gradle contract
+checks `TG_KEYSTORE_FILE` (a decoded file path). A `variant=release`
+dispatch would have silently produced the UNSIGNED fallback APK. (2) The
+unified DEBUG path signed with the runner-local
+`~/.android/debug.keystore`, regenerated randomly per CI run: every
+fresh debug APK (builds 39/40, runs #1–#3) was a DIFFERENT signer, so
+Android demanded an uninstall before every install — the maintainer's
+exact complaint.
+
+**Changes.** `unified-apk.yml`: the release path now mirrors release.yml
+verbatim (decode TG_RELEASE_KEYSTORE_BASE64 to `$RUNNER_TEMP`, empty
+decode is a hard `::error::`, feed TG_KEYSTORE_FILE + the three
+credential envs through step-level env); the debug path sets
+`TG_DEBUG_KEYSTORE_FILE` at the committed public CI debug key; a new
+"Verify the APK signature (hard gate)" step (apksigner, the pinned
+build-tools-36.0.0 resolution convention) fails the job BEFORE upload
+unless the signer cert SHA-256 equals the pinned digest — release:
+`8a4640e0…` (the same ADR-0018 identity release.yml publishes under),
+debug: `a0300c25…` (the CI debug key). The artifact name now carries the
+versionCode (`…-vc41-debug.apk`); the job summary states the REAL
+per-variant applicationId (`…unified.debug` for debug), the versionCode
+and the verified signer digest. `apps/gallery/build.gradle.kts`: a new
+`ciDebug` signing config (PKCS12, passwords `android` — public by
+design) wired ONLY when TG_DEBUG_KEYSTORE_FILE is present, so local dev
+and every other CI job keep the standard debug key; versionCode 40 → 41
+(the per-round bump resumes; versionName stays 0.4.5-alpha). New file
+`tools/ci-signing/ci-debug.p12` (2048-bit RSA, alias `ci-debug`,
+100-year validity): a `.p12` DELIBERATELY, so the .gitignore guard on
+`*.jks`/`*.keystore` — which exists to keep the RELEASE key out of the
+repo — does not match it; a debug key carries no trust and its entire
+purpose is a stable shared identity.
+
+**Verification.** Local: YAML parse of the rewritten workflow (9 steps,
+ordered), `git diff --check` whitespace-clean; no Kotlin touched (the
+lex gate is a no-op this round). CI: repo-lint (actionlint) + the full
+9-check suite on the PR; then BOTH unified variants dispatch from
+`unified-app` post-merge — debug proves the CI debug key path
+(gate pinned to `a0300c25…`), release proves the ADR-0018 path end to
+end (gate pinned to `8a4640e0…`; this is the first unified release
+dispatch that can actually sign).
+
+**Remaining.** F-65 (versionCode could ride GITHUB_RUN_NUMBER for CI
+dispatches instead of the manual per-round bump), F-66 (unified has no
+tag-driven release path; the F-14 allowlist entry the unified-apk
+header names is still future work), F-67 (apk-build.yml's flavor debug
+artifacts still sign with ephemeral runner keys — deliberately out of
+scope); carried items unchanged, PAT revocation advised again.

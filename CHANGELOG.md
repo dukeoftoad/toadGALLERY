@@ -4,6 +4,67 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r61 round (stable unified-APK signing: the ADR-0018 release contract actually wired, the public CI debug key, hard signature gates; gallery versionCode 41, versionName stays 0.4.5-alpha)
+
+The maintainer's 2026-11-08 follow-up directive: "any next release should
+be signed as currently every time I need to uninstall." Two root causes
+found and fixed — every future unified APK now carries ONE stable signer
+per variant and installs as an in-place update.
+
+### Fixed
+
+- **The unified release path was silently UNSIGNED** (r61): the r59
+  wiring in `unified-apk.yml` claimed to be "release.yml verbatim" but
+  passed secret names that do not exist in this repo
+  (`secrets.TG_KEYSTORE_BASE64` and friends — the real ADR-0018 set is
+  `TG_RELEASE_KEYSTORE_BASE64`/`TG_RELEASE_KEYSTORE_PASSWORD`/
+  `TG_RELEASE_KEY_ALIAS`/`TG_RELEASE_KEY_PASSWORD`) and in the wrong
+  shape (base64 env values, while the Gradle contract checks
+  `TG_KEYSTORE_FILE` — a decoded file path). Dead env vars; every
+  `variant=release` dispatch would have fallen back to the unsigned APK
+  with no signal. The release path now mirrors `release.yml` verbatim:
+  decode `TG_RELEASE_KEYSTORE_BASE64` to a runner-temp file (empty-
+  decoded is a hard `::error::`), feed the four `TG_*` envs to Gradle
+  through step-level env (never a command line).
+- **CI debug builds demanded an uninstall before every install** (r61):
+  debug variants sign with the runner-local
+  `~/.android/debug.keystore`, which is regenerated RANDOMLY per CI
+  run — every fresh unified debug APK (builds 39/40, runs #1–#3) was a
+  different signer, so Android rejected in-place updates. The repo now
+  carries a PUBLIC-by-design CI debug key,
+  `tools/ci-signing/ci-debug.p12` (PKCS12, alias `ci-debug`, passwords
+  `android`, 100-year validity — a `.p12` on purpose, so the
+  `.gitignore` guard that protects the release key's `*.jks`/
+  `*.keystore` does not match it). `apps/gallery/build.gradle.kts` gains
+  a `ciDebug` signing config wired ONLY when `TG_DEBUG_KEYSTORE_FILE`
+  points at it (`unified-apk.yml`'s debug path does); local dev builds
+  and every other CI job keep the standard per-developer debug key,
+  unchanged.
+
+### Added
+
+- **Hard signature gates on the unified APK, both variants** (r61): a
+  new "Verify the APK signature" step resolves `apksigner` (the
+  pinned-build-tools-36.0.0 + glob convention), runs
+  `verify --print-certs`, and fails the job BEFORE upload unless the
+  signer certificate SHA-256 equals the pinned digest — `8a4640e0…`
+  (the same ADR-0018 release identity `release.yml` publishes under)
+  for the release variant, `a0300c25…` (the public CI debug key) for
+  debug. A silently-unsigned APK or a signer swap can no longer reach
+  the artifact. The job summary now states the real per-variant
+  `applicationId` (`…unified.debug` for debug builds), the versionCode,
+  and the verified signer digest.
+- **versionCode in the artifact name** (r61): the unified APK artifact
+  is now `toadGALLERY-unified-<versionName>-vc<versionCode>-<variant>.apk`,
+  so the build on a device is identifiable at a glance against the
+  Settings "About" line.
+
+### Changed
+
+- **versionCode 40 → 41** (r61): the per-round bump resumes so signed
+  in-place updates ride versionCode monotonicity again; versionName
+  stays `0.4.5-alpha` (`-unified` suffix on the unified flavor).
+
 ## [Unreleased] — the r60 round (the device-feedback fixes: download progress bars, the honest face self-test, the Stories/Settings UI flaws; gallery unchanged versions, unified APK rebuilt)
 
 The maintainer's 2026-11-08 device round on the unified APK (build 40)

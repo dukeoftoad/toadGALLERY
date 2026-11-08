@@ -40,7 +40,7 @@
     <!-- Frame extraction -->
     <string name="editor_video_section_frame">Extract frame</string>
     <string name="editor_video_frame_timestamp">Frame time: %1$s</string>
-    <string name="editor_a11y_video_frame_timestamp">Frame extraction timestamp</string>
+    <string name="editor_a11y_video_frame_timestamp">Frame timestamp</string>
     <string name="editor_video_frame_jpeg">JPEG</string>
     <string name="editor_video_frame_png">PNG</string>
     <string name="editor_video_frame_note">The frame is saved from the source video, without the colour adjustments.</string>
@@ -60,7 +60,7 @@
     <string name="editor_video_animation_gif">GIF</string>
     <string name="editor_video_animation_webp">WebP</string>
     <string name="editor_video_animation_estimate">About %1$d frames, roughly %2$d MiB.</string>
-    <string name="editor_video_animation_export">Export animation</string>
+    <string name="editor_video_animation_export">Export GIF</string>
     <string name="editor_video_animation_saved">Animation saved as a new image.</string>
 
     <!-- Export progress + the honest narrations -->

@@ -6,13 +6,16 @@
      photo surface's base strings (names prefixed editor_v2_ to avoid
      collisions with the older rounds). -->
 <resources>
-    <!-- The six tool tabs (also the sub-screen titles) -->
+    <!-- The six tool tabs (also the sub-screen titles). r63a V6: the
+         honest labels (the Extract tool saves a still FRAME, the
+         Animate tool exports a GIF segment; behavior unchanged, display
+         strings only). -->
     <string name="editor_v2_tab_trim">Trim</string>
     <string name="editor_v2_tab_speed">Speed</string>
     <string name="editor_v2_tab_audio">Audio</string>
     <string name="editor_v2_tab_adjust">Adjust</string>
-    <string name="editor_v2_tab_extract">Extract</string>
-    <string name="editor_v2_tab_animate">Animate</string>
+    <string name="editor_v2_tab_extract">Frame</string>
+    <string name="editor_v2_tab_animate">GIF</string>
 
     <!-- Header actions -->
     <string name="editor_v2_export">Export</string>

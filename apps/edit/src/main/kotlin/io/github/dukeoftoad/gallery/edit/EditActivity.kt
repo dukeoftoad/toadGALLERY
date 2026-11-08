@@ -96,6 +96,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
@@ -2132,6 +2133,33 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // cancel path.
     BackHandler(enabled = screen != PhotoScreen.Main) { exitToMain() }
 
+    // F-71 (the r63a audit's P1, ledger item): on the r62 device screenshot
+    // this header rendered ~630px below the top edge with pure black above
+    // it, yet the code composes it as the FIRST child of the ONLY root
+    // container. The r63a root-cause hunt exonerates this tree, with line
+    // evidence: (a) the root fills the window --- fillMaxSize here under the
+    // fillMaxSize Surface in onCreate's setContent (EditActivity.kt:465),
+    // default Arrangement.Top, no contentAlignment; (b) insets are consumed
+    // EXACTLY ONCE --- this systemBarsPadding is the only inset modifier in
+    // the whole edit app (no statusBars/displayCutout/ime/safeDrawing
+    // padding exists), there is no Scaffold, and no manifest or theme
+    // declares fitsSystemWindows/translucent bars/cutout modes that could
+    // double-pay at the decor; (c) nothing is composed above the header ---
+    // the first child below is the header branch itself (no spacers, no
+    // wrapper Box, no early-return layout, the one verticalScroll lives in
+    // the export sheet's own window); (d) the unified APK launches THIS
+    // activity class (apps/gallery/src/unified/AndroidManifest.xml registers
+    // io.github.dukeoftoad.gallery.edit.EditActivity; the gallery's
+    // EditorLaunch resolves exactly it), so there is no alternate entry; and
+    // (e) the VIDEO editor (VideoEditActivity: the identical root pattern,
+    // same device, same audit) rendered top-anchored --- a window-mode cause
+    // would have hit both. Verdict: the offset is a device-side window state
+    // (a mid-launch window transition or a compat/windowed placement
+    // captured by the screenshot), not producible by this composition tree;
+    // EditHeaderPinningTest pins the header as the top-most composed element
+    // on the JVM harness (the repro attempt, negative). The layout contract
+    // stands: header pinned to the top of a fillMaxSize root, insets paid
+    // exactly once.
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2218,6 +2246,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                     R.string.editor_cancel_export
                                 },
                             ),
+                            // r63a P3: the CTA pill never wraps --- longer
+                            // locales ellipsize instead of breaking the
+                            // primary control into two lines.
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }

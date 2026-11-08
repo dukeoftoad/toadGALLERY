@@ -52,6 +52,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -375,6 +376,12 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
     DisposableEffect(player) {
         onDispose { player.release() }
     }
+
+    // r63a V2: the fullscreen toggle's view handle + zoom state live at the
+    // chassis so the toggle can sit in the transport row (the playback
+    // cluster) instead of floating inside the preview Box.
+    val playerViewRef = remember { mutableStateOf<PlayerView?>(null) }
+    var fullscreenZoomed by remember { mutableStateOf(false) }
 
     // While the Adjust screen is up the DRAFT params preview live
     // (recommitted on each slider release); everywhere else the committed
@@ -703,12 +710,20 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
             )
         }
 
+        // r63a V1: the preview fills the leftover stage on the Main chassis
+        // (the r62 hardcoded 220dp sliver + the dead Spacer below it wasted
+        // ~50% of the screen); the tool screens keep the fixed height so
+        // their scrolling bodies keep the room. The height is the caller's
+        // decision now --- PreviewSurface no longer pins it.
         PreviewSurface(
             player = player,
             previewA11yName = previewA11yName,
-            fullscreenA11y = fullscreenA11y,
-            fitState = fullscreenFitState,
-            zoomState = fullscreenZoomState,
+            playerViewRef = playerViewRef,
+            modifier = if (screen == EditorScreen.Main) {
+                Modifier.weight(1f)
+            } else {
+                Modifier.height(220.dp)
+            },
         )
 
         TransportRow(
@@ -723,6 +738,24 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
                 // Player-relative: the item is clipped to the committed trim,
                 // and previewDurationMs already encodes the duration fallback.
                 player.seekTo((positionMs + deltaMs).coerceIn(0L, previewDurationMs))
+            },
+            fullscreenZoomed = fullscreenZoomed,
+            fullscreenA11y = fullscreenA11y,
+            fullscreenFitState = fullscreenFitState,
+            fullscreenZoomState = fullscreenZoomState,
+            onToggleFullscreen = {
+                val view = playerViewRef.value
+                if (view != null) {
+                    fullscreenZoomed = !fullscreenZoomed
+                    // The resize-mode constants live on the content frame's
+                    // AspectRatioFrameLayout (CI's compile judge --- they are
+                    // NOT PlayerView members); the view's setter takes them.
+                    view.resizeMode = if (fullscreenZoomed) {
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    } else {
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                }
             },
         )
 
@@ -752,7 +785,10 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
                 onSeekAbsolute = seekToAbsolute,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
-            Spacer(Modifier.weight(1f))
+            // r63a V5: the dead Spacer(weight(1f)) that parked ~40% of the
+            // screen below the filmstrip is gone --- the preview's weight(1f)
+            // above now takes this space, so the filmstrip and the tab bar
+            // dock at the bottom against a full-height stage.
             EditorTabBar(
                 current = screen,
                 onSelect = { screen = it },
@@ -993,25 +1029,24 @@ private fun StillExportProgressBlock(
 
 /**
  * The preview surface: the ONE PlayerView of the session (never recomposed
- * away --- a sub-screen only ever replaces the content BELOW it), with the
- * fullscreen toggle overlay at the bottom-end flipping the view's resize
- * mode between fit and zoom.
+ * away --- a sub-screen only ever replaces the content BELOW it). The height
+ * is the CALLER's decision (r63a V1: weight(1f) on the Main chassis, the
+ * fixed 220dp on the tool screens) --- the r62 hardcoded height(220.dp) here
+ * is what locked the preview to ~9% of the screen. The Box carries the
+ * preview a11y name only; the fullscreen toggle moved to the transport
+ * cluster (r63a V2), so this Box hosts nothing but the video surface.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun PreviewSurface(
     player: ExoPlayer,
     previewA11yName: String,
-    fullscreenA11y: String,
-    fitState: String,
-    zoomState: String,
+    playerViewRef: MutableState<PlayerView?>,
+    modifier: Modifier = Modifier,
 ) {
-    val playerViewRef = remember { mutableStateOf<PlayerView?>(null) }
-    var zoomed by remember { mutableStateOf(false) }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(220.dp)
             .semantics { contentDescription = previewA11yName },
     ) {
         AndroidView(
@@ -1023,41 +1058,19 @@ private fun PreviewSurface(
             },
             modifier = Modifier.fillMaxSize(),
         )
-        IconButton(
-            onClick = {
-                val view = playerViewRef.value
-                if (view != null) {
-                    zoomed = !zoomed
-                    // The resize-mode constants live on the content frame's
-                    // AspectRatioFrameLayout (CI's compile judge --- they are
-                    // NOT PlayerView members); the view's setter takes them.
-                    view.resizeMode = if (zoomed) {
-                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    } else {
-                        AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    }
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .semantics {
-                    contentDescription = fullscreenA11y
-                    stateDescription = if (zoomed) zoomState else fitState
-                },
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_vt_fullscreen),
-                contentDescription = null,
-                tint = VideoTextPrimary,
-            )
-        }
     }
 }
 
 /**
  * The transport row: one second back / the accent play-pause circle / one
- * second forward. The seeks are PLAYER-relative within the current preview
- * window (the chassis computes the clamp from the polled position).
+ * second forward, with the preview's fullscreen toggle docked at the row's
+ * right end (r63a V2: the toggle joins the playback cluster instead of
+ * floating inside the preview Box; same action, same semantics, and the
+ * centered trio stays centered via the two equal-weight spacers). The
+ * seeks are PLAYER-relative within the current preview window (the chassis
+ * computes the clamp from the polled position). The fullscreen toggle is
+ * never gated (the r52 surface-toggle behavior, preserved verbatim through
+ * the re-anchor).
  */
 @Composable
 private fun TransportRow(
@@ -1069,14 +1082,19 @@ private fun TransportRow(
     seekForwardA11y: String,
     onTogglePlay: () -> Unit,
     onSeekRelative: (Long) -> Unit,
+    fullscreenZoomed: Boolean,
+    fullscreenA11y: String,
+    fullscreenFitState: String,
+    fullscreenZoomState: String,
+    onToggleFullscreen: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Spacer(Modifier.weight(1f))
         IconButton(
             onClick = { onSeekRelative(-1000L) },
             enabled = enabled,
@@ -1116,6 +1134,20 @@ private fun TransportRow(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_vt_next),
+                contentDescription = null,
+                tint = VideoTextPrimary,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        IconButton(
+            onClick = onToggleFullscreen,
+            modifier = Modifier.semantics {
+                contentDescription = fullscreenA11y
+                stateDescription = if (fullscreenZoomed) fullscreenZoomState else fullscreenFitState
+            },
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_vt_fullscreen),
                 contentDescription = null,
                 tint = VideoTextPrimary,
             )

@@ -191,7 +191,10 @@ class EditHeaderPinningTest {
 
         val buttonNode = rule.onNodeWithTag(saveTag).fetchSemanticsNode()
         val buttonHeight = buttonNode.boundsInRoot.height
-        val singleLinePillHeight = with(buttonNode.density) { 50.dp.toPx() }
+        // The density comes from the test rule (the r63d audit fix: the
+        // 1.7.6 SemanticsNode carries no density property --- the rule's
+        // is the same display density this node was measured in).
+        val singleLinePillHeight = with(rule.density) { 50.dp.toPx() }
         assertTrue(
             "the Save copy pill wrapped to two lines ($buttonHeight px); the CTA " +
                 "label must stay single-line under label starvation",

@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -56,6 +58,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,12 +70,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -82,6 +90,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import io.github.dukeoftoad.gallery.edit.R
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -95,6 +104,25 @@ import kotlinx.coroutines.delay
 // only new capability is the volume percent (task 2-a's VideoEditPlan
 // contract). The r47 EditorTheme stays with the photo editor; this surface
 // brings its own fixed dark scheme LOCAL to this file.
+//
+// r63d VIDEO round (the approved proposal section 5 --- presentation +
+// gesture layer ONLY): the preview frame gains the spec's 12dp h-margins /
+// 14dp radius / 1dp outlineVariant border and hosts the transport as an
+// overlay INSIDE the frame (canvas-tap play/pause chip + double-tap +-10s
+// seek via the left/right halves + the fullscreen toggle re-anchored
+// top-trailing with the r63a a11y strings verbatim --- the three-button
+// row retires); the Main filmstrip becomes the PRIMARY trim surface (16dp
+// accent handles on a 28dp grab radius, a dim scrim outside the trim
+// window, a 2dp white playhead CLAMPED inside it, the adaptive
+// (width/72).clamp(4,12) frame count, pause/resume-on-drag, and
+// commit-on-release through the SAME Apply path the Trim tab uses);
+// TimestampRow retires into the mono TimeRow, and the tab bar adopts the
+// photo rail's selected-halo language as six flex(1) columns. PLAYER / GL /
+// EXPORT PATHS UNTOUCHED: the MediaItem rebuild, the effects attach, the
+// volume/speed previews and every plan/validation/permission/progress
+// block below are the r52/r63a logic verbatim --- trim semantics (what
+// gets exported) did not move; only the CONTROL surface did. The Trim tab
+// stays as the precision surface, byte-identical except the row swap.
 // ---------------------------------------------------------------------------
 
 /** The r52 palette (pinned from Image 2), shared with the activity's root Surface. */
@@ -213,6 +241,28 @@ internal sealed interface StillExportOutcome {
 /** The smallest trim/speed granularity the sliders snap to (100 ms; moved verbatim). */
 private const val TIME_STEP_MS: Long = 100
 
+/**
+ * The canvas transport's double-tap seek step (the section-5 spec's +-10 s
+ * via the left/right halves; the retired three-button row carried its +-1 s
+ * step as an inline literal --- no named constant existed to match).
+ */
+private const val TRANSPORT_SEEK_STEP_MS: Long = 10_000L
+
+/**
+ * The r63d trim-strip numbers (the Ente video_trim_slider budget adapted to
+ * this repo's touch contract): 16dp visual handles centered on the trim
+ * bounds, a 28dp grab radius per handle (a 56dp catch zone), and the
+ * adaptive frame budget --- about (width/72) frames, clamped to 4..12.
+ */
+private val STRIP_HANDLE_WIDTH = 16.dp
+private val STRIP_HANDLE_GRAB_RADIUS = 28.dp
+private const val STRIP_FRAME_SLOT_DP = 72f
+private const val STRIP_FRAME_MIN = 4
+private const val STRIP_FRAME_MAX = 12
+
+/** The dim scrim over the filmstrip OUTSIDE the trim window (section 5). */
+private val TrimScrimColor = Color.Black.copy(alpha = 0.55f)
+
 /** One adjust slider's binding over the colour params (moved verbatim). */
 private data class VideoSliderSpec(
     val label: Int,
@@ -303,7 +353,11 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
     val fullscreenA11y = stringResource(R.string.editor_v2_fullscreen)
     val fullscreenFitState = stringResource(R.string.editor_v2_fullscreen_fit)
     val fullscreenZoomState = stringResource(R.string.editor_v2_fullscreen_zoom)
-    val filmstripA11yName = stringResource(R.string.editor_v2_filmstrip)
+    // The r52 filmstrip a11y name stays with the precision Trim tab's strip
+    // (TrimScreenBody resolves it itself); the Main chassis strip is the
+    // trim strip now, with its own name below.
+    val trimStripA11yName = stringResource(R.string.editor_v2_trim_strip)
+    val transportHint = stringResource(R.string.editor_v2_transport_hint)
     val muteA11yName = stringResource(R.string.editor_a11y_video_mute)
     val muteStateOn = stringResource(R.string.editor_video_mute_state_on)
     val muteStateOff = stringResource(R.string.editor_video_mute_state_off)
@@ -377,11 +431,22 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
         onDispose { player.release() }
     }
 
-    // r63a V2: the fullscreen toggle's view handle + zoom state live at the
-    // chassis so the toggle can sit in the transport row (the playback
-    // cluster) instead of floating inside the preview Box.
+    // The fullscreen toggle's view handle + zoom state live at the chassis
+    // (r63a V2 kept them here through the r63d re-anchor: the toggle now
+    // sits top-trailing INSIDE the preview frame --- the section-5 spec ---
+    // with the exact r63a a11y strings; same action, same semantics).
     val playerViewRef = remember { mutableStateOf<PlayerView?>(null) }
     var fullscreenZoomed by remember { mutableStateOf(false) }
+
+    // r63d trim-on-filmstrip drag contract (the Main strip is the PRIMARY
+    // trim surface): any strip drag pauses the preview, and the release
+    // resumes it ONLY if it was playing before the drag. The drag-live
+    // window rides the existing Trim-tab drafts (which re-key to committed
+    // on every commit), and a handle release commits through the SAME copy
+    // path the Trim tab's Apply uses --- the trim plan path is untouched.
+    var stripDragActive by remember { mutableStateOf(false) }
+    var wasPlayingBeforeStripDrag by remember { mutableStateOf(false) }
+    var stripDragEndTick by remember { mutableStateOf(0) }
 
     // While the Adjust screen is up the DRAFT params preview live
     // (recommitted on each slider release); everywhere else the committed
@@ -406,6 +471,17 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
         player.setMediaItem(mediaItem)
         player.playWhenReady = true
         player.prepare()
+    }
+
+    // The r63d drag contract's SECOND half, declared AFTER the rebuild
+    // effect above so it re-asserts the contract on top of the rebuild's
+    // playWhenReady = true (a trim commit restarts the clipped item; the
+    // effects dispatch in composition order, so this runs after). Without
+    // it, releasing a strip drag while PAUSED would kick the preview into
+    // playing --- the contract says resume ONLY if it was playing before.
+    LaunchedEffect(stripDragEndTick) {
+        if (stripDragEndTick == 0) return@LaunchedEffect
+        if (wasPlayingBeforeStripDrag) player.play() else player.pause()
     }
 
     // The volume preview: the Audio screen's DRAFT (instant on release),
@@ -466,6 +542,58 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
     // result clamps into the current preview window.
     val seekToAbsolute: (Long) -> Unit = { absoluteMs ->
         player.seekTo((absoluteMs - committed.trimStartMs).coerceIn(0L, previewDurationMs))
+    }
+
+    // ---- The r63d Main-strip drag plumbing: the handle math is the Trim
+    // screen's, VERBATIM (same TIME_STEP snap, same minimum gap), the drag
+    // start pauses the player and remembers whether it was playing (the
+    // playWhenReady intent --- a buffering stream counts as playing), and a
+    // handle release commits the drafts through the Apply path. Every
+    // finisher is armed only by a real drag start, so a gesture that was
+    // gated off (an export running) can never fire the contract. ----
+    val stripOnDragStarted: () -> Unit = {
+        stripDragActive = true
+        wasPlayingBeforeStripDrag = player.playWhenReady
+        player.pause()
+    }
+    val stripOnStartDrag: (Long) -> Unit = { absoluteMs ->
+        // The Trim tab's start-handle rule: 0 until end - TIME_STEP.
+        val snapped = snapTimeStep(
+            absoluteMs.toFloat(),
+            0f..(draftTrimEndMs - TIME_STEP_MS).toFloat(),
+        ).toLong()
+        draftTrimStartMs = snapped
+        seekToAbsolute(snapped)
+    }
+    val stripOnEndDrag: (Long) -> Unit = { absoluteMs ->
+        // The Trim tab's end-handle rule: start + TIME_STEP until duration.
+        val snapped = snapTimeStep(
+            absoluteMs.toFloat(),
+            (draftTrimStartMs + TIME_STEP_MS).toFloat()..durationMs.toFloat(),
+        ).toLong()
+        draftTrimEndMs = snapped
+        seekToAbsolute(snapped)
+    }
+    val stripOnHandleDragFinished: () -> Unit = {
+        if (stripDragActive) {
+            stripDragActive = false
+            // The Trim tab's Apply, verbatim: committed <- draft.
+            committed = committed.copy(trimStartMs = draftTrimStartMs, trimEndMs = draftTrimEndMs)
+            stripDragEndTick++
+        }
+    }
+    val stripOnScrubFinished: () -> Unit = {
+        if (stripDragActive) {
+            stripDragActive = false
+            stripDragEndTick++
+        }
+    }
+
+    // Leaving the Main chassis mid-drag (a stray second finger on a tab)
+    // drops the accent flag; the drafts re-key to committed on the screen
+    // change by themselves.
+    LaunchedEffect(screen) {
+        if (screen != EditorScreen.Main) stripDragActive = false
     }
 
     // ---- The real filmstrip frames (decoded once; placeholders until then) ----
@@ -661,8 +789,8 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
         }
     }
 
-    // ---- The chassis: header / preview + overlay / transport / timestamp /
-    // then either (filmstrip + tab bar) on Main or (scrolling body +
+    // ---- The chassis: header / preview + transport overlay / time row /
+    // then either (trim strip + tab bar) on Main or (scrolling body +
     // footer) on a tool screen. r47 ux fix paid once at the root.
     Column(
         modifier = Modifier
@@ -714,11 +842,49 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
         // (the r62 hardcoded 220dp sliver + the dead Spacer below it wasted
         // ~50% of the screen); the tool screens keep the fixed height so
         // their scrolling bodies keep the room. The height is the caller's
-        // decision now --- PreviewSurface no longer pins it.
+        // decision now --- PreviewSurface no longer pins it. r63d: the
+        // frame hosts the transport overlay (the retired row's actions live
+        // on the canvas now) and the section-5 frame craft.
         PreviewSurface(
             player = player,
             previewA11yName = previewA11yName,
             playerViewRef = playerViewRef,
+            transport = {
+                PreviewTransportOverlay(
+                    isPlaying = isPlaying,
+                    enabled = !exporting,
+                    playA11y = playA11y,
+                    pauseA11y = pauseA11y,
+                    seekBackA11y = seekBackA11y,
+                    seekForwardA11y = seekForwardA11y,
+                    fullscreenZoomed = fullscreenZoomed,
+                    fullscreenA11y = fullscreenA11y,
+                    fullscreenFitState = fullscreenFitState,
+                    fullscreenZoomState = fullscreenZoomState,
+                    onTogglePlay = { player.playWhenReady = !player.isPlaying },
+                    onSeekRelative = { deltaMs ->
+                        // Player-relative, clamped into the current preview
+                        // window: the item is clipped to the committed trim,
+                        // and previewDurationMs already encodes the fallback
+                        // (the retired row's rule, verbatim).
+                        player.seekTo((positionMs + deltaMs).coerceIn(0L, previewDurationMs))
+                    },
+                    onToggleFullscreen = {
+                        val view = playerViewRef.value
+                        if (view != null) {
+                            fullscreenZoomed = !fullscreenZoomed
+                            // The resize-mode constants live on the content frame's
+                            // AspectRatioFrameLayout (CI's compile judge --- they are
+                            // NOT PlayerView members); the view's setter takes them.
+                            view.resizeMode = if (fullscreenZoomed) {
+                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            } else {
+                                AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            }
+                        }
+                    },
+                )
+            },
             modifier = if (screen == EditorScreen.Main) {
                 Modifier.weight(1f)
             } else {
@@ -726,62 +892,63 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
             },
         )
 
-        TransportRow(
-            isPlaying = isPlaying,
-            enabled = !exporting,
-            playA11y = playA11y,
-            pauseA11y = pauseA11y,
-            seekBackA11y = seekBackA11y,
-            seekForwardA11y = seekForwardA11y,
-            onTogglePlay = { player.playWhenReady = !player.isPlaying },
-            onSeekRelative = { deltaMs ->
-                // Player-relative: the item is clipped to the committed trim,
-                // and previewDurationMs already encodes the duration fallback.
-                player.seekTo((positionMs + deltaMs).coerceIn(0L, previewDurationMs))
-            },
-            fullscreenZoomed = fullscreenZoomed,
-            fullscreenA11y = fullscreenA11y,
-            fullscreenFitState = fullscreenFitState,
-            fullscreenZoomState = fullscreenZoomState,
-            onToggleFullscreen = {
-                val view = playerViewRef.value
-                if (view != null) {
-                    fullscreenZoomed = !fullscreenZoomed
-                    // The resize-mode constants live on the content frame's
-                    // AspectRatioFrameLayout (CI's compile judge --- they are
-                    // NOT PlayerView members); the view's setter takes them.
-                    view.resizeMode = if (fullscreenZoomed) {
-                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        // r63d: the Time row replaces the two-row TimestampRow block (mono
+        // 11sp; leading = position, accent while a strip drag is live;
+        // trailing = the trim end on Main, the draft bounds on the Trim
+        // screen, the previewed length on the other tool screens).
+        when (screen) {
+            EditorScreen.Main -> VideoTimeRow(
+                leadingText = formatTimestamp(
+                    if (stripDragActive && draftTrimStartMs != committed.trimStartMs) {
+                        draftTrimStartMs
                     } else {
-                        AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    }
-                }
-            },
-        )
-
-        if (screen == EditorScreen.Trim) {
-            TimestampRow(
-                startText = formatTimestamp(draftTrimStartMs),
-                endText = formatTimestamp(draftTrimEndMs),
+                        committed.trimStartMs + positionMs
+                    },
+                ),
+                trailingText = formatTimestamp(draftTrimEndMs),
+                hint = transportHint,
+                leadingAccent = stripDragActive,
             )
-        } else {
-            TimestampRow(
-                startText = formatTimestamp(positionMs),
-                endText = formatTimestamp(previewDurationMs),
+            EditorScreen.Trim -> VideoTimeRow(
+                leadingText = formatTimestamp(draftTrimStartMs),
+                trailingText = formatTimestamp(draftTrimEndMs),
+                hint = null,
+                leadingAccent = false,
+            )
+            else -> VideoTimeRow(
+                leadingText = formatTimestamp(positionMs),
+                trailingText = formatTimestamp(previewDurationMs),
+                hint = null,
+                leadingAccent = false,
             )
         }
 
         if (screen == EditorScreen.Main) {
-            ScrubFilmstrip(
-                thumbs = thumbs,
+            // r63d V4: the filmstrip IS the trim surface now (16dp handles,
+            // dim scrim outside the window, clamped playhead); the Trim tab
+            // below stays as the precision surface. The strip shows the LIVE
+            // window --- the drafts, which equal committed at rest.
+            TrimStrip(
                 durationMs = durationMs,
+                trimStartMs = draftTrimStartMs,
+                trimEndMs = draftTrimEndMs,
                 playheadAbsoluteMs = committed.trimStartMs + positionMs,
-                height = 48.dp,
-                filmstripA11yName = filmstripA11yName,
+                enabled = !exporting,
+                filmstripA11yName = trimStripA11yName,
                 positionStateText = stringResource(
                     R.string.editor_v2_filmstrip_state,
                     formatTimestamp(committed.trimStartMs + positionMs),
                 ),
+                startHandleA11y = stringResource(R.string.editor_a11y_video_trim_start),
+                endHandleA11y = stringResource(R.string.editor_a11y_video_trim_end),
+                startHandleState = formatTimestamp(draftTrimStartMs),
+                endHandleState = formatTimestamp(draftTrimEndMs),
+                onDecodeThumbnails = { count, onDone -> activity.decodeThumbnails(count, onDone) },
+                onDragStarted = stripOnDragStarted,
+                onHandleDragFinished = stripOnHandleDragFinished,
+                onScrubFinished = stripOnScrubFinished,
+                onStartDrag = stripOnStartDrag,
+                onEndDrag = stripOnEndDrag,
                 onSeekAbsolute = seekToAbsolute,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
@@ -1032,9 +1199,11 @@ private fun StillExportProgressBlock(
  * away --- a sub-screen only ever replaces the content BELOW it). The height
  * is the CALLER's decision (r63a V1: weight(1f) on the Main chassis, the
  * fixed 220dp on the tool screens) --- the r62 hardcoded height(220.dp) here
- * is what locked the preview to ~9% of the screen. The Box carries the
- * preview a11y name only; the fullscreen toggle moved to the transport
- * cluster (r63a V2), so this Box hosts nothing but the video surface.
+ * is what locked the preview to ~9% of the screen. r63d adds the section-5
+ * frame craft (12dp h-margins, a 14dp-radius clip, a 1dp outlineVariant
+ * border) and the [transport] slot rendered INSIDE the frame over the video:
+ * the canvas-tap transport overlay, with the fullscreen toggle anchored
+ * top-trailing (the r63a a11y strings verbatim).
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -1042,78 +1211,113 @@ private fun PreviewSurface(
     player: ExoPlayer,
     previewA11yName: String,
     playerViewRef: MutableState<PlayerView?>,
+    transport: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp)
             .semantics { contentDescription = previewA11yName },
     ) {
-        AndroidView(
-            factory = { viewContext ->
-                PlayerView(viewContext).apply {
-                    useController = false
-                    this.player = player
-                }.also { created -> playerViewRef.value = created }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(14.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp)),
+        ) {
+            AndroidView(
+                factory = { viewContext ->
+                    PlayerView(viewContext).apply {
+                        useController = false
+                        // The section-5 fit rule, pinned explicitly (this
+                        // is PlayerView's default; the fullscreen toggle
+                        // flips it to RESIZE_MODE_ZOOM and back).
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        this.player = player
+                    }.also { created -> playerViewRef.value = created }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+            transport()
+        }
     }
 }
 
 /**
- * The transport row: one second back / the accent play-pause circle / one
- * second forward, with the preview's fullscreen toggle docked at the row's
- * right end (r63a V2: the toggle joins the playback cluster instead of
- * floating inside the preview Box; same action, same semantics, and the
- * centered trio stays centered via the two equal-weight spacers). The
- * seeks are PLAYER-relative within the current preview window (the chassis
- * computes the clamp from the polled position). The fullscreen toggle is
- * never gated (the r52 surface-toggle behavior, preserved verbatim through
- * the re-anchor).
+ * The r63d transport overlay (the three-button row retired): the CANVAS is
+ * the transport now. A single tap anywhere toggles play/pause; a double tap
+ * on the left/right half seeks back/forward by [TRANSPORT_SEEK_STEP_MS]
+ * (the section-5 spec; seeks clamp into the current preview window at the
+ * chassis). The playback state renders as the small centered chip --- 44dp,
+ * 62% scrim --- which also carries the a11y contract: the play/pause
+ * contentDescription exactly like the retired button, plus the retired
+ * seek buttons' affordances as custom accessibility actions (honest
+ * ten-second labels, same resource names). The fullscreen toggle anchors
+ * top-trailing inside the frame (section 5) and is never gated (the r52
+ * surface-toggle behavior, preserved verbatim through the re-anchor).
  */
 @Composable
-private fun TransportRow(
+private fun PreviewTransportOverlay(
     isPlaying: Boolean,
     enabled: Boolean,
     playA11y: String,
     pauseA11y: String,
     seekBackA11y: String,
     seekForwardA11y: String,
-    onTogglePlay: () -> Unit,
-    onSeekRelative: (Long) -> Unit,
     fullscreenZoomed: Boolean,
     fullscreenA11y: String,
     fullscreenFitState: String,
     fullscreenZoomState: String,
+    onTogglePlay: () -> Unit,
+    onSeekRelative: (Long) -> Unit,
     onToggleFullscreen: () -> Unit,
 ) {
-    Row(
+    // The gesture handlers read live values through rememberUpdatedState so
+    // the pointerInput never keys on them (a mid-session key change would
+    // not fire, and stale captures would seek from a frozen position).
+    val currentEnabled by rememberUpdatedState(enabled)
+    val currentOnTogglePlay by rememberUpdatedState(onTogglePlay)
+    val currentOnSeekRelative by rememberUpdatedState(onSeekRelative)
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { if (currentEnabled) currentOnTogglePlay() },
+                    onDoubleTap = { offset ->
+                        if (currentEnabled) {
+                            currentOnSeekRelative(
+                                if (offset.x < size.width / 2f) {
+                                    -TRANSPORT_SEEK_STEP_MS
+                                } else {
+                                    TRANSPORT_SEEK_STEP_MS
+                                },
+                            )
+                        }
+                    },
+                )
+            },
     ) {
-        Spacer(Modifier.weight(1f))
-        IconButton(
-            onClick = { onSeekRelative(-1000L) },
-            enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = seekBackA11y },
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_vt_prev),
-                contentDescription = null,
-                tint = VideoTextPrimary,
-            )
-        }
-        Spacer(Modifier.width(24.dp))
+        // The play/pause state chip: 44dp, scrim 62%, centered.
         Box(
             modifier = Modifier
-                .size(56.dp)
-                .background(VideoAccent, CircleShape)
+                .align(Alignment.Center)
+                .size(44.dp)
+                .background(Color.Black.copy(alpha = 0.62f), CircleShape)
                 .clickable(enabled = enabled, onClick = onTogglePlay)
                 .semantics {
                     contentDescription = if (isPlaying) pauseA11y else playA11y
+                    customActions = listOf(
+                        CustomAccessibilityAction(seekBackA11y) {
+                            currentOnSeekRelative(-TRANSPORT_SEEK_STEP_MS)
+                            true
+                        },
+                        CustomAccessibilityAction(seekForwardA11y) {
+                            currentOnSeekRelative(TRANSPORT_SEEK_STEP_MS)
+                            true
+                        },
+                    )
                 },
             contentAlignment = Alignment.Center,
         ) {
@@ -1122,57 +1326,80 @@ private fun TransportRow(
                     if (isPlaying) R.drawable.ic_vt_pause else R.drawable.ic_vt_play,
                 ),
                 contentDescription = null,
-                tint = VideoOnAccent,
-                modifier = Modifier.size(28.dp),
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
             )
         }
-        Spacer(Modifier.width(24.dp))
-        IconButton(
-            onClick = { onSeekRelative(1000L) },
-            enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = seekForwardA11y },
+        // The fullscreen toggle: re-anchored top-trailing INSIDE the frame
+        // (the section-5 preview spec), same action + the same a11y strings
+        // the r63a transport cluster carried, verbatim.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+                .background(Color.Black.copy(alpha = 0.62f), CircleShape),
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_vt_next),
-                contentDescription = null,
-                tint = VideoTextPrimary,
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        IconButton(
-            onClick = onToggleFullscreen,
-            modifier = Modifier.semantics {
-                contentDescription = fullscreenA11y
-                stateDescription = if (fullscreenZoomed) fullscreenZoomState else fullscreenFitState
-            },
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_vt_fullscreen),
-                contentDescription = null,
-                tint = VideoTextPrimary,
-            )
+            IconButton(
+                onClick = onToggleFullscreen,
+                modifier = Modifier.semantics {
+                    contentDescription = fullscreenA11y
+                    stateDescription = if (fullscreenZoomed) fullscreenZoomState else fullscreenFitState
+                },
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_vt_fullscreen),
+                    contentDescription = null,
+                    tint = Color.White,
+                )
+            }
         }
     }
 }
 
-/** The timestamp row: position on the left, the previewed length on the right. */
+/**
+ * The r63d Time row (TimestampRow retired into it): mono 11sp, leading =
+ * the position (accent while a strip drag is live), trailing = the
+ * duration/trim-end, and on the Main chassis the centered transport hint
+ * between them. Plain text like the row it replaces --- no new a11y
+ * contract, the values are announced as the texts they are.
+ */
 @Composable
-private fun TimestampRow(startText: String, endText: String) {
+internal fun VideoTimeRow(
+    leadingText: String,
+    trailingText: String,
+    hint: String?,
+    leadingAccent: Boolean,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = startText,
-            color = VideoTextSecondary,
-            style = MaterialTheme.typography.labelLarge,
+            text = leadingText,
+            color = if (leadingAccent) VideoAccent else VideoTextSecondary,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
         )
+        if (hint != null) {
+            Text(
+                text = hint,
+                color = VideoTextSecondary,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
+            )
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
         Text(
-            text = endText,
+            text = trailingText,
             color = VideoTextSecondary,
-            style = MaterialTheme.typography.labelLarge,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
         )
     }
 }
@@ -1307,14 +1534,235 @@ private fun TrimFilmstrip(
     }
 }
 
-/** The ten thumbnail slots: real bitmaps when decoded, honest outlined dark placeholders otherwise. */
+/** Where a strip drag's touch landed, fixed at grab time. */
+private enum class TrimDragMode { START, END, SCRUB }
+
+/**
+ * The r63d trim-on-filmstrip: the Main chassis' PRIMARY trim surface (the
+ * Ente video_trim_slider pattern on the repo's 48dp touch contract). The
+ * full-clip filmstrip carries TWO 16dp accent handles centered on the LIVE
+ * trim bounds, a dim scrim over the strip OUTSIDE the window, and a 2dp
+ * white playhead CLAMPED inside it (during a drag the player's position can
+ * fall outside the live window --- the clamp keeps the line honest). The
+ * strip renders an adaptive frame count --- about (width/72), clamped to
+ * 4..12 --- decoded at the slot midpoints through [onDecodeThumbnails] (the
+ * shared 10-frame decode stays with the untouched tool-screen strips).
+ *
+ * Gestures: a touch starting within the 28dp grab radius of a handle drags
+ * THAT handle (nearest wins when the zones overlap); anywhere else is a
+ * scrub. A tap seeks. Every drag start pauses the preview and every release
+ * resumes it ONLY if it was playing before (the chassis owns that contract
+ * and the commit); handle drags feed the chassis' TIME_STEP-snapped math.
+ * The pointer inputs read live values through rememberUpdatedState so a
+ * draft update mid-drag never re-keys (and cancels) the gesture.
+ */
 @Composable
-private fun FilmstripRow(thumbs: List<Bitmap>?) {
+internal fun TrimStrip(
+    durationMs: Long,
+    trimStartMs: Long,
+    trimEndMs: Long,
+    playheadAbsoluteMs: Long,
+    enabled: Boolean,
+    filmstripA11yName: String,
+    positionStateText: String,
+    startHandleA11y: String,
+    endHandleA11y: String,
+    startHandleState: String,
+    endHandleState: String,
+    onDecodeThumbnails: (count: Int, onDone: (List<Bitmap>) -> Unit) -> Unit,
+    onDragStarted: () -> Unit,
+    onHandleDragFinished: () -> Unit,
+    onScrubFinished: () -> Unit,
+    onStartDrag: (Long) -> Unit,
+    onEndDrag: (Long) -> Unit,
+    onSeekAbsolute: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // The strip's own adaptive decode: placeholders until the frames land.
+    var stripThumbs by remember { mutableStateOf<List<Bitmap>?>(null) }
+    var dragMode by remember { mutableStateOf(TrimDragMode.SCRUB) }
+    val startFraction = if (durationMs > 0) trimStartMs.toFloat() / durationMs else 0f
+    val endFraction = if (durationMs > 0) trimEndMs.toFloat() / durationMs else 1f
+    val currentEnabled by rememberUpdatedState(enabled)
+    val currentStartFraction by rememberUpdatedState(startFraction)
+    val currentEndFraction by rememberUpdatedState(endFraction)
+    val currentOnDragStarted by rememberUpdatedState(onDragStarted)
+    val currentOnHandleDragFinished by rememberUpdatedState(onHandleDragFinished)
+    val currentOnScrubFinished by rememberUpdatedState(onScrubFinished)
+    val currentOnStartDrag by rememberUpdatedState(onStartDrag)
+    val currentOnEndDrag by rememberUpdatedState(onEndDrag)
+    val currentOnSeekAbsolute by rememberUpdatedState(onSeekAbsolute)
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .semantics {
+                contentDescription = filmstripA11yName
+                stateDescription = positionStateText
+            }
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    if (currentEnabled && durationMs > 0) {
+                        currentOnSeekAbsolute(((offset.x / size.width) * durationMs).toLong())
+                    }
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        if (!currentEnabled) return@detectHorizontalDragGestures
+                        currentOnDragStarted()
+                        val startX = currentStartFraction * size.width
+                        val endX = currentEndFraction * size.width
+                        val dStart = abs(offset.x - startX)
+                        val dEnd = abs(offset.x - endX)
+                        val grab = STRIP_HANDLE_GRAB_RADIUS.toPx()
+                        dragMode = when {
+                            dStart <= grab && dStart <= dEnd -> TrimDragMode.START
+                            dEnd <= grab -> TrimDragMode.END
+                            else -> TrimDragMode.SCRUB
+                        }
+                    },
+                    onDragEnd = {
+                        if (currentEnabled) {
+                            if (dragMode == TrimDragMode.SCRUB) {
+                                currentOnScrubFinished()
+                            } else {
+                                currentOnHandleDragFinished()
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        if (currentEnabled) {
+                            if (dragMode == TrimDragMode.SCRUB) {
+                                currentOnScrubFinished()
+                            } else {
+                                currentOnHandleDragFinished()
+                            }
+                        }
+                    },
+                ) { change, _ ->
+                    change.consume()
+                    if (!currentEnabled || durationMs <= 0) return@detectHorizontalDragGestures
+                    val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                    val absoluteMs = (fraction * durationMs).toLong()
+                    when (dragMode) {
+                        TrimDragMode.START -> currentOnStartDrag(absoluteMs)
+                        TrimDragMode.END -> currentOnEndDrag(absoluteMs)
+                        TrimDragMode.SCRUB -> currentOnSeekAbsolute(absoluteMs)
+                    }
+                }
+            },
+    ) {
+        val stripWidthPx = constraints.maxWidth.toFloat()
+        val frameCount = (maxWidth.value / STRIP_FRAME_SLOT_DP).toInt()
+            .coerceIn(STRIP_FRAME_MIN, STRIP_FRAME_MAX)
+        LaunchedEffect(frameCount) {
+            onDecodeThumbnails(frameCount) { list -> stripThumbs = list }
+        }
+
+        FilmstripRow(thumbs = stripThumbs, frameCount = frameCount)
+        // The dim scrim over everything OUTSIDE the live window (the weights
+        // are kept just above zero for the Row contract --- a full-clip trim
+        // simply hides the sliver).
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(4.dp)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(startFraction.coerceAtLeast(0.002f))
+                    .fillMaxHeight()
+                    .background(TrimScrimColor),
+            )
+            Box(
+                modifier = Modifier
+                    .weight((endFraction - startFraction).coerceAtLeast(0.002f))
+                    .fillMaxHeight(),
+            )
+            Box(
+                modifier = Modifier
+                    .weight((1f - endFraction).coerceAtLeast(0.002f))
+                    .fillMaxHeight()
+                    .background(TrimScrimColor),
+            )
+        }
+        // The 2dp white playhead, CLAMPED inside the live trim window.
+        val playheadFraction = (
+            if (durationMs > 0) playheadAbsoluteMs.toFloat() / durationMs else 0f
+            ).coerceIn(startFraction, endFraction)
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset((playheadFraction * stripWidthPx).roundToInt(), 0)
+                }
+                .width(2.dp)
+                .fillMaxHeight()
+                .background(Color.White),
+        )
+        // The two 16dp handles, centered on the live bounds.
+        TrimHandle(
+            fraction = startFraction,
+            stripWidthPx = stripWidthPx,
+            contentDescription = startHandleA11y,
+            stateText = startHandleState,
+        )
+        TrimHandle(
+            fraction = endFraction,
+            stripWidthPx = stripWidthPx,
+            contentDescription = endHandleA11y,
+            stateText = endHandleState,
+        )
+    }
+}
+
+/**
+ * One trim handle: a 16dp full-height accent bar (the section-5 visual)
+ * centered on its trim bound, carrying the Trim tab's handle a11y strings
+ * verbatim (name + timestamp state). The 28dp grab radius lives on the
+ * parent's drag classifier, not here --- this node is the visual + the
+ * TalkBack target.
+ */
+@Composable
+private fun TrimHandle(
+    fraction: Float,
+    stripWidthPx: Float,
+    contentDescription: String,
+    stateText: String,
+) {
+    Box(
+        modifier = Modifier
+            .offset {
+                IntOffset(
+                    (fraction * stripWidthPx - (STRIP_HANDLE_WIDTH.toPx() / 2f)).roundToInt(),
+                    0,
+                )
+            }
+            .width(STRIP_HANDLE_WIDTH)
+            .fillMaxHeight()
+            .background(VideoAccent, RoundedCornerShape(3.dp))
+            .semantics {
+                this.contentDescription = contentDescription
+                stateDescription = stateText
+            },
+    )
+}
+
+/**
+ * The thumbnail slots: real bitmaps when decoded, honest outlined dark
+ * placeholders otherwise. [frameCount] slots are laid out at equal weight;
+ * the r63d Main strip passes its adaptive budget while the untouched
+ * tool-screen strips keep the r52 ten (the default).
+ */
+@Composable
+private fun FilmstripRow(thumbs: List<Bitmap>?, frameCount: Int = 10) {
     Row(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        for (i in 0 until 10) {
+        for (i in 0 until frameCount) {
             val bitmap = thumbs?.getOrNull(i)
             Box(
                 modifier = Modifier
@@ -1365,42 +1813,71 @@ private fun PlayheadOverlay(fraction: Float) {
     }
 }
 
-/** The bottom tab bar: six equal-weight columns, active = accent + underline. */
+/**
+ * The bottom tab bar (r63d): the photo rail's selected-halo language on the
+ * video palette --- a docked 1dp hairline, a 40x28dp accent-halo pill behind
+ * the active icon, the 11sp label, the 24x2dp underline --- laid out as six
+ * equal-weight (flex) columns so all six tabs fit with NO scroll at 360dp.
+ * The enum constants, the label strings and the click behavior are the r52
+ * ones verbatim (the a11y reads the labels as it always did).
+ */
 @Composable
-private fun EditorTabBar(current: EditorScreen, onSelect: (EditorScreen) -> Unit) {
-    Row(
+internal fun EditorTabBar(current: EditorScreen, onSelect: (EditorScreen) -> Unit) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(VideoSurface),
     ) {
-        for (tab in EditorScreen.entries) {
-            if (tab == EditorScreen.Main) continue
-            val selected = tab == current
-            val tint = if (selected) VideoAccent else VideoTextSecondary
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onSelect(tab) }
-                    .padding(top = 8.dp, bottom = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(
-                    painter = painterResource(tab.iconRes),
-                    contentDescription = null,
-                    tint = tint,
-                )
-                Text(
-                    text = stringResource(tab.labelRes),
-                    color = tint,
-                    fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(2.dp))
-                Box(
+        // The r56 hairline: the bar is docked, not floating.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant),
+        )
+        Row(modifier = Modifier.fillMaxWidth()) {
+            for (tab in EditorScreen.entries) {
+                if (tab == EditorScreen.Main) continue
+                val selected = tab == current
+                val tint = if (selected) VideoAccent else VideoTextSecondary
+                Column(
                     modifier = Modifier
-                        .width(24.dp)
-                        .height(2.dp)
-                        .background(if (selected) VideoAccent else Color.Transparent),
-                )
+                        .weight(1f)
+                        .clickable { onSelect(tab) }
+                        .padding(top = 10.dp, bottom = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    // The selected halo: the accent language behind the
+                    // icon, so the active tab reads at a glance even
+                    // before the underline lands.
+                    Box(
+                        modifier = Modifier
+                            .size(width = 40.dp, height = 28.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (selected) VideoAccent.copy(alpha = 0.18f) else Color.Transparent,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(tab.iconRes),
+                            contentDescription = null,
+                            tint = tint,
+                        )
+                    }
+                    Text(
+                        text = stringResource(tab.labelRes),
+                        color = tint,
+                        fontSize = 11.sp,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .width(24.dp)
+                            .height(2.dp)
+                            .background(if (selected) VideoAccent else Color.Transparent),
+                    )
+                }
             }
         }
     }

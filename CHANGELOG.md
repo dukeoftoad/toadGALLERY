@@ -40,6 +40,18 @@ them authored by parallel agents on disjoint files.
   DEFAULT seed --- the java registrations were never the compiler's
   input). The first attempt registered the java directory set instead and
   CI run #11's own gate caught it: assemble green, classes still absent.
+  The kotlin registration then surfaced the next layer the in-process
+  claim never exercised: the embedded sources reference the editor's
+  module-local R (io.github.dukeoftoad.gallery.edit.R), which has no
+  generated target inside the gallery module (CI run #12: only
+  'string'/'drawable' unresolved references, nothing else --- the
+  classpath was complete). The unified flavor source dir now carries an
+  R-compat shim (apps/gallery/src/unified/kotlin/.../edit/RCompat.kt,
+  `typealias R = io.github.dukeoftoad.gallery.R`): the editor res rides
+  the flavor source set of the module itself, so under
+  android.nonTransitiveRClass=true every referenced resource is
+  module-OWN and present in the gallery's R. apps/edit keeps its real
+  generated R; zero churn there.
   (2) unified-apk.yml gains the embedded-code hard gate: the two
   manifest-declared editor entry classes and
   `lib/arm64-v8a/libtoad_ml_jni.so` MUST be present in the produced APK

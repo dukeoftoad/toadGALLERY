@@ -183,6 +183,80 @@ jobs:
           echo "signature gate OK --- signer cert SHA-256 matches $EXPECTED_LABEL."
           echo "SIGNER_SHA256=$ACTUAL_SHA256" >> "$GITHUB_ENV"
 
+      # r63 fix (the device round: "the unified build doesn't contain the
+      # editor"): the r59 sourceSets wiring silently dropped the editor's
+      # KOTLIN sources --- the legacy .java.srcDirs call stopped feeding the
+      # AGP 9 built-in Kotlin compiler while res/assets (the same legacy API)
+      # kept merging --- so FOUR unified releases (r59-r63) shipped with the
+      # contract activities DECLARED in the manifest but ABSENT from the dex.
+      # Fresh-install devices got the silent no-op Edit tap; older devices
+      # never noticed because the separately-installed edit APK answered the
+      # contract. This gate makes the omission a BUILD FAILURE: the two
+      # manifest-declared editor entry classes and the engine JNI library
+      # MUST be present in the produced APK, or the job dies before upload.
+      - name: Verify the embedded editor + engine classes (hard gate)
+        run: |
+          # Scan EVERY dex file (classes*.dex --- the editor sources push
+          # the build past the single-dex limit; run #11's gate failure was
+          # single-dex exclusivity-blind, not a compile failure).
+          for CLS in \
+            "io/github/dukeoftoad/gallery/edit/EditActivity" \
+            "io/github/dukeoftoad/gallery/edit/video/VideoEditActivity"; do
+            if ! unzip -p "$APK" 'classes*.dex' | strings | grep -q "$CLS"; then
+              echo "::error::unified APK is missing the embedded editor class $CLS --- the unified flavor no longer compiles the editor sources in-process; check apps/gallery/build.gradle.kts sourceSets (the r63 kotlin.srcDirs fix)"
+              exit 1
+            fi
+          done
+          if ! unzip -l "$APK" | grep -q "lib/arm64-v8a/libtoad_ml_jni.so"; then
+            echo "::error::unified APK is missing lib/arm64-v8a/libtoad_ml_jni.so --- the engine native libraries are absent; the workflow requires -PwithEngine"
+            exit 1
+          fi
+          echo "embedded-code gate OK --- both editor entry classes + the engine JNI library are in the APK."
+
+      # r63 fix F-74 DIAGNOSTIC (round 5): the editor sources compile but
+      # every R.string/R.drawable member lookup fails while the gallery's own
+      # sources compile clean in the SAME task --- so the R class the editor
+      # sources resolve is NOT the gallery's generated R. The source-level
+      # typealias seam (EditorRAlias) compiles yet loses the resolution.
+      # This step captures the generated R jars (the compile classpath's R
+      # surface) so the shadowing class --- if any --- is visible by name.
+      - name: Diagnostic --- capture the generated R jars (always)
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/rjar-diagnostic"
+          FOUND=0
+          for JAR in $(find apps/gallery/build/intermediates apps/gallery/build/generated -name "*.jar" 2>/dev/null); do
+            if unzip -l "$JAR" 2>/dev/null | grep -qE "R(class)?\.class|/R\.class|edit/R"; then
+              cp "$JAR" "$RUNNER_TEMP/rjar-diagnostic/$(echo "$JAR" | tr '/' '_')"
+              FOUND=1
+            fi
+          done
+          for RTXT in $(find apps/gallery/build -name "R.txt" 2>/dev/null); do
+            cp "$RTXT" "$RUNNER_TEMP/rjar-diagnostic/$(echo "$RTXT" | tr '/' '_')"
+            FOUND=1
+          done
+          {
+            echo "### R-jar diagnostic"
+            echo ""
+            for J in "$RUNNER_TEMP"/rjar-diagnostic/*.jar; do
+              [ -e "$J" ] || continue
+              echo "#### $(basename "$J")"
+              echo '```'
+              unzip -l "$J" | grep -E "edit/R|R\.class" | head -40 || true
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "diagnostic jars found: $FOUND"
+      - name: Upload the R-jar diagnostic
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rjar-diagnostic
+          path: |
+            /home/runner/work/_temp/rjar-diagnostic/**
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload the unified APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

@@ -1,8 +1,15 @@
 import com.android.build.api.artifact.SingleArtifact
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -472,7 +479,22 @@ android {
         // and the video chassis (trim-on-filmstrip, canvas-tap transport,
         // the time row). Same stable-signing contract: the unified APK
         // updates in place.
-        versionCode = 43
+        //
+        // versionCode 44 (r63 fix round): the unified editor was never in
+        // the APK. The r59 sourceSets wired the editor's Kotlin sources
+        // through the LEGACY .java.srcDirs(...) call, which AGP 9 built-in
+        // Kotlin silently stopped consuming --- resources and assets still
+        // merged, so every unified release r59-r63 declared the contract
+        // activities in the manifest WITHOUT carrying their classes in the
+        // dex (fresh-install devices: the Edit tap resolves Ready and then
+        // fails to launch; older devices never noticed because the separate
+        // edit APK answered). The java registration now rides the same
+        // .java.directories API the main source set uses, the
+        // unified-apk.yml embedded-code gate hard-fails on missing editor
+        // classes, and the packaging guard covers Unified. The device test
+        // that pinned it: fresh install of ONLY the unified APK, Edit tap
+        // -> nothing.
+        versionCode = 44
         versionName = "0.4.5-alpha"
         // The launcher-alias consolidation's default: the canonical
         // basic build keeps its MAIN/LAUNCHER entry (the ONE family
@@ -701,7 +723,45 @@ android {
         // outside the repo and was silently ignored --- missing srcDirs do
         // not error, which is why the compile gate stayed green while the
         // resource link failed).
-        getByName("unified").java.srcDirs("../edit/src/main/kotlin")
+        //
+        // r63 FIX (the device round: "the unified build doesn't contain the
+        // editor") --- TWO CI rounds to pin the real wiring, both kept here
+        // because each layer taught something:
+        //
+        // The r59 symptom: four unified releases (r59-r63; the dex probe on
+        // the shipped vc42/vc43 APKs: ZERO io/github/dukeoftoad/gallery/edit
+        // strings) shipped with the contract activities DECLARED in the
+        // manifest but ABSENT from the dex --- resources and assets (legacy
+        // .srcDirs on res/assets) still merged, the Kotlin sources never
+        // compiled. Older devices never noticed because the separate edit
+        // APK always answered the contract launch; the fresh-install device
+        // round finally hit it (Edit tap -> nothing).
+        //
+        // Fix attempt 1 (run #11): register ../edit on the unified JAVA
+        // directory set (.java.directories, the API the main/test lines
+        // use). The assemble SUCCEEDED (the classpath wiring below was
+        // always complete) but the embedded-code gate STILL failed: the
+        // AGP 9 built-in Kotlin compile task does NOT consume
+        // sourceSets[].java at all.
+        //
+        // The real wiring (the offline config probe, probe-sourcesets2):
+        // AGP 9.2.1 gives every Android source set a dedicated KOTLIN
+        // directory set, and that is what the built-in Kotlin task seeds
+        // from: main carries [src/main/java, src/main/kotlin] by DEFAULT
+        // (which is why the java registrations above were never actually
+        // needed for Kotlin), and unified carries only
+        // [src/unified/java, src/unified/kotlin]. The operative fix is the
+        // .kotlin.srcDirs registration below; the java.directories line
+        // stays as belt-and-braces for any Java-consumer path (javac
+        // filters .kt out of its own inputs --- run #11's assemble proved
+        // the mixed build tolerates it).
+        //
+        // The unified-apk.yml embedded-code gate (scanning EVERY dex file,
+        // multi-dex safe) fails the job before upload if the editor
+        // classes ever go missing again, so this can never silently
+        // regress.
+        getByName("unified").java.directories.add("../edit/src/main/kotlin")
+        getByName("unified").kotlin.directories.add("../edit/src/main/kotlin")
         getByName("unified").assets.srcDirs("../edit/src/main/assets")
         getByName("unified").res.srcDirs("../edit/src/main/res")
     }
@@ -722,6 +782,140 @@ android {
     dependenciesInfo {
         includeInApk = false
     }
+}
+
+// --- r63 fix (F-74, CI round 4): the VARIANT-level Kotlin source registration ---
+//
+// The sourceSets-level registration above (java.directories + kotlin.srcDirs)
+// demonstrably feeds the built-in Kotlin compiler (CI run #12 compiled the
+// ../edit sources) --- but the compile task's DIRECT, documented input is the
+// Variant API (variant.sources.kotlin), and the unified flavor ALSO needs
+// src/unified/kotlin (where r59's EditorRAlias.kt R-seam lives) to be
+// unambiguous. This registration puts BOTH directories on the variant's
+// Kotlin source tree directly --- no sourceSets-to-variant mapping layer in
+// between can drop either one. The sourceSets-level registrations stay as
+// belt-and-braces for every other consumer of the source set model.
+androidComponents {
+    onVariants { variant ->
+        if (variant.name.startsWith("unified")) {
+            // AGP 9.2.1 SourceDirectories API: addStaticSourceDirectory(String)
+            // is the static-dir mutator (the old addSrcDir was retired;
+            // javap of gradle-api-9.2.1 pinned the method name).
+            variant.sources.kotlin?.addStaticSourceDirectory("../edit/src/main/kotlin")
+            variant.sources.kotlin?.addStaticSourceDirectory("src/unified/kotlin")
+            // The generated edit-package R (see GenerateEditRCompatTask below)
+            // feeds EVERY source consumer through addGeneratedSourceDirectory,
+            // which wires the task dependency into the Kotlin compile, javac,
+            // KSP and lint automatically (the static-dir registration left
+            // KSP and lint un-wired --- run #17's implicit-dependency error).
+            variant.sources.java?.addGeneratedSourceDirectory(
+                generateEditRCompat,
+                GenerateEditRCompatTask::outputDir,
+            )
+        }
+    }
+}
+
+// --- r63 fix (F-74, CI round 6): the EDIT-package R, GENERATED for real ---
+//
+// Five CI rounds pinned the full anatomy of "the unified editor was never
+// in the APK": (1) r59's legacy java.srcDirs silently dropped the editor
+// KOTLIN sources (runs 1-4 green with the activities declared but absent
+// from every unified dex); (2) the kotlin directory set registration fixed
+// the sources (run #12 compiled them); (3) the editor's module-local R
+// (io.github.dukeoftoad.gallery.edit.R) has NO generated target inside the
+// gallery module (run #12: only string/drawable unresolved); (4) r59's
+// EditorRAlias typealias seam compiles, its target (the gallery R) is on
+// the classpath WITH every editor entry (the round-5 diagnostic artifact
+// proves the compile R.jar carries all 277 editor entries) --- and K2
+// STILL refuses to resolve the editor sources' bare R references through
+// the alias (runs #12-#15: 351 identical member errors, zero alias
+// errors). Whatever the precise K2/built-in-Kotlin interplay is, the
+// typealias seam is not a fixable configuration surface.
+//
+// So the seam becomes a REAL generated source class: every unified variant
+// gets io/github/dukeoftoad/gallery/edit/R.java, GENERATED from this
+// module's compile-time symbol list (the R.txt whose exact path the round-5
+// diagnostic captured), delegating every resource field to the gallery's
+// generated R. A source CLASS beats every other resolution candidate
+// (aliases, classpath remnants), so bare R.<type>.<name> in the editor
+// sources resolves unambiguously. The delegation keeps runtime values
+// correct: the fields are non-final ints initialized from the gallery R's
+// fields (AGP's compile-time R.jar carries placeholder 0x0 values and the
+// runtime pass bakes the real IDs into those same non-final fields --- a
+// delegating read picks up the real value at class-init, exactly like the
+// fields it delegates to). The standalone edit app never sees this file:
+// it is generated into THIS module's build dir and registered on the
+// unified variants only.
+abstract class GenerateEditRCompatTask : DefaultTask() {
+
+    /** The unified variant's compile symbol lists (R.txt, placeholder IDs). */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NONE)
+    val symbolLists: ConfigurableFileCollection = project.objects.fileCollection()
+
+    /** Where the generated io/github/dukeoftoad/gallery/edit/R.java lands. */
+    @get:OutputDirectory
+    val outputDir: DirectoryProperty = project.objects.directoryProperty()
+
+    @TaskAction
+    fun generate() {
+        // The unifiedRelease list is the canonical one (the symbol NAMES are
+        // identical across unified build types --- the compile-time list
+        // carries placeholder IDs for every variant; the delegation reads
+        // the real values at runtime).
+        val rTxt = symbolLists.files.firstOrNull { it.path.contains("unifiedRelease") }
+            ?: symbolLists.files.firstOrNull()
+            ?: throw GradleException(
+                "GenerateEditRCompatTask: no compile symbol list (R.txt) input --- " +
+                    "the unified variant's R generation did not run before this task; " +
+                    "check the dependsOn ordering below."
+            )
+        val byType = rTxt.readLines()
+            .map { it.trim().split(" ") }
+            .filter { it.size == 4 && it[0] == "int" }
+            .groupBy({ it[1] }, { it[2] })
+        if (byType.isEmpty()) {
+            throw GradleException("GenerateEditRCompatTask: empty symbol list at $rTxt")
+        }
+        val sb = StringBuilder()
+        sb.appendLine("package io.github.dukeoftoad.gallery.edit;")
+        sb.appendLine()
+        sb.appendLine("// GENERATED by GenerateEditRCompatTask (r63 F-74). DO NOT EDIT --- the")
+        sb.appendLine("// task regenerates this file from the unified variant's compile symbol")
+        sb.appendLine("// list. Delegates every resource field to the gallery's generated R so")
+        sb.appendLine("// the editor sources' bare R.<type>.<name> references resolve to the")
+        sb.appendLine("// SAME values in-process, without touching a single editor source file.")
+        sb.appendLine("public final class R {")
+        for ((type, names) in byType.entries.sortedBy { it.key }) {
+            sb.appendLine("    public static final class $type {")
+            for (name in names.sorted()) {
+                sb.appendLine(
+                    "        public static int $name = io.github.dukeoftoad.gallery.R.$type.$name;",
+                )
+            }
+            sb.appendLine("    }")
+        }
+        sb.appendLine("}")
+        val dir = outputDir.get().asFile.resolve("io/github/dukeoftoad/gallery/edit")
+        dir.mkdirs()
+        dir.resolve("R.java").writeText(sb.toString())
+        logger.lifecycle("GenerateEditRCompatTask: ${byType.entries.sumOf { it.value.size }} symbols -> ${dir.resolve("R.java")}")
+    }
+}
+
+val generateEditRCompat = tasks.register("generateEditRCompat", GenerateEditRCompatTask::class) {
+    symbolLists.from(
+        layout.buildDirectory.dir("intermediates/compile_symbol_list").map {
+            it.asFileTree.matching { include("**/R.txt") }
+        },
+    )
+    outputDir.set(layout.buildDirectory.dir("generated/editRCompat"))
+    // Explicit ordering: the generator reads the R.txt the variant's R-file
+    // generation produces. Lazy STRING dependency (a provider .configure{}
+    // call from inside another task's realization context is a Gradle 9
+    // configuration-time error --- run #16) resolves in the task graph.
+    dependsOn("generateUnifiedReleaseRFile")
 }
 
 // --- Optional Rust engine packaging (r22, ADR-0020) ---
@@ -887,19 +1081,25 @@ if (withBundledModels) {
 // every workflow actually invokes; every suffixed helper stays exempt.
 gradle.taskGraph.whenReady {
     val packagingTaskPattern = Regex(
-        "^(assemble|package|bundle)(Basic|Engine|Semantic|Face)(Debug|Release)?$",
+        // r63 FIX: Unified joins the packaging guard. The unified flavor
+        // builds with BuildShape WITH_ENGINE=true --- assembling it without
+        // -PwithEngine would produce exactly the honest-but-wrong
+        // LibraryMissing APK this guard exists to prevent, and until now
+        // assembleUnifiedRelease silently bypassed the check.
+        "^(assemble|package|bundle)(Basic|Engine|Semantic|Face|Unified)(Debug|Release)?$",
     )
     val packagingTaskNames = allTasks
         .filter { it.project.path == ":apps:gallery" }
         .map { it.name }
         .filter { it.matches(packagingTaskPattern) }
     val engineFamilyPackaging = packagingTaskNames.any {
-        it.contains("Engine") || it.contains("Semantic") || it.contains("Face")
+        it.contains("Engine") || it.contains("Semantic") || it.contains("Face") ||
+            it.contains("Unified")
     }
     val basicPackaging = packagingTaskNames.any { it.contains("Basic") }
     if (engineFamilyPackaging && !withEngine) {
         throw GradleException(
-            "The engine-family gallery flavors (engine/semantic/face) package the Rust JNI " +
+            "The engine-family gallery flavors (engine/semantic/face/unified) package the Rust JNI " +
                 "libraries only under -PwithEngine (ADR-0020): assembling them without the " +
                 "property produces an APK whose whole AI UI renders over a missing native " +
                 "library (BuildShape.withEngine=true, LibraryMissing at runtime). Re-run with " +

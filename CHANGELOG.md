@@ -4,7 +4,7 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
-## [Unreleased] — the r63 round (the editor craft: the fix-first round, violet retires to toad-green, the Ente-style tune-rail, trim-on-filmstrip; unified versionCode 43, versionName stays 0.4.5-alpha)
+## [Unreleased] — the r63 round (the editor craft: the fix-first round, violet retires to toad-green, the Ente-style tune-rail, trim-on-filmstrip; unified versionCode 44, versionName stays 0.4.5-alpha)
 
 The maintainer's 2026-11-08 directive: "Coming to editor - you can see
 flaws and generic feel, buggy old ux design. craft proposed solution with
@@ -15,6 +15,51 @@ burhanrashid52/PhotoEditor, Fossify Gallery) was approved IN FULL (items
 1-8) before any code. Four phases on one branch sequence: r63a fixes
 (zero design), r63b chrome + re-pin, r63c panels, r63d video --- three of
 them authored by parallel agents on disjoint files.
+
+### Fixed (the r63 device round --- the unified editor was never in the APK)
+
+- **F-74, the unified editor never shipped**: the maintainer's fresh-install
+  device round (uninstall everything, install ONLY the unified r63 APK)
+  exposed what four unified releases (r59-r63) had silently carried: the
+  Edit tap did NOTHING --- no crash, no editor, no fallback. The dex probe
+  on the shipped vc42/vc43 APKs found ZERO
+  `io/github/dukeoftoad/gallery/edit` strings: the r59 sourceSets wired the
+  editor's Kotlin sources through the LEGACY `.java.srcDirs(...)` call,
+  which AGP 9 built-in Kotlin silently stopped consuming, while `res` and
+  `assets` (the same legacy API on their source sets) kept merging --- so
+  the contract activities were DECLARED in the merged manifest (and their
+  RESOURCES shipped) but their CLASSES were absent from every unified dex.
+  No device ever caught it because the separately-installed edit APK always
+  answered the contract launch; a fresh install of only the unified app
+  finally hit the gap. Three fixes, each pinning a different layer:
+  (1) the operative fix: the unified source set now registers
+  `../edit/src/main/kotlin` on its KOTLIN directory set
+  (`.kotlin.srcDirs(...)`), because the offline config probe proved AGP
+  9.2.1 built-in Kotlin seeds its compile task from the per-source-set
+  kotlin directory set (main compiles only because src/main/kotlin is its
+  DEFAULT seed --- the java registrations were never the compiler's
+  input). The first attempt registered the java directory set instead and
+  CI run #11's own gate caught it: assemble green, classes still absent.
+  The kotlin registration then surfaced the next layer the in-process
+  claim never exercised: the embedded sources reference the editor's
+  module-local R (io.github.dukeoftoad.gallery.edit.R), which has no
+  generated target inside the gallery module (CI run #12: only
+  'string'/'drawable' unresolved references, nothing else --- the
+  classpath was complete). The unified flavor source dir now carries an
+  R-compat shim (apps/gallery/src/unified/kotlin/.../edit/RCompat.kt,
+  `typealias R = io.github.dukeoftoad.gallery.R`): the editor res rides
+  the flavor source set of the module itself, so under
+  android.nonTransitiveRClass=true every referenced resource is
+  module-OWN and present in the gallery's R. apps/edit keeps its real
+  generated R; zero churn there.
+  (2) unified-apk.yml gains the embedded-code hard gate: the two
+  manifest-declared editor entry classes and
+  `lib/arm64-v8a/libtoad_ml_jni.so` MUST be present in the produced APK
+  (scanning EVERY classes*.dex, multi-dex safe --- run #11's gate was
+  single-dex blind) or the job fails before upload. (3) the
+  packaging-discipline guard regex now covers `Unified`, so an engine-less
+  unified assemble fails fast like its engine-family siblings. versionCode
+  44 so the fixed APK installs over vc43 in place.
 
 ### Fixed (r63a --- the fix-first round, zero design change)
 

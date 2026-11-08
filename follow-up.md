@@ -1145,6 +1145,44 @@ the public remote each time.
   canvas-paint tab with two modes). Needs its own consent-free UX pass
   (the Regions consent surface must not silently disappear); not bundled
   into r63 by design.
+- **F-74 (2026-11-08, FIXED this round)** — the unified editor was never
+  in the APK. The maintainer's fresh-install round ("uninstall the old
+  APKs, install only the unified r63 build") hit the Edit tap doing
+  nothing, and the dex probe on the shipped vc42/vc43 artifacts proved
+  ZERO `io/github/dukeoftoad/gallery/edit` strings in every unified dex
+  since r59: the legacy `.java.srcDirs(...)` call silently stopped feeding
+  the AGP 9 built-in Kotlin compiler while the same legacy API on
+  res/assets kept merging (resources shipped, classes never did). Older
+  devices never noticed because the separately-installed edit APK answered
+  the contract. Fixed in three layers: the operative one registers
+  `../edit/src/main/kotlin` on the unified source set's KOTLIN directory
+  set (the offline probe proved AGP 9.2.1 built-in Kotlin seeds its
+  compile task from the per-source-set kotlin set --- main compiles only
+  because src/main/kotlin is its DEFAULT seed; the first attempt used the
+  java directory set and CI run #11's own embedded-code gate caught the
+  miss: assemble green, classes still absent), unified-apk.yml hard-gates
+  the embedded editor classes + the engine JNI library before upload
+  (scanning every classes*.dex --- the editor sources push the build
+  multi-dex), and the packaging-discipline guard covers `Unified`.
+  versionCode 44 rides the fix. Round 4: the registration is now made at
+  BOTH layers --- the sourceSets kotlin directory set AND the Variant API
+  (`variant.sources.kotlin.addStaticSourceDirectory(...)` for ../edit and
+  src/unified/kotlin, the compile task's direct documented input; the
+  method name pinned by javap of gradle-api-9.2.1), and r59's
+  EditorRAlias R-seam is public. Rounds 5-6: the alias seam turned out to
+  be a dead end --- the round-5 diagnostic artifact (the generated R jars
+  captured from the failing build) proves the compile R.jar carries all
+  277 editor entries under io.github.dukeoftoad.gallery.R$string, no
+  edit-package R exists on any classpath, and yet K2 refuses to resolve
+  the editor sources' bare R references through the source-level
+  typealias. The seam is now a GENERATED source class instead:
+  generateEditRCompat produces io/github/dukeoftoad/gallery/edit/R.java
+  from the unified variant's compile symbol list (build/intermediates/
+  compile_symbol_list), delegating every resource field to
+  io.github.dukeoftoad.gallery.R --- a source CLASS wins resolution
+  unambiguously, the delegation keeps runtime values correct (non-final
+  fields, the same non-final contract the runtime R replacement relies
+  on), and apps/edit stays untouched.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69 (the
   EditorPalette registry the r63b re-pin landed IS its plug-in point),

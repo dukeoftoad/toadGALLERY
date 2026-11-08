@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,12 +70,22 @@ internal enum class PhotoScreen(val labelRes: Int, val iconRes: Int) {
 }
 
 /**
- * The r54 tool-screen header: back on the left, the tool's title (the
- * heading anchor), and the confirm check on the right --- the video
- * chassis's header shape on the photo surface's r53 theme roles. Both
- * actions sweep-and-exit honestly: the photo tools commit LIVE on
- * release, so there is no draft to apply or discard --- the check is the
- * chassis's signature, not a fake apply.
+ * The r54 tool-screen header, r63c-promoted: back on the left, the tool's
+ * title (the heading anchor), then the session RESET icon, then the confirm
+ * check on the right --- ONE consistent shape for all ten photo tools (the
+ * approved section 4 spec row: back 48dp, title weight(1f), Reset icon
+ * disabled when committed == entry, confirm check accent 48dp).
+ *
+ * The Reset promotion (r63c): the value tools' trailing TextButton footer
+ * row retired --- Reset moved INTO the header row and now rides EVERY tool
+ * screen, not just the five recipe-value tools. Same honest semantics: the
+ * photo tools commit LIVE on release, so there is no draft to apply or
+ * discard --- Reset reverts the tool session as ONE undoable commit against
+ * the entry snapshot, disabled while that snapshot IS the recipe (or during
+ * an export, the freeze-everything rule). The a11y name is the old footer
+ * button's label (editor_v2_reset), carried as the icon's
+ * contentDescription; the back/confirm contracts are unchanged (the check
+ * is the chassis's signature, not a fake apply).
  */
 @Composable
 internal fun PhotoToolHeader(
@@ -83,6 +94,9 @@ internal fun PhotoToolHeader(
     confirmA11y: String,
     onBack: () -> Unit,
     onConfirm: () -> Unit,
+    resetA11y: String,
+    onReset: () -> Unit,
+    resetEnabled: Boolean,
 ) {
     Row(
         modifier = Modifier
@@ -108,6 +122,25 @@ internal fun PhotoToolHeader(
                 .weight(1f)
                 .semantics { heading() },
         )
+        // r63c: the session Reset, promoted out of the value tools' footer
+        // row into the header --- one chrome shape for all ten tools. The
+        // disabled tint is the section 4 spec's disabled-alpha convention
+        // (38%), the same language the main header's undo/redo pair uses.
+        IconButton(
+            onClick = onReset,
+            enabled = resetEnabled,
+            modifier = Modifier.semantics { contentDescription = resetA11y },
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = null,
+                tint = if (resetEnabled) {
+                    MaterialTheme.colorScheme.onBackground
+                } else {
+                    MaterialTheme.colorScheme.onBackground.copy(alpha = 0.38f)
+                },
+            )
+        }
         IconButton(
             onClick = onConfirm,
             modifier = Modifier.semantics { contentDescription = confirmA11y },

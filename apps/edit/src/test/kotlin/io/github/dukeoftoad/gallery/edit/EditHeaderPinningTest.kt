@@ -16,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -100,6 +101,11 @@ class EditHeaderPinningTest {
                                 confirmA11y = "Done",
                                 onBack = {},
                                 onConfirm = {},
+                                // r63c: the promoted session Reset rides the
+                                // production header shape this test pins.
+                                resetA11y = "Reset",
+                                onReset = {},
+                                resetEnabled = true,
                             )
                         }
                         Box(
@@ -147,7 +153,16 @@ class EditHeaderPinningTest {
     @Test
     fun saveCopyPillStaysSingleLineWhenTheHeaderTextButtonsStarveIt() {
         rule.mainClock.autoAdvance = false
+        // The 50dp single-line floor, measured in px under the composition's
+        // REAL density (the pinned w411dp-h891dp-420dpi viewport). Measured
+        // in composition via LocalDensity --- the compose-ui (1.7.6)
+        // SemanticsNode exposes no density accessor for the post-hoc
+        // `node.density` read this test originally used (that reference did
+        // not resolve; r63c compile repair, the assertion's intent is
+        // unchanged).
+        var singleLinePillHeight = 0f
         rule.setContent {
+            singleLinePillHeight = with(LocalDensity.current) { 50.dp.toPx() }
             EditorTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                     Column(
@@ -191,7 +206,6 @@ class EditHeaderPinningTest {
 
         val buttonNode = rule.onNodeWithTag(saveTag).fetchSemanticsNode()
         val buttonHeight = buttonNode.boundsInRoot.height
-        val singleLinePillHeight = with(buttonNode.density) { 50.dp.toPx() }
         assertTrue(
             "the Save copy pill wrapped to two lines ($buttonHeight px); the CTA " +
                 "label must stay single-line under label starvation",

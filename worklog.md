@@ -2788,3 +2788,17 @@ F-63 (the components page's "separate installable apps" copy on the
 unified build), F-64 (People empty-state could distinguish "index ran,
 zero faces" from "index never ran"); carried items unchanged, PAT
 revocation advised again.
+
+**Run #33 addendum — CI infra note (the maintainer's "github actions got
+down and error. So skip for now").** PR #156 head `0715a72` sits at 8/9
+green (CodeQL, actions-lint, java-kotlin analysis, sensitive-change
+approval, BOTH Roborazzi gates, cargo check/clippy, the engine-enabled
+Android ABI assemble --- that last one compiling every gallery flavor
+source, so the r60 Kotlin is verified to compile). The ninth (Build +
+lint + test, the JVM suite incl. the +4 provisioner progress tests) was
+cancelled mid-run by the cancel-in-progress concurrency race, its rerun
+(attempt 2) crawled through a second infra wobble; the maintainer called
+the outage and directed the round to skip CI. Merge stays gated on that
+one job going green when Actions recovers (the repo's own gate
+discipline); then `unified-app` fast-forwards and unified-apk.yml
+rebuilds the unified APK with the fixes.

@@ -193,16 +193,21 @@ class ModelProvisioner(
      * calls. Throws the first [ProvisionException]; completed installs stay
      * installed (per-item failure isolation).
      *
-     * [onProgress] stays the r21 per-asset callback (fired after each
-     * verified install; the Settings presence rows re-derive on it).
      * [listener] is the r60 byte-level event stream (see [ProvisionEvent]);
      * it is OPTIONAL and never throws into the provisioning path --- a
-     * sinking UI must not be able to fail a download.
+     * sinking UI must not be able to fail a download. [onProgress] stays
+     * the r21 per-asset callback (fired after each verified install; the
+     * Settings presence rows re-derive on it). The ORDER is deliberate:
+     * [onProgress] is LAST so the historical trailing-lambda call shape
+     * `provision(FACE) { installed += it.fileName }` keeps binding to the
+     * per-asset callback --- Kotlin binds a lone trailing lambda to the
+     * final parameter, and the r60 listener must never silently capture
+     * those r21 call sites.
      */
     fun provision(
         capability: ModelManifest.Capability,
-        onProgress: ((ModelManifest.Model) -> Unit)? = null,
         listener: ProvisionListener? = null,
+        onProgress: ((ModelManifest.Model) -> Unit)? = null,
     ) {
         ensureDir()
         val specs = forCapability(capability)

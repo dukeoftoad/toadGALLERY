@@ -257,9 +257,8 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                     // snapshot; see [progressListener]).
                     provisioner.provision(
                         ModelManifest.Capability.FACE,
-                        { _state.value = snapshot().copy(busy = true) },
                         progressListener(ModelManifest.Capability.FACE),
-                    )
+                    ) { _state.value = snapshot().copy(busy = true) }
                     AiDogfoodState.Note.Downloaded
                 } catch (e: CancellationException) {
                     throw e
@@ -310,9 +309,8 @@ class AiEngineViewModel(app: Application) : AndroidViewModel(app) {
                 val note = try {
                     provisioner.provision(
                         ModelManifest.Capability.SEMANTIC,
-                        { _state.value = snapshot().copy(busy = true) },
                         progressListener(ModelManifest.Capability.SEMANTIC),
-                    )
+                    ) { _state.value = snapshot().copy(busy = true) }
                     AiDogfoodState.Note.SemanticDownloaded
                 } catch (e: CancellationException) {
                     throw e

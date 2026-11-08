@@ -1,18 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- r52 video editor tab icon: extract (frame corner brackets + centre
-     pick dot). House style = the gallery ic_nav_*.xml vectors: 24dp
+<!-- r63d video editor tab icon refresh: the Frame tab reads as a CAMERA
+     (the tab saves a still frame: the r63a honest rename, now the
+     honest glyph). House style = the gallery ic_nav_*.xml vectors: 24dp
      viewport, white fill, tinted in Compose. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Four L-shaped corner brackets -->
+    <!-- Body + viewfinder bump, with the lens punched out (even-odd) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M4,4h6v2H6v4H4V4zM14,4h6v6h-2V6h-4V4zM4,14h2v4h4v2H4v-6zM20,14v6h-6v-2h4v-4H20z" />
-    <!-- Centre pick dot -->
+        android:fillType="evenOdd"
+        android:pathData="M9.2,5.2h5.6l1.5,2H21v12H3v-12h4.7zM12,9.6a3.4,3.4 0 1,0 0,6.8a3.4,3.4 0 1,0 0,-6.8z" />
+    <!-- Shutter dot inside the lens ring -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M12,10.5a1.5,1.5 0 1,0 0,3a1.5,1.5 0 1,0 0,-3z" />
+        android:pathData="M12,11.6a1.4,1.4 0 1,0 0,2.8a1.4,1.4 0 1,0 0,-2.8z" />
 </vector>

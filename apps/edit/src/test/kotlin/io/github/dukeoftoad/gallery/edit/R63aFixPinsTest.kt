@@ -24,14 +24,23 @@ import java.io.File
  *        tool screens);
  *  - V5  (VideoEditorScreen): the dead weight(1f) Spacer between the
  *        filmstrip and the tab bar stays gone;
- *  - V2  (VideoEditorScreen): the fullscreen toggle lives in the transport
- *        cluster, not as an orphan inside the preview Box;
+ *  - V2  (VideoEditorScreen): the fullscreen toggle survives the transport
+ *        retirement --- r63d re-anchors it top-trailing INSIDE the preview
+ *        frame (the approved section-5 spec) with the r63a a11y strings
+ *        verbatim, and the three-button row itself stays retired;
  *  - V6  (strings): the honest tool labels --- Frame and GIF --- and the
  *        jargon-free frame-timestamp description.
  *
- * A failing assertion here means an r63a wiring was reverted --- restore it
- * or (for a deliberate redesign) retire the pin WITH the design round's
- * approval; do not relax it silently.
+ * r63d note (the deliberate redesign, approved): the three-button transport
+ * row and the two-row TimestampRow RETIRED per the proposal --- this file's
+ * video pins were rewritten for the new shape in the same round (the V2 pin
+ * guards the toggle's new anchor + the row's absence; the V1 end-anchor is
+ * now the transport overlay; the Main strip is TrimStrip). The photo pins
+ * (P3, F-71) are untouched.
+ *
+ * A failing assertion here means an r63a/r63d wiring was reverted ---
+ * restore it or (for a deliberate redesign) retire the pin WITH the design
+ * round's approval; do not relax it silently.
  */
 class R63aFixPinsTest {
 
@@ -100,8 +109,8 @@ class R63aFixPinsTest {
     fun `video preview surface no longer hardcodes its height`() {
         val source = editSource(EDIT_SRC + "video/VideoEditorScreen.kt")
         val start = source.indexOf("private fun PreviewSurface(")
-        val end = source.indexOf("private fun TransportRow(")
-        assertTrue("the PreviewSurface/TransportRow definitions must exist", start >= 0 && end > start)
+        val end = source.indexOf("private fun PreviewTransportOverlay(")
+        assertTrue("the PreviewSurface/PreviewTransportOverlay definitions must exist", start >= 0 && end > start)
         val preview = source.substring(start, end)
         assertFalse(
             "V1: a height() inside PreviewSurface re-locks the 220dp sliver --- " +
@@ -134,11 +143,12 @@ class R63aFixPinsTest {
     @Test
     fun `filmstrip docks against the tab bar with no dead spacer`() {
         val source = editSource(EDIT_SRC + "video/VideoEditorScreen.kt")
-        // The MAIN branch: from the chassis ScrubFilmstrip call (the first
-        // occurrence) to the chassis EditorTabBar call (the first one).
-        val start = source.indexOf("ScrubFilmstrip(")
+        // The MAIN branch: from the chassis TrimStrip call (the first
+        // occurrence; r63d made the trim strip the Main strip) to the
+        // chassis EditorTabBar call (the first one).
+        val start = source.indexOf("TrimStrip(")
         val end = source.indexOf("EditorTabBar(")
-        assertTrue("the Main-branch filmstrip/tab bar calls must exist", start >= 0 && end > start)
+        assertTrue("the Main-branch trim strip/tab bar calls must exist", start >= 0 && end > start)
         val mainBranch = source.substring(start, end)
         assertFalse(
             "V5: the dead weight(1f) Spacer between the filmstrip and the tab " +
@@ -147,32 +157,42 @@ class R63aFixPinsTest {
         )
     }
 
-    // ---- V2: the fullscreen toggle lives in the transport cluster ----
+    // ---- V2: the fullscreen toggle survives the transport retirement ----
 
     @Test
-    fun `fullscreen toggle lives in the transport cluster`() {
+    fun `fullscreen toggle anchors inside the preview frame`() {
         val source = editSource(EDIT_SRC + "video/VideoEditorScreen.kt")
-        val transportStart = source.indexOf("private fun TransportRow(")
-        val transportEnd = source.indexOf("private fun TimestampRow(")
-        assertTrue(
-            "the TransportRow/TimestampRow definitions must exist",
-            transportStart >= 0 && transportEnd > transportStart,
+        // r63d (approved): the three-button transport row retired; the
+        // toggle re-anchored top-trailing INSIDE the preview frame, hosting
+        // the same action with the r63a a11y strings verbatim.
+        assertFalse(
+            "r63d: the three-button transport row must stay retired",
+            source.contains("private fun TransportRow("),
         )
-        val transport = source.substring(transportStart, transportEnd)
+        val overlayStart = source.indexOf("private fun PreviewTransportOverlay(")
+        val overlayEnd = source.indexOf("internal fun VideoTimeRow(")
         assertTrue(
-            "V2: the transport row must host the fullscreen toggle (onToggleFullscreen)",
-            transport.contains("onToggleFullscreen"),
+            "the PreviewTransportOverlay/VideoTimeRow definitions must exist",
+            overlayStart >= 0 && overlayEnd > overlayStart,
+        )
+        val overlay = source.substring(overlayStart, overlayEnd)
+        assertTrue(
+            "r63d: the transport overlay must host the fullscreen toggle (onToggleFullscreen)",
+            overlay.contains("onToggleFullscreen"),
         )
         assertTrue(
-            "V2: the toggle's zoom state description wiring must ride the row",
-            transport.contains("fullscreenZoomed"),
+            "r63d: the toggle's zoom state description wiring must ride the overlay",
+            overlay.contains("fullscreenZoomed"),
+        )
+        assertTrue(
+            "r63d: the overlay chip must carry the play/pause contentDescription",
+            overlay.contains("contentDescription = if (isPlaying) pauseA11y else playA11y"),
         )
         val previewStart = source.indexOf("private fun PreviewSurface(")
-        val previewEnd = source.indexOf("private fun TransportRow(")
-        val preview = source.substring(previewStart, previewEnd)
-        assertFalse(
-            "V2: the preview Box must not host the orphan fullscreen icon again",
-            preview.contains("ic_vt_fullscreen"),
+        val preview = source.substring(previewStart, overlayStart)
+        assertTrue(
+            "r63d: PreviewSurface must render the transport slot INSIDE the frame",
+            preview.contains("transport()"),
         )
     }
 

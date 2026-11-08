@@ -14,6 +14,8 @@ import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.ml.engine.MlEngine
 import io.github.dukeoftoad.gallery.ml.engine.ModelManifest
 import io.github.dukeoftoad.gallery.ml.engine.ModelProvisioner
+import io.github.dukeoftoad.gallery.ml.engine.ProvisionEvent
+import io.github.dukeoftoad.gallery.ml.engine.ProvisionListener
 import io.github.dukeoftoad.gallery.ml.index.ClipIndexScheduler
 import io.github.dukeoftoad.gallery.ml.index.ClipIndexWorkState
 import io.github.dukeoftoad.gallery.ml.index.EngineSessionGuard

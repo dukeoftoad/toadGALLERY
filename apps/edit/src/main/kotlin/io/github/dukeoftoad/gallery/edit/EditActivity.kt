@@ -23,15 +23,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +56,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -95,7 +101,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
@@ -969,20 +975,9 @@ private fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = whe
 // The r56 move: the PhotoScreen enum, the tool header and the tab bar now
 // live in `PhotoChrome.kt` (composable in isolation --- the edit screenshot
 // harness renders them); this file keeps the chassis logic.
-
-/**
- * The recipe-field editors --- the tools whose whole surface is a set of
- * recipe values (vs the layer tools' add/select/delete flows and the AI
- * tools' jobs). These get the session Reset footer: reverting the tool
- * session is ONE undoable commit against the entry snapshot.
- */
-private val PHOTO_VALUE_TOOLS: Set<PhotoScreen> = setOf(
-    PhotoScreen.Adjust,
-    PhotoScreen.Color,
-    PhotoScreen.Looks,
-    PhotoScreen.Frames,
-    PhotoScreen.Crop,
-)
+//
+// r63c: the value-tools session-Reset footer retired --- Reset moved INTO
+// the tool header row (PhotoChrome.kt), one chrome shape for all ten tools.
 
 @OptIn(ExperimentalMaterial3Api::class) // FilterChip in the export sheet
 @Composable
@@ -1083,8 +1078,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // photo-adapted): the main canvas screen vs the ten tool screens.
     var screen by remember { mutableStateOf(PhotoScreen.Main) }
     // r54: the recipe as it was when the CURRENT tool screen was entered
-    // --- the Reset footer's honest boundary (reverting a tool session is
-    // ONE undoable commit against this snapshot).
+    // --- the tool Reset's honest boundary (reverting a tool session is
+    // ONE undoable commit against this snapshot; the r63c header Reset
+    // reads it).
     var entryRecipe by remember { mutableStateOf<EditRecipe?>(null) }
 
     val committed = uiState.recipe
@@ -2105,7 +2101,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     // ---- r54: the chassis navigation (the video editor's screen
     // contract, photo-adapted) ----
-    // Entering a tool snapshots the recipe (the Reset footer's honest
+    // Entering a tool snapshots the recipe (the tool Reset's honest
     // boundary); leaving one sweeps any pending gesture draft and drops
     // the paint modes --- painting belongs to its tool's screen now,
     // where the scroll era kept the modes alive across sections (the one
@@ -2132,6 +2128,33 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // cancel path.
     BackHandler(enabled = screen != PhotoScreen.Main) { exitToMain() }
 
+    // F-71 (the r63a audit's P1, ledger item): on the r62 device screenshot
+    // this header rendered ~630px below the top edge with pure black above
+    // it, yet the code composes it as the FIRST child of the ONLY root
+    // container. The r63a root-cause hunt exonerates this tree, with line
+    // evidence: (a) the root fills the window --- fillMaxSize here under the
+    // fillMaxSize Surface in onCreate's setContent (EditActivity.kt:465),
+    // default Arrangement.Top, no contentAlignment; (b) insets are consumed
+    // EXACTLY ONCE --- this systemBarsPadding is the only inset modifier in
+    // the whole edit app (no statusBars/displayCutout/ime/safeDrawing
+    // padding exists), there is no Scaffold, and no manifest or theme
+    // declares fitsSystemWindows/translucent bars/cutout modes that could
+    // double-pay at the decor; (c) nothing is composed above the header ---
+    // the first child below is the header branch itself (no spacers, no
+    // wrapper Box, no early-return layout, the one verticalScroll lives in
+    // the export sheet's own window); (d) the unified APK launches THIS
+    // activity class (apps/gallery/src/unified/AndroidManifest.xml registers
+    // io.github.dukeoftoad.gallery.edit.EditActivity; the gallery's
+    // EditorLaunch resolves exactly it), so there is no alternate entry; and
+    // (e) the VIDEO editor (VideoEditActivity: the identical root pattern,
+    // same device, same audit) rendered top-anchored --- a window-mode cause
+    // would have hit both. Verdict: the offset is a device-side window state
+    // (a mid-launch window transition or a compat/windowed placement
+    // captured by the screenshot), not producible by this composition tree;
+    // EditHeaderPinningTest pins the header as the top-most composed element
+    // on the JVM harness (the repro attempt, negative). The layout contract
+    // stands: header pinned to the top of a fillMaxSize root, insets paid
+    // exactly once.
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2142,17 +2165,25 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // targetSdk 36+); the black background still reaches the bars.
             .systemBarsPadding(),
     ) {
-        // ---- Top bar: the r54 chassis header ----
+        // ---- Top bar: the r54 chassis header, r63b §4 icon chrome ----
         // The MAIN screen keeps the photo editor's own chrome (close /
         // title / settings / undo / redo / save) --- the video header is a
         // back / title / export pill, but the photo surface's undo-redo
         // and the r41 settings entry are contract chrome that stays one
         // tap from the canvas. A tool screen swaps in the video shape.
+        //
+        // r63b §4: 56dp row, 8dp horizontal padding; the three r54
+        // TextButtons retire into 48dp-touch IconButtons with 24dp glyphs
+        // (undo/redo disabled at 38% alpha), the title gains the one-line
+        // ellipsis, and the CTA pill holds the §4 shape (40dp tall, 20dp
+        // radius, 20dp horizontal padding, labelLarge, maxLines = 1 --- the
+        // r63a P3 pin). The icons free the ~140dp that used to wrap P3.
         if (screen == PhotoScreen.Main) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                    .height(56.dp)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { activity.finishCanceled() }) {
@@ -2171,32 +2202,58 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     modifier = Modifier
                         .weight(1f)
                         .semantics { heading() },
+                    // §4: one line --- longer locales ellipsize, never wrap.
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 // r41: the editor's FIRST settings entry --- a one-row sheet
                 // (the retouch kill-switch lives there; ADR-0010 section 5).
-                TextButton(
+                // §4: the gear icon, not a text button.
+                val settingsLabel = stringResource(R.string.editor_settings)
+                IconButton(
                     onClick = { settingsOpen = !settingsOpen },
                     enabled = !exporting,
+                    modifier = Modifier.semantics { contentDescription = settingsLabel },
                 ) {
-                    Text(stringResource(R.string.editor_settings))
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onBackground,
+                    )
                 }
-                TextButton(
+                val undoLabel = stringResource(R.string.editor_undo)
+                val redoLabel = stringResource(R.string.editor_redo)
+                val undoEnabled = uiState.canUndo && !exporting
+                val redoEnabled = uiState.canRedo && !exporting
+                IconButton(
                     onClick = {
                         sweepPendingDrafts()
                         uiState = engine.undo()
                     },
-                    enabled = uiState.canUndo && !exporting,
+                    enabled = undoEnabled,
+                    modifier = Modifier.semantics { contentDescription = undoLabel },
                 ) {
-                    Text(stringResource(R.string.editor_undo))
+                    Icon(
+                        painter = painterResource(R.drawable.ic_pt_undo),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onBackground
+                            .copy(alpha = if (undoEnabled) 1f else 0.38f),
+                    )
                 }
-                TextButton(
+                IconButton(
                     onClick = {
                         sweepPendingDrafts()
                         uiState = engine.redo()
                     },
-                    enabled = uiState.canRedo && !exporting,
+                    enabled = redoEnabled,
+                    modifier = Modifier.semantics { contentDescription = redoLabel },
                 ) {
-                    Text(stringResource(R.string.editor_redo))
+                    Icon(
+                        painter = painterResource(R.drawable.ic_pt_redo),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onBackground
+                            .copy(alpha = if (redoEnabled) 1f else 0.38f),
+                    )
                 }
                 if (exporting) {
                     CircularProgressIndicator(
@@ -2208,7 +2265,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         onClick = {
                             exportChoice = if (exportChoice == null) ExportChoice() else null
                         },
-                        modifier = Modifier.padding(end = 4.dp),
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .height(40.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     ) {
                         Text(
                             stringResource(
@@ -2218,6 +2279,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                     R.string.editor_cancel_export
                                 },
                             ),
+                            // r63a P3: the CTA pill never wraps --- longer
+                            // locales ellipsize instead of breaking the
+                            // primary control into two lines.
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            // §4: labelLarge (14sp) --- also Button's
+                            // default, pinned explicitly against drift.
+                            style = MaterialTheme.typography.labelLarge,
                         )
                     }
                 }
@@ -2229,6 +2298,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 confirmA11y = stringResource(R.string.editor_v2_confirm),
                 onBack = { exitToMain() },
                 onConfirm = { exitToMain() },
+                // r63c: the session Reset, promoted into the header row
+                // (the old value-tools footer row retired) --- one chrome
+                // shape for all ten tools; same ONE-undoable-commit revert
+                // against the entry snapshot, disabled while the snapshot
+                // IS the recipe and during the export freeze.
+                resetA11y = stringResource(R.string.editor_v2_reset),
+                onReset = { entryRecipe?.let { commit(it) } },
+                resetEnabled = !exporting && entryRecipe != null && committed != entryRecipe,
             )
         }
 
@@ -2497,6 +2574,43 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            // r63b §4: the floating compare chip --- the r56 press-and-hold
+            // gesture made discoverable. Bottom-leading overlay, 8dp from
+            // the edges, surfaceVariant @ 72% alpha behind a 1dp
+            // outlineVariant border, full-radius pill, 12sp label, 40dp min
+            // height. Holding it drives the SAME showOriginal flag the
+            // canvas gesture does (press = the untouched decode, release =
+            // the pipelined preview); the r56 top badge still names the
+            // state while held. Hidden exactly when the gesture is (a paint
+            // mode, a layer selection, an export --- compareEligible), so
+            // the affordance and the gesture can never disagree.
+            if (compareEligible) {
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(8.dp)
+                        .heightIn(min = 40.dp)
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                showOriginal = true
+                                waitForUpOrCancellation()
+                                showOriginal = false
+                            }
+                        },
+                ) {
+                    Text(
+                        text = stringResource(R.string.editor_r63b_hold_to_compare),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                     )
                 }
             }
@@ -2781,43 +2895,51 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     )
                 }
             }
-            // ---- The value tools' session Reset (the video footer's
-            // Reset, adapted honestly): the photo tools commit LIVE on
-            // release, so there is no draft to Apply and deliberately no
-            // dead Apply button --- Reset reverts the tool session as ONE
-            // undoable commit against the entry snapshot. ----
-            if (screen in PHOTO_VALUE_TOOLS) {
-                val entry = entryRecipe
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(
-                        onClick = { entry?.let { commit(it) } },
-                        enabled = !exporting && entry != null && committed != entry,
-                    ) {
-                        Text(stringResource(R.string.editor_v2_reset))
-                    }
-                }
-            }
-
-            // ---- The always-visible honesty line (the r54 chassis's Main
+            // ---- The always-visible honesty chip (the r54 chassis's Main
             // home: the export decision surface; tool screens don't repeat
             // it) ----
+            // r63b §4: the r54 text line becomes a tappable pill --- the
+            // same effective-policy copy, now legible AND actionable: a
+            // surfaceVariant pill with the shield glyph in the accent and a
+            // 10dp margin, tapping it opens the export-policy sheet (the
+            // same sheet the Save-copy CTA opens; the privacy floor and the
+            // policy choice machinery are untouched).
             if (screen == PhotoScreen.Main) {
-                Text(
-                    text = stringResource(
-                        R.string.editor_policy_line,
-                        policyLabel(
-                            ExportPolicyChoice.effectivePolicy(policy, exportChoice?.metadataPolicy),
-                        ),
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Start,
-                )
+                Surface(
+                    onClick = {
+                        exportChoice = if (exportChoice == null) ExportChoice() else null
+                    },
+                    enabled = !exporting,
+                    shape = RoundedCornerShape(percent = 50),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.padding(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pt_shield),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.editor_policy_line,
+                                policyLabel(
+                                    ExportPolicyChoice.effectivePolicy(
+                                        policy,
+                                        exportChoice?.metadataPolicy,
+                                    ),
+                                ),
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
             }
         }
 

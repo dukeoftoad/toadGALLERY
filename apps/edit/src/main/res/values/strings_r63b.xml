@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The r63b chrome round's strings. One label, and only because the §4
+     compare chip genuinely needs one (the §4 mockup's chip copy): the
+     floating chip at the canvas's bottom-leading edge names the
+     press-and-hold BEFORE/AFTER gesture it mirrors. Everything else in the
+     round reuses the existing strings verbatim. -->
+<resources>
+    <!-- The canvas compare chip: press-and-hold shows the untouched decode
+         (the r56 gesture), release returns to the pipelined preview. -->
+    <string name="editor_r63b_hold_to_compare">Hold to compare</string>
+</resources>

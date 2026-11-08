@@ -234,4 +234,123 @@ class ModelProvisionerTest {
         provisioner.provision(ModelManifest.Capability.FACE)
         assertEquals(2, downloader.openCount.getValue("a.bin"))
     }
+
+    // ------------------------------------------------- r60 progress events
+
+    /**
+     * The r60 event contract, end to end over a two-asset capability:
+     * per asset Start -> (zero or more Bytes, monotonically growing, the
+     * last one exact) -> Verifying -> Installed; the legacy per-asset
+     * [ModelProvisioner.provision]'s onProgress callback still fires after
+     * each install, in the same order.
+     */
+    @Test
+    fun `progress events stream in order with monotonic bytes and exact totals`() {
+        val dir = tmp.newFolder("models-events")
+        val p1 = ByteArray(600) { it.toByte() }
+        val p2 = "second".toByteArray()
+        val spec1 = specFor("e1.bin", ModelManifest.Capability.FACE, p1)
+        val spec2 = specFor("e2.bin", ModelManifest.Capability.FACE, p2)
+        val provisioner = ModelProvisioner(
+            dir,
+            FakeDownloader(mutableMapOf("e1.bin" to p1, "e2.bin" to p2)),
+            catalog = listOf(spec1, spec2),
+        )
+        val events = mutableListOf<ProvisionEvent>()
+        val legacyOrder = mutableListOf<String>()
+        provisioner.provision(
+            ModelManifest.Capability.FACE,
+            onProgress = { legacyOrder.add(it.fileName) },
+            listener = ProvisionListener { events.add(it) },
+        )
+
+        val kinds = events.map { it::class.simpleName }
+        assertEquals(
+            listOf(
+                "DownloadStart", "DownloadBytes", "Verifying", "Installed", // e1
+                "DownloadStart", "DownloadBytes", "Verifying", "Installed", // e2
+            ),
+            kinds,
+        )
+        // Start/Installed carry the 1-based file index over the count.
+        assertEquals(1, (events[0] as ProvisionEvent.DownloadStart).index)
+        assertEquals(2, (events[0] as ProvisionEvent.DownloadStart).count)
+        assertEquals(2, (events[4] as ProvisionEvent.DownloadStart).index)
+        // Bytes are monotonic, pinned-total-denominated, and end exact.
+        val e1Bytes = events.filterIsInstance<ProvisionEvent.DownloadBytes>().take(1)
+        assertEquals(1, e1Bytes.size)
+        assertEquals(p1.size.toLong(), e1Bytes[0].bytesSoFar)
+        assertEquals(spec1.sizeBytes, e1Bytes[0].totalBytes)
+        assertEquals(spec2.sizeBytes, (events[5] as ProvisionEvent.DownloadBytes).bytesSoFar)
+        assertEquals(spec2.sizeBytes, (events[5] as ProvisionEvent.DownloadBytes).totalBytes)
+        // The legacy r21 callback still fired, per asset, after its install.
+        assertEquals(listOf("e1.bin", "e2.bin"), legacyOrder)
+        // And the assets are really installed.
+        assertNotNull(provisioner.installedFile(spec1))
+        assertNotNull(provisioner.installedFile(spec2))
+    }
+
+    /** The 128 KiB emission budget: a >chunk payload emits MORE than once. */
+    @Test
+    fun `large transfer emits throttled byte events ending at the exact total`() {
+        val dir = tmp.newFolder("models-throttle")
+        val payload = ByteArray(300 * 1024) { (it % 255).toByte() }
+        val spec = specFor("big.bin", ModelManifest.Capability.SEMANTIC, payload)
+        val provisioner = ModelProvisioner(
+            dir,
+            FakeDownloader(mutableMapOf("big.bin" to payload)),
+            catalog = listOf(spec),
+        )
+        val byteEvents = mutableListOf<ProvisionEvent.DownloadBytes>()
+        provisioner.provision(
+            ModelManifest.Capability.SEMANTIC,
+            listener = ProvisionListener {
+                if (it is ProvisionEvent.DownloadBytes) byteEvents.add(it)
+            },
+        )
+        assertTrue("expected throttled emissions, got ${byteEvents.size}", byteEvents.size >= 2)
+        assertEquals(
+            byteEvents.map { it.bytesSoFar },
+            byteEvents.map { it.bytesSoFar }.sorted(),
+        ) // monotonic
+        assertEquals(payload.size.toLong(), byteEvents.last().bytesSoFar)
+        assertEquals(spec.sizeBytes, byteEvents.last().totalBytes)
+    }
+
+    /** Idempotent re-provision: already-installed assets emit NOTHING. */
+    @Test
+    fun `already-installed assets emit no progress events`() {
+        val dir = tmp.newFolder("models-idle")
+        val payload = "again".toByteArray()
+        val spec = specFor("s.bin", ModelManifest.Capability.FACE, payload)
+        val downloader = FakeDownloader(mutableMapOf("s.bin" to payload))
+        val provisioner = ModelProvisioner(dir, downloader, catalog = listOf(spec))
+        provisioner.provision(ModelManifest.Capability.FACE)
+        val events = mutableListOf<ProvisionEvent>()
+        provisioner.provision(
+            ModelManifest.Capability.FACE,
+            listener = ProvisionListener { events.add(it) },
+        )
+        assertTrue(events.isEmpty())
+        // And no transport call either: the skip happens before the fetch.
+        assertEquals(1, downloader.openCount.getValue("s.bin"))
+    }
+
+    /** A crashing UI listener must never fail the download itself. */
+    @Test
+    fun `a throwing listener cannot break provisioning`() {
+        val dir = tmp.newFolder("models-throw")
+        val payload = "resilient".toByteArray()
+        val spec = specFor("r.bin", ModelManifest.Capability.FACE, payload)
+        val provisioner = ModelProvisioner(
+            dir,
+            FakeDownloader(mutableMapOf("r.bin" to payload)),
+            catalog = listOf(spec),
+        )
+        provisioner.provision(
+            ModelManifest.Capability.FACE,
+            listener = ProvisionListener { error("the UI sank") },
+        )
+        assertNotNull(provisioner.installedFile(spec))
+    }
 }

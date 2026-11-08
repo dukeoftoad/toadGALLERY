@@ -472,7 +472,22 @@ android {
         // and the video chassis (trim-on-filmstrip, canvas-tap transport,
         // the time row). Same stable-signing contract: the unified APK
         // updates in place.
-        versionCode = 43
+        //
+        // versionCode 44 (r63 fix round): the unified editor was never in
+        // the APK. The r59 sourceSets wired the editor's Kotlin sources
+        // through the LEGACY .java.srcDirs(...) call, which AGP 9 built-in
+        // Kotlin silently stopped consuming --- resources and assets still
+        // merged, so every unified release r59-r63 declared the contract
+        // activities in the manifest WITHOUT carrying their classes in the
+        // dex (fresh-install devices: the Edit tap resolves Ready and then
+        // fails to launch; older devices never noticed because the separate
+        // edit APK answered). The java registration now rides the same
+        // .java.directories API the main source set uses, the
+        // unified-apk.yml embedded-code gate hard-fails on missing editor
+        // classes, and the packaging guard covers Unified. The device test
+        // that pinned it: fresh install of ONLY the unified APK, Edit tap
+        // -> nothing.
+        versionCode = 44
         versionName = "0.4.5-alpha"
         // The launcher-alias consolidation's default: the canonical
         // basic build keeps its MAIN/LAUNCHER entry (the ONE family
@@ -701,7 +716,24 @@ android {
         // outside the repo and was silently ignored --- missing srcDirs do
         // not error, which is why the compile gate stayed green while the
         // resource link failed).
-        getByName("unified").java.srcDirs("../edit/src/main/kotlin")
+        //
+        // r63 FIX (the device round: "the unified build doesn't contain the
+        // editor"): the java line above used the LEGACY .java.srcDirs(...)
+        // API while the main/test lines use the AGP 9 new .java.directories
+        // API. Under AGP 9 built-in Kotlin the legacy call SILENTLY stopped
+        // feeding the Kotlin compilation --- resources and assets (legacy
+        // .srcDirs on res/assets) still merged, so four unified releases
+        // (r59-r63, the dex probe on the shipped vc42/vc43 APKs: ZERO
+        // io/github/dukeoftoad/gallery/edit strings) shipped with the
+        // contract activities DECLARED in the manifest but ABSENT from the
+        // dex. The device never saw it because the separate edit APK was
+        // always installed alongside and the resolver launched THAT. The
+        // unified java registration now uses the SAME new-API call the
+        // main source set uses --- the one the built-in Kotlin compiler
+        // provably consumes. The unified-apk.yml embedded-code gate fails
+        // the job before upload if the editor classes ever go missing
+        // again, so this can never silently regress.
+        getByName("unified").java.directories.add("../edit/src/main/kotlin")
         getByName("unified").assets.srcDirs("../edit/src/main/assets")
         getByName("unified").res.srcDirs("../edit/src/main/res")
     }
@@ -887,19 +919,25 @@ if (withBundledModels) {
 // every workflow actually invokes; every suffixed helper stays exempt.
 gradle.taskGraph.whenReady {
     val packagingTaskPattern = Regex(
-        "^(assemble|package|bundle)(Basic|Engine|Semantic|Face)(Debug|Release)?$",
+        // r63 FIX: Unified joins the packaging guard. The unified flavor
+        // builds with BuildShape WITH_ENGINE=true --- assembling it without
+        // -PwithEngine would produce exactly the honest-but-wrong
+        // LibraryMissing APK this guard exists to prevent, and until now
+        // assembleUnifiedRelease silently bypassed the check.
+        "^(assemble|package|bundle)(Basic|Engine|Semantic|Face|Unified)(Debug|Release)?$",
     )
     val packagingTaskNames = allTasks
         .filter { it.project.path == ":apps:gallery" }
         .map { it.name }
         .filter { it.matches(packagingTaskPattern) }
     val engineFamilyPackaging = packagingTaskNames.any {
-        it.contains("Engine") || it.contains("Semantic") || it.contains("Face")
+        it.contains("Engine") || it.contains("Semantic") || it.contains("Face") ||
+            it.contains("Unified")
     }
     val basicPackaging = packagingTaskNames.any { it.contains("Basic") }
     if (engineFamilyPackaging && !withEngine) {
         throw GradleException(
-            "The engine-family gallery flavors (engine/semantic/face) package the Rust JNI " +
+            "The engine-family gallery flavors (engine/semantic/face/unified) package the Rust JNI " +
                 "libraries only under -PwithEngine (ADR-0020): assembling them without the " +
                 "property produces an APK whose whole AI UI renders over a missing native " +
                 "library (BuildShape.withEngine=true, LibraryMissing at runtime). Re-run with " +

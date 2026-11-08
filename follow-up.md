@@ -1145,6 +1145,20 @@ the public remote each time.
   canvas-paint tab with two modes). Needs its own consent-free UX pass
   (the Regions consent surface must not silently disappear); not bundled
   into r63 by design.
+- **F-74 (2026-11-08, FIXED this round)** — the unified editor was never
+  in the APK. The maintainer's fresh-install round ("uninstall the old
+  APKs, install only the unified r63 build") hit the Edit tap doing
+  nothing, and the dex probe on the shipped vc42/vc43 artifacts proved
+  ZERO `io/github/dukeoftoad/gallery/edit` strings in every unified dex
+  since r59: the legacy `.java.srcDirs(...)` call silently stopped feeding
+  the AGP 9 built-in Kotlin compiler while the same legacy API on
+  res/assets kept merging (resources shipped, classes never did). Older
+  devices never noticed because the separately-installed edit APK answered
+  the contract. Fixed in three layers: the unified java registration
+  rides `.java.directories.add(...)` (the main source set's proven API),
+  unified-apk.yml hard-gates the embedded editor classes + the engine JNI
+  library before upload, and the packaging-discipline guard covers
+  `Unified`. versionCode 44 rides the fix.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69 (the
   EditorPalette registry the r63b re-pin landed IS its plug-in point),

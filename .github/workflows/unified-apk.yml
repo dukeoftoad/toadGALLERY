@@ -183,6 +183,33 @@ jobs:
           echo "signature gate OK --- signer cert SHA-256 matches $EXPECTED_LABEL."
           echo "SIGNER_SHA256=$ACTUAL_SHA256" >> "$GITHUB_ENV"
 
+      # r63 fix (the device round: "the unified build doesn't contain the
+      # editor"): the r59 sourceSets wiring silently dropped the editor's
+      # KOTLIN sources --- the legacy .java.srcDirs call stopped feeding the
+      # AGP 9 built-in Kotlin compiler while res/assets (the same legacy API)
+      # kept merging --- so FOUR unified releases (r59-r63) shipped with the
+      # contract activities DECLARED in the manifest but ABSENT from the dex.
+      # Fresh-install devices got the silent no-op Edit tap; older devices
+      # never noticed because the separately-installed edit APK answered the
+      # contract. This gate makes the omission a BUILD FAILURE: the two
+      # manifest-declared editor entry classes and the engine JNI library
+      # MUST be present in the produced APK, or the job dies before upload.
+      - name: Verify the embedded editor + engine classes (hard gate)
+        run: |
+          for CLASS in \
+            "io/github/dukeoftoad/gallery/edit/EditActivity" \
+            "io/github/dukeoftoad/gallery/edit/video/VideoEditActivity"; do
+            if ! unzip -p "$APK" classes.dex | strings | grep -q "$CLASS"; then
+              echo "::error::unified APK is missing the embedded editor class $CLASS --- the unified flavor no longer compiles the editor sources in-process; check apps/gallery/build.gradle.kts sourceSets (the r63 java.directories fix)"
+              exit 1
+            fi
+          done
+          if ! unzip -l "$APK" | grep -q "lib/arm64-v8a/libtoad_ml_jni.so"; then
+            echo "::error::unified APK is missing lib/arm64-v8a/libtoad_ml_jni.so --- the engine native libraries are absent; the workflow requires -PwithEngine"
+            exit 1
+          fi
+          echo "embedded-code gate OK --- both editor entry classes + the engine JNI library are in the APK."
+
       - name: Upload the unified APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

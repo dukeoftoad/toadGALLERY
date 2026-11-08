@@ -21,6 +21,10 @@ class AppearanceTest {
         assertEquals(LayoutStyle.COLLAGE, Appearance().layout)
         assertEquals(3, Appearance().columns)
         assertEquals(GroupBy.NONE, Appearance().groupBy)
+        // r62: the Stories shelf default ON --- the pre-r62 home page
+        // carried the shelf, so a fresh install (and every pre-r62
+        // install reading a missing key) keeps that render.
+        assertEquals(true, Appearance().storiesOnHome)
     }
 
     @Test

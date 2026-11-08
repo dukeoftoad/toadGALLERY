@@ -80,6 +80,16 @@ import java.util.Locale
  * plain square grid; one composable, two looks). The defaults keep every
  * pre-slice call site rendering exactly what it rendered before.
  *
+ * ## Header slot (r62)
+ * [header] is an optional LEADING composable rendered as the grid's FIRST
+ * item (`key = "paging_header"`, full-line span, so it can never collide
+ * with the uri-keyed media items or the `header_` date-row keys). The
+ * Photos timeline passes the Stories shelf through it --- r62 moves the
+ * shelf INSIDE the scroll so it scrolls away with the content (the old
+ * pinned-above-the-grid slot permanently ate ~100dp of the home page;
+ * the maintainer's "stories features is fixed on home page which
+ * shouldn't" finding). A null header composes nothing at all.
+ *
  * ## Footer slot (issue #38, finding 2)
  * [footer] is an optional trailing composable rendered as the grid's LAST
  * item (`key = "paging_footer"`, so it can never collide with the
@@ -130,6 +140,7 @@ fun MediaPagingGrid(
     selectedKeys: Set<String> = emptySet(),
     onItemTap: ((index: Int, item: MediaItem) -> Unit)? = null,
     onItemLongPress: ((MediaItem) -> Unit)? = null,
+    header: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
 ) {
     // Grouped-timeline rows: recomputed reactively (itemSnapshotList is
@@ -153,6 +164,17 @@ fun MediaPagingGrid(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalItemSpacing = 2.dp,
     ) {
+        // r62: the leading full-line header slot (the Stories shelf rides
+        // it on the plain timeline) --- FIRST item, its own key so it can
+        // never collide with the uri keys, the `header_` date keys or the
+        // positional `row_` keys, and a full-line span like the date
+        // headers. A null header composes nothing.
+        header?.let { headerContent ->
+            item(
+                key = "paging_header",
+                span = { StaggeredGridItemSpan.FullLine },
+            ) { headerContent() }
+        }
         // Every lambda below reads `rows`/the snapshot defensively: the
         // staggered grid can query key/span/content for an index from its
         // layout range, which is one frame staler than a refresh that

@@ -120,9 +120,23 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             layout = parseLayout(prefs.getString(KEY_PHOTOS_LAYOUT, null)),
             columns = clampColumns(prefs.getInt(KEY_PHOTOS_COLUMNS, DEFAULT_COLUMNS)),
             groupBy = parseGroupBy(prefs.getString(KEY_PHOTOS_GROUP_BY, null)),
+            // r62: the Stories shelf toggle, default TRUE = the pre-r62
+            // render (the shelf always showed); a missing key keeps it.
+            storiesOnHome = prefs.getBoolean(KEY_STORIES_ON_HOME, true),
         )
     )
     val appearance: StateFlow<Appearance> = _appearance.asStateFlow()
+
+    // r62: the Material You toggle (the Appearance extras slice). Default
+    // TRUE = the pre-r62 behavior (ToadGalleryTheme's `dynamicColor`
+    // parameter defaulted to true); turning it OFF forces the deterministic
+    // toad-green fallback palette on every API level --- the app's own
+    // brand look, independent of the wallpaper.
+    private val _useDynamicColor =
+        MutableStateFlow(prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, true))
+
+    /** Whether Material You dynamic color is honoured (Android 12+; r62). */
+    val useDynamicColor: StateFlow<Boolean> = _useDynamicColor.asStateFlow()
 
     /**
      * Phase 4 location consent (ACCESS_MEDIA_LOCATION): the shell-scoped
@@ -179,6 +193,25 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString(KEY_PHOTOS_GROUP_BY, serializeGroupBy(groupBy)).apply()
     }
 
+    /**
+     * r62: sets the Stories-on-home toggle and persists it write-through.
+     * The Photos timeline reads [Appearance.storiesOnHome] from the same
+     * shell-scoped flow, so the shelf appears/disappears on the next
+     * composition without a restart.
+     */
+    fun setStoriesOnHome(enabled: Boolean) {
+        if (enabled == _appearance.value.storiesOnHome) return
+        _appearance.value = _appearance.value.copy(storiesOnHome = enabled)
+        prefs.edit().putBoolean(KEY_STORIES_ON_HOME, enabled).apply()
+    }
+
+    /** r62: sets the Material You toggle; the shell theme re-composes live. */
+    fun setUseDynamicColor(enabled: Boolean) {
+        if (enabled == _useDynamicColor.value) return
+        _useDynamicColor.value = enabled
+        prefs.edit().putBoolean(KEY_USE_DYNAMIC_COLOR, enabled).apply()
+    }
+
     private companion object {
         /** Module-private settings file (issue #27). */
         const val PREFS_FILE = "toad_settings"
@@ -186,6 +219,12 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_PHOTOS_LAYOUT = "photos_layout"
         const val KEY_PHOTOS_COLUMNS = "photos_columns"
         const val KEY_PHOTOS_GROUP_BY = "photos_group_by"
+
+        /** r62: the Stories shelf toggle key (default true). */
+        const val KEY_STORIES_ON_HOME = "stories_on_home"
+
+        /** r62: the Material You dynamic-color key (default true). */
+        const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
 
         /** [Appearance.columns]' default; kept beside its keys for symmetry. */
         const val DEFAULT_COLUMNS = 3

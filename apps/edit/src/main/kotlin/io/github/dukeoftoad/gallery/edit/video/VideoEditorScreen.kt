@@ -80,6 +80,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import io.github.dukeoftoad.gallery.edit.EditorPalette
 import io.github.dukeoftoad.gallery.edit.R
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -87,35 +88,44 @@ import kotlinx.coroutines.delay
 
 // ---------------------------------------------------------------------------
 // r52 VIDEO surface redesign --- the maintainer-approved Image-2 base
-// chassis (dark + violet palette, preview on top, transport row, filmstrip,
-// bottom tab bar, per-tab screens with the <- Title v header and the
-// Reset | Apply footer). The r42 BEHAVIOR is untouched: the session state
-// is committed/drafted here, the plan building / validation / permission
-// gate / preflight / progress blocks are the old logic verbatim, and the
-// only new capability is the volume percent (task 2-a's VideoEditPlan
-// contract). The r47 EditorTheme stays with the photo editor; this surface
-// brings its own fixed dark scheme LOCAL to this file.
+// chassis (dark palette, preview on top, transport row, filmstrip, bottom
+// tab bar, per-tab screens with the <- Title v header and the Reset | Apply
+// footer). The r42 BEHAVIOR is untouched: the session state is
+// committed/drafted here, the plan building / validation / permission gate /
+// preflight / progress blocks are the old logic verbatim, and the only new
+// capability is the volume percent (task 2-a's VideoEditPlan contract).
+//
+// r63b: the violet retires --- this surface's pins re-point to the edit
+// app's toad-green [io.github.dukeoftoad.gallery.edit.EditorPalette.Toad]
+// registry (the approved §3 table; same module, so the r52 note's
+// "duplicated on purpose" hex fork has no dependency reason to survive).
+// The fixed-dark, non-dynamic contract stands, and the r52 selection
+// mechanism survives re-colored (secondaryContainer = the #9CD8A2 accent,
+// labels in #00390F).
 // ---------------------------------------------------------------------------
 
-/** The r52 palette (pinned from Image 2), shared with the activity's root Surface. */
-internal val VideoEditBg = Color(0xFF0D0A14)
-private val VideoSurface = Color(0xFF17131F)
-private val VideoSurfaceHigh = Color(0xFF221B2E)
-private val VideoOutline = Color(0xFF3A3148)
-private val VideoAccent = Color(0xFFA78BFA)
-private val VideoOnAccent = Color(0xFF171126)
-private val VideoAccentSoft = Color(0xFF8B72E8)
-private val VideoTextPrimary = Color(0xFFF3F0FA)
-private val VideoTextSecondary = Color(0xFFA99FBF)
+// The video pins, sourced from the shared EditorPalette registry (the ONLY
+// toad-green source of truth in the edit app). VideoEditBg is shared with
+// the activity's root Surface.
+internal val VideoEditBg = EditorPalette.Toad.background
+private val VideoSurface = EditorPalette.Toad.background
+private val VideoSurfaceHigh = EditorPalette.Toad.surfaceVariant
+private val VideoOutline = EditorPalette.Toad.outlineVariant
+private val VideoAccent = EditorPalette.Toad.primary
+private val VideoOnAccent = EditorPalette.Toad.onPrimary
+private val VideoAccentSoft = EditorPalette.Toad.secondary
+private val VideoTextPrimary = EditorPalette.Toad.onBackground
+private val VideoTextSecondary = EditorPalette.Toad.onSurfaceVariant
 private val VideoError = Color(0xFFF2B8B5)
 
 /**
- * The video surface's own fixed dark scheme (the spec's role mapping):
- * primary = violet accent, background/surface = the near-black violet base,
- * secondaryContainer = accent so a SELECTED FilterChip is the accent-filled
- * pill the design shows (no per-chip color overrides anywhere). Deliberately
- * not dynamic color, exactly like [io.github.dukeoftoad.gallery.edit.EditorTheme]:
- * the editor's accent promise is deterministic.
+ * The video surface's own fixed dark scheme (the §3 role mapping over the
+ * toad-green registry): primary = the green accent, background/surface =
+ * the warm near-black base, secondaryContainer = accent so a SELECTED
+ * FilterChip is the accent-filled pill the design shows (no per-chip color
+ * overrides anywhere). Deliberately not dynamic color, exactly like
+ * [io.github.dukeoftoad.gallery.edit.EditorTheme]: the editor's accent
+ * promise is deterministic.
  */
 @Composable
 internal fun VideoEditTheme(content: @Composable () -> Unit) {
@@ -123,17 +133,33 @@ internal fun VideoEditTheme(content: @Composable () -> Unit) {
         colorScheme = darkColorScheme(
             primary = VideoAccent,
             onPrimary = VideoOnAccent,
+            primaryContainer = EditorPalette.Toad.primaryContainer,
+            onPrimaryContainer = EditorPalette.Toad.onPrimaryContainer,
+            inversePrimary = EditorPalette.Toad.inversePrimary,
             secondary = VideoAccentSoft,
+            onSecondary = EditorPalette.Toad.onSecondary,
             secondaryContainer = VideoAccent,
             onSecondaryContainer = VideoOnAccent,
+            tertiary = EditorPalette.Toad.tertiary,
+            onTertiary = EditorPalette.Toad.onTertiary,
+            tertiaryContainer = EditorPalette.Toad.tertiaryContainer,
+            onTertiaryContainer = EditorPalette.Toad.onTertiaryContainer,
             background = VideoEditBg,
             onBackground = VideoTextPrimary,
             surface = VideoEditBg,
             onSurface = VideoTextPrimary,
             surfaceVariant = VideoSurfaceHigh,
             onSurfaceVariant = VideoTextSecondary,
-            outline = VideoOutline,
+            surfaceTint = VideoAccent,
+            inverseSurface = VideoTextPrimary,
+            inverseOnSurface = Color(0xFF1D1C17),
+            outline = EditorPalette.Toad.outline,
+            outlineVariant = VideoOutline,
+            scrim = Color(0xFF000000),
             error = VideoError,
+            onError = Color(0xFF601C10),
+            errorContainer = Color(0xFF8C1D18),
+            onErrorContainer = Color(0xFFF9DEDC),
         ),
         content = content,
     )

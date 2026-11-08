@@ -15,5 +15,10 @@ package io.github.dukeoftoad.gallery.edit
  * Member names never clash: the r59 de-collision renamed the editor's
  * launcher resources to editor_*, and every other editor resource name is
  * editor-prefixed; the values-merge is name-disjoint from the gallery's.
+ *
+ * r63 round 4 (F-74): the alias is PUBLIC now (was `internal`). Same-module
+ * visibility should make internal irrelevant, but the CI rounds proved this
+ * seam is the fragile layer of the whole in-process embedding --- every
+ * variable that could matter is eliminated, one per round.
  */
-internal typealias R = io.github.dukeoftoad.gallery.R
+typealias R = io.github.dukeoftoad.gallery.R

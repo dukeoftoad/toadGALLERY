@@ -1164,7 +1164,12 @@ the public remote each time.
   the embedded editor classes + the engine JNI library before upload
   (scanning every classes*.dex --- the editor sources push the build
   multi-dex), and the packaging-discipline guard covers `Unified`.
-  versionCode 44 rides the fix.
+  versionCode 44 rides the fix. Round 4: the registration is now made at
+  BOTH layers --- the sourceSets kotlin directory set AND the Variant API
+  (`variant.sources.kotlin.addStaticSourceDirectory(...)` for ../edit and
+  src/unified/kotlin, the compile task's direct documented input; the
+  method name pinned by javap of gradle-api-9.2.1), and r59's
+  EditorRAlias R-seam is public.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69 (the
   EditorPalette registry the r63b re-pin landed IS its plug-in point),

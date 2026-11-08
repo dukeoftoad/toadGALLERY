@@ -754,7 +754,7 @@ android {
         // classes ever go missing again, so this can never silently
         // regress.
         getByName("unified").java.directories.add("../edit/src/main/kotlin")
-        getByName("unified").kotlin.srcDirs("../edit/src/main/kotlin")
+        getByName("unified").kotlin.directories.add("../edit/src/main/kotlin")
         getByName("unified").assets.srcDirs("../edit/src/main/assets")
         getByName("unified").res.srcDirs("../edit/src/main/res")
     }
@@ -774,6 +774,29 @@ android {
 
     dependenciesInfo {
         includeInApk = false
+    }
+}
+
+// --- r63 fix (F-74, CI round 4): the VARIANT-level Kotlin source registration ---
+//
+// The sourceSets-level registration above (java.directories + kotlin.srcDirs)
+// demonstrably feeds the built-in Kotlin compiler (CI run #12 compiled the
+// ../edit sources) --- but the compile task's DIRECT, documented input is the
+// Variant API (variant.sources.kotlin), and the unified flavor ALSO needs
+// src/unified/kotlin (where r59's EditorRAlias.kt R-seam lives) to be
+// unambiguous. This registration puts BOTH directories on the variant's
+// Kotlin source tree directly --- no sourceSets-to-variant mapping layer in
+// between can drop either one. The sourceSets-level registrations stay as
+// belt-and-braces for every other consumer of the source set model.
+androidComponents {
+    onVariants { variant ->
+        if (variant.name.startsWith("unified")) {
+            // AGP 9.2.1 SourceDirectories API: addStaticSourceDirectory(String)
+            // is the static-dir mutator (the old addSrcDir was retired;
+            // javap of gradle-api-9.2.1 pinned the method name).
+            variant.sources.kotlin?.addStaticSourceDirectory("../edit/src/main/kotlin")
+            variant.sources.kotlin?.addStaticSourceDirectory("src/unified/kotlin")
+        }
     }
 }
 

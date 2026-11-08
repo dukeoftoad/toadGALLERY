@@ -975,20 +975,9 @@ private fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = whe
 // The r56 move: the PhotoScreen enum, the tool header and the tab bar now
 // live in `PhotoChrome.kt` (composable in isolation --- the edit screenshot
 // harness renders them); this file keeps the chassis logic.
-
-/**
- * The recipe-field editors --- the tools whose whole surface is a set of
- * recipe values (vs the layer tools' add/select/delete flows and the AI
- * tools' jobs). These get the session Reset footer: reverting the tool
- * session is ONE undoable commit against the entry snapshot.
- */
-private val PHOTO_VALUE_TOOLS: Set<PhotoScreen> = setOf(
-    PhotoScreen.Adjust,
-    PhotoScreen.Color,
-    PhotoScreen.Looks,
-    PhotoScreen.Frames,
-    PhotoScreen.Crop,
-)
+//
+// r63c: the value-tools session-Reset footer retired --- Reset moved INTO
+// the tool header row (PhotoChrome.kt), one chrome shape for all ten tools.
 
 @OptIn(ExperimentalMaterial3Api::class) // FilterChip in the export sheet
 @Composable
@@ -1089,8 +1078,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // photo-adapted): the main canvas screen vs the ten tool screens.
     var screen by remember { mutableStateOf(PhotoScreen.Main) }
     // r54: the recipe as it was when the CURRENT tool screen was entered
-    // --- the Reset footer's honest boundary (reverting a tool session is
-    // ONE undoable commit against this snapshot).
+    // --- the tool Reset's honest boundary (reverting a tool session is
+    // ONE undoable commit against this snapshot; the r63c header Reset
+    // reads it).
     var entryRecipe by remember { mutableStateOf<EditRecipe?>(null) }
 
     val committed = uiState.recipe
@@ -2111,7 +2101,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     // ---- r54: the chassis navigation (the video editor's screen
     // contract, photo-adapted) ----
-    // Entering a tool snapshots the recipe (the Reset footer's honest
+    // Entering a tool snapshots the recipe (the tool Reset's honest
     // boundary); leaving one sweeps any pending gesture draft and drops
     // the paint modes --- painting belongs to its tool's screen now,
     // where the scroll era kept the modes alive across sections (the one
@@ -2308,6 +2298,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 confirmA11y = stringResource(R.string.editor_v2_confirm),
                 onBack = { exitToMain() },
                 onConfirm = { exitToMain() },
+                // r63c: the session Reset, promoted into the header row
+                // (the old value-tools footer row retired) --- one chrome
+                // shape for all ten tools; same ONE-undoable-commit revert
+                // against the entry snapshot, disabled while the snapshot
+                // IS the recipe and during the export freeze.
+                resetA11y = stringResource(R.string.editor_v2_reset),
+                onReset = { entryRecipe?.let { commit(it) } },
+                resetEnabled = !exporting && entryRecipe != null && committed != entryRecipe,
             )
         }
 
@@ -2897,28 +2895,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     )
                 }
             }
-            // ---- The value tools' session Reset (the video footer's
-            // Reset, adapted honestly): the photo tools commit LIVE on
-            // release, so there is no draft to Apply and deliberately no
-            // dead Apply button --- Reset reverts the tool session as ONE
-            // undoable commit against the entry snapshot. ----
-            if (screen in PHOTO_VALUE_TOOLS) {
-                val entry = entryRecipe
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(
-                        onClick = { entry?.let { commit(it) } },
-                        enabled = !exporting && entry != null && committed != entry,
-                    ) {
-                        Text(stringResource(R.string.editor_v2_reset))
-                    }
-                }
-            }
-
             // ---- The always-visible honesty chip (the r54 chassis's Main
             // home: the export decision surface; tool screens don't repeat
             // it) ----

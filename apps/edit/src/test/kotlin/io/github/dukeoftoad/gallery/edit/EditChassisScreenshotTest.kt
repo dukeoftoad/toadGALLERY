@@ -96,6 +96,11 @@ class EditChassisScreenshotTest {
                         confirmA11y = "Done",
                         onBack = {},
                         onConfirm = {},
+                        // r63c: the promoted session Reset (the header's
+                        // one-consistent-shape contract) rides the capture.
+                        resetA11y = "Reset",
+                        onReset = {},
+                        resetEnabled = true,
                     )
                 }
             }

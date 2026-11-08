@@ -23,6 +23,20 @@ import androidx.compose.ui.unit.dp
 // pairs. The committed Roborazzi chassis baselines are the regression proof.
 // ---------------------------------------------------------------------------
 
+/**
+ * The Adjust panel, rebuilt as the r63c tune-rail (the approved proposal's
+ * Ente pattern): the stacked LabeledSliders retire here --- the section
+ * heading stays, the slider stack becomes [TuneRail]'s chip-ring row plus
+ * ONE active slider. The contract is unchanged: the panel is a thin
+ * adapter over the chassis state (committed + the ONE draft slot + commit);
+ * every parameter in [ADJUST_SLIDERS] rides the same draft/commit pipeline
+ * as before, and the a11y contract is the r32 one, verbatim (see
+ * TuneRail.kt). The non-tonal panels keep the LabeledSlider kit.
+ *
+ * The bodies are the r31/r32 adjust contracts and the r47 HSL band contract,
+ * unchanged; the chassis state arrives as explicit value + `on...Change`
+ * pairs. The committed Roborazzi chassis baselines are the regression proof.
+ */
 @Composable
 internal fun AdjustPanel(
     committed: EditRecipe,
@@ -38,34 +52,14 @@ internal fun AdjustPanel(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelLarge,
     )
-    for (spec in ADJUST_SLIDERS) {
-        val committedValue = spec.get(committed)
-        val live = if (draft?.first == spec.key) draft!!.second else committedValue
-        val labelText = stringResource(spec.label, live)
-        val a11yName = stringResource(spec.a11yNameRes)
-        // r56: the crafted slider row (label + live value pill);
-        // the r32 draft contract is verbatim --- every tick writes
-        // the draft (the preview re-renders), release commits, and
-        // the double-tap returns the control to its neutral.
-        LabeledSlider(
-            name = a11yName,
-            label = labelText,
-            valueText = live.toString(),
-            value = live.toFloat(),
-            valueRange = -100f..100f,
-            enabled = !exporting,
-            onChange = { value -> onDraftChange(Pair(spec.key, value))},
-            onFinish = {
-                draft?.let { d ->
-                    if (d.first == spec.key) {
-                        commit(spec.set(committed, d.second))
-                    }
-                }
-                onDraftChange(null)
-            },
-            resetValue = 0,
-        )
-    }
+    TuneRail(
+        specs = ADJUST_SLIDERS,
+        committed = committed,
+        draft = draft,
+        onDraftChange = onDraftChange,
+        exporting = exporting,
+        commit = commit,
+    )
 }
 
 @Composable

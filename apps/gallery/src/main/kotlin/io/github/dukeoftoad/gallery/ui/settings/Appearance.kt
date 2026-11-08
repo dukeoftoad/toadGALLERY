@@ -75,6 +75,16 @@ data class Appearance(
     /** Column count in [MIN_COLUMNS, MAX_COLUMNS] (see [clampColumns]). */
     val columns: Int = 3,
     val groupBy: GroupBy = GroupBy.NONE,
+    /**
+     * r62: whether the Photos timeline carries the Stories shelf at all.
+     * The default TRUE is the pre-r62 render (the shelf always showed), so
+     * a fresh install and every existing install keep today's behavior
+     * until the user opts out --- the settings only ever change what the
+     * user explicitly changes. When false the shelf is absent entirely
+     * (not empty-styled); when true it still renders only on the plain
+     * unfiltered timeline, per StoriesShelf's own when-it-renders rule.
+     */
+    val storiesOnHome: Boolean = true,
 )
 
 /** The smallest selectable photos-per-row count (2 keeps cells legible). */

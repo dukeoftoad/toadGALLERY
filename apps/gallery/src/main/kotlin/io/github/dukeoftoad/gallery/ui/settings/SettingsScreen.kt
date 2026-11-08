@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -49,6 +53,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,11 +73,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.ContextCompat
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.pm.PackageManager
 import io.github.dukeoftoad.gallery.BuildConfig
 import io.github.dukeoftoad.gallery.R
 import io.github.dukeoftoad.gallery.buildshape.BuildShape
+import io.github.dukeoftoad.gallery.ui.theme.ToadShapes
 import io.github.dukeoftoad.gallery.data.diag.DiagLog
 import io.github.dukeoftoad.gallery.data.DataSizeFormats
 import io.github.dukeoftoad.gallery.data.media.location.MediaLocationState
@@ -222,10 +230,17 @@ fun SettingsScreen(
         settingsViewModel.mediaLocation.onPermissionResult(granted)
     }
 
+    // r62: the segmented tabs (the maintainer's IA call: "General | AI |
+    // System --- flatter, fewer taps"). The scroll position resets on
+    // every switch so a tab never lands mid-page.
+    var selectedTab by rememberSaveable { mutableStateOf(SettingsTab.GENERAL) }
+    val settingsScroll = rememberScrollState()
+    LaunchedEffect(selectedTab) { settingsScroll.scrollTo(0) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(settingsScroll)
             .padding(horizontal = 16.dp, vertical = 24.dp),
     ) {
         Text(
@@ -236,6 +251,33 @@ fun SettingsScreen(
             // whole settings page.
             modifier = Modifier.semantics { heading() },
         )
+
+        // ---- r62: the segmented tabs (General | AI | System) ----
+        Spacer(Modifier.height(16.dp))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SettingsTab.entries.forEachIndexed { index, tab ->
+                SegmentedButton(
+                    selected = selectedTab == tab,
+                    onClick = { selectedTab = tab },
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = SettingsTab.entries.size,
+                    ),
+                    modifier = Modifier.testTag(
+                        when (tab) {
+                            SettingsTab.GENERAL -> "settings_tab_general"
+                            SettingsTab.AI -> "settings_tab_ai"
+                            SettingsTab.SYSTEM -> "settings_tab_system"
+                        }
+                    ),
+                ) {
+                    Text(stringResource(tab.labelRes))
+                }
+            }
+        }
+
+        // ---- The GENERAL tab: appearance, media access, location, about ----
+        if (selectedTab == SettingsTab.GENERAL) {
 
         // ---- Appearance (Ente-inspired; first section, the screenshot's order) ----
         Spacer(Modifier.height(24.dp))
@@ -349,6 +391,77 @@ fun SettingsScreen(
                 )
             }
         }
+
+        // ---- Appearance extras (r62): Stories on home + Material You ----
+        // The maintainer's picks: the Stories shelf must be dismissible
+        // (the "scroll + toggle" call) and the wallpaper palette must be
+        // opt-outable. Both ride the shell-scoped settingsViewModel
+        // write-through; the Stories toggle lands on the Photos timeline
+        // via the same Appearance flow the grids already read.
+        val storiesAppearance by settingsViewModel.appearance.collectAsState()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = storiesAppearance.storiesOnHome,
+                    role = Role.Switch,
+                    onValueChange = { settingsViewModel.setStoriesOnHome(it) },
+                )
+                .padding(top = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_stories_on_home),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = storiesAppearance.storiesOnHome,
+                onCheckedChange = null,
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .testTag("settings_toggle_stories_on_home"),
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_stories_on_home_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        val useDynamicColor by settingsViewModel.useDynamicColor.collectAsState()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = useDynamicColor,
+                    role = Role.Switch,
+                    onValueChange = { settingsViewModel.setUseDynamicColor(it) },
+                )
+                .padding(top = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.settings_dynamic_color),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = useDynamicColor,
+                onCheckedChange = null,
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .testTag("settings_toggle_dynamic_color"),
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_dynamic_color_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
 
         // ---- Media access (issue #27) ----
         Spacer(Modifier.height(24.dp))
@@ -497,6 +610,10 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+        } // selectedTab == GENERAL
+
+        // ---- The SYSTEM tab: recycle bin, vault, storage, privacy, dev tools ----
+        if (selectedTab == SettingsTab.SYSTEM) {
 
         // ---- Recycle bin (issue #31) ----
         Spacer(Modifier.height(24.dp))
@@ -612,6 +729,172 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+
+        // ---- Storage dashboard (r62) ----
+        // The maintainer's feature pick: what toadGALLERY keeps on this
+        // device, one measured row per honest location (an IO walk per
+        // refresh; the trash row is a MediaStore count when the OS can
+        // answer). The only destructive action here is the disposable
+        // cache clear --- models/vault/index have their own dedicated
+        // surfaces (the AI tab's provisioning cards, the vault screen)
+        // and this page deliberately does not duplicate them.
+        val storageViewModel: StorageInsightsViewModel = viewModel()
+        val storageState by storageViewModel.state.collectAsState()
+        SettingsSectionHeader(stringResource(R.string.settings_storage_section))
+        Text(
+            text = stringResource(R.string.settings_storage_section_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        SettingsGroupCard {
+            storageState.entries.forEach { entry ->
+                val labelRes = when (entry.key) {
+                    STORAGE_KEY_CATALOGUE -> R.string.settings_storage_catalogue
+                    STORAGE_KEY_ML_INDEX -> R.string.settings_storage_ml_index
+                    STORAGE_KEY_MODELS -> R.string.settings_storage_models
+                    STORAGE_KEY_VAULT -> R.string.settings_storage_vault
+                    STORAGE_KEY_CACHE -> R.string.settings_storage_cache
+                    else -> null
+                }
+                if (labelRes != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(labelRes),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = if (storageState.measuring) {
+                                stringResource(R.string.settings_storage_measuring)
+                            } else {
+                                DataSizeFormats.formatBytes(entry.bytes)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            if (storageState.trashCount >= 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_storage_trash),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.settings_storage_trash_count,
+                            storageState.trashCount,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        OutlinedButton(
+            onClick = storageViewModel::clearCache,
+            enabled = !storageState.measuring,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .testTag("settings_storage_clear_cache"),
+        ) {
+            Text(stringResource(R.string.settings_storage_action_clear_cache))
+        }
+
+        // ---- Privacy center (r62) ----
+        // The maintainer's feature pick: one audit-style page where every
+        // consent and on-device posture stands. Read-only by design --- the
+        // controls live on their own sections (media access, location data,
+        // the vault, the AI consents); this page is the honest at-a-glance
+        // answer to "what is on right now?".
+        val privacyContext = LocalContext.current
+        val mediaReadGranted = remember(privacyContext) {
+            fun granted(perm: String) =
+                ContextCompat.checkSelfPermission(privacyContext, perm) ==
+                    PackageManager.PERMISSION_GRANTED
+            if (Build.VERSION.SDK_INT >= 33) {
+                granted(Manifest.permission.READ_MEDIA_IMAGES) &&
+                    granted(Manifest.permission.READ_MEDIA_VIDEO)
+            } else {
+                granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+        val peopleOn by settingsViewModel.peopleAlbumsEnabled.collectAsState()
+        val magicOn by settingsViewModel.magicSearchEnabled.collectAsState()
+        val thingsOn by settingsViewModel.thingsAlbumsEnabled.collectAsState()
+        val aiEnabledCount = listOf(peopleOn, magicOn, thingsOn).count { it }
+        SettingsSectionHeader(stringResource(R.string.settings_privacy_section))
+        Text(
+            text = stringResource(R.string.settings_privacy_section_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        SettingsGroupCard {
+            PrivacyStatusRow(
+                label = stringResource(R.string.settings_privacy_media),
+                status = stringResource(
+                    if (mediaReadGranted) {
+                        R.string.settings_privacy_media_status_granted
+                    } else {
+                        R.string.settings_privacy_media_status_denied
+                    }
+                ),
+                ok = mediaReadGranted,
+            )
+            PrivacyStatusRow(
+                label = stringResource(R.string.settings_privacy_location),
+                status = stringResource(
+                    when (locationState) {
+                        MediaLocationState.GRANTED -> R.string.settings_privacy_location_granted
+                        MediaLocationState.DENIED -> R.string.settings_privacy_location_denied
+                        MediaLocationState.NOT_REQUIRED -> R.string.settings_privacy_location_na
+                        MediaLocationState.UNKNOWN -> R.string.settings_privacy_location_unknown
+                    }
+                ),
+                ok = locationState == MediaLocationState.GRANTED ||
+                    locationState == MediaLocationState.NOT_REQUIRED,
+            )
+            PrivacyStatusRow(
+                label = stringResource(R.string.settings_privacy_vault),
+                status = stringResource(
+                    when (vaultState) {
+                        VaultUiState.Locked -> R.string.settings_privacy_vault_configured
+                        is VaultUiState.Unlocked -> R.string.settings_privacy_vault_unlocked
+                        else -> R.string.settings_privacy_vault_none
+                    }
+                ),
+                ok = vaultState is VaultUiState.Locked,
+            )
+            PrivacyStatusRow(
+                label = stringResource(R.string.settings_privacy_ai),
+                status = if (aiEnabledCount == 0) {
+                    stringResource(R.string.settings_privacy_ai_off)
+                } else {
+                    stringResource(R.string.settings_privacy_ai_on, aiEnabledCount)
+                },
+                ok = aiEnabledCount == 0,
+            )
+        }
+        } // selectedTab == SYSTEM
+
+        // ---- The AI tab (r46 build-shape gate: engine builds only) ----
+        if (selectedTab == SettingsTab.AI) {
 
         // ---- AI engine (r22 dogfood, ADR-0020) ----
         // The maintainer's window into the model-delivery path: FACE
@@ -781,6 +1064,28 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             } // BuildShape.semanticIndex
+
+            // ---- Models (r62: the model-manager consolidation) ----
+            // The two provisioning packs (FACE below, SEMANTIC further
+            // down) now read as ONE managed group: a named header, the
+            // pack lifecycle in one line (download verifies size +
+            // SHA-256, delete removes the pack), and the r60 byte-level
+            // progress bars live right on the cards. The consents above
+            // gate the FEATURES; the cards below manage the WEIGHTS.
+            Text(
+                text = stringResource(R.string.settings_models_group),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(top = 24.dp)
+                    .semantics { heading() },
+            )
+            Text(
+                text = stringResource(R.string.settings_models_group_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
 
             val aiViewModel: AiEngineViewModel = viewModel()
             val aiState by aiViewModel.state.collectAsState()
@@ -1491,6 +1796,10 @@ fun SettingsScreen(
                 }
             } // BuildShape.semanticIndex
         } // BuildShape.withEngine
+        } // selectedTab == AI
+
+        // ---- The SYSTEM tab, continued: dev tools, components, progress ----
+        if (selectedTab == SettingsTab.SYSTEM) {
 
         // ---- Developer diagnostics (r59, the debug-tools round) ----
         // The maintainer's "add option to add debug tool ... for fixing
@@ -1661,6 +1970,11 @@ fun SettingsScreen(
             )
         }
 
+        } // selectedTab == SYSTEM
+
+        // ---- The About entry (the GENERAL tab's last row) ----
+        if (selectedTab == SettingsTab.GENERAL) {
+
         // ---- About (appearance slice) ----
         Spacer(Modifier.height(24.dp))
         Text(
@@ -1690,6 +2004,7 @@ fun SettingsScreen(
                 modifier = Modifier.weight(1f),
             )
         }
+        } // selectedTab == GENERAL
     }
 }
 
@@ -1959,3 +2274,96 @@ private val GroupBy.labelRes: Int
         GroupBy.WEEK -> R.string.settings_group_by_week
         GroupBy.MONTH -> R.string.settings_group_by_month
     }
+
+/**
+ * r62: the Settings tab's segmented control scopes (the maintainer's IA
+ * call: "General | AI | System --- flatter, fewer taps, longer pages").
+ * One screen, three scopes; [labelRes] feeds the segment labels. The AI
+ * scope renders nothing on non-engine builds (the r46 gate hides the
+ * whole AI surface there), the same hide-not-crash posture the section
+ * always had.
+ */
+enum class SettingsTab(val labelRes: Int) {
+    GENERAL(R.string.settings_tab_general),
+    AI(R.string.settings_tab_ai),
+    SYSTEM(R.string.settings_tab_system),
+}
+
+/**
+ * r62 polish: the evolved section header --- the pre-r62 shape (title,
+ * primary color, heading anchor) shared by the NEW sections so they can
+ * never drift from the house pattern. The existing sections keep their
+ * inline headers untouched.
+ */
+@Composable
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() },
+    )
+}
+
+/**
+ * r62 polish: the evolved group card --- a 16dp ([ToadShapes.large])
+ * rounded container over a softened `surfaceVariant`, wrapping the new
+ * sections' rows so the Settings page reads as cards-with-headers instead
+ * of bare rows on the background. Padding vertical is 4dp so a row's own
+ * 12dp vertical padding makes the rhythm; horizontal 16dp matches the
+ * screen margin.
+ */
+@Composable
+private fun SettingsGroupCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(ToadShapes.large))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        content = content,
+    )
+}
+
+/**
+ * r62: one Privacy center row --- label left, status right. [ok] picks
+ * the status color: the primary (toad green) for the explicitly-safe
+ * state, `onSurfaceVariant` otherwise (a neutral, non-alarming gray ---
+ * the page narrates posture, it does not alarm).
+ */
+@Composable
+private fun PrivacyStatusRow(
+    label: String,
+    status: String,
+    ok: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = status,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (ok) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}

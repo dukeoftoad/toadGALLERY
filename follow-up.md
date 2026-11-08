@@ -1095,3 +1095,22 @@ the public remote each time.
   set TG_DEBUG_KEYSTORE_FILE there too.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, F-62, F-63, F-64, PAT revocation (advised again).
+
+## 2026-11-08 — r62 window (the Settings craft: segmented tabs, the Stories scroll-away + toggle, Storage dashboard, Privacy center, Material You toggle, Models group)
+
+- **F-68 (2026-11-08, open)** — The Appearance extras the r62 round cut
+  for scope: a date-format selector (the timeline's group labels) and a
+  video-autoplay toggle (the viewer); both need cross-surface plumbing
+  beyond the Appearance tab and deserve their own round.
+- **F-69 (2026-11-08, open)** — The accent picker beyond the r62
+  Material You toggle: a explicit "toad green / wallpaper / mono"
+  tri-state would need a small palette registry in Theme.kt and WCAG
+  re-verification per seed (the #3E9B4F seed's own 3.5:1 lesson is the
+  cautionary tale).
+- **F-70 (2026-11-08, open)** — The Storage dashboard's rows could
+  deep-link to their management surfaces (models row -> the AI tab's
+  pack cards, vault row -> the vault screen) instead of narrating where
+  the controls live.
+- **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
+  F-61, F-62, F-63, F-64, F-65, F-66, F-67, PAT revocation (advised
+  again).

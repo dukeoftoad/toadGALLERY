@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -248,7 +249,14 @@ private val bottomNavItems = listOf(
 
 @Composable
 fun ToadGalleryApp() {
-    ToadGalleryTheme {
+    // r62: the settings ViewModel hoisted ABOVE the theme so the Appearance
+    // tab's Material You toggle can gate dynamic color at the theme call ---
+    // the SAME shell-scoped instance the rest of the shell already consumed
+    // (one viewModel(), one activity scope; the inner creation moved up, the
+    // downstream references unchanged).
+    val settingsViewModel: SettingsViewModel = viewModel()
+    val useDynamicColor by settingsViewModel.useDynamicColor.collectAsState()
+    ToadGalleryTheme(dynamicColor = useDynamicColor) {
         val navController = rememberNavController()
         // Issue #27: the picked-photos set is shared between the Settings tab
         // (picker entry point + live count) and the `picked` sub-screen, so it
@@ -269,8 +277,9 @@ fun ToadGalleryApp() {
         // tab propagates to the Photos timeline and album detail in the
         // same session (SettingsScreen used to create its own ViewModel;
         // the shell hoists it now, the picked/viewer/vault hand-off
-        // pattern).
-        val settingsViewModel: SettingsViewModel = viewModel()
+        // pattern). r62: the creation itself moved ABOVE ToadGalleryTheme
+        // (see the comment there) so the theme can read the Material You
+        // toggle; this is the same instance, not a second one.
         val openViewer: (window: List<MediaItem>, index: Int) -> Unit = { window, index ->
             viewerViewModel.open(window, index)
             navController.navigate(Destinations.VIEWER)

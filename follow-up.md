@@ -1114,3 +1114,38 @@ the public remote each time.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, PAT revocation (advised
   again).
+
+## 2026-11-08 — r63 window (the editor craft: the fix-first round, violet retires to toad-green, the Ente tune-rail, trim-on-filmstrip)
+
+- **F-71 (2026-11-08, recorded, still open pending the device check)** —
+  the on-device editor chrome offset: the audit's P1 showed the photo
+  header floating ~26-30% down (≈630px of black above it) while the code
+  composes it as the FIRST child of the fillMaxSize root Column
+  (EditActivity.kt, the r63a evidence comment carries the full hunt).
+  The r63a root-cause round exonerated the composition tree: no center
+  arrangement, exactly one inset payment (.systemBarsPadding() at the
+  root), nothing composed above the header, the unified APK launches
+  this exact activity (apps/gallery/src/unified/AndroidManifest.xml),
+  no scroll parent --- and the cross-editor control (the video editor,
+  same device, same root pattern) rendered TOP-anchored. Verdict: a
+  device-side window state at capture time (a mid-launch
+  window-transition frame or a compat/windowed bottom-anchored
+  placement), not producible by this tree. A JVM pin
+  (EditHeaderPinningTest.headerIsTheTopMostElementInTheProductionRootShape)
+  asserts boundsInRoot.top == 0 so a real regression has a signature.
+  REMAINS OPEN until the vc43 device check shows the header pinned top
+  in a steady-state capture; if it reproduces, the next step is a
+  bugreport + window-state dump, not a layout patch.
+- **F-72 (2026-11-08, open)** — the photo canvas pinch-zoom +
+  double-tap-fit. Explicitly cut from r63b's scope (the approved item 8
+  ledger plan); the chassis works without it. Needs the gesture layer
+  around the canvas Box (scale/pan state vs the pipeline preview) and a
+  decide on how it interacts with the compare chip's hold gesture.
+- **F-73 (2026-11-08, open)** — the Regions→Draw merge candidate (one
+  canvas-paint tab with two modes). Needs its own consent-free UX pass
+  (the Regions consent surface must not silently disappear); not bundled
+  into r63 by design.
+- **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
+  F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69 (the
+  EditorPalette registry the r63b re-pin landed IS its plug-in point),
+  F-70, PAT revocation (advised again).

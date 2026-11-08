@@ -2923,3 +2923,86 @@ committed PNGs, then green verify.
 for scope), F-69 (accent picker beyond the Material You toggle), F-70
 (storage dashboard could deep-link each row to its management surface);
 carried items unchanged, PAT revocation advised again.
+
+## 2026-11-08 — r63 window (the editor craft)
+
+**Directive.** "Coming to editor - you can see flaws and generic feel,
+buggy old ux design. craft proposed solution with visual design for
+approval. Take help from open source projects like ente, editor apps."
+The round DELIBERATELY split: first the visual proposal
+(download/toadGALLERY-r63-editor-redesign-proposal.html, built from code
+@ d1da449 + the maintainer's device screenshots; references read live
+from the ente/ente mobile editor sources --- the bottom tool bar, the
+tune chip-rings + single active slider + tap-to-zero, the trim-on-
+filmstrip --- plus burhanrashid52/PhotoEditor and Fossify Gallery
+discipline), THEN the implementation, started only after the maintainer
+approved all eight checklist items ("Approved").
+
+**The plan that ran.** Four phases on one branch sequence (`r63` off
+unified-app @ d1da449), three authored by parallel subagents on disjoint
+files, each gated on compile + unit + Roborazzi (re-record where pixels
+intentionally move), then PR → CI → unified APK → device check:
+
+- **r63a (fix-first, agent D, zero design change)** --- commit 5419fa4:
+  the P1/F-71 root-cause hunt (composition tree exonerated; the
+  cross-editor evidence points at a device-side window state at capture
+  time; verdict + evidence chain as a fix-site comment; the JVM
+  top-most pin added), the Save-copy maxLines=1 pill, the video preview
+  weight(1f) + the dead Spacer retired, the orphan fullscreen toggle
+  re-homed into the TransportRow, and the honest Frame/GIF renames
+  (strings only).
+- **r63b (chrome + re-pin, agent A)** --- commit 74a0052: EditorTheme.kt
+  rebuilt around the EditorPalette registry (Toad fixed default; the F-69
+  plug-in point; the r47 fixed-dark contract and the r52 selection
+  mechanism stand) with VideoEditTheme's hex fork re-pointed to it; the
+  icon-chrome header (undo/redo/settings 48dp + the Save-copy pill); the
+  grouped/auto-scrolling tab bar (Adjust·Looks·Color ‖
+  Crop·AI·Text·Stickers·Draw·Regions ‖ Frames, separators + selected
+  halo + fade padders, 68dp rows); the honesty chip (the r54 line
+  becomes the tappable export-policy pill) + the hold-to-compare chip.
+  Undo/Redo/Shield glyph vectors added (material-icons-core lacks them;
+  no new dependency).
+- **r63c (panels, agent B, ∥ r63b)** --- commit 6a8b990: the Ente
+  tune-rail (TuneRail.kt: chip row with 34dp progress rings over the
+  ten ADJUST_SLIDERS params, exactly one active slider, tap-to-activate,
+  tap-active-to-zero via the last-values memory --- UI-local, never
+  recipe state); Reset promoted into the tool header across all ten
+  tools (the value-tools footer retired); the r32 a11y contract ported
+  verbatim (chips announce name + value state like the sliders did,
+  Role.RadioButton one-of-many).
+- **r63d (video, agent C, ∥ r63c)** --- commit 9c1f920: the Main
+  filmstrip becomes the PRIMARY trim surface (16dp handles / 28dp grab
+  radius, dim scrim outside the window, 2dp white playhead clamped
+  inside it, (width/72).coerceIn(4,12) adaptive frames,
+  pause/resume-on-drag, commit-on-release through the Trim tab's own
+  Apply path); transport = canvas-tap play/pause + double-tap ±10s seek
+  (the retired seek buttons survive as the chip's custom actions), the
+  fullscreen toggle re-anchored top-trailing with its r63a a11y
+  verbatim; TimestampRow → the mono TimeRow; six flex tab columns with
+  the halo language. Player/GL/export untouched; TrimScreenBody
+  byte-identical (diff-pinned).
+
+**Merge discipline.** r63b/r63c/r63d authored in separate worktrees off
+r63a (wt-a/wt-b/wt-c), merged in order; three conflicts, all unions ---
+the PhotoToolHeader KDoc (tab-groups doc vs the Reset-promotion doc),
+the EditActivity honesty-comment head (the footer B removed vs the chip
+A introduced), the VideoEditorScreen file-header note and the
+EditHeaderPinningTest density fix (the r63c LocalDensity variant won ---
+same fix, compiles, no val redeclaration). One base-commit landmine
+surfaced in the audits: EditHeaderPinningTest used SemanticsNode.density
+(removed in compose-ui 1.7.6) --- fixed in BOTH worktrees independently,
+merged to the LocalDensity shape.
+
+**Verification.** Local (new this round: a real Android SDK + JDK 17 in
+the sandbox): :apps:edit:compileDebugKotlin + compileDebugUnitTestKotlin +
+:apps:gallery:compileUnifiedDebugKotlin green after every phase and after
+each merge. CI gates the final head. Roborazzi: the six committed edit
+baselines are EXPECTED to drift (the re-pin recolors every capture; the
+tab bar and tool header change geometry) + four TuneRail captures and
+four VideoTrimStrip captures are new --- the screenshots.yml mode=record
+artifact lands them, then verify re-activates.
+
+**Remaining.** F-71 stays open pending the vc43 device check; F-72
+(pinch-zoom) and F-73 (Regions→Draw) opened as ledger-only by the
+approved item 8; F-69's registry structure landed, the Settings
+tri-state UI is its own round; PAT revocation advised again.

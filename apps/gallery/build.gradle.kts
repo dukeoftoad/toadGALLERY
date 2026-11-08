@@ -457,7 +457,22 @@ android {
         // tabs, the Storage dashboard, the Privacy center, the Material
         // You toggle, the Models group. Same stable-signing contract as
         // r61: the unified APK updates in place.
-        versionCode = 42
+        //
+        // versionCode 43 (r63 round): the editor craft --- the fix-first
+        // round (the P1 header root-cause hunt + the JVM top-most pin,
+        // the Save-copy single-line pill, the video preview weight(1f)
+        // + the dead Spacer retired, the fullscreen toggle re-anchored,
+        // the honest Frame/GIF renames), then the approved redesign: the
+        // violet retires into the EditorPalette.Toad registry (the §3
+        // re-pin --- the r47 fixed-dark contract and the r52 selection
+        // mechanism stand; the F-69 palette-registry structure), the
+        // photo chrome (icon header, grouped/auto-scrolling tab bar,
+        // honesty + compare chips), the Ente tune-rail (chip rings + one
+        // active slider + tap-to-zero, the r32 a11y contract verbatim),
+        // and the video chassis (trim-on-filmstrip, canvas-tap transport,
+        // the time row). Same stable-signing contract: the unified APK
+        // updates in place.
+        versionCode = 43
         versionName = "0.4.5-alpha"
         // The launcher-alias consolidation's default: the canonical
         // basic build keeps its MAIN/LAUNCHER entry (the ONE family

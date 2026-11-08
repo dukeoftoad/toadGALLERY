@@ -36,6 +36,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -787,24 +788,71 @@ fun SettingsScreen(
             // r50 ux fix: the provisioning busy state used to disable every
             // button while showing NO activity at all --- on a slow
             // connection the card looked frozen for minutes. One indeterminate
-            // spinner + narration line (byte-level progress is deliberately
-            // out of the provisioner contract; this states the work, not
-            // fake percentages).
+            // spinner + narration line for the actions without byte progress
+            // (delete, self-test).
+            // r60: while a model DOWNLOAD is in flight, the indeterminate
+            // spinner becomes a DETERMINATE bar + live line (file, MiB in/of
+            // the pinned total, file i of n; "verifying SHA-256" during the
+            // hash pass) --- the r50 comment's "byte-level progress is
+            // deliberately out of the provisioner contract" call is reversed
+            // by the maintainer's 2026-11-08 device round: a ~207 MiB SEMANTIC
+            // pack with zero feedback read as a frozen app.
             if (aiState.busy) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 8.dp),
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                    )
-                    Text(
-                        text = stringResource(R.string.settings_ai_busy),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
+                val progress = aiState.downloadProgress
+                if (progress != null) {
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        LinearProgressIndicator(
+                            progress = {
+                                if (progress.totalBytes <= 0L) {
+                                    0f
+                                } else {
+                                    (progress.bytesSoFar.toFloat() / progress.totalBytes.toFloat())
+                                        .coerceIn(0f, 1f)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("settings_ai_download_progress"),
+                        )
+                        Text(
+                            text = if (progress.verifying) {
+                                stringResource(
+                                    R.string.settings_ai_progress_verifying,
+                                    progress.fileName,
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.settings_ai_progress_downloading,
+                                    progress.fileName,
+                                    DataSizeFormats.formatBytes(progress.bytesSoFar),
+                                    DataSizeFormats.formatBytes(progress.totalBytes),
+                                    progress.fileIndex,
+                                    progress.fileCount,
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .testTag("settings_ai_download_progress_line"),
+                        )
+                    }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_ai_busy),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
                 }
             }
             Text(
@@ -980,10 +1028,21 @@ fun SettingsScreen(
                     )
                     is AiDogfoodState.SelfTestResult.Ok -> Text(
                         text = pluralStringResource(
-                            R.plurals.settings_ai_selftest_faces,
+                            R.plurals.settings_ai_selftest_hit,
                             result.faces,
-                            result.fileName,
+                            result.scanned,
                             result.faces,
+                            result.elapsedMs,
+                            result.firstFaceFile,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    is AiDogfoodState.SelfTestResult.Zero -> Text(
+                        text = stringResource(
+                            R.string.settings_ai_selftest_no_faces,
+                            result.scanned,
                             result.elapsedMs,
                         ),
                         style = MaterialTheme.typography.bodyMedium,
@@ -1610,8 +1669,11 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.semantics { heading() },
         )
-        // The same row shape as the recycle-bin entry (no subtitle: there
-        // is no live state to narrate --- the About page carries it all).
+        // The same row shape as the recycle-bin entry. r60: the row's text
+        // used to be the heading's own string --- heading and row rendered
+        // the SAME words stacked ("About toadGALLERY" twice), which the
+        // maintainer's device screenshot read as a rendering bug (it was a
+        // copy bug). The row now names what the About page actually holds.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1622,7 +1684,7 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = stringResource(R.string.settings_about_title),
+                text = stringResource(R.string.settings_about_entry),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),

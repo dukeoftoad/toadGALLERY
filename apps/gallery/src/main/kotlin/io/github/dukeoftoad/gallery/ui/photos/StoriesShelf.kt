@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import coil.compose.AsyncImage
@@ -140,6 +143,15 @@ fun StoriesShelf(
  * date-range label, and the member count. A rounded 2:3 card --- the
  * shelf reads as a row of mini-albums, visually distinct from the square
  * grid cells below it.
+ *
+ * r60: the Column and BOTH labels are pinned to the cover's own 96.dp
+ * width (maxLines + ellipsis on the range label). They used to be
+ * UNCONSTRAINED: a Column wraps its widest child, and a long single-line
+ * range label ("1 November 2026 – 7 November 2026" at full date
+ * verbosity) measured at ~2.5x the card width --- every adjacent card's
+ * label then painted over its neighbours (and off the screen edge), the
+ * maintainer's 2026-11-08 device screenshot caught the overlap. The card
+ * defines its geometry; the labels live inside it.
  */
 @Composable
 private fun StoryCard(
@@ -151,6 +163,7 @@ private fun StoryCard(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .width(96.dp)
             .clip(RoundedCornerShape(12.dp))
             .padding(bottom = 4.dp),
     ) {
@@ -180,6 +193,9 @@ private fun StoryCard(
             text = StorySets.rangeLabel(story, locale),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 4.dp),
         )
         Text(
@@ -190,6 +206,9 @@ private fun StoryCard(
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }

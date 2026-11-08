@@ -1053,3 +1053,23 @@ the public remote each time.
   even though the editor is embedded; the row could special-case self.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, PAT
   revocation (advised again).
+
+## 2026-11-08 — r60 window (the device-feedback round: progress bars + the honest face self-test + the screenshot flaws)
+
+- **F-62 (2026-11-08, open)** — The self-test's per-photo detail: the
+  r60 multi-photo scan reports aggregate faces/ms and the first hit;
+  per-photo timings (and which of the 12 were skipped as unreadable)
+  would make the zero case even more auditable on a device.
+- **F-63 (2026-11-08, open)** — The Installed-components page's intro
+  copy ("ships as separate installable apps") is the family's truth but
+  reads oddly ON the unified build, where the editor row narrates an
+  embedded-in-process editor; the copy could branch on the unified
+  flavor like the self row's flavor copy does.
+- **F-64 (2026-11-08, open)** — The People tab's empty state says
+  "they appear after the background face index runs" even when the
+  queue ALREADY drained with zero faces found (a screenshots-only
+  library); the empty state could read the queue's terminal state and
+  say "no faces found in the indexed photos" instead — the same honesty
+  split the r60 self-test gained.
+- **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
+  F-61, PAT revocation (advised again).

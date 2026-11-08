@@ -1073,3 +1073,25 @@ the public remote each time.
   split the r60 self-test gained.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
   F-61, PAT revocation (advised again).
+
+## 2026-11-08 — r61 window (the stable-signing round: the ADR-0018 release contract wired, the public CI debug key, the hard signature gates)
+
+- **F-65 (2026-11-08, open)** — versionCode monotonicity is a manual
+  per-round bump in `apps/gallery/build.gradle.kts` (41 as of r61). A
+  missed bump ships a unified APK that cannot install over the previous
+  one even with a stable signer. The unified dispatches could instead
+  derive versionCode from `GITHUB_RUN_NUMBER` (offset above 41) via a
+  `-PciVersionCode` property, keeping the manual value as the floor.
+- **F-66 (2026-11-08, open)** — the unified app still has NO tag-driven
+  release path of its own: unified-apk.yml is manual-dispatch only, and
+  the release.yml F-14 permission gate lacks the unified allowlist entry
+  (the unified-apk.yml header already names the required permission
+  set). If the maintainer promotes the unified app to a tagged release,
+  that allowlist entry must land first.
+- **F-67 (2026-11-08, open)** — apk-build.yml's flavor debug artifacts
+  still sign with the ephemeral runner-local debug keystore (the same
+  uninstall-every-time pain if ever dogfooded); the r61 ciDebug wiring
+  is deliberately scoped to unified-apk.yml only. A later round could
+  set TG_DEBUG_KEYSTORE_FILE there too.
+- **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
+  F-61, F-62, F-63, F-64, PAT revocation (advised again).

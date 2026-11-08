@@ -15,11 +15,25 @@ name: Unified APK (manual)
 #
 # Inputs:
 #   variant = debug (default)  -> :apps:gallery:assembleUnifiedDebug
+#           r61: signed with the PUBLIC-by-design CI debug key
+#           (tools/ci-signing/ci-debug.p12, passwords "android"), so
+#           every CI debug APK shares ONE stable signer and installs as
+#           an in-place update over its predecessors (the r59/r60 builds
+#           signed with the runner-local random ~/.android/debug.keystore
+#           --- the maintainer's "every time I need to uninstall" root
+#           cause). Hard-gated on that key's pinned digest.
 #   variant = release          -> :apps:gallery:assembleUnifiedRelease
-#           signed with the SAME TG_* release-key env vars the release.yml
-#           convention pins (ADR-0018) when the secrets exist; otherwise
-#           the APK stays UNSIGNED BY DESIGN (the repo's documented local
-#           fallback) --- the step summary says which happened.
+#           r61: ACTUALLY signed with the ADR-0018 release key now ---
+#           the r59 wiring passed secrets that do not exist in this repo
+#           (TG_KEYSTORE_BASE64 etc. vs the real TG_RELEASE_* set) and
+#           never fed Gradle the TG_KEYSTORE_FILE it checks, so release
+#           builds were silently UNSIGNED. The r61 wiring mirrors
+#           release.yml verbatim (decode TG_RELEASE_KEYSTORE_BASE64 to
+#           $RUNNER_TEMP, feed TG_KEYSTORE_FILE + the three credential
+#           envs) and hard-gates the signer against the same pinned
+#           digest release.yml publishes under --- a missing secret or a
+#           wrong key now fails the job before upload instead of shipping
+#           an unsigned APK.
 #   bundled_models = true      -> -PwithBundledModels (the ADR-0020 staged
 #           model pack rides IN the APK; much larger download, zero
 #           first-run model provisioning)
@@ -35,7 +49,7 @@ on:
   workflow_dispatch:
     inputs:
       variant:
-        description: "debug = signed-with-debug-key dev build (includes the Developer diagnostics section); release = release-key-signed (or unsigned) production build"
+        description: "debug = stable CI-debug-key dev build (includes the Developer diagnostics section); release = ADR-0018 release-key-signed production build (hard signature gate)"
         required: false
         default: debug
         type: choice
@@ -64,41 +78,110 @@ jobs:
       - name: Set up the toolchain (Android)
         uses: ./.github/actions/toad-setup
 
-      # The ADR-0018 signing convention (release.yml verbatim): wire the
-      # TG_* env ONLY for the release variant; Gradle falls back to the
-      # documented unsigned local build when the secrets are absent.
-      - name: Assemble the unified APK
+      # r61: the ADR-0018 signing convention, REALLY wired this time.
+      # The r59 block here passed secrets that do not exist in this repo
+      # (TG_KEYSTORE_BASE64 etc.) and in the wrong shape (Gradle wants a
+      # TG_KEYSTORE_FILE path, not base64) --- dead env vars, so release
+      # builds came out silently unsigned. The release path now mirrors
+      # release.yml verbatim: decode TG_RELEASE_KEYSTORE_BASE64 to a
+      # runner-temp file (never committed, never in a command line), then
+      # feed the four TG_* envs to Gradle. The debug path signs with the
+      # public-by-design CI debug key (stable across runs --- see
+      # apps/gallery/build.gradle.kts's ciDebug signing config).
+      - name: Decode release keystore (release variant only)
+        if: inputs.variant == 'release'
         env:
-          TG_KEYSTORE_BASE64: ${{ secrets.TG_KEYSTORE_BASE64 }}
-          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_KEYSTORE_PASSWORD }}
-          TG_KEY_ALIAS: ${{ secrets.TG_KEY_ALIAS }}
-          TG_KEY_PASSWORD: ${{ secrets.TG_KEY_PASSWORD }}
+          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
         run: |
-          VARIANT="${{ inputs.variant }}"
+          printf '%s' "$TG_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
+          chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
+          if [[ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]]; then
+            echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
+            exit 1
+          fi
+
+      - name: Assemble the unified APK (release, ADR-0018-signed)
+        if: inputs.variant == 'release'
+        env:
+          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
+        run: |
           MODEL_FLAG=""
           if [[ "${{ inputs.bundled_models }}" == "true" ]]; then
             MODEL_FLAG="-PwithBundledModels"
           fi
-          if [[ "$VARIANT" == "release" ]]; then
-            ./gradlew :apps:gallery:assembleUnifiedRelease -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
-          else
-            ./gradlew :apps:gallery:assembleUnifiedDebug -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
+          ./gradlew :apps:gallery:assembleUnifiedRelease -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
+
+      - name: Assemble the unified APK (debug, stable CI debug key)
+        if: inputs.variant != 'release'
+        env:
+          TG_DEBUG_KEYSTORE_FILE: ${{ github.workspace }}/tools/ci-signing/ci-debug.p12
+        run: |
+          MODEL_FLAG=""
+          if [[ "${{ inputs.bundled_models }}" == "true" ]]; then
+            MODEL_FLAG="-PwithBundledModels"
           fi
+          ./gradlew :apps:gallery:assembleUnifiedDebug -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
 
       - name: Collect + rename the APK
         run: |
           VARIANT="${{ inputs.variant }}"
           VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' apps/gallery/build.gradle.kts | tail -n1)"
+          VERSION_CODE="$(grep -oP 'versionCode = \K\d+' apps/gallery/build.gradle.kts | tail -n1)"
           OUT="apps/gallery/build/outputs/apk/unified/${VARIANT}"
           ls -la "$OUT"
-          SRC="$(find "$OUT" -name "*.apk" | head -n1)"
+          SRC="$(find "$OUT" -name "*.apk" ! -name "*unsigned*" | head -n1)"
           if [[ -z "$SRC" ]]; then
-            echo "::error::no unified APK under $OUT"; exit 1
+            echo "::error::no signed unified APK under $OUT (unsigned present: $(find "$OUT" -name '*unsigned*.apk' -print -quit))"
+            exit 1
           fi
-          DEST="toadGALLERY-unified-${VERSION_NAME}-${VARIANT}.apk"
+          DEST="toadGALLERY-unified-${VERSION_NAME}-vc${VERSION_CODE}-${VARIANT}.apk"
           cp "$SRC" "$DEST"
           sha256sum "$DEST" | tee "${DEST}.sha256"
           echo "APK=$DEST" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+
+      # r61: hard signature gates, both variants --- the maintainer's
+      # "any next release should be signed as currently every time I need
+      # to uninstall" directive. A silently-unsigned APK or a signer swap
+      # must never reach the artifact: the release variant must carry THE
+      # ADR-0018 toadGALLERY release key (the same pinned digest
+      # release.yml publishes under), the debug variant the public CI
+      # debug key. Any mismatch fails the job BEFORE upload.
+      - name: Verify the APK signature (hard gate)
+        run: |
+          # Resolve apksigner robustly (the release.yml convention): the
+          # exact pinned build-tools dir first, then a glob fallback.
+          APKSIGNER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/apksigner"
+          if [[ ! -x "$APKSIGNER" ]]; then
+            APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -path '*36.0.0*/apksigner' -print -quit)"
+          fi
+          if [[ -z "$APKSIGNER" || ! -x "$APKSIGNER" ]]; then
+            echo "::error::apksigner not found under build-tools 36.0.0"
+            exit 1
+          fi
+          if [[ "${{ inputs.variant }}" == "release" ]]; then
+            EXPECTED_SHA256="8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494"
+            EXPECTED_LABEL="the ADR-0018 toadGALLERY release key"
+          else
+            EXPECTED_SHA256="a0300c2564c7e4bf7ecf18a0bdf5466d4cd87585ee9986ff885ff9f48b41841a"
+            EXPECTED_LABEL="the public CI debug key (tools/ci-signing/ci-debug.p12)"
+          fi
+          "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/unified-apk-certs.txt"
+          cat "$RUNNER_TEMP/unified-apk-certs.txt"
+          ACTUAL_SHA256="$(grep -oP 'Signer #1 certificate SHA-256 digest: \K[0-9a-fA-F]+' "$RUNNER_TEMP/unified-apk-certs.txt" | tr '[:upper:]' '[:lower:]')"
+          if [[ -z "$ACTUAL_SHA256" ]]; then
+            echo "::error::apksigner reported no signer certificate --- the unified APK is unsigned or the signature did not verify"
+            exit 1
+          fi
+          if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
+            echo "::error::unified APK signer mismatch: expected $EXPECTED_SHA256 ($EXPECTED_LABEL), got $ACTUAL_SHA256 --- refusing to upload"
+            exit 1
+          fi
+          echo "signature gate OK --- signer cert SHA-256 matches $EXPECTED_LABEL."
+          echo "SIGNER_SHA256=$ACTUAL_SHA256" >> "$GITHUB_ENV"
 
       - name: Upload the unified APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -115,9 +198,14 @@ jobs:
           {
             echo "### Unified APK"
             echo ""
-            echo "- applicationId: \`io.github.dukeoftoad.gallery.unified\`"
+            if [[ "${{ inputs.variant }}" == "release" ]]; then
+              echo "- applicationId: \`io.github.dukeoftoad.gallery.unified\` (versionCode ${VERSION_CODE})"
+            else
+              echo "- applicationId: \`io.github.dukeoftoad.gallery.unified.debug\` (the debug buildType's .debug suffix; versionCode ${VERSION_CODE})"
+            fi
             echo "- variant: \`${{ inputs.variant }}\` (bundled models: \`${{ inputs.bundled_models }}\`)"
             echo "- artifact: \`unified-apk\` --- \`$APK\`"
+            echo "- signer cert SHA-256: \`${SIGNER_SHA256}\` (hard-gated: release = the ADR-0018 release key, debug = the public CI debug key)"
             if [[ "${{ inputs.variant }}" == "debug" ]]; then
               echo "- Developer diagnostics: **included** (Settings > Developer diagnostics --- debug builds only)"
             else

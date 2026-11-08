@@ -4,6 +4,77 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r62 round (the Settings craft: segmented tabs General/AI/System, the Stories shelf scrolls away + toggle, Storage dashboard, Privacy center, Material You toggle, Models group; gallery versionCode 42, versionName stays 0.4.5-alpha)
+
+The maintainer's 2026-11-08 directive: "stories features is fixed on home
+page which shouldn't, setting tab need more polished ui/ux and new
+features." The round's scope was confirmed interactively: Stories =
+scroll-away + toggle; Settings = segmented tabs; new features = Storage
+dashboard + Model manager + Privacy center + Appearance extras; visual =
+evolve the current warm-gray/toad-green system.
+
+### Fixed
+
+- **The Stories shelf no longer sits FIXED above the grid** (r62): the
+  plain timeline's `StoriesShelf` occupied a pinned Column slot above
+  `PhotosGrid` — permanently eating ~100dp of the home page while the
+  grid scrolled beneath it (the maintainer's "fixed on home page which
+  shouldn't"). The shelf now rides `MediaPagingGrid`'s new leading
+  full-line header slot (`key = "paging_header"`): it is the grid's
+  FIRST item and scrolls away with the content, Instagram-style.
+  `PhotosGrid` gained the header passthrough; the selection-mode call
+  site passes none.
+
+### Added
+
+- **"Stories on home page" toggle** (r62, Appearance tab): default ON =
+  the pre-r62 render (a missing preference key keeps the shelf), so
+  existing installs change nothing until the user opts out. Persisted
+  write-through on the shell-scoped `SettingsViewModel` under
+  `stories_on_home`; the Photos timeline reads it from the same
+  `Appearance` flow the grids already consume.
+- **Segmented Settings tabs — General | AI | System** (r62, the IA
+  restructure): the 1,961-line single scroll is now three scopes under a
+  `SingleChoiceSegmentedButtonRow` — General (appearance + the new
+  extras, media access, location data, About), AI (the engine card, the
+  consents, the new Models group, the provisioning packs, background
+  indexing — engine builds only, the r46 gate unchanged), System (recycle
+  bin, vault, the new Storage dashboard, the new Privacy center,
+  Developer diagnostics, Installed components, Progress). The scroll
+  position resets on every tab switch.
+- **Storage dashboard** (r62, System tab): one measured row per honest
+  location — the catalogue's Room DB trio, the shared ML index store
+  (`face-index/`, faces + semantic), the downloaded models, the vault,
+  the thumbnail/temp cache — plus a MediaStore count of trashed rows
+  (API 30+; the row hides when the OS cannot answer, never an invented
+  zero). One destructive action only: Clear cache (disposable by
+  definition). `StorageInsightsViewModel` measures on Dispatchers.IO;
+  `directorySize`/`databaseFilesSize` are pure JVM and unit-tested.
+- **Privacy center** (r62, System tab): the audit-style status page —
+  photo/video access (granted/not), precise-location consent
+  (allowed/denied/not asked/not needed), the vault (configured & locked /
+  unlocked / not set up), AI features (N of 3 enabled; the opt-in
+  default reads as the safe state). Read-only by design: the controls
+  stay on their own sections.
+- **"Use system colors" toggle** (r62, Appearance tab): the Material You
+  opt-out — default ON (pre-r62 behavior); OFF forces the deterministic
+  toad-green fallback palette on every API level. The shell hoists the
+  settings ViewModel above `ToadGalleryTheme` so the toggle re-composes
+  the theme live; one instance, same scope.
+- **Models group** (r62, AI tab): the model-manager consolidation — the
+  FACE and SEMANTIC provisioning packs read as one managed group (named
+  header + the pack lifecycle in one line); the r60 byte-level progress
+  bars stay on the cards; the consents above gate the FEATURES, the
+  cards below manage the WEIGHTS.
+
+### Changed
+
+- **Settings visual polish** (r62, "evolve current"): new sections render
+  in the evolved shape — tonal group cards at `ToadShapes.large` (16dp)
+  radius over a softened `surfaceVariant`, shared
+  `SettingsSectionHeader`/`SettingsGroupCard`/`PrivacyStatusRow`
+  primitives — while every existing control keeps its token-driven look.
+
 ## [Unreleased] — the r61 round (stable unified-APK signing: the ADR-0018 release contract actually wired, the public CI debug key, hard signature gates; gallery versionCode 41, versionName stays 0.4.5-alpha)
 
 The maintainer's 2026-11-08 follow-up directive: "any next release should

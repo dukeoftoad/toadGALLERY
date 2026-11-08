@@ -2862,3 +2862,64 @@ tag-driven release path; the F-14 allowlist entry the unified-apk
 header names is still future work), F-67 (apk-build.yml's flavor debug
 artifacts still sign with ephemeral runner keys — deliberately out of
 scope); carried items unchanged, PAT revocation advised again.
+
+### Run #35 — 2026-11-08 (the r62 window: the Settings craft — the Stories shelf scrolls away + the toggle, the segmented General/AI/System tabs, the Storage dashboard, the Privacy center, the Material You toggle, the Models group)
+
+**Directive.** The maintainer's 2026-11-08 message: "stories features is
+fixed on home page which shouldn't, setting tab need more polished ui/ux
+and new features []proposed plan and craft ui/ux visual design so that we
+can start working]". The scope was confirmed interactively before a line
+was written: Stories = scroll-away + a toggle (not removal); Settings =
+segmented tabs (General | AI | System), not grouped sub-pages; new
+features = Storage dashboard + Model manager + Privacy center +
+Appearance extras; visual = evolve the current warm-gray/toad-green
+token system; deliverable = straight to code.
+
+**Root cause (the Stories "fixed").** The plain timeline composed
+`StoriesShelf` in a Column slot ABOVE `PhotosGrid`'s `weight(1f)` Box —
+a pinned ~100dp band the grid scrolled UNDER, exactly the maintainer's
+"fixed on home page which shouldn't". r62 adds a leading full-line
+header slot to `MediaPagingGrid` (`key = "paging_header"`, full-line
+span, no key collision with the uri/`header_`/`row_` keys) and moves the
+shelf INSIDE the scroll: first grid item, scrolls away with content.
+Selection mode passes no header; the filtered timeline keeps none (the
+r27 when-it-renders rule survives unchanged).
+
+**Changes.** (1) `Appearance.storiesOnHome` (default TRUE = the pre-r62
+render) persisted write-through under `stories_on_home`, surfaced as the
+"Stories on home page" switch; `PhotosScreen` gates the header on
+`!filter.isActive && appearance.storiesOnHome`. (2) `SettingsScreen`
+restructured into three scopes under a `SingleChoiceSegmentedButtonRow`
+(General | AI | System), scroll reset per switch; About moved to the
+General tab's tail; the AI region keeps its r46 `BuildShape.withEngine`
+gate (basic builds render an empty AI tab, the same hide-not-crash
+posture as before). (3) Storage dashboard (System): per-location sizes
+from one IO walk (catalogue DB trio, `face-index/` ML store, `models/`,
+`vault/`, cache) + the MediaStore trashed count (API 30+, row hides on
+-1); Clear cache is the page's only destructive action;
+`directorySize`/`databaseFilesSize` are pure JVM. (4) Privacy center
+(System): the read-only audit page (media access, location consent,
+vault posture, N-of-3 AI consents). (5) "Use system colors" toggle
+(Appearance): the Material You opt-out; the shell hoists
+`settingsViewModel` ABOVE `ToadGalleryTheme` so `dynamicColor` reads the
+same single instance and the toggle re-composes live. (6) Models group
+(AI): the FACE + SEMANTIC pack cards read as one managed group (header +
+one-line lifecycle; the r60 progress bars untouched). (7) New sections
+use the evolved primitives (`SettingsSectionHeader`, `SettingsGroupCard`
+16dp tonal cards, `PrivacyStatusRow`); existing controls untouched.
+
+**Verification.** Local: `tools/kotlin_lex_check.py` green on all nine
+touched Kotlin files; brace/paren balance re-checked after each
+structural patch (one patch-consumed else-closer caught and restored by
+the depth trace before commit). JVM tests: the Appearance default pin
+(+storiesOnHome=true) and the new `StorageInsightsMathTest` (walk, absent
+paths, DB-trio sum). CI: the full 10-check suite; the Roborazzi verify
+gate is EXPECTED to flag 05-settings (the tab bar) and possibly
+01-photos (shelf position at scroll-top) --- the r48 flow applies: a
+mode=record dispatch on this branch, the roborazzi-baselines artifact,
+committed PNGs, then green verify.
+
+**Remaining.** F-68 (date-format + video-autoplay appearance extras cut
+for scope), F-69 (accent picker beyond the Material You toggle), F-70
+(storage dashboard could deep-link each row to its management surface);
+carried items unchanged, PAT revocation advised again.

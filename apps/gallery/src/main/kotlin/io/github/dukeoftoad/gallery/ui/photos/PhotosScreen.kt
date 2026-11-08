@@ -619,16 +619,15 @@ private fun PhotosTimeline(
                     onFolderClear = onFolderClear,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                // The Stories shelf (r27): recent time clusters of the SAME
-                // snapshot, plain unfiltered timeline only (see
-                // StoriesShelf's KDoc for the when-it-renders rule).
-                if (!filter.isActive) {
-                    StoriesShelf(
-                        lazyItems = lazyItems,
-                        onOpenStory = onOpenStory,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                // r62: the Stories shelf moved INSIDE the scroll --- it is
+                // the grid's first full-line item and scrolls away with the
+                // content (the maintainer's "stories features is fixed on
+                // home page which shouldn't": the old pinned slot above the
+                // grid permanently ate ~100dp of the home page). Still plain
+                // unfiltered timeline only (StoriesShelf's own
+                // when-it-renders rule), and now also gated by the
+                // Appearance "Stories on home page" toggle (default ON ---
+                // the pre-r62 render).
                 Box(modifier = Modifier.weight(1f)) {
                     PhotosGrid(
                         lazyItems = lazyItems,
@@ -637,6 +636,17 @@ private fun PhotosTimeline(
                         selectionActive = false,
                         selectedKeys = emptySet(),
                         onOpenViewer = onOpenViewer,
+                        header = if (!filter.isActive && appearance.storiesOnHome) {
+                            {
+                                StoriesShelf(
+                                    lazyItems = lazyItems,
+                                    onOpenStory = onOpenStory,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -795,6 +805,7 @@ private fun PhotosGrid(
     selectionActive: Boolean,
     selectedKeys: Set<String>,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
+    header: (@Composable () -> Unit)? = null,
 ) {
     MediaPagingGrid(
         items = lazyItems,
@@ -804,6 +815,7 @@ private fun PhotosGrid(
         uniformCells = appearance.layout == LayoutStyle.GRID,
         selectionActive = selectionActive,
         selectedKeys = selectedKeys,
+        header = header,
         onItemTap = { index, item ->
             if (selectionActive) {
                 fileOpsViewModel.onItemTapped(item)

@@ -451,7 +451,13 @@ android {
         // ADR-0018 contract for release and a public-by-design CI debug
         // key for debug (see signingConfigs below); versionCode rides its
         // per-round bump again so in-place updates work.
-        versionCode = 41
+        //
+        // versionCode 42 (r62 round): the Settings craft --- the Stories
+        // shelf scrolls away + its toggle, the segmented General/AI/System
+        // tabs, the Storage dashboard, the Privacy center, the Material
+        // You toggle, the Models group. Same stable-signing contract as
+        // r61: the unified APK updates in place.
+        versionCode = 42
         versionName = "0.4.5-alpha"
         // The launcher-alias consolidation's default: the canonical
         // basic build keeps its MAIN/LAUNCHER entry (the ONE family

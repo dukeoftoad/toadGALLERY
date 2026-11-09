@@ -580,7 +580,10 @@ fun SettingsScreen(
         val buildFeaturesLine = if (buildFeatureRes.isEmpty()) {
             stringResource(R.string.settings_features_core)
         } else {
-            buildFeatureRes.joinToString(" \u00b7 ") { stringResource(it) }
+            // map first (inline --- the composable call is legal inside),
+            // joinToString's own transform is NOT inline, so it joins the
+            // already-resolved strings.
+            buildFeatureRes.map { res -> stringResource(res) }.joinToString(" \u00b7 ")
         }
         SettingsGroupCard {
             SettingsNavRow(

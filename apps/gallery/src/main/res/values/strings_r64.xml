@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r64 (the Settings re-craft round): the Theme section + the About card's
+     honest build line. The Settings tab becomes a modern carded page ---
+     every section a rounded group card, every row an icon badge --- and
+     the two maintainer-facing r55/F-1 surfaces (Installed components,
+     Development progress) are gone from the product UI. -->
+<resources>
+
+    <!-- The Theme section (r64's new hand-written feature): the one place
+         the app's own colors are chosen. The mode is a REAL preference
+         (persisted under "theme_mode", resolved at the shell theme call),
+         not a system-app shortcut. -->
+    <string name="settings_theme_section">Theme</string>
+    <string name="settings_theme_mode">Appearance mode</string>
+    <string name="settings_theme_mode_body">Light or dark on its own, or follow the system setting.</string>
+    <string name="settings_theme_system">System default</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+
+    <!-- The About card's build line (r64): what this particular APK carries,
+     derived from the build shape itself --- the honest replacement for the
+     removed r55 "Installed components" family probe, which read
+     "Not installed" for capabilities that were embedded all along in the
+     unified build. -->
+    <string name="settings_features_core">The offline-first core gallery</string>
+    <string name="settings_feature_people">People albums</string>
+    <string name="settings_feature_semantic">Magic Search + Things</string>
+    <string name="settings_feature_editor">Photo &amp; video editor</string>
+
+    <!-- (The Adjust chips' name-only labels live in apps/edit's own
+         strings.xml --- the video editor's R is the edit module's R in
+         every build, standalone or unified.) -->
+</resources>

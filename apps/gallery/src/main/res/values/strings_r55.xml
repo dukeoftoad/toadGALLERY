@@ -1,30 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- r55 (the one-launcher unification round): the Settings "Installed
-     components" section: the family's single home since the launcher
-     consolidation. The five component names below deliberately MATCH
-     the launcher labels shipped by the corresponding builds
-     (app_launcher_name in src/<flavor>/res/values/strings.xml and the
-     editor's editor_app_name): if a future round renames a launcher
-     label, rename its mirror here in the same commit so the section
-     never disagrees with what the system shows in App info. -->
+<!-- r55 (the one-launcher unification round) + r64 (the Settings re-craft
+     round): this file originally carried the "Installed components"
+     family-probe strings. r64 REMOVED that section --- in the unified
+     build the maintainer actually ships, the probe read "Not installed"
+     for capabilities (Engine, Semantic, Face, Edit) that are EMBEDDED all
+     along; the honest replacement is the About card's build row, derived
+     from BuildShape itself (see strings_r64.xml). The debug-builds-only
+     developer-diagnostics strings below stay (nothing ships in a signed
+     release build). -->
 <resources>
     <!-- r59 developer diagnostics (debug builds only; see SettingsScreen) -->
     <string name="settings_devtools_title">Developer diagnostics</string>
     <string name="settings_devtools_body">Debug-build-only tools for fixing bugs and flaws: the in-process diagnostics ring, the build shape, and the on-device ML index state. Nothing here ships in a signed release build.</string>
     <string name="settings_devtools_copy">Copy diagnostics</string>
     <string name="settings_devtools_clear">Clear ring</string>
-    <string name="settings_components_title">Installed components</string>
-    <string name="settings_components_body">The toadGALLERY family ships as separate installable apps — the gallery builds and the editor. One launcher icon; this page is the family\'s home.</string>
-    <string name="settings_components_app_gallery">toadGALLERY</string>
-    <string name="settings_components_app_engine">toadGALLERY Engine</string>
-    <string name="settings_components_app_semantic">toadGALLERY Semantic</string>
-    <string name="settings_components_app_face">toadGALLERY Face</string>
-    <string name="settings_components_app_edit">toadGALLERY Edit</string>
-    <string name="settings_components_flavor_basic">basic — the offline-first core</string>
-    <string name="settings_components_flavor_engine">engine — People + Magic Search + Things</string>
-    <string name="settings_components_flavor_semantic">semantic — Magic Search + Things</string>
-    <string name="settings_components_flavor_face">face — People</string>
-    <string name="settings_components_open">Open</string>
-    <string name="settings_components_not_installed">Not installed</string>
-    <string name="settings_components_edit_hint">Opens from the viewer\'s Edit action</string>
 </resources>

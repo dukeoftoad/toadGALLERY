@@ -1187,3 +1187,39 @@ the public remote each time.
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69 (the
   EditorPalette registry the r63b re-pin landed IS its plug-in point),
   F-70, PAT revocation (advised again).
+
+## 2026-11-09 — r64 window (the Settings re-craft: modern card UX, the theme preference, the dev surfaces retire)
+
+- **r64 (2026-11-09, FIXED this round)** — The maintainer's post-vc44
+  directive: "All are working..! Now polish, fix the flaws, make the app
+  modern, remove development progress in setting page, add more features
+  to setting tab with ux redesign, scrollable, more features in ui(hand
+  written) with ux." Landed on `feat/r64-settings-modern` (branched from
+  unified-app @ 2fc6e74): (1) the Settings page becomes a modern carded
+  page --- the segmented tabs PINNED above a scrollable body (the switcher
+  stays reachable however far the content scrolls; the scroll resets on
+  every switch), every section a rounded group card of icon-badged rows
+  (SettingsNavRow / SettingsToggleRow, hand-written on the house tokens;
+  three hand-drawn badge glyphs in res/drawable: theme contrast circle,
+  stories ring+play, picker photo-frame --- the bin/vault rows reuse
+  ic_trash/ic_vault and the Material slots ride the core icon set);
+  (2) a REAL new preference: ThemeMode (System/Light/Dark, persisted
+  under "theme_mode", resolved at the shell theme call so the whole app
+  re-themes live --- default SYSTEM = the pre-r64 render); (3) the F-1
+  "Development progress" surface is REMOVED in full (screen, route,
+  entry, strings, the ProgressSnapshot parser + its test, and the
+  build-time progress.json asset mirror with its merge/lintVital wiring)
+  --- the product UI carries no dev-dashboard bytes; (4) the r55
+  "Installed components" family probe is REMOVED (in the unified build
+  the maintainer ships, it read "Not installed" for Engine, Semantic,
+  Face and Edit --- capabilities embedded all along; the About card's
+  BuildShape-derived build line replaces it with the honest version +
+  features summary); (5) the SYSTEM tab's recycle-bin and vault sections
+  fold into the Storage card as its first rows (the duplicate vault/trash
+  measurement rows merge away; a locked vault still leaks no count or
+  size); (6) the video editor's Adjust chips drop the "Name: value"
+  repeat (name-only chips; the header carries the live value --- the
+  device screenshot's "Contr..." half-cut chip). versionCode 45.
+- **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
+  F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69, F-70, PAT
+  revocation (advised again).

@@ -3,6 +3,7 @@ package io.github.dukeoftoad.gallery.ui
 import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,9 +58,9 @@ import io.github.dukeoftoad.gallery.ui.picker.PickedPhotosViewModel
 import io.github.dukeoftoad.gallery.ui.photos.PhotosScreen
 import io.github.dukeoftoad.gallery.ui.search.SearchScreen
 import io.github.dukeoftoad.gallery.ui.settings.AboutScreen
-import io.github.dukeoftoad.gallery.ui.settings.ProgressScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsScreen
 import io.github.dukeoftoad.gallery.ui.settings.SettingsViewModel
+import io.github.dukeoftoad.gallery.ui.settings.ThemeMode
 import io.github.dukeoftoad.gallery.ui.things.ThingsDetailScreen
 import io.github.dukeoftoad.gallery.ui.theme.ToadGalleryTheme
 import io.github.dukeoftoad.gallery.ui.trash.TrashScreen
@@ -81,15 +82,6 @@ object Destinations {
     const val ALBUMS = "albums"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
-
-    /**
-     * The progress sub-screen (F-1, follow-up 2026-11-04): the build-time
-     * progress.json mirror --- the two independent bars (overall project
-     * + the Ente port workstream) + their phase lists, reached from the
-     * Settings entry. A static snapshot by design (the app never fetches
-     * progress); sub-page UX like About (no bottom bar).
-     */
-    const val PROGRESS = "progress"
 
     /**
      * The Map tab (r16 round, Phase 4 still-open item "on-device map
@@ -256,7 +248,18 @@ fun ToadGalleryApp() {
     // downstream references unchanged).
     val settingsViewModel: SettingsViewModel = viewModel()
     val useDynamicColor by settingsViewModel.useDynamicColor.collectAsState()
-    ToadGalleryTheme(dynamicColor = useDynamicColor) {
+    // r64 (the Settings re-craft round): the Theme section's REAL mode
+    // preference --- light, dark, or follow the system --- resolved HERE,
+    // above the theme call, so a mode change re-themes every surface in
+    // the same session. The default (SYSTEM) is the pre-r64 behavior:
+    // ToadGalleryTheme resolved `isSystemInDarkTheme()` on its own.
+    val appearanceForTheme by settingsViewModel.appearance.collectAsState()
+    val darkTheme = when (appearanceForTheme.themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    ToadGalleryTheme(darkTheme = darkTheme, dynamicColor = useDynamicColor) {
         val navController = rememberNavController()
         // Issue #27: the picked-photos set is shared between the Settings tab
         // (picker entry point + live count) and the `picked` sub-screen, so it
@@ -595,7 +598,6 @@ fun ToadGalleryApp() {
                         vaultViewModel = vaultViewModel,
                         onOpenVault = { navController.navigate(Destinations.VAULT) },
                         onOpenAbout = { navController.navigate(Destinations.ABOUT) },
-                        onOpenProgress = { navController.navigate(Destinations.PROGRESS) },
                     )
                 }
                 composable(Destinations.PICKED) {
@@ -667,16 +669,13 @@ fun ToadGalleryApp() {
                     // About sub-screen: identity, privacy, credits and the
                     // vault diagnostics probed through the SAME shell-scoped
                     // vault session (the vault screen's hand-off pattern).
+                    // r64: the Development progress sub-screen (F-1, the
+                    // build-time progress.json mirror) is REMOVED per the
+                    // maintainer's directive --- the product UI no longer
+                    // carries the project's dev dashboard; progress.json
+                    // stays the repo's own tracking file.
                     AboutScreen(
                         vaultViewModel = vaultViewModel,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(Destinations.PROGRESS) {
-                    // Progress sub-screen (F-1): the build-time
-                    // progress.json mirror --- the two independent bars +
-                    // phase lists; a static snapshot (zero network).
-                    ProgressScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }

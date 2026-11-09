@@ -494,7 +494,16 @@ android {
         // classes, and the packaging guard covers Unified. The device test
         // that pinned it: fresh install of ONLY the unified APK, Edit tap
         // -> nothing.
-        versionCode = 44
+        // versionCode 45 (r64 round): the Settings re-craft --- the modern
+        // carded page (pinned tabs, icon-badged rows, the hand-drawn badge
+        // glyphs), the REAL light/dark/system theme preference, the
+        // "Installed components" family probe REMOVED (it read "Not
+        // installed" for capabilities the unified build embeds; the About
+        // card's BuildShape-derived build line replaces it), the F-1
+        // "Development progress" surface REMOVED (screen + route + parser
+        // + this file's progress.json asset mirror), and the video
+        // editor's name-only Adjust chips.
+        versionCode = 45
         versionName = "0.4.5-alpha"
         // The launcher-alias consolidation's default: the canonical
         // basic build keeps its MAIN/LAUNCHER entry (the ONE family
@@ -978,53 +987,18 @@ if (withEngine) {
     tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(buildRustEngine) }
 }
 
-// --- The progress.json build-time mirror (F-1, follow-up 2026-11-04) --------
-// The repo-root progress.json --- the project's progress source of truth,
-// the same file the live sandbox dashboard file-watches --- is COPIED into
-// the APK assets at build time and read by the Settings -> Development
-// progress screen (ui/settings/ProgressScreen.kt over the pure
-// data/ProgressSnapshot.kt). A static snapshot BY DESIGN: the app never
-// fetches progress (zero uninvited egress), and the screen says so.
-//
-// The bytes are the COMMITTED file, never generated. The assets live in
-// the BUILD directory like the model-pack srcDir below (the source tree
-// stays clean), and every mergeAssets task depends on the copy so the
-// mirror can never be stale-or-missing in an assembled APK.
-val progressAssetsDir = layout.buildDirectory.dir("generated/progressAssets")
-val copyProgressJson = tasks.register<Copy>("copyProgressJson") {
-    from(rootProject.layout.projectDirectory.file("progress.json"))
-    into(progressAssetsDir.map { it.dir("progress") })
-}
-android {
-    sourceSets {
-        // Same AGP 9 plain-File srcDir form as the engine jniLibs srcDir
-        // above (the audit comment there applies verbatim; the task
-        // dependency below covers freshness for this generated dir).
-        getByName("main").assets.srcDir(progressAssetsDir.get().asFile)
-    }
-}
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
-    dependsOn(copyProgressJson)
-}
-// r43 (the release-engineering round; the catches from the failed release
-// runs 41991609209 at f610860, then 41997801764/41997801776 at cfaed66
-// and 41998886318/41998886375 at 32dbda2): the release-only lintVital
-// chain consumes the build/generated/progressAssets srcDir, and unlike
-// the merge*Assets tasks above it carried NO declared dependency on the
-// copy --- Gradle's implicit-output validation fails assembleRelease on
-// exactly that (release builds run lintVital in-graph; a debug CI lint
-// never has the copy in its graph, which is why ci.yml stayed green
-// while every assembleRelease broke). THREE iterations to get the match
-// right, honestly recorded: fix one covered only
-// generateReleaseLintVitalReportModel (endsWith the AGP mid-name shape,
-// capital L); the r45 tag pushes then caught lintVitalAnalyzeRelease ---
-// AGP names the chain's other members with the LOWERCASE lintVital
-// prefix, so contains("LintVital") missed them too. The ignoreCase match
-// below covers the WHOLE family in both naming shapes, and any future
-// member is covered by construction.
-tasks.matching { it.name.contains("lintvital", ignoreCase = true) }.configureEach {
-    dependsOn(copyProgressJson)
-}
+// --- r64 (the Settings re-craft round): the progress.json build-time
+// mirror (F-1, follow-up 2026-11-04) is REMOVED, whole block ---
+// copyProgressJson, the generated/progressAssets srcDir, the
+// merge*Assets/lintvital dependsOn wiring, all of it. The maintainer's
+// "remove development progress in setting page" directive removed the
+// ONLY consumer (ui/settings/ProgressScreen.kt over data/
+// ProgressSnapshot.kt); the repo-root progress.json stays the project's
+// own tracking file, and an assembled APK now carries no dev-dashboard
+// bytes at all. (The r43 lintVital story below is preserved as history:
+// release lintVital once failed three times on this srcDir's implicit
+// outputs before the ignoreCase family match landed; the match is gone
+// with the block, so nothing re-learns the lesson.)
 
 // --- Optional offline model-pack assets (r28, ADR-0020 offline pack) ---------
 // The OTHER half of ADR-0020's delivery decision ("CI retains the

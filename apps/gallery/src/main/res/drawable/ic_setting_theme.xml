@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r64 (the Settings re-craft round): the Theme section's badge glyph ---
+     the classic contrast circle (one disc, one half shown solid), the
+     universal light/dark theme symbol. Hand-drawn on the same 24dp grid
+     as ic_vault and the nav icons; single-color fill so the Settings
+     icon badge can tint it with the theme's primary. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- evenOdd: outer disc minus inner disc = the ring; the inner disc's
+         left half re-adds as solid = the contrast split. -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M12,2a10,10 0 1,0 0,20 10,10 0 0,0 0,-20z M12,4a8,8 0 1,0 0,16 8,8 0 0,0 0,-16z M12,4a8,8 0 0,0 0,16z" />
+</vector>

@@ -3243,3 +3243,83 @@ own consent-free UX pass) stays open per the proposal's own rule;
 F-68/F-69/F-70 carried; the v1.0 stable cut + the F-Droid submission +
 every on-device verification row remain the human remainder (the
 standing directive); PAT revocation advised again.
+
+## 2026-11-09 — r66 window (the Phase 2 wrong-base accident postmortem, the CI repair, the Virtual Fork re-land)
+
+**Directive.** The maintainer's standing repo-ops directive: repair the
+post-Phase-1 CI outage, re-land the Phase 2 "Virtual Fork" workflows
+the #164/#165 accident left un-landed, re-seed the four virtual-fork
+branches, and clean the accident branches up.
+
+**The wrong-base accident (PR #164 + the hollow revert #165).** The
+Phase 2 branch-CI-isolation PR was merged onto the WRONG BASE — the
+phase-1 refactor tip `e85a458` (refactor/phase-1-modularization)
+instead of main — so its squash landed on a lineage main never had and
+main itself got NOTHING. The "revert" #165 (`08463c2`) then proved to
+be a HOLLOW zero-diff revert: it reverted a change that was never on
+main, changing nothing. Net effect: main sat at the pre-accident tree
+with a reverted-nothing commit on top, while the phase-2 workflows
+existed only on the dead accident branches.
+
+**The post-Phase-1 CI outage (root causes).** Phase 1's modularization
+moved the modules (`apps/gallery` → `gallery/app`, `apps/edit` →
+`editor/app`, the unified flavor → its own `unified/app` module) but
+the workflows still spoke the old layout:
+- ci.yml addressed the stale `:apps:gallery:*` / `:apps:edit:*` Gradle
+  task paths — main runs #505/#508 died on task-not-found.
+- engine/scripts/build-android.sh staged the engine `.so` into the
+  dead `apps/gallery/build/rust-jniLibs` path, so the jniLibs srcDir
+  never saw it and engine-enabled APKs shipped LIBRARY-LESS — runs
+  #506, #509–#512, #516 (the "Verify the native libraries are
+  packaged" step failing).
+- screenshots.yml + unified-apk.yml carried the same stale paths; the
+  editor tests and roborazzi baselines had drifted with the move.
+
+**The repair (PR #166, squash `384d260`).** ci.yml rewired to
+`:gallery:app:*` / `:editor:app:*` / `:unified:app:*` (+ the APK/report
+globs), the engine `.so` DUAL-staged in build-android.sh (both the old
+and the post-Phase-1 layout) so `assemble` finds it either way,
+screenshots.yml + unified-apk.yml repaired, editor tests + roborazzi
+baselines realigned. Verified by CI #518: the engine-android job's
+"Verify the native libraries are packaged" step green again — first
+time since Phase 1.
+
+**The Virtual Fork re-land (PR #167, squash `9d006e6`).** The Phase 2
+workflows re-landed on main verbatim from `2acf1cb` — gallery-ci /
+editor-ci / unified-ci / ente-ci.yml, the 5-APK main-release.yml, and
+the PR-gate-only ci.yml (push-to-main handed to main-release.yml) —
+plus an SC2086 quoting fix; actionlint 1.7.12 + shellcheck 0.10.0
+clean locally before the push. CI #518 green, repo-lint #35 green;
+CodeQL #98 still mid-Analyze at merge time (noted, non-blocking — the
+java-kotlin Analyze step is the same pre-existing flake as #96).
+
+**The transient zero-job push anomaly.** All three push runs on
+`384d260` (CI #517, CodeQL #97, repo-lint #34) concluded FAILURE with
+ZERO jobs and zero check-runs, ~51s after creation — while a
+workflow_dispatch run and the PR runs of the same minutes executed
+jobs normally. The API offered no error text (no jobs → no check-runs
+→ nothing to annotate), so the transient theory was tested the direct
+way: re-run all three. The re-runs CREATED JOBS IMMEDIATELY (repo-lint
+#34 green on re-run; CI #517 and CodeQL #97 re-runs executing
+normally) — a platform-side push-event hiccup, not a workflow defect.
+Post-#167 push runs (repo-lint #36, CodeQL #99, the first-ever
+main-release run) all created jobs normally. (Footnote from the
+diagnosis: codeql.yml + repo-lint.yml have carried a `branches: ain]`
+typo in their `on:` blocks since r50 — demonstrably tolerated by the
+Actions parser, cosmetic only, flagged for a future hygiene pass.)
+
+**The re-seed + cleanup.** The four virtual-fork branches
+(gallery/editor/unified/ente) force-pushed from the stale `2acf1cb` to
+the new main tip `9d006e6` — their FIRST-EVER branch CI runs
+(Gallery/Editor/Unified/Ente CI #1) triggered on the push, in flight
+at write time; the first-ever Main release (5-APK matrix) run #1
+triggered on the #167 merge push likewise. Deleted: fix/main-ci-paths,
+fix/reland-phase2-workflows (post-merge), refactor/phase-1-modularization,
+refactor/phase-2-branch-ci-isolation.
+
+**Remaining.** The first-ever branch-CI + 5-APK release run
+conclusions to verify on the next pass; F-73 (Regions→Draw merge)
+stays open by design; F-68/F-69/F-70 carried; the v1.0 stable cut +
+the F-Droid submission + every on-device verification row remain the
+human remainder (the standing directive); PAT revocation advised
+again.

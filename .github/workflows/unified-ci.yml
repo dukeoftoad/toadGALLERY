@@ -1,0 +1,67 @@
+name: Unified CI
+
+# Phase 2 branch isolation --- the unified integration branch builds ONLY
+# the unified APK (the everything-in-one app: gallery shell + editor code
+# + the vendored Rust engine, all via standard project dependencies on
+# :gallery:core, :editor:core, :shared:editor-contract, :shared:video-edit).
+# The unified branch merges to main via a manual PR.
+#
+# Path filter: unified-side sources + the modules the unified app depends
+# on (gallery/core, editor/core, shared/*). Engine-only changes route to
+# the ente branch, not here.
+
+on:
+  push:
+    branches: [ unified ]
+    paths:
+      - 'unified/**'
+      - 'gallery/**'
+      - 'editor/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/unified-ci.yml'
+      - '.github/actions/toad-setup/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unified-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unified-apk:
+    name: Unified debug APK (engine-enabled)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up the toolchain (Rust Android cross + Android)
+        uses: ./.github/actions/toad-setup
+        with:
+          rust: android
+
+      - name: Assemble the unified debug APK
+        run: ./gradlew :unified:app:assembleDebug -PwithEngine --no-daemon --stacktrace
+
+      - name: Verify the engine native libraries are packaged
+        run: |
+          APK="$(ls unified/app/build/outputs/apk/debug/*.apk)"
+          echo "APK: $APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
+
+      - name: Upload unified APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: unified-debug-apk
+          path: unified/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 14

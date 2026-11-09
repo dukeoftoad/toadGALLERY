@@ -89,8 +89,10 @@ jobs:
 
       - name: Verify native libraries are packaged (engine flavors only)
         if: matrix.with_engine
+        env:
+          FLAVOR: ${{ matrix.flavor }}
         run: |
-          FLAVOR_LC="$(echo "${{ matrix.flavor }}" | tr '[:upper:]' '[:lower:]')"
+          FLAVOR_LC="$(echo "$FLAVOR" | tr '[:upper:]' '[:lower:]')"
           APK="$(ls gallery/app/build/outputs/apk/$FLAVOR_LC/debug/*.apk)"
           echo "APK: $APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"

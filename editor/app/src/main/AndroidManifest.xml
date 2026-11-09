@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 1 modularization: the standalone editor APP shell. The contract
+     activities arrive from the :editor:core library manifest; this shell
+     carries exactly the pieces that belonged to the standalone APK alone:
+     the application attributes, the APPLICATION-level contract marker
+     (r46), and the r41 INTERNET hard-strip (the standalone editor has no
+     network capability at all: the strip directive is NOT on the
+     :editor:core library, because the unified build embeds that library
+     and keeps the gallery's model-download INTERNET grant). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- r41 (the CI merge-gate catch): the onnxruntime-android AAR's own
+         manifest declares INTERNET; this is a HARD STRIP, never an
+         allowlist (see the :apps:edit manifest history for the full r41
+         story: unchanged). -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
+
+    <application
+        android:allowBackup="false"
+        android:appCategory="image"
+        android:icon="@mipmap/editor_ic_launcher"
+        android:roundIcon="@mipmap/editor_ic_launcher_round"
+        android:label="@string/editor_app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+
+        <!-- r46: the APPLICATION-level contract marker (the fallback the
+             hardened gallery resolver reads when the ACTIVITY-level
+             meta-data is unavailable on some PackageManager paths). -->
+        <meta-data
+            android:name="org.toadgallery.contract.EDIT"
+            android:value="2" />
+    </application>
+</manifest>

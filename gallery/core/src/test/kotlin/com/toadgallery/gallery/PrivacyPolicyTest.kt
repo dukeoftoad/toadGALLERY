@@ -227,12 +227,14 @@ class PrivacyPolicyTest {
 
     @Test
     fun `build-time privacy gate is wired into the build`() {
-        val buildScript = moduleFile("build.gradle.kts").readText()
+        // Phase-1 split: the gate moved verbatim to the gallery APP module
+        // (:gallery:app), so the module dir's ../app sibling is the script.
+        val buildScript = moduleFile("../app/build.gradle.kts").readText()
         // Regression tripwire: if the gate task or its merged-manifest wiring is
         // removed from the build script, this test fails the (binding) unit-test
         // CI step before the enforcement model silently disappears.
         assertTrue(
-            "InternetPermissionGateTask is missing from apps/gallery/build.gradle.kts --- " +
+            "InternetPermissionGateTask is missing from gallery/app/build.gradle.kts --- " +
                 "the issue #20 build-time gate must stay wired in.",
             buildScript.contains("InternetPermissionGateTask"),
         )
@@ -289,7 +291,7 @@ class PrivacyPolicyTest {
             "models.ente.com",
             MODEL_HOST,
         )
-        val mlDir = moduleFile("src/main/kotlin/io/github/dukeoftoad/gallery/ml")
+        val mlDir = moduleFile("src/main/kotlin/com/toadgallery/gallery/ml")
         val hostLike = Regex(
             "\"[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+\"",
         )

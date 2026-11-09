@@ -37,11 +37,11 @@ class AccessibilityWiringTest {
 
     /** The module-relative prefix of every gallery screen source file. */
     private val GALLERY_SRC =
-        "src/main/kotlin/io/github/dukeoftoad/gallery/"
+        "src/main/kotlin/com/toadgallery/gallery/"
 
-    /** The edit module's one touched source file (full module-relative path). */
+    /** The edit module's one touched source file (module-relative path). */
     private val EDIT_ACTIVITY =
-        "src/main/kotlin/io/github/dukeoftoad/gallery/edit/EditActivity.kt"
+        "src/main/kotlin/com/toadgallery/editor/EditActivity.kt"
 
     /**
      * Unit-test working dir is the module dir under Gradle (apps/gallery)
@@ -59,6 +59,10 @@ class AccessibilityWiringTest {
             File(cwd, moduleRelative),
             File(cwd, "apps/$app/$moduleRelative"),
             File(cwd.parentFile, "$app/$moduleRelative"),
+            // Phase-1 split: the sibling module lives at the repo root as
+            // <product>/core (the gallery test task locating the EDIT app's
+            // file: gallery/core cwd -> editor/core).
+            File(cwd.parentFile?.parentFile, "$app/core/$moduleRelative"),
         )
         return candidates.firstOrNull { it.exists() }
             ?: error(
@@ -117,7 +121,7 @@ class AccessibilityWiringTest {
 
     @Test
     fun `the editor top-bar title carries the heading convention`() {
-        assertHasHeading("edit", EDIT_ACTIVITY, "the editor surface")
+        assertHasHeading("editor", EDIT_ACTIVITY, "the editor surface")
     }
 
     // ---- The live-region convention: dynamic count/progress surfaces ----

@@ -53,7 +53,7 @@ import java.io.File
  */
 class VaultExclusionReadGateTest {
     /** The one source file under test (module dir or repo root; tolerant either way). */
-    private val SRC = "src/main/kotlin/io/github/dukeoftoad/gallery/data/media/access/MediaAccess.kt"
+    private val SRC = "src/main/kotlin/com/toadgallery/gallery/data/media/access/MediaAccess.kt"
 
 
     private fun identity(id: Long = 42, uri: String = "content://media/external/images/$id"): MediaIdentity =
@@ -166,7 +166,7 @@ class VaultExclusionReadGateTest {
      */
     @Test
     fun `the production opener checks the permission gate before constructing a handle`() {
-        val source = moduleFile("src/main/kotlin/io/github/dukeoftoad/gallery/data/media/access/ContentResolverMediaAccess.kt")
+        val source = moduleFile("src/main/kotlin/com/toadgallery/gallery/data/media/access/ContentResolverMediaAccess.kt")
             .readText()
         val gateCall = source.indexOf("permissionGate.stillHasAccess(media)")
         val handleConstruction = source.indexOf("ResolverReadHandle(")

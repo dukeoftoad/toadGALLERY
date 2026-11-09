@@ -101,7 +101,7 @@ class EgressSolePathTest {
                 "else is an untested network surface; route fetches through HttpModelDownloader " +
                 "(ADR-0020). Found: $found",
             mapOf(
-                "io/github/dukeoftoad/gallery/ui/settings/AboutScreen.kt" to "\"https://github.com/dukeoftoad/toadGALLERY\"",
+                "com/toadgallery/gallery/ui/settings/AboutScreen.kt" to "\"https://github.com/dukeoftoad/toadGALLERY\"",
             ),
             found,
         )
@@ -121,7 +121,7 @@ class EgressSolePathTest {
         assertEquals(
             "java.net types are the network surface: only HttpModelDownloader.kt --- the ADR-0020 " +
                 "single-host, fail-closed transport --- may import them. Found importers: $importers",
-            listOf("io/github/dukeoftoad/gallery/ml/engine/HttpModelDownloader.kt"),
+            listOf("com/toadgallery/gallery/ml/engine/HttpModelDownloader.kt"),
             importers,
         )
     }
@@ -239,7 +239,9 @@ class EgressSolePathTest {
      */
     @Test
     fun `the build-time INTERNET gates stay wired with their allowlist input and anchors`() {
-        val buildScript = moduleFile("build.gradle.kts").readText()
+        // Phase-1 split: the gate moved verbatim to the gallery APP module
+        // (:gallery:app), so the module dir's ../app sibling is the script.
+        val buildScript = moduleFile("../app/build.gradle.kts").readText()
         // The per-variant task registration (generates gateDebugInternetPermission
         // and gateReleaseInternetPermission for the debug/release variants):
         assertTrue(
@@ -282,7 +284,7 @@ class EgressSolePathTest {
      */
     @Test
     fun `the transport source keeps redirects disabled and the https production root`() {
-        val source = moduleFile("src/main/kotlin/io/github/dukeoftoad/gallery/ml/engine/HttpModelDownloader.kt")
+        val source = moduleFile("src/main/kotlin/com/toadgallery/gallery/ml/engine/HttpModelDownloader.kt")
             .readText()
         assertTrue(
             "HttpModelDownloader must disable connection-level redirects " +

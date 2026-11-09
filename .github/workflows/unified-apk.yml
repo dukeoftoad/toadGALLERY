@@ -10,11 +10,11 @@ name: Unified APK (manual)
 # engine native libraries (-PwithEngine) + BOTH index pipelines (People,
 # Magic Search, Things) + the editor app's code embedded in-process (the
 # r59 `unified` flavor compiles apps/edit's sources verbatim --- see
-# apps/gallery/build.gradle.kts). applicationId io.github.dukeoftoad.gallery.unified,
+# unified/app/build.gradle.kts). applicationId com.toadgallery.unified,
 # versionName 0.4.5-alpha-unified; it coexists with the whole family.
 #
 # Inputs:
-#   variant = debug (default)  -> :apps:gallery:assembleUnifiedDebug
+#   variant = debug (default)  -> :unified:app:assembleDebug
 #           r61: signed with the PUBLIC-by-design CI debug key
 #           (tools/ci-signing/ci-debug.p12, passwords "android"), so
 #           every CI debug APK shares ONE stable signer and installs as
@@ -22,7 +22,7 @@ name: Unified APK (manual)
 #           signed with the runner-local random ~/.android/debug.keystore
 #           --- the maintainer's "every time I need to uninstall" root
 #           cause). Hard-gated on that key's pinned digest.
-#   variant = release          -> :apps:gallery:assembleUnifiedRelease
+#   variant = release          -> :unified:app:assembleRelease
 #           r61: ACTUALLY signed with the ADR-0018 release key now ---
 #           the r59 wiring passed secrets that do not exist in this repo
 #           (TG_KEYSTORE_BASE64 etc. vs the real TG_RELEASE_* set) and
@@ -43,7 +43,7 @@ name: Unified APK (manual)
 # maintainer-facing verification/dogfood surface. If a future round
 # promotes the unified app to a tagged release, the release.yml gate MUST
 # gain the unified allowlist entry first (gallery-engine's set + edit's
-# set + io.github.dukeoftoad.gallery.unified.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION).
+# set + com.toadgallery.unified.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION).
 
 on:
   workflow_dispatch:
@@ -87,7 +87,7 @@ jobs:
       # runner-temp file (never committed, never in a command line), then
       # feed the four TG_* envs to Gradle. The debug path signs with the
       # public-by-design CI debug key (stable across runs --- see
-      # apps/gallery/build.gradle.kts's ciDebug signing config).
+      # unified/app/build.gradle.kts's ciDebug signing config).
       - name: Decode release keystore (release variant only)
         if: inputs.variant == 'release'
         env:
@@ -112,7 +112,7 @@ jobs:
           if [[ "${{ inputs.bundled_models }}" == "true" ]]; then
             MODEL_FLAG="-PwithBundledModels"
           fi
-          ./gradlew :apps:gallery:assembleUnifiedRelease -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
+          ./gradlew :unified:app:assembleRelease -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
 
       - name: Assemble the unified APK (debug, stable CI debug key)
         if: inputs.variant != 'release'
@@ -123,14 +123,14 @@ jobs:
           if [[ "${{ inputs.bundled_models }}" == "true" ]]; then
             MODEL_FLAG="-PwithBundledModels"
           fi
-          ./gradlew :apps:gallery:assembleUnifiedDebug -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
+          ./gradlew :unified:app:assembleDebug -PwithEngine $MODEL_FLAG --stacktrace --no-daemon
 
       - name: Collect + rename the APK
         run: |
           VARIANT="${{ inputs.variant }}"
-          VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' apps/gallery/build.gradle.kts | tail -n1)"
-          VERSION_CODE="$(grep -oP 'versionCode = \K\d+' apps/gallery/build.gradle.kts | tail -n1)"
-          OUT="apps/gallery/build/outputs/apk/unified/${VARIANT}"
+          VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' unified/app/build.gradle.kts | tail -n1)"
+          VERSION_CODE="$(grep -oP 'versionCode = \K\d+' unified/app/build.gradle.kts | tail -n1)"
+          OUT="unified/app/build/outputs/apk/${VARIANT}"
           ls -la "$OUT"
           SRC="$(find "$OUT" -name "*.apk" ! -name "*unsigned*" | head -n1)"
           if [[ -z "$SRC" ]]; then
@@ -200,10 +200,10 @@ jobs:
           # the build past the single-dex limit; run #11's gate failure was
           # single-dex exclusivity-blind, not a compile failure).
           for CLS in \
-            "io/github/dukeoftoad/gallery/edit/EditActivity" \
-            "io/github/dukeoftoad/gallery/edit/video/VideoEditActivity"; do
+            "com/toadgallery/editor/EditActivity" \
+            "com/toadgallery/editor/video/VideoEditActivity"; do
             if ! unzip -p "$APK" 'classes*.dex' | strings | grep -q "$CLS"; then
-              echo "::error::unified APK is missing the embedded editor class $CLS --- the unified flavor no longer compiles the editor sources in-process; check apps/gallery/build.gradle.kts sourceSets (the r63 kotlin.srcDirs fix)"
+              echo "::error::unified APK is missing the embedded editor class $CLS --- :unified:app is not compiling the editor sources; check its project dependencies on :editor:core (the Phase 1 modularization wiring)"
               exit 1
             fi
           done
@@ -237,9 +237,9 @@ jobs:
             echo "### Unified APK"
             echo ""
             if [[ "${{ inputs.variant }}" == "release" ]]; then
-              echo "- applicationId: \`io.github.dukeoftoad.gallery.unified\` (versionCode ${VERSION_CODE})"
+              echo "- applicationId: \`com.toadgallery.unified\` (versionCode ${VERSION_CODE})"
             else
-              echo "- applicationId: \`io.github.dukeoftoad.gallery.unified.debug\` (the debug buildType's .debug suffix; versionCode ${VERSION_CODE})"
+              echo "- applicationId: \`com.toadgallery.unified.debug\` (the debug buildType's .debug suffix; versionCode ${VERSION_CODE})"
             fi
             echo "- variant: \`${{ inputs.variant }}\` (bundled models: \`${{ inputs.bundled_models }}\`)"
             echo "- artifact: \`unified-apk\` --- \`$APK\`"

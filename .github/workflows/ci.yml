@@ -14,7 +14,7 @@ name: CI
 # Since r46 the gallery is a FOUR-FLAVOR matrix (one "engine" dimension:
 # basic / engine / semantic / face --- docs/phase-11/apk-matrix.md), so the
 # unflavored assembleDebug/lintDebug/testDebugUnitTest task names no longer
-# exist for :gallery:app: the canonical gate builds+lints+tests the BASIC
+# exist for :apps:gallery: the canonical gate builds+lints+tests the BASIC
 # flavor, and additionally runs the ENGINE flavor's JVM unit tests (no
 # -PwithEngine needed --- unit tests compile no native code) so the
 # engine-shaped BuildConfig suite stays compiled and green on every PR.
@@ -26,9 +26,8 @@ name: CI
 # every non-release workflow now declares its permissions).
 
 on:
-  # Phase 2: push-to-main removed --- main-release.yml is the post-merge
-  # 5-APK release build now. This workflow stays the canonical PR gate
-  # (pull_request on main + manual dispatch for on-demand verification).
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   # 2026-11-03 (orchestrator): dispatch added after pull_request event
@@ -115,10 +114,10 @@ jobs:
       # rides the BASIC flavor (the canonical applicationId, no engine
       # library, no engine UI). The APK lands in apk/basic/debug/.
       - name: Build debug APK
-        run: ./gradlew :gallery:app:assembleBasicDebug --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:assembleBasicDebug --no-daemon --stacktrace
 
       - name: Run lint
-        run: ./gradlew :gallery:app:lintBasicDebug --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:lintBasicDebug --no-daemon --stacktrace
         # Hard gate since the NewApi cleanup (PR #52): lint errors fail CI.
 
       # r46: unit tests run under BOTH the basic flavor (the default
@@ -127,7 +126,7 @@ jobs:
       # flavor algebra (BuildShapeTest) is exercised in both. No
       # -PwithEngine anywhere: unit tests compile no native code.
       - name: Run unit tests (basic + engine flavors)
-        run: ./gradlew :gallery:app:testBasicDebugUnitTest :gallery:app:testEngineDebugUnitTest --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:testBasicDebugUnitTest :apps:gallery:testEngineDebugUnitTest --no-daemon --stacktrace
 
       # r59 (the unified-app round): the canonical gate ALSO compiles the
       # unified flavor's Kotlin --- the editor app's sources compiled
@@ -137,7 +136,7 @@ jobs:
       # compiles on EVERY PR, without packaging the heavy APK here (the
       # unified-apk.yml dispatch workflow assembles it on demand).
       - name: Compile the unified flavor (editor-in-gallery source graph)
-        run: ./gradlew :unified:app:compileDebugKotlin -PwithEngine --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:compileUnifiedDebugKotlin -PwithEngine --no-daemon --stacktrace
         # Binding since the issue #20 privacy policy tests landed; lint stays
         # non-binding until the Phase 2 cleanup pass.
 
@@ -151,20 +150,20 @@ jobs:
       # editor app, not a Phase 6 prototype. The step's command and scope
       # are unchanged; only the stale label is.
       - name: Build editor debug APK
-        run: ./gradlew :editor:app:assembleDebug --no-daemon --stacktrace
+        run: ./gradlew :apps:edit:assembleDebug --no-daemon --stacktrace
 
       - name: Run editor lint
-        run: ./gradlew :editor:app:lintDebug --no-daemon --stacktrace
+        run: ./gradlew :apps:edit:lintDebug --no-daemon --stacktrace
 
       - name: Run editor + contract unit tests
-        run: ./gradlew :editor:app:testDebugUnitTest :shared:editor-contract:test --no-daemon --stacktrace
+        run: ./gradlew :apps:edit:testDebugUnitTest :shared:editor-contract:test --no-daemon --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: gallery-debug-apk
-          path: gallery/app/build/outputs/apk/basic/debug/*.apk
+          path: apps/gallery/build/outputs/apk/basic/debug/*.apk
           if-no-files-found: warn
           retention-days: 14
 
@@ -173,7 +172,7 @@ jobs:
         if: always()
         with:
           name: edit-debug-apk
-          path: editor/app/build/outputs/apk/debug/*.apk
+          path: apps/edit/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
           retention-days: 14
 
@@ -182,7 +181,7 @@ jobs:
         if: always()
         with:
           name: lint-reports
-          path: gallery/app/build/reports/lint-results-*.html
+          path: apps/gallery/build/reports/lint-results-*.html
           if-no-files-found: warn
           retention-days: 14
 
@@ -191,7 +190,7 @@ jobs:
         if: always()
         with:
           name: test-reports
-          path: gallery/app/build/reports/tests/
+          path: apps/gallery/build/reports/tests/
           if-no-files-found: warn
           retention-days: 14
 
@@ -216,21 +215,21 @@ jobs:
       # dependency runs engine/scripts/build-android.sh (idempotent):
       # cargo-ndk builds libtoad_ml_jni.so + libonnxruntime.so (the vendored
       # ente-ml uses ort load-dynamic + copy-dylibs) for arm64-v8a into
-      # gallery/app/build/rust-jniLibs/, which the jniLibs srcDir packages.
+      # apps/gallery/build/rust-jniLibs/, which the jniLibs srcDir packages.
       # Lint and unit tests stay in the build job (property-less; r46: the
       # ENGINE-flavor unit tests ride there too).
       # r46: the engine-enabled assemble is flavor-qualified --- the ENGINE
       # flavor (applicationIdSuffix .engine, the full BuildShape), not the
       # unflavored task that no longer exists.
       - name: Engine-enabled debug assemble (arm64-v8a)
-        run: ./gradlew :gallery:app:assembleEngineDebug -PwithEngine --no-daemon --stacktrace
+        run: ./gradlew :apps:gallery:assembleEngineDebug -PwithEngine --no-daemon --stacktrace
 
       # Gate, not an upload: the engine-enabled APK must actually carry BOTH
       # native libraries (a silently broken jniLibs wiring would otherwise
       # pass the assemble step).
       - name: Verify the native libraries are packaged
         run: |
-          APK="$(ls gallery/app/build/outputs/apk/engine/debug/*.apk)"
+          APK="$(ls apps/gallery/build/outputs/apk/engine/debug/*.apk)"
           echo "APK: $APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"

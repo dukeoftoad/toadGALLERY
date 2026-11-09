@@ -108,7 +108,9 @@ class AccessibilityWiringTest {
             GALLERY_SRC + "ui/collage/CollageScreen.kt" to "the collage creator",
             GALLERY_SRC + "ui/settings/SettingsScreen.kt" to "the Settings screen + section headers",
             GALLERY_SRC + "ui/settings/AboutScreen.kt" to "the About screen",
-            GALLERY_SRC + "ui/settings/ProgressScreen.kt" to "the Development progress screen",
+            // r64: ui/settings/ProgressScreen.kt is REMOVED (the maintainer's
+            // "remove development progress" directive) --- the product UI no
+            // longer carries the project's dev dashboard.
         )
         screens.forEach { (file, label) -> assertHasHeading("gallery", file, label) }
     }

@@ -4,6 +4,89 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r64 round (the Settings re-craft: pinned tabs, icon-badged card rows, the Theme preference; the dev surfaces retire; unified versionCode 45, versionName stays 0.4.5-alpha)
+
+The maintainer's 2026-11-09 directive, with vc44 confirmed working on the
+device: "All are working..! Now polish, fix the flaws, make the app
+modern, remove development progress in setting page, add more features
+to setting tab with ux redesign, scrollable, more features in ui(hand
+written) with ux."
+
+### Added (r64 --- hand-written, no new dependencies)
+
+- **The Theme preference (a REAL new feature)**: the General tab's new
+  Theme card carries a light/dark/system segmented control --- a new
+  `ThemeMode` enum (Appearance.kt, the same forgiving-parse
+  NAME-wire-format as GroupBy/LayoutStyle), persisted by
+  SettingsViewModel under `"theme_mode"`, and resolved by the SHELL at
+  the `ToadGalleryTheme` call (`SYSTEM -> isSystemInDarkTheme()`,
+  `LIGHT -> false`, `DARK -> true`), so the whole app re-themes live in
+  the same session. Default SYSTEM = the pre-r64 render. The r62 Material
+  You dynamic-color toggle moves into the same card: the two color
+  controls read as one group.
+- **The modern carded Settings page**: the segmented tabs (General | AI |
+  System) are PINNED above a scrollable body (the switcher stays
+  reachable however far the content scrolls; the scroll position resets
+  on every switch), and every section renders as rounded group cards of
+  icon-badged rows --- `SettingsIconBadge` (a 40dp tonal container, the
+  primary at 12% alpha, on `ToadShapes.medium`), `SettingsNavRow`
+  (badge + title + supporting + chevron, whole row the tap target),
+  `SettingsToggleRow` (the r50 whole-row-toggle idiom on the new shape).
+  Three badge glyphs are hand-drawn 24dp vectors in res/drawable
+  (`ic_setting_theme` contrast circle, `ic_setting_stories`
+  ring+play, `ic_setting_picker` photo-frame); the recycle-bin row
+  reuses `ic_trash`, the vault row `ic_vault`, the Material slots use
+  the core icon set only (Info, LocationOn, Settings,
+  KeyboardArrowRight) --- no icon dependency added.
+- **The About card's honest build row**: version line + what THIS APK
+  carries, derived from `BuildShape` + the unified flavor's editor
+  (`BuildConfig.FLAVOR == "unified"`), one tap into the About
+  sub-screen.
+
+### Removed (the maintainer's two retire directives)
+
+- **"Development progress" (F-1) is gone in full**: the Settings entry,
+  the `progress` route, ProgressScreen.kt, the pure ProgressSnapshot
+  parser + its test, the twelve `settings_progress_*` strings, and the
+  build-time progress.json asset mirror (copyProgressJson, the
+  generated/progressAssets srcDir, and its merge*Assets/lintVital
+  dependsOn wiring --- including the r43 three-catch lintVital family
+  match, retired with the block). The product UI carries no
+  dev-dashboard bytes; the repo-root progress.json stays the project's
+  own tracking file.
+- **"Installed components" (the r55 family probe) is gone**: in the
+  unified build the maintainer actually ships, the PackageManager probe
+  read "Not installed" for Engine, Semantic, Face and Edit ---
+  capabilities embedded in the APK all along (the probeGalleryComponentRows/
+  openGalleryComponent helpers and the fourteen `settings_components_*`
+  strings went with it; the manifest `<queries>` entries stay ---
+  LauncherConsolidationTest still pins the launcher consolidation). The
+  About card's BuildShape-derived build line is the honest replacement.
+
+### Changed
+
+- **The SYSTEM tab consolidates**: the recycle-bin and hidden-vault
+  standalone sections fold into the Storage card as its first rows
+  (badge + live status supporting lines, chevron into their screens),
+  and the duplicate vault/trash measurement rows merge away --- a
+  locked vault still leaks no count or size, by design. The clear-cache
+  action stays the only destructive control.
+- **The video editor's Adjust chips go name-only** (r64 editor polish):
+  the chips used to repeat the "Name: value" format while the header
+  above the slider already carried the live value, so long names read
+  as half-cut clutter at the row's edge ("Contr..." on the device
+  screenshot). Nine new `editor_adjust_name_*` strings ship name-only
+  chips; the "Name: %1$d" formats stay the headers'.
+- **The Settings KDoc re-pins the page story** (pinned tabs, card
+  language, the two retirements) and `AccessibilityWiringTest` drops
+  the removed ProgressScreen from the heading-convention map.
+- **unified-apk.yml retires the F-74 round-5 diagnostic**: the
+  always-run R-jar capture + the `rjar-diagnostic` artifact were the
+  temporary evidence-gathering steps that settled the K2/typealias
+  question; with vc44 device-confirmed ("All are working..!"), the
+  diagnostic stops riding every run. The signature gates and the
+  embedded-code hard gate are untouched.
+
 ## [Unreleased] — the r63 round (the editor craft: the fix-first round, violet retires to toad-green, the Ente-style tune-rail, trim-on-filmstrip; unified versionCode 44, versionName stays 0.4.5-alpha)
 
 The maintainer's 2026-11-08 directive: "Coming to editor - you can see

@@ -425,21 +425,11 @@
     <string name="details_blocks_expand">Show metadata blocks</string>
     <string name="details_blocks_collapse">Hide metadata blocks</string>
     <string name="details_gps_hidden">Hidden — allow Location data in Settings to show coordinates</string>
-    <!-- F-1 (follow-up 2026-11-04): the in-app progress screen: the
-         build-time progress.json mirror (two independent bars + phase
-         lists), reached from the Settings entry. -->
-    <string name="settings_progress_title">Project progress</string>
-    <string name="settings_progress_entry">Development progress</string>
-    <string name="settings_progress_snapshot_note">A snapshot mirrored from the repository\'s progress.json when this build was assembled — not a live view.</string>
-    <string name="settings_progress_updated">Updated: %1$s</string>
-    <string name="settings_progress_percent">%1$d%%</string>
-    <string name="settings_progress_phase_count">%1$d of %2$d phases done</string>
-    <string name="settings_progress_bar_description">%1$s: %2$d percent</string>
-    <string name="settings_progress_status_done">Done</string>
-    <string name="settings_progress_status_in_progress">In progress</string>
-    <string name="settings_progress_status_pending">Pending</string>
-    <string name="settings_progress_source">Source: %1$s</string>
-    <string name="settings_progress_unavailable">Progress data is unavailable in this build.</string>
+    <!-- r64: the F-1 settings_progress_* block ("Development progress")
+         is REMOVED. The maintainer's directive took the project's dev
+         dashboard out of the product UI; the route, the screen, the
+         parser and the build-time progress.json asset mirror are gone
+         with it (progress.json stays the repo's own tracking file). -->
 
     <!-- r46 (the APK-matrix round): the build-shape fallback card for a
          routed engine feature the installed flavor does not carry (the

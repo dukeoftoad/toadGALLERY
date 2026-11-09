@@ -40,6 +40,22 @@
     <string name="editor_vignette">Vignette: %1$d</string>
     <string name="editor_sharpness">Sharpness: %1$d</string>
 
+    <!-- r64 (the Settings re-craft round, editor polish): the Adjust chips'
+         name-only labels. The video editor's chip row used the full
+         "Name: value" formats above in every chip while the header already
+         showed the live value; long names read as truncated clutter at
+         the row's edge ("Contr..."). The chips now show just the parameter
+         name; the "Name: %1$d" formats stay the slider headers' format. -->
+    <string name="editor_adjust_name_exposure">Exposure</string>
+    <string name="editor_adjust_name_brightness">Brightness</string>
+    <string name="editor_adjust_name_contrast">Contrast</string>
+    <string name="editor_adjust_name_saturation">Saturation</string>
+    <string name="editor_adjust_name_temperature">Temperature</string>
+    <string name="editor_adjust_name_tint">Tint</string>
+    <string name="editor_adjust_name_highlights">Highlights</string>
+    <string name="editor_adjust_name_shadows">Shadows</string>
+    <string name="editor_adjust_name_vignette">Vignette</string>
+
     <!-- Per-channel HSL section -->
     <string name="editor_section_hsl">Colour channels (HSL)</string>
     <string name="editor_hsl_hue">Hue: %1$d°</string>

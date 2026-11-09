@@ -25,6 +25,10 @@ class AppearanceTest {
         // carried the shelf, so a fresh install (and every pre-r62
         // install reading a missing key) keeps that render.
         assertEquals(true, Appearance().storiesOnHome)
+        // r64: the theme mode default SYSTEM --- the pre-r64 render
+        // resolved isSystemInDarkTheme() on its own, so a fresh install
+        // (and every pre-r64 install reading a missing key) keeps it.
+        assertEquals(ThemeMode.SYSTEM, Appearance().themeMode)
     }
 
     @Test
@@ -93,6 +97,31 @@ class AppearanceTest {
         }
     }
 
+    // r64: the theme mode rides the same forgiving-parse contract as the
+    // layout/group-by enums --- the NAME is the wire format, null and any
+    // unknown value degrade to SYSTEM (the pre-r64 render), never crash.
+    @Test
+    fun `parseThemeMode maps null and unknown values to SYSTEM`() {
+        assertEquals(ThemeMode.SYSTEM, parseThemeMode(null))
+        assertEquals(ThemeMode.SYSTEM, parseThemeMode(""))
+        assertEquals(ThemeMode.SYSTEM, parseThemeMode("dark"))
+        assertEquals(ThemeMode.SYSTEM, parseThemeMode("always"))
+    }
+
+    @Test
+    fun `parseThemeMode maps known names to their enum values`() {
+        assertEquals(ThemeMode.SYSTEM, parseThemeMode("SYSTEM"))
+        assertEquals(ThemeMode.LIGHT, parseThemeMode("LIGHT"))
+        assertEquals(ThemeMode.DARK, parseThemeMode("DARK"))
+    }
+
+    @Test
+    fun `themeMode serialize and parse round-trip every value`() {
+        ThemeMode.entries.forEach { mode ->
+            assertEquals(mode, parseThemeMode(serializeThemeMode(mode)))
+        }
+    }
+
     @Test
     fun `appearance equality follows its fields`() {
         val base = Appearance()
@@ -101,5 +130,7 @@ class AppearanceTest {
         assertNotEquals(base, base.copy(layout = LayoutStyle.GRID))
         assertNotEquals(base, base.copy(columns = 4))
         assertNotEquals(base, base.copy(groupBy = GroupBy.DAY))
+        // r64: the theme mode is a real equality field too.
+        assertNotEquals(base, base.copy(themeMode = ThemeMode.DARK))
     }
 }

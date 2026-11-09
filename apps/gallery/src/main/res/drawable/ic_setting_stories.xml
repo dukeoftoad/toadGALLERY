@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r64 (the Settings re-craft round): the Stories toggle's badge glyph :
+     a ring with a play triangle inside, the "one story = one replayed
+     memory" shorthand for the Photos shelf the toggle shows and hides.
+     Hand-drawn on the same 24dp grid as ic_vault; single-color fill so
+     the Settings icon badge can tint it with the theme's primary. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- evenOdd: the 10dp ring minus its 7.5dp core = the story ring; the
+         play triangle lands inside the hollow and reads solid. -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M12,2a10,10 0 1,0 0,20 10,10 0 0,0 0,-20z M12,4.5a7.5,7.5 0 1,0 0,15 7.5,7.5 0 0,0 0,-15z M10.4,8.6v6.8l5.9,-3.4z" />
+</vector>

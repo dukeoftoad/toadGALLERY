@@ -44,30 +44,36 @@ import java.io.File
  */
 class R63aFixPinsTest {
 
-    /** The edit module-relative prefix of every pinned source file. */
-    private val EDIT_SRC = "src/main/kotlin/io/github/dukeoftoad/gallery/edit/"
+    /**
+     * The edit module-relative prefix of every pinned source file. Phase 1
+     * moved the sources into :editor:core and renamed the package to the
+     * module namespace (com.toadgallery.editor), so the pinned files are
+     * src/main/kotlin/com/toadgallery/editor/{EditActivity.kt, video/...}.
+     */
+    private val EDIT_SRC = "src/main/kotlin/com/toadgallery/editor/"
 
     /**
-     * Unit-test working dir is the module dir under Gradle (apps/edit) but
-     * is the repo root under the pre-push harness; be tolerant of both (the
-     * gallery AccessibilityWiringTest moduleFile pattern, generalized).
+     * Unit-test working dir is the module dir under Gradle (:editor:core)
+     * but is the repo root under the pre-push harness; be tolerant of both
+     * (the gallery AccessibilityWiringTest moduleFile pattern, generalized
+     * for the post-Phase-1 module layout).
      */
-    private fun sourceFile(app: String, moduleRelative: String): File {
+    private fun sourceFile(moduleRelative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         val candidates = listOf(
-            File(cwd, moduleRelative),
-            File(cwd, "apps/$app/$moduleRelative"),
-            File(cwd.parentFile, "$app/$moduleRelative"),
+            File(cwd, moduleRelative), // the Gradle module cwd (:editor:core)
+            File(cwd.parentFile, "core/$moduleRelative"), // a sibling :editor:* module cwd
+            File(cwd, "editor/core/$moduleRelative"), // the repo/worktree-root cwd (the harness)
         )
         return candidates.firstOrNull { it.exists() }
             ?: error(
-                "Cannot locate apps/$app/$moduleRelative from ${cwd.absolutePath}; " +
+                "Cannot locate $moduleRelative from ${cwd.absolutePath}; " +
                     "checked: " + candidates.joinToString { it.path },
             )
     }
 
     private fun editSource(moduleRelative: String): String =
-        sourceFile("edit", moduleRelative).readText()
+        sourceFile(moduleRelative).readText()
 
     // ---- P3: the Save copy CTA never wraps ----
 

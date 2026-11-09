@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- r55 (the one-launcher unification round) + r64 (the Settings re-craft
      round): this file originally carried the "Installed components"
-     family-probe strings. r64 REMOVED that section --- in the unified
+     family-probe strings. r64 REMOVED that section: in the unified
      build the maintainer actually ships, the probe read "Not installed"
      for capabilities (Engine, Semantic, Face, Edit) that are EMBEDDED all
      along; the honest replacement is the About card's build row, derived

@@ -426,7 +426,7 @@
     <string name="details_blocks_collapse">Hide metadata blocks</string>
     <string name="details_gps_hidden">Hidden — allow Location data in Settings to show coordinates</string>
     <!-- r64: the F-1 settings_progress_* block ("Development progress")
-         is REMOVED --- the maintainer's directive took the project's dev
+         is REMOVED. The maintainer's directive took the project's dev
          dashboard out of the product UI; the route, the screen, the
          parser and the build-time progress.json asset mirror are gone
          with it (progress.json stays the repo's own tracking file). -->

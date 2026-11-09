@@ -43,7 +43,7 @@
     <!-- r64 (the Settings re-craft round, editor polish): the Adjust chips'
          name-only labels. The video editor's chip row used the full
          "Name: value" formats above in every chip while the header already
-         showed the live value --- long names read as truncated clutter at
+         showed the live value; long names read as truncated clutter at
          the row's edge ("Contr..."). The chips now show just the parameter
          name; the "Name: %1$d" formats stay the slider headers' format. -->
     <string name="editor_adjust_name_exposure">Exposure</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- r64 (the Settings re-craft round): the Media access section's badge
-     glyph --- the photo-frame card (mountain + sun, the image symbol)
+     glyph:the photo-frame card (mountain + sun, the image symbol)
      that stands for the system Photo Picker's "browse only what I
      picked" path. Hand-drawn on the same 24dp grid as ic_vault;
      single-color fill so the Settings icon badge can tint it with the

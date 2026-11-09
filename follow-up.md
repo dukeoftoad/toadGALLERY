@@ -1220,6 +1220,33 @@ the public remote each time.
   size); (6) the video editor's Adjust chips drop the "Name: value"
   repeat (name-only chips; the header carries the live value --- the
   device screenshot's "Contr..." half-cut chip). versionCode 45.
+
+## 2026-11-09 — r65 window (the r63-proposal cross-verification + F-72 lands)
+
+- **Cross-verification (2026-11-09, done)** --- the maintainer's directive:
+  "cross verify with r63 editor redesign proposal html. if current state
+  of repo is generic and flaws as like attached document shows - fix it".
+  Every spec item in the approved proposal (the §3 hex table, the §4
+  photo chrome + panels, the §5 video chassis) audited against the
+  shipped r63/vc44-45 sources: ALL landed (the audit table is ledgered
+  in the CHANGELOG's r65 section). The only deferred item was the
+  proposal's own F-72 escape hatch; F-73 (Regions to Draw merge) stays
+  open per the proposal's own rule (its own consent-free UX pass, never
+  bundled).
+- **F-72 (2026-11-09, FIXED this round)** --- the photo editor's MAIN
+  canvas zooms: pinch 1x-4x (the proposal's P4 line verbatim),
+  two-finger pan while zoomed, double-tap-to-fit. CanvasZoomMath (pure,
+  JVM-pinned by CanvasZoomMathTest: bounds / centroid-kept / overflow
+  parking / exact re-center / ceiling absorption) + a custom TWO-pointer
+  transform loop in EditActivity (deliberately not
+  detectTransformGestures, whose one-finger consumption would cancel the
+  compare press-hold the moment a held finger moved), a graphicsLayer
+  pose layer wrapping the preview + crop overlay together (the compare
+  chip/badge stay chrome, outside the pose), clipToBounds so the zoomed
+  canvas never paints over the chrome, reset on every tool entry (the
+  ten tools keep their unzoomed coordinate space), inert while
+  exporting. versionCode 46.
 - **Carried**: F-52/F-53/F-54, PR #134, F-58b-2, F-58c, F-58d, F-60,
-  F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69, F-70, PAT
-  revocation (advised again).
+  F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69, F-70, F-73
+  (Regions to Draw merge --- its own UX pass), PAT revocation (advised
+  again).

@@ -503,7 +503,15 @@ android {
         // "Development progress" surface REMOVED (screen + route + parser
         // + this file's progress.json asset mirror), and the video
         // editor's name-only Adjust chips.
-        versionCode = 45
+        // versionCode 46 (r65 round): F-72 lands --- the photo editor's
+        // MAIN canvas zooms (pinch 1x-4x per the r63 proposal's P4 spec,
+        // two-finger pan while zoomed, double-tap-to-fit), the math
+        // JVM-pinned in CanvasZoomMathTest, the compare press-hold contract
+        // preserved byte-identically (the transform gesture consumes only
+        // two-pointer events), the zoom resets on every tool entry. Plus
+        // the r63-proposal cross-verification sweep (the violet comment
+        // fix) and the vc45 delivery.
+        versionCode = 46
         versionName = "0.4.5-alpha"
         // The launcher-alias consolidation's default: the canonical
         // basic build keeps its MAIN/LAUNCHER entry (the ONE family

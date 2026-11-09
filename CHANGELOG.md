@@ -4,6 +4,85 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r65 round (F-72 lands: the photo editor's canvas zooms — the r63 proposal's deferred craft; unified versionCode 46, versionName stays 0.4.5-alpha)
+
+The maintainer's 2026-11-09 directive, with vc45 device-side: follow up on
+the green CI, CROSS-VERIFY the current repo against the r63 editor
+redesign proposal (the approved design document), and fix whatever still
+matches that document's "before" audit, using the proposal as the spec.
+
+### The cross-verification (the proposal vs the shipped r63/vc44-45 code)
+
+Every §3–§5 spec item was audited against the current sources — and the
+r63 implementation matches the approved proposal:
+
+- **§3 the toad-green re-pin**: `EditorPalette.Toad` carries the exact
+  hex table (primary #9CD8A2 · onPrimary #00390F · container #14522A ·
+  background #151512 · surfaceVariant #3A3830 · onBackground #E5E2D8 ·
+  onSurfaceVariant #C6C2B6 · outline #918F85 · outlineVariant #46453F ·
+  tertiary #B3CCB4 / #35543A · inversePrimary #2E7A3C), and the video
+  surface's own scheme maps the same registry (violet retired; zero
+  violet chrome anywhere — the one remaining violet hex is the
+  filter-thumb gradient's HUE-WHEEL reference stop, CONTENT not chrome,
+  now honestly commented as such).
+- **§4 the photo chrome**: the 56dp icon header (close/settings/undo/redo
+  at 48dp touch, disabled 38% alpha, the CTA pill 40dp/20dp radius/
+  maxLines=1), the grouped auto-scrolling tab bar (68dp rows, 56dp-min
+  tabs, 22dp glyphs + 9sp labels, the 30dp @14% selected halo, the
+  1dp separators after Color and after Regions, the 26dp conditional
+  fade padders) in the approved Adjust·Looks·Color ‖ Crop·AI·Text·
+  Stickers·Draw·Regions ‖ Frames order, the tappable honesty chip
+  (shield in accent → the export-policy sheet), the floating compare
+  chip (bottom-leading, 8dp, surfaceVariant @ 72%, 1dp outline, 40dp),
+  the tool header with the promoted Reset icon, and the Ente tune-rail
+  (34dp conic value rings, 8sp labels, one active slider, the value
+  pill, tap-to-toggle-zero).
+- **§5 the video chassis**: the expanded preview frame (12dp margins,
+  14dp radius, 1dp outline, the fullscreen toggle anchored top-trailing
+  INSIDE the frame), the canvas-tap transport with the 44dp overlay chip
+  and the ±10s double-tap seek (the three-button row retired), the
+  trim-on-filmstrip (16dp handles, 28dp grab radius, the clamped white
+  playhead, the dim scrim, drag-live timestamps), the mono Time row that
+  retired TimestampRow, the six flex tabs with the halo language, and
+  the Frame/GIF renames.
+
+The ONLY spec item the r63 rounds deferred was **F-72** — the proposal's
+own escape hatch ("pinch-zoom + double-tap-to-fit (clamped 1×–4×) — F-72
+if cut for scope"). F-73 (Regions→Draw merge) stays OPEN by design: the
+proposal requires it to ship as its own consent-free UX pass.
+
+### Added (r65)
+
+- **F-72, the canvas zoom (the r63 proposal's P4 spec, landed verbatim)**:
+  the photo editor's MAIN canvas now zooms — pinch to scale between 1×
+  (fit) and 4× (the proposal's ceiling), two-finger pan while zoomed,
+  double-tap-to-fit back to the exact identity pose. The transform math
+  lives in a pure `CanvasZoomMath` (ADR-0011: JVM-tested in
+  `CanvasZoomMathTest` — the bounds, the centroid-kept contract, the
+  overflow parking, the exact re-center on zoom-out, the ceiling
+  absorption), the Compose layer replays the answer through a
+  `graphicsLayer` pose layer that transforms the preview AND its crop
+  overlay together (the compare chip/badge stay chrome, outside the
+  pose), and the zoomed canvas clips its own bounds so it can never paint
+  over the header or the tab bar.
+- **The gesture discipline that protects the existing contracts**: the
+  transform is a CUSTOM two-pointer loop, not `detectTransformGestures` —
+  the generic detector consumes one-finger drags too, which would cancel
+  the compare press-hold the moment a held finger moved
+  (`waitForUpOrCancellation` treats a consumed position change as a
+  cancellation). The F-72 loop reacts and consumes ONLY while two or more
+  pointers are down, so the compare hold's single-finger event stream
+  stays byte-identical to the pre-F-72 shape. The zoom resets on every
+  tool entry (the ten tool canvases keep their unzoomed coordinate space
+  — Ente's split: the main canvas zooms, sub-editors own their gestures)
+  and is inert while an export runs.
+
+### Changed
+
+- The filter-thumb gradient's violet stop keeps its hue-wheel job with an
+  honest comment (content, not the retired chrome accent); versionCode
+  45 → 46; the follow-up ledger records F-72 FIXED, F-73 still open.
+
 ## [Unreleased] — the r64 round (the Settings re-craft: pinned tabs, icon-badged card rows, the Theme preference; the dev surfaces retire; unified versionCode 45, versionName stays 0.4.5-alpha)
 
 The maintainer's 2026-11-09 directive, with vc44 confirmed working on the

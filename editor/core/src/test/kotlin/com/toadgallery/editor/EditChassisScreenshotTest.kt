@@ -1,0 +1,294 @@
+package com.toadgallery.editor
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * The edit app's screenshot baselines (r56, docs/phase-11/roborazzi.md) ---
+ * the photo editor's CHROME and the r56 control kit, the pieces the r56
+ * extraction made composable in isolation. This is the module's first
+ * visual coverage: until now the edit app shipped with zero pixel gates
+ * (the gallery has had the Roborazzi pair since r47), which is exactly how
+ * a chassis round could change every screen with nothing catching a
+ * regression.
+ *
+ * Subject choice, determinism-first: the tab bar, the tool header and the
+ * slider row are PARAM-LIGHT (no Activity, no ViewModel, no bitmap decode,
+ * no indeterminate animation), so each capture depends only on the pinned
+ * Robolectric SDK (34), the fixed w411dp-h891dp-420dpi viewport and the
+ * r53 theme. The frame clock is frozen before setContent and advanced one
+ * fixed 16ms frame (the gallery suite's convention) so the captures are
+ * stable by construction. Every capture paints the theme's background
+ * first --- the app renders the editor on the fixed dark surface, and a
+ * transparent-root capture would gate near-white ink against white
+ * (invisible ghosts), not the contrast the user actually sees.
+ *
+ * The PNG names are pinned by the module's
+ * `roborazzi.record.namingStrategy = fullyQualifiedName` property:
+ * `com.toadgallery.editor.EditChassisScreenshotTest.<method>.png`
+ * under src/test/resources/roborazzi (the plugin outputDir). The plugin's
+ * recordRoborazziDebug task records them; verifyRoborazziDebug gates
+ * against the committed baselines once they exist.
+ *
+ * r58b (F-58b): the per-panel slider captures. The r57 panel seam made
+ * each panel composable in isolation; this round converts every raw Slider
+ * in the Draw/Region/AI/Crop panels to the r56 `LabeledSlider` and pins
+ * the result. Three panels (Crop, Draw, Regions) compose standalone with
+ * minimal `EditRecipe()` fixtures --- the `AiPanel` still takes `EditActivity`
+ * as its first parameter, so its per-panel capture is deferred to F-58b-2
+ * (the activity-dependency refactor). Each capture paints the theme's
+ * background first (the r56 rule: transparent-root captures gate
+ * near-white ink against white, not the contrast the user sees).
+ */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
+class EditChassisScreenshotTest {
+
+    @get:Rule
+    val rule = createComposeRule()
+
+    @Test
+    fun photoTabBarRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    PhotoTabBar(current = PhotoScreen.Main, enabled = true, onSelect = {})
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun photoToolHeaderRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    PhotoToolHeader(
+                        title = "Adjust",
+                        backA11y = "Back",
+                        confirmA11y = "Done",
+                        onBack = {},
+                        onConfirm = {},
+                        // r63c: the promoted session Reset (the header's
+                        // one-consistent-shape contract) rides the capture.
+                        resetA11y = "Reset",
+                        onReset = {},
+                        resetEnabled = true,
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun labeledSliderRowsRecordBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    Column {
+                        LabeledSlider(
+                            name = "Brightness",
+                            label = "Brightness: 12",
+                            valueText = "12",
+                            value = 12f,
+                            valueRange = -100f..100f,
+                            enabled = true,
+                            onChange = {},
+                            onFinish = {},
+                            resetValue = 0,
+                        )
+                        LabeledSlider(
+                            name = "Contrast",
+                            label = "Contrast: -8",
+                            valueText = "-8",
+                            value = -8f,
+                            valueRange = -100f..100f,
+                            enabled = true,
+                            onChange = {},
+                            onFinish = null,
+                            resetValue = 0,
+                        )
+                    }
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    /**
+     * r58b: the Crop panel's straighten slider on the crafted LabeledSlider.
+     * Minimal fixture: `EditRecipe()` defaults (straightenDeg = 0.0). The
+     * capture pins the slider row + the geometry chip row + the crop aspect
+     * presets --- the r32 contract on the r56 control, the regression surface
+     * for the straighten conversion.
+     */
+    @Test
+    fun cropPanelStraightenSliderRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    CropPanel(
+                        committed = EditRecipe(),
+                        draft = null,
+                        onDraftChange = {},
+                        exporting = false,
+                        previewBase = null,
+                        commit = {},
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    /**
+     * r58b: the Draw panel's three brush sliders (width/opacity/smoothing) on
+     * the crafted LabeledSlider. Minimal fixture: `drawMode = true` shows the
+     * brush controls (the r36 plain-state contract: every tick writes the
+     * chassis state, no draft). The capture pins the slider rows + the color
+     * swatch row + the draw-mode/layer chip row.
+     */
+    @Test
+    fun drawPanelBrushSlidersRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    DrawPanel(
+                        committed = EditRecipe(),
+                        draft = null,
+                        onDraftChange = {},
+                        exporting = false,
+                        commit = {},
+                        sweepPendingDrafts = {},
+                        commitSelectedDrawLayer = {},
+                        drawMode = true,
+                        onDrawModeChange = {},
+                        regionMode = false,
+                        onRegionModeChange = {},
+                        eraseMode = false,
+                        onEraseModeChange = {},
+                        brushColor = 0xFFFFFFFFL,
+                        onBrushColorChange = {},
+                        brushWidth = 25,
+                        onBrushWidthChange = {},
+                        brushOpacity = 80,
+                        onBrushOpacityChange = {},
+                        brushSmoothing = 30,
+                        onBrushSmoothingChange = {},
+                        selectedTextLayerId = null,
+                        onSelectTextLayerChange = {},
+                        selectedStickerLayerId = null,
+                        onSelectStickerLayerChange = {},
+                        selectedDrawLayerId = null,
+                        onSelectDrawLayerChange = {},
+                        selectedRegionLayerId = null,
+                        onSelectRegionLayerChange = {},
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    /**
+     * r58b: the Regions panel's strength slider on the crafted LabeledSlider.
+     * Minimal fixture: `regionMode = true` shows the kind chips + the strength
+     * slider (the r37 plain-state contract). The capture pins the slider row +
+     * the mosaic/blur chip row + the region-mode/layer chip row.
+     */
+    @Test
+    fun regionsPanelStrengthSliderRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    RegionsPanel(
+                        committed = EditRecipe(),
+                        draft = null,
+                        onDraftChange = {},
+                        exporting = false,
+                        commit = {},
+                        sweepPendingDrafts = {},
+                        commitSelectedRegionLayer = {},
+                        drawMode = false,
+                        onDrawModeChange = {},
+                        regionMode = true,
+                        onRegionModeChange = {},
+                        eraseMode = false,
+                        onEraseModeChange = {},
+                        regionKind = RegionKind.MOSAIC,
+                        onRegionKindChange = {},
+                        regionStrength = 60,
+                        onRegionStrengthChange = {},
+                        selectedTextLayerId = null,
+                        onSelectTextLayerChange = {},
+                        selectedStickerLayerId = null,
+                        onSelectStickerLayerChange = {},
+                        selectedDrawLayerId = null,
+                        onSelectDrawLayerChange = {},
+                        selectedRegionLayerId = null,
+                        onSelectRegionLayerChange = {},
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+}

@@ -161,6 +161,9 @@ roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose"
 
 [plugins]
 android = { id = "com.android.application", version.ref = "gradlePlugins-agp" }
+# Phase 1 modularization: the library flavor of the same AGP pin, for
+# the new :gallery:core / :editor:core modules.
+android-library = { id = "com.android.library", version.ref = "gradlePlugins-agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 # Compose compiler plugin ships with Kotlin 2.0+ (ADR-0009)
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

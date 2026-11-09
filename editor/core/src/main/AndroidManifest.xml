@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 1 modularization: the editor's CONTRACT SURFACE manifest, now on
+     the :editor:core library (both installable shells merge it). Split out
+     of the old :apps:edit manifest: the activities use FULL class names
+     (the library namespace com.toadgallery.editor), the storage grant and
+     the two activity-level contract markers are verbatim, and the
+     standalone app's INTERNET strip directive deliberately stays on the
+     :editor:app shell manifest: the unified build embeds this library
+     and must keep the gallery's ADR-0020 model-download INTERNET grant
+     (the old :apps:gallery unified overlay's rule, unchanged). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Pre-Q MediaStore inserts (the save-copy export) need the legacy
+         external-storage WRITE grant; on API 29+ own-contribution inserts
+         into Pictures need no permission at all, so this is capped at
+         maxSdkVersion=28. It is requested at export time only, on devices
+         where it applies. A storage permission, never a network one. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <application>
+        <!-- The contract image surface (v1 wire). -->
+        <activity
+            android:name="com.toadgallery.editor.EditActivity"
+            android:exported="true"
+            android:label="@string/editor_app_name">
+            <intent-filter>
+                <action android:name="org.toadgallery.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/webp" />
+                <data android:mimeType="image/heic" />
+            </intent-filter>
+            <meta-data
+                android:name="org.toadgallery.contract.EDIT"
+                android:value="1" />
+        </activity>
+
+        <!-- The contract video surface (v2 wire). -->
+        <activity
+            android:name="com.toadgallery.editor.video.VideoEditActivity"
+            android:exported="true"
+            android:label="@string/editor_video_app_name">
+            <intent-filter>
+                <action android:name="org.toadgallery.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/mp4" />
+                <data android:mimeType="video/quicktime" />
+                <data android:mimeType="video/3gpp" />
+            </intent-filter>
+            <meta-data
+                android:name="org.toadgallery.contract.EDIT"
+                android:value="2" />
+        </activity>
+    </application>
+</manifest>

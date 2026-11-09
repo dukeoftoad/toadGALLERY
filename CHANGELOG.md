@@ -80,6 +80,12 @@ written) with ux."
 - **The Settings KDoc re-pins the page story** (pinned tabs, card
   language, the two retirements) and `AccessibilityWiringTest` drops
   the removed ProgressScreen from the heading-convention map.
+- **unified-apk.yml retires the F-74 round-5 diagnostic**: the
+  always-run R-jar capture + the `rjar-diagnostic` artifact were the
+  temporary evidence-gathering steps that settled the K2/typealias
+  question; with vc44 device-confirmed ("All are working..!"), the
+  diagnostic stops riding every run. The signature gates and the
+  embedded-code hard gate are untouched.
 
 ## [Unreleased] — the r63 round (the editor craft: the fix-first round, violet retires to toad-green, the Ente-style tune-rail, trim-on-filmstrip; unified versionCode 44, versionName stays 0.4.5-alpha)
 

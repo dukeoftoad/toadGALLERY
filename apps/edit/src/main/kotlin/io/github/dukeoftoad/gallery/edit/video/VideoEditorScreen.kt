@@ -292,6 +292,11 @@ private val TrimScrimColor = Color.Black.copy(alpha = 0.55f)
 /** One adjust slider's binding over the colour params (moved verbatim). */
 private data class VideoSliderSpec(
     val label: Int,
+    // r64: the chip's name-only string --- the chips used to repeat the
+    // "Name: value" format while the header above the slider already
+    // carries the live value, so long names truncated at the row's edge
+    // ("Contr...").
+    val nameRes: Int,
     val a11yNameRes: Int,
     val get: (VideoAdjustParams) -> Int,
     val set: (VideoAdjustParams, Int) -> VideoAdjustParams,
@@ -299,15 +304,15 @@ private data class VideoSliderSpec(
 
 /** The nine ADR-0012 sliders in the photo surface's own order (moved verbatim). */
 private val VIDEO_ADJUST_SLIDERS: List<VideoSliderSpec> = listOf(
-    VideoSliderSpec(R.string.editor_exposure, R.string.editor_a11y_exposure, { it.exposure }, { p, v -> p.copy(exposure = v) }),
-    VideoSliderSpec(R.string.editor_brightness, R.string.editor_a11y_brightness, { it.brightness }, { p, v -> p.copy(brightness = v) }),
-    VideoSliderSpec(R.string.editor_contrast, R.string.editor_a11y_contrast, { it.contrast }, { p, v -> p.copy(contrast = v) }),
-    VideoSliderSpec(R.string.editor_saturation, R.string.editor_a11y_saturation, { it.saturation }, { p, v -> p.copy(saturation = v) }),
-    VideoSliderSpec(R.string.editor_temperature, R.string.editor_a11y_temperature, { it.temperature }, { p, v -> p.copy(temperature = v) }),
-    VideoSliderSpec(R.string.editor_tint, R.string.editor_a11y_tint, { it.tint }, { p, v -> p.copy(tint = v) }),
-    VideoSliderSpec(R.string.editor_highlights, R.string.editor_a11y_highlights, { it.highlights }, { p, v -> p.copy(highlights = v) }),
-    VideoSliderSpec(R.string.editor_shadows, R.string.editor_a11y_shadows, { it.shadows }, { p, v -> p.copy(shadows = v) }),
-    VideoSliderSpec(R.string.editor_vignette, R.string.editor_a11y_vignette, { it.vignette }, { p, v -> p.copy(vignette = v) }),
+    VideoSliderSpec(R.string.editor_exposure, R.string.editor_adjust_name_exposure, R.string.editor_a11y_exposure, { it.exposure }, { p, v -> p.copy(exposure = v) }),
+    VideoSliderSpec(R.string.editor_brightness, R.string.editor_adjust_name_brightness, R.string.editor_a11y_brightness, { it.brightness }, { p, v -> p.copy(brightness = v) }),
+    VideoSliderSpec(R.string.editor_contrast, R.string.editor_adjust_name_contrast, R.string.editor_a11y_contrast, { it.contrast }, { p, v -> p.copy(contrast = v) }),
+    VideoSliderSpec(R.string.editor_saturation, R.string.editor_adjust_name_saturation, R.string.editor_a11y_saturation, { it.saturation }, { p, v -> p.copy(saturation = v) }),
+    VideoSliderSpec(R.string.editor_temperature, R.string.editor_adjust_name_temperature, R.string.editor_a11y_temperature, { it.temperature }, { p, v -> p.copy(temperature = v) }),
+    VideoSliderSpec(R.string.editor_tint, R.string.editor_adjust_name_tint, R.string.editor_a11y_tint, { it.tint }, { p, v -> p.copy(tint = v) }),
+    VideoSliderSpec(R.string.editor_highlights, R.string.editor_adjust_name_highlights, R.string.editor_a11y_highlights, { it.highlights }, { p, v -> p.copy(highlights = v) }),
+    VideoSliderSpec(R.string.editor_shadows, R.string.editor_adjust_name_shadows, R.string.editor_a11y_shadows, { it.shadows }, { p, v -> p.copy(shadows = v) }),
+    VideoSliderSpec(R.string.editor_vignette, R.string.editor_adjust_name_vignette, R.string.editor_a11y_vignette, { it.vignette }, { p, v -> p.copy(vignette = v) }),
 )
 
 /** Formats a millisecond position as seconds with one decimal (moved verbatim). */
@@ -2295,7 +2300,10 @@ private fun AdjustScreenBody(
                     selected = index == selectedIndex,
                     onClick = { onSelect(index) },
                     enabled = enabled,
-                    label = { Text(text = stringResource(chipSpec.label, chipSpec.get(draftAdjust))) },
+                    // r64: name-only chips --- the header above the slider
+                    // already carries "Name: value"; a chip repeating it
+                    // made the row read as half-cut clutter ("Contr...").
+                    label = { Text(text = stringResource(chipSpec.nameRes)) },
                     modifier = Modifier.padding(end = 8.dp),
                 )
             }

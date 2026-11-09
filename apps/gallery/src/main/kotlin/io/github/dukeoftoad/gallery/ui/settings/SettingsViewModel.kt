@@ -120,6 +120,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             layout = parseLayout(prefs.getString(KEY_PHOTOS_LAYOUT, null)),
             columns = clampColumns(prefs.getInt(KEY_PHOTOS_COLUMNS, DEFAULT_COLUMNS)),
             groupBy = parseGroupBy(prefs.getString(KEY_PHOTOS_GROUP_BY, null)),
+            // r64: the light/dark/system mode (the Theme section's
+            // segmented control); the default SYSTEM = the pre-r64 render.
+            themeMode = parseThemeMode(prefs.getString(KEY_THEME_MODE, null)),
             // r62: the Stories shelf toggle, default TRUE = the pre-r62
             // render (the shelf always showed); a missing key keeps it.
             storiesOnHome = prefs.getBoolean(KEY_STORIES_ON_HOME, true),
@@ -194,6 +197,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * r64: sets the light/dark/system appearance mode and persists it
+     * write-through. The SHELL resolves [Appearance.themeMode] into the
+     * theme call's darkTheme argument (see ToadGalleryApp), so the whole
+     * app re-themes in the same session --- no restart.
+     */
+    fun setThemeMode(themeMode: ThemeMode) {
+        if (themeMode == _appearance.value.themeMode) return
+        _appearance.value = _appearance.value.copy(themeMode = themeMode)
+        prefs.edit().putString(KEY_THEME_MODE, serializeThemeMode(themeMode)).apply()
+    }
+
+    /**
      * r62: sets the Stories-on-home toggle and persists it write-through.
      * The Photos timeline reads [Appearance.storiesOnHome] from the same
      * shell-scoped flow, so the shelf appears/disappears on the next
@@ -225,6 +240,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
         /** r62: the Material You dynamic-color key (default true). */
         const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
+
+        /** r64: the light/dark/system mode key (default SYSTEM). */
+        const val KEY_THEME_MODE = "theme_mode"
 
         /** [Appearance.columns]' default; kept beside its keys for symmetry. */
         const val DEFAULT_COLUMNS = 3

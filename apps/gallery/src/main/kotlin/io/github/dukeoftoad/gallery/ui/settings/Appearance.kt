@@ -69,12 +69,38 @@ enum class GroupBy {
     MONTH,
 }
 
+/**
+ * r64 (the Settings re-craft round): the app's appearance-mode
+ * preference --- light, dark, or follow the system. The default
+ * [SYSTEM] is the pre-r64 render (the theme call's own
+ * `isSystemInDarkTheme()`), so a fresh install and every existing
+ * install keep today's behavior until the user picks otherwise. Like
+ * the other persisted enums here, the NAME is the wire format and any
+ * unknown stored value degrades to [SYSTEM] instead of crashing.
+ */
+enum class ThemeMode {
+    /** Follow `isSystemInDarkTheme()` --- the pre-r64 behavior. */
+    SYSTEM,
+
+    /** Always the light color scheme, whatever the OS says. */
+    LIGHT,
+
+    /** Always the dark color scheme, whatever the OS says. */
+    DARK,
+}
+
 /** The user's appearance preferences; see the file KDoc for the defaults. */
 data class Appearance(
     val layout: LayoutStyle = LayoutStyle.COLLAGE,
     /** Column count in [MIN_COLUMNS, MAX_COLUMNS] (see [clampColumns]). */
     val columns: Int = 3,
     val groupBy: GroupBy = GroupBy.NONE,
+    /**
+     * r64: the light/dark/system appearance mode (see [ThemeMode]). The
+     * default SYSTEM keeps the pre-r64 render --- the theme call resolved
+     * `isSystemInDarkTheme()` on its own.
+     */
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /**
      * r62: whether the Photos timeline carries the Stories shelf at all.
      * The default TRUE is the pre-r62 render (the shelf always showed), so
@@ -112,8 +138,20 @@ fun parseLayout(raw: String?): LayoutStyle =
 fun parseGroupBy(raw: String?): GroupBy =
     GroupBy.entries.firstOrNull { it.name == raw } ?: GroupBy.NONE
 
+/**
+ * Parses a persisted theme-mode name (r64); `null` and any unknown value
+ * degrade to [ThemeMode.SYSTEM] --- a corrupt or future-format preference
+ * falls back to today's render, the same forgiving-parse posture as
+ * [parseLayout]/[parseGroupBy].
+ */
+fun parseThemeMode(raw: String?): ThemeMode =
+    ThemeMode.entries.firstOrNull { it.name == raw } ?: ThemeMode.SYSTEM
+
 /** The persisted form of [layout] (the enum NAME --- see the file KDoc). */
 fun serializeLayout(layout: LayoutStyle): String = layout.name
 
 /** The persisted form of [groupBy] (the enum NAME --- see the file KDoc). */
 fun serializeGroupBy(groupBy: GroupBy): String = groupBy.name
+
+/** The persisted form of [themeMode] (the enum NAME, r64). */
+fun serializeThemeMode(themeMode: ThemeMode): String = themeMode.name

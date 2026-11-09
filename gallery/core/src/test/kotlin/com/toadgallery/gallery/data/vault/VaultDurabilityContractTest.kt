@@ -193,15 +193,15 @@ class VaultDurabilityContractTest {
 
         /** The store whose D-3/D-9 contracts are pinned (module dir or repo root). */
         const val VAULT_STORE_SRC =
-            "src/main/kotlin/io/github/dukeoftoad/gallery/data/vault/VaultStore.kt"
+            "src/main/kotlin/com/toadgallery/gallery/data/vault/VaultStore.kt"
 
         /** The D-5 seam under test. */
         const val BIOMETRIC_KEYS_SRC =
-            "src/main/kotlin/io/github/dukeoftoad/gallery/data/vault/AndroidVaultBiometricKeys.kt"
+            "src/main/kotlin/com/toadgallery/gallery/data/vault/AndroidVaultBiometricKeys.kt"
 
         /** The read-only sibling whose D-5 fallback is mirrored. */
         const val MEDIA_KEYS_SRC =
-            "src/main/kotlin/io/github/dukeoftoad/gallery/data/vault/AndroidVaultKeys.kt"
+            "src/main/kotlin/com/toadgallery/gallery/data/vault/AndroidVaultKeys.kt"
 
         /** D-3's blob-durability anchor: the fsync inside the blob-write `.use` block. */
         const val BLOB_FSYNC_ANCHOR = "output.fd.sync()"

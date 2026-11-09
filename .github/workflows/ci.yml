@@ -26,8 +26,9 @@ name: CI
 # every non-release workflow now declares its permissions).
 
 on:
-  push:
-    branches: [ main ]
+  # Phase 2: push-to-main removed --- main-release.yml is the post-merge
+  # 5-APK release build now. This workflow stays the canonical PR gate
+  # (pull_request on main + manual dispatch for on-demand verification).
   pull_request:
     branches: [ main ]
   # 2026-11-03 (orchestrator): dispatch added after pull_request event

@@ -914,17 +914,38 @@ abstract class GenerateEditRCompatTask : DefaultTask() {
 }
 
 val generateEditRCompat = tasks.register("generateEditRCompat", GenerateEditRCompatTask::class) {
+    // r64 fix (the r63-fix round's latent debug-variant gap): the input is
+    // scoped to the UNIFIED flavor's two symbol-list dirs (the exact layout
+    // the round-5 diagnostic + the CI validation error both pin:
+    // intermediates/compile_symbol_list/<variant>/generate<Variant>RFile/R.txt).
+    // The previous broad `compile_symbol_list/**/R.txt` glob matched EVERY
+    // flavor's R.txt, so a debug-variant graph consumed
+    // generateUnifiedDebugRFile's output with no declared dependency --- the
+    // ci.yml compileUnifiedDebugKotlin gate (never run against the r63 fix
+    // before) failed Gradle 9's implicit-dependency validation exactly there.
+    // The BOTH-variants dependsOn below declares the producer tasks the
+    // scoped input can reach; the generate() body still prefers the
+    // unifiedRelease list as canonical (the symbol NAMES are identical
+    // across build types; only the placeholder IDs differ, and the
+    // delegation reads real values at runtime anyway).
     symbolLists.from(
-        layout.buildDirectory.dir("intermediates/compile_symbol_list").map {
+        layout.buildDirectory.dir("intermediates/compile_symbol_list/unifiedRelease").map {
+            it.asFileTree.matching { include("**/R.txt") }
+        },
+        layout.buildDirectory.dir("intermediates/compile_symbol_list/unifiedDebug").map {
             it.asFileTree.matching { include("**/R.txt") }
         },
     )
     outputDir.set(layout.buildDirectory.dir("generated/editRCompat"))
-    // Explicit ordering: the generator reads the R.txt the variant's R-file
-    // generation produces. Lazy STRING dependency (a provider .configure{}
-    // call from inside another task's realization context is a Gradle 9
-    // configuration-time error --- run #16) resolves in the task graph.
+    // Explicit ordering: the generator reads the R.txt the unified variants'
+    // R-file generation produces. Lazy STRING dependencies (a provider
+    // .configure{} call from inside another task's realization context is a
+    // Gradle 9 configuration-time error --- run #16) resolve in the task
+    // graph. BOTH build types are declared (the scoped input can reach
+    // either; an undeclared producer is a validation failure, whichever
+    // variant is being built).
     dependsOn("generateUnifiedReleaseRFile")
+    dependsOn("generateUnifiedDebugRFile")
 }
 
 // --- Optional Rust engine packaging (r22, ADR-0020) ---

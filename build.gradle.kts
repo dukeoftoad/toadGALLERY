@@ -1,5 +1,10 @@
 plugins {
     alias(libs.plugins.android) apply false
+    alias(libs.plugins.android.library) apply false
+    // Phase 1 modularization: the library marker joins the same pin-once
+    // shape as the aliases above --- AGP is already on the root classpath via
+    // the application alias, so the :gallery:core / :editor:core modules must
+    // not resolve the library marker at a fresh version.
     // KSP for the Room schema compiler (Phase 4 media catalogue, ADR-0006).
     // Declared here with `apply false` --- same shape as the android alias
     // above --- so the catalog alias resolves at the root and only the

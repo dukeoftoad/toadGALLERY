@@ -1,0 +1,226 @@
+package com.toadgallery.gallery.data.catalogue.room
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+/**
+ * The Room row for one live [CatalogueRecord][com.toadgallery.gallery
+ * .data.catalogue.CatalogueRecord] --- the Phase 4 media catalogue (ADR-0006
+ * persistence layer; audit item "Room catalogue").
+ *
+ * Android-adjacent persistence code: untested per ADR-0016 (the repo
+ * pattern --- all logic lives in pure types covered by JVM tests). The
+ * columns mirror [CatalogueRecord][com.toadgallery.gallery.data
+ * .catalogue.CatalogueRecord] one-to-one; the ONLY translation is
+ * [metadataCacheState], stored as the enum's [name] because Room has no
+ * built-in enum column mapping and a global `TypeConverter` would be
+ * overkill for a single field --- the mapping lives in
+ * [RoomMediaCatalogue] instead, next to its reverse.
+ *
+ * Scope guard (audit): face/CLIP vectors and all engine-owned AI state are
+ * NOT columns here and never will be --- they live in the ML stores keyed
+ * by `localMediaKey`.
+ *
+ * The r13 display/shape ride-alongs (displayName, width, height,
+ * durationMs, isFavorite) mirror the record's same-named fields: nullable /
+ * defaulted columns, plain `ALTER TABLE ... ADD COLUMN` additions in
+ * [MediaCatalogueDatabase.MIGRATION_2_3], and --- as on the record ---
+ * NON-REVISION state that never participates in reconciliation.
+ *
+ * The r16 location provenance columns (latitude, longitude,
+ * locationSource) follow the r12 capture-date pattern (nullable derived
+ * state, `ADD COLUMN` only in [MediaCatalogueDatabase.MIGRATION_3_4]) but
+ * deliberately have NO counterpart on
+ * [CatalogueRecord][com.toadgallery.gallery.data.catalogue
+ * .CatalogueRecord] this round: the map surface reads them through a
+ * dedicated projection (see `CatalogueDao`'s r16 section), and widening the
+ * record + [com.toadgallery.gallery.data.catalogue.MediaCatalogue]
+ * interface is the Phase 5 Places index's contract to settle.
+ *
+ * The r19 folder/bucket ride-alongs (bucketId, bucketDisplayName) close
+ * exactly that gap for the folder dimension: they ARE on
+ * [CatalogueRecord][com.toadgallery.gallery.data.catalogue
+ * .CatalogueRecord] and ride every scan upsert --- they are ROW-SOURCED
+ * (the provider's own `bucket_id` / `bucket_display_name` columns), never
+ * hook-refilled, so the record->row mapper below carries them like every
+ * ride-along and NO wipe-and-refill sequencing applies. Nullable columns,
+ * `ADD COLUMN` only in [MediaCatalogueDatabase.MIGRATION_4_5], the v1 ->
+ * v2 shape again.
+ */
+@Entity(tableName = "catalogue_items")
+data class CatalogueItemEntity(
+    /** Primary key: the stable local media key (MediaIdentity.toKeyString()). */
+    @PrimaryKey val localMediaKey: String,
+    /** The resolved content `Uri` string; access handle, not identity. */
+    val canonicalUri: String,
+    /** MIME type as reported by the provider. */
+    val mimeType: String,
+    /** File size in bytes; part of the MediaStore-observed revision. */
+    val sizeBytes: Long,
+    /** Provider `date_modified` in epoch millis. */
+    val dateModifiedMillis: Long,
+    /** Provider `date_added` in epoch millis. */
+    val dateAddedMillis: Long,
+    /** MediaStore per-row generation token (`MediaColumns.GENERATION_MODIFIED` of THIS row); `null` below API 30. */
+    val generationToken: String?,
+    /** In-app metadata write counter; excluded from scan reconciliation. */
+    val metadataWriteRevision: Int,
+    /**
+     * The [MetadataCacheState][com.toadgallery.gallery.data.catalogue
+     * .MetadataCacheState] name as a plain string.
+     */
+    val metadataCacheState: String,
+    /** Epoch millis of the last scan that observed this row live. */
+    val lastSeenAtMillis: Long,
+    /**
+     * Resolved capture instant in epoch millis (see the matching
+     * [CatalogueRecord] field); `null` when never resolved or when the
+     * item's metadata carried no trustworthy tag. Legitimately negative
+     * for pre-1970 capture dates.
+     */
+    val resolvedCaptureDateMillis: Long?,
+    /**
+     * Zone assumption (minutes east of UTC) used to interpret the winning
+     * naive tag; `null` for epoch-based winning sources and when
+     * [resolvedCaptureDateMillis] is `null`.
+     */
+    val resolvedCaptureDateZoneOffsetMinutes: Int?,
+    /**
+     * The winning
+     * [CaptureDateSource][com.toadgallery.gallery.data.media.dates
+     * .CaptureDateSource] as its [name][kotlin.Enum.name] string --- the
+     * same stringly-enum convention as [metadataCacheState], for the same
+     * reason (no global TypeConverter for a single field; the mapping
+     * lives next to its reverse in [RoomMediaCatalogue] and is a straight
+     * name copy here since the record's field is already a string).
+     */
+    val resolvedCaptureDateSource: String?,
+
+    /** The provider `_display_name`; `null` when the provider reported none (r13 ride-along). */
+    val displayName: String?,
+
+    /** Pixel width; `0` means "unknown" (r13 ride-along, non-revision). */
+    val width: Int,
+
+    /** Pixel height; `0` means "unknown" (r13 ride-along, non-revision). */
+    val height: Int,
+
+    /** Video duration in milliseconds; `0` for stills / "unknown" (r13 ride-along, non-revision). */
+    val durationMs: Long,
+
+    /** The MediaStore `is_favorite` flag as the last scan saw it (r13 ride-along, non-revision). */
+    val isFavorite: Boolean,
+
+    /**
+     * EXIF GPS latitude in signed decimal degrees (r16 round), or `null`.
+     * Nullable for the same honest reasons as
+     * [resolvedCaptureDateMillis]: rows scanned before the location
+     * indexer existed were never resolved, and rows whose GPS block was
+     * absent/unreadable/withheld resolve to no location at all ---
+     * `null` means "no persisted location", whichever reason produced
+     * it. NON-REVISION derived state (like the capture-date provenance
+     * columns): a location re-read never participates in reconciliation.
+     *
+     * DEFAULTS TO `null` (like its siblings) because
+     * [CatalogueRecord][com.toadgallery.gallery.data.catalogue
+     * .CatalogueRecord] carries no location fields this round: the
+     * record->row mapper constructs the entity WITHOUT them, so a scan
+     * upsert writes the honest "no persisted location" and the location
+     * index pass re-fills the row right after the batch (the same
+     * wipe-and-refill sequencing the capture-date columns ride). Kotlin
+     * default values are invisible to Room (the generated CREATE TABLE
+     * and the v4 schema JSON declare no column default), so this is a
+     * construction-site convenience, not schema.
+     */
+    val latitude: Double? = null,
+
+    /**
+     * EXIF GPS longitude in signed decimal degrees; `null` whenever
+     * [latitude] is `null` (a real GPS fix always writes both). Defaults
+     * to `null` for the reason [latitude]'s KDoc gives.
+     */
+    val longitude: Double? = null,
+
+    /**
+     * Where the location outcome came from, as the
+     * [ItemLocationSource][com.toadgallery.gallery.data.media.location
+     * .ItemLocationSource] enum's [name][kotlin.Enum.name] string --- the
+     * same stringly-enum convention as [resolvedCaptureDateSource], for
+     * the same reason. `EXIF_GPS` for a parsed fix; the special
+     * `MEDIA_LOCATION_UNGRANTED` value marks rows first scanned while
+     * the platform redacts EXIF location (API 29+ without
+     * ACCESS_MEDIA_LOCATION) --- exactly the set a grant-triggered
+     * re-pass would target; `null` for every other no-location outcome
+     * (no GPS block, unreadable, unsupported format, never indexed).
+     * Defaults to `null` for the reason [latitude]'s KDoc gives.
+     */
+    val locationSource: String? = null,
+
+    // --- folder/bucket ride-alongs (r19 round) ------------------------------
+
+    /**
+     * The provider `bucket_id` --- the folder/bucket dimension the
+     * timeline's folder filter matches (`WHERE bucketId = ?`). Nullable
+     * for the honest "not resolvable on this API path" (a provider that
+     * drops the column, or the row source's reduced-projection defensive
+     * fallback, leaves the row honestly bucketless) --- deliberately NOT a
+     * 0 sentinel, which would collide with a real bucket id. NULL in the
+     * migration matches the entity's no-default nullable declaration
+     * byte-for-byte, the MIGRATION_1_2 discipline.
+     *
+     * DEFAULTS TO `null` as a construction-site convenience ONLY (Kotlin
+     * defaults are invisible to Room --- the generated CREATE TABLE and
+     * the v5 schema JSON declare no column default), the latitude KDoc
+     * pattern; unlike the location columns the mapper in
+     * [RoomMediaCatalogue] DOES carry the record's value: bucket is
+     * row-sourced and must survive every upsert unchanged, because no
+     * index hook re-fills it.
+     */
+    val bucketId: Long? = null,
+
+    /**
+     * The bucket's display name (`bucket_display_name`, the DATA-column
+     * derived name --- NOT `_display_name`; the same semantics
+     * `MediaStoreSource.queryCollection` surfaces buckets with), `null`
+     * when the provider reported none. Carried so a folder surface can
+     * label the filter without a second MediaStore round trip; the filter
+     * itself matches [bucketId] only. Defaults to `null` for the reason
+     * [bucketId]'s KDoc gives.
+     */
+    val bucketDisplayName: String? = null,
+
+    // --- indexer healing marker (r20 round) --------------------------------
+
+    /**
+     * Epoch millis of the moment the combined EXIF index pass last
+     * completed ALL of a row's provenance writes (capture date + location
+     * + this stamp), or `null` when the row was never fully indexed ---
+     * the marker the NULL-provenance healing pass selects on (see
+     * `CatalogueDao`'s r20 section and [RoomMediaCatalogue]'s
+     * [ProvenanceHealingStore][com.toadgallery.gallery.data.media
+     * .changes.ProvenanceHealingStore] implementation).
+     *
+     * WIPE-AND-REFILL, exactly like the capture-date/location provenance
+     * columns: the record->row mapper constructs the entity WITHOUT this
+     * field (the record does not carry it), so every scan upsert resets it
+     * to `null` and the index pass re-stamps the row right after the
+     * batch. That reset is CORRECT, not loss: an upserted row is by
+     * definition ADDED or CHANGED, i.e. exactly the set the index pass
+     * must re-run for anyway; the stamp's only job is to distinguish
+     * "indexed" from "never successfully indexed" for rows the scan did
+     * NOT touch this pass --- the per-row-failure remainder the healing
+     * pass exists to re-offer. A row whose indexing fails keeps `null`
+     * (the stamp write is the LAST of the pass's writes) and is selected
+     * again by the next healing pass, idempotently, until it succeeds.
+     *
+     * NO counterpart on
+     * [CatalogueRecord][com.toadgallery.gallery.data.catalogue
+     * .CatalogueRecord] (the r16 location-column discipline): the marker
+     * is pipeline-internal state; no reader outside the healing pass has
+     * a use for it, so widening the record would be speculative surface.
+     * Nullable `ADD COLUMN` only, in
+     * [MediaCatalogueDatabase.MIGRATION_5_6]; Kotlin default invisible
+     * to Room (no schema default), the latitude/bucket pattern.
+     */
+    val provenanceIndexedAtMillis: Long? = null,
+)

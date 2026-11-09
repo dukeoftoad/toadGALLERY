@@ -26,6 +26,22 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+// --- Roborazzi capture output location (r47, docs/phase-11/roborazzi.md) ----
+// The plugin's default output dir is build/outputs/roborazzi --- a BUILD
+// directory, which can never hold committed baselines (build/ is gitignored
+// and wiped by every clean). The F-34 verify gate needs the goldens committed
+// under the module, so the output dir is pointed at the test resources tree:
+// the recordRoborazziBasicDebug task writes the PNGs STRAIGHT into the
+// directory they are committed from, the verifyRoborazziBasicDebug task reads
+// them back from the same place, and no copy step ever exists between a
+// recorded artifact and the committed baseline. (Restored at the Phase-1
+// split's cost: the block was lost when the monolith became :gallery:core,
+// which is why the #93 verify leg could not find its originals --- the
+// pre-split wording from apps/gallery/build.gradle.kts, verbatim.)
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/resources/roborazzi"))
+}
+
 android {
     namespace = "com.toadgallery.gallery"
     compileSdk = libs.versions.app.build.compileSDKVersion.get().toInt()

@@ -14,13 +14,16 @@
 #                           Microsoft's official onnxruntime-android AAR on
 #                           Maven Central, sha256-pinned in this script.
 #
-# Both are staged into the app module's build-dir jniLibs folder:
+# Both are staged into BOTH app modules' build-dir jniLibs folders (the
+# Phase 1 modularization: TWO modules assemble engine-enabled APKs now):
 #
-#   apps/gallery/build/rust-jniLibs/<abi>/   (arm64-v8a, x86_64 with --all)
+#   gallery/app/build/rust-jniLibs/<abi>/    (:gallery:app engine-flavor APKs)
+#   unified/app/build/rust-jniLibs/<abi>/    (:unified:app the unified APK)
 #
-# which apps/gallery/build.gradle.kts adds as a jniLibs srcDir ONLY when
-# Gradle runs with -PwithEngine. Nothing lands in the source tree (the folder
-# lives under build/, which is gitignored).
+# (arm64-v8a, x86_64 with --all). Each app module's build.gradle.kts adds its
+# own build-dir jniLibs srcDir ONLY when Gradle runs with -PwithEngine.
+# Nothing lands in the source tree (the folders live under build/, which is
+# gitignored).
 #
 # Invoked by the Gradle task `buildRustEngine` (preBuild dependency) and by
 # CI's engine-android job. Idempotent: re-running is safe (cargo is
@@ -49,7 +52,12 @@ done
 # Repo root from the script location (engine/scripts/../..), CWD-independent.
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENGINE_DIR="$REPO_ROOT/engine"
-OUT_ROOT="$REPO_ROOT/apps/gallery/build/rust-jniLibs"
+# Phase 1 modularization: BOTH app modules package the engine --- stage into
+# each module's build-dir jniLibs (see the header note above).
+OUT_ROOTS=(
+  "$REPO_ROOT/gallery/app/build/rust-jniLibs"
+  "$REPO_ROOT/unified/app/build/rust-jniLibs"
+)
 
 # --- 1. Toolchain (fail loudly if absent; add the rust targets) ------------
 
@@ -210,12 +218,15 @@ stage_ort() { # <abi>
   echo "    $abi/libonnxruntime.so ($(wc -c < "$src" | tr -d ' ') bytes)"
 }
 
-echo "==> staging into ${OUT_ROOT#"$REPO_ROOT"/}"
+echo "==> staging into (relative to the repo root):"
+for out in "${OUT_ROOTS[@]}"; do echo "    ${out#"$REPO_ROOT"/}"; done
 for abi in arm64-v8a $([ "$ALL" -eq 1 ] && echo x86_64); do
   triple="aarch64-linux-android"
   [ "$abi" = "x86_64" ] && triple="x86_64-linux-android"
-  stage_cargo "$triple" "$abi"
-  stage_ort "$abi"
+  for OUT_ROOT in "${OUT_ROOTS[@]}"; do
+    stage_cargo "$triple" "$abi"
+    stage_ort "$abi"
+  done
 done
 
 echo "==> done"

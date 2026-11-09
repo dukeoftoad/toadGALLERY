@@ -77,7 +77,12 @@ internal const val THUMB_HEIGHT = 64
 internal fun thumbGradientPixels(width: Int, height: Int): IntArray {
     require(width > 0 && height > 0) { "thumb raster must be non-empty" }
     val pixels = IntArray(width * height)
-    // The three sweep stops (sRGB): teal, the editor's own violet, amber.
+    // The three sweep stops (sRGB): teal, violet, amber. The violet stop is
+    // a HUE-WHEEL reference (teal -> violet -> amber maximizes the hue
+    // coverage the LUT response shows in one glance) --- it is CONTENT, not
+    // the chrome accent, and it is NOT the r53 chrome violet that the r63
+    // re-pin retired from every theme role (see the r63 proposal's §3: only
+    // EditorTheme.kt + VideoEditTheme carry accent hexes now).
     val stops = intArrayOf(0xFF2E8B8B.toInt(), 0xFF8B72E8.toInt(), 0xFFE8A04B.toInt())
     val neutralTop = height * 2 / 3
     for (y in 0 until height) {

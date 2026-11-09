@@ -29,6 +29,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -75,6 +78,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,14 +86,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -102,6 +109,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dukeoftoad.gallery.edit.contract.EditContract
@@ -2334,10 +2342,36 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // wrapper is a view of the same pixel buffer, not a copy).
         val originalImage = remember(previewBase) { previewBase?.asImageBitmap() }
 
+        // F-72 (r65, the r63 proposal's deferred canvas craft): the MAIN
+        // canvas zooms --- pinch to scale between 1x (fit) and 4x (the
+        // proposal's "clamped 1x-4x"), pan while zoomed (two fingers),
+        // double-tap to fit. The math lives in CanvasZoomMath (JVM-tested);
+        // this state is session-local UI (the compose-side pose the
+        // graphicsLayer replays) and RESETS on every tool entry --- the ten
+        // tool canvases own their own gestures and their unzoomed coordinate
+        // space, exactly Ente's split (the main canvas zooms, sub-editors
+        // own their gestures).
+        var canvasScale by remember { mutableFloatStateOf(1f) }
+        var canvasOffset by remember { mutableStateOf(Offset.Zero) }
+        var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+        fun resetCanvasZoom() {
+            canvasScale = 1f
+            canvasOffset = Offset.Zero
+        }
+        LaunchedEffect(screen) {
+            if (screen != PhotoScreen.Main) resetCanvasZoom()
+        }
+
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                // F-72: the zoomed preview must never paint over the chrome
+                // (the header above, the tab bar below) --- the canvas clips
+                // its own bounds (the image was Fit-fit inside anyway; the
+                // clip only becomes visible once the zoom exceeds 1x).
+                .clipToBounds()
+                .onSizeChanged { canvasSize = it }
                 .pointerInput(
                     selectedTextLayerId, selectedStickerLayerId,
                     selectedDrawLayerId, selectedRegionLayerId,
@@ -2510,11 +2544,82 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             },
                         )
                     }
+                }
+                // F-72 gesture 1: the two-pointer transform (pinch zoom + pan
+                // while zoomed). A CUSTOM loop, not detectTransformGestures,
+                // on purpose: the generic detector consumes ONE-finger drags
+                // too, which would cancel the compare press-hold above the
+                // moment a held finger moved (waitForUpOrCancellation treats
+                // a consumed position change as a cancellation). This loop
+                // only reacts --- and only consumes --- while TWO or more
+                // pointers are down, so the compare hold's single-finger
+                // event stream stays byte-identical to the pre-F-72 shape:
+                // the zoom can never eat the compare's contract.
+                .pointerInput(screen == PhotoScreen.Main, exporting) {
+                    if (screen == PhotoScreen.Main && !exporting) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            do {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                if (pressed.size >= 2) {
+                                    val zoomChange = event.calculateZoom()
+                                    val pan = event.calculatePan()
+                                    val centroid = event.calculateCentroid()
+                                    if (zoomChange != 1f || pan != Offset.Zero) {
+                                        val out = CanvasZoomMath.step(
+                                            scale = canvasScale,
+                                            offsetX = canvasOffset.x,
+                                            offsetY = canvasOffset.y,
+                                            zoomChange = zoomChange,
+                                            panX = pan.x,
+                                            panY = pan.y,
+                                            centroidX = centroid.x,
+                                            centroidY = centroid.y,
+                                            widthPx = canvasSize.width.toFloat(),
+                                            heightPx = canvasSize.height.toFloat(),
+                                        )
+                                        canvasScale = out[0]
+                                        canvasOffset = Offset(out[1], out[2])
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    }
+                }
+                // F-72 gesture 2: double-tap-to-fit. Sits AFTER the compare's
+                // detector in the chain, so the compare observes every event
+                // unconsumed first (its press-hold semantics are untouched);
+                // the reset is a no-op at the fit pose, and while the pose is
+                // zoomed the brief first-tap compare flash IS the honest
+                // original-vs-edited look at the moment of reset.
+                .pointerInput(screen == PhotoScreen.Main, exporting) {
+                    if (screen == PhotoScreen.Main && !exporting) {
+                        detectTapGestures(
+                            onDoubleTap = { resetCanvasZoom() },
+                        )
+                    }
                 },
             contentAlignment = Alignment.Center,
         ) {
             val image = if (showOriginal) originalImage else previewImage
             if (image != null) {
+                // F-72: the pose layer --- the preview AND its overlays (the
+                // crop dim rect) transform TOGETHER, so the zoomed canvas
+                // stays self-consistent. The chrome overlays (the compare
+                // chip/badge below) sit OUTSIDE this layer: they are canvas
+                // chrome, not canvas content.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = canvasScale
+                            scaleY = canvasScale
+                            translationX = canvasOffset.x
+                            translationY = canvasOffset.y
+                        },
+                ) {
                 Image(
                     bitmap = image,
                     contentDescription = stringResource(R.string.editor_preview),
@@ -2555,6 +2660,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                     }
                 }
+                } // F-72 pose layer (the graphicsLayer Box)
             } else {
                 CircularProgressIndicator(color = Color.White)
             }

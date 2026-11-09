@@ -10,36 +10,69 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * The prototype's contract-conformance suite (Issue #14): parses the EDIT
- * APP's own source manifest on the JVM and pins the contract surface the
+ * APP's source manifests on the JVM and pins the contract surface the
  * gallery relies on. CI cannot install two APKs on an emulator (ADR-0016),
  * so the round-trip is proven in two layers: this manifest-level
  * conformance suite (the editor's side of the contract) plus the contract
  * module's negotiation/request/result tests (the shared logic), with the
  * on-device dogfood checklist carrying the physical round trip.
+ *
+ * Phase 1 layout (the deliberate split, see the manifest headers): the
+ * CONTRACT SURFACE (activities, intent-filters, mime sets, the two
+ * activity-level contract markers, the legacy capped write grant) rides
+ * the :editor:core library manifest that both installable shells merge;
+ * the APP-LEVEL pieces (the application attributes, the APPLICATION-level
+ * r46 fallback marker, and the r41 INTERNET hard-strip) ride the
+ * :editor:app SHELL manifest alone --- the unified build embeds the
+ * library and keeps the gallery's model-download INTERNET grant, so the
+ * strip must never ride the library. Each assertion below reads exactly
+ * the manifest that owns its subject.
  */
 class EditManifestConformanceTest {
 
     /**
-     * Unit-test working dir is the module dir (apps/edit) under Gradle; the
-     * local r41 harness pins the WORKTREE ROOT as the cwd --- be tolerant
-     * of both (the repo-root candidate the round's harness runs from).
+     * Unit-test working dir is the module dir (:editor:core) under Gradle;
+     * the local r41 harness pins the WORKTREE ROOT as the cwd --- be
+     * tolerant of both (the repo-root candidate the round's harness runs
+     * from, generalized for the post-Phase-1 module layout).
      */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         return sequenceOf(
-            File(cwd, relative), // the Gradle module cwd (apps/edit)
-            File(cwd, "apps/edit/$relative"), // the repo/worktree-root cwd (the local harness)
-            File(cwd.parentFile, "apps/edit/$relative"), // any direct child of the root
+            File(cwd, relative), // the Gradle module cwd (:editor:core)
+            File(cwd.parentFile, "core/$relative"), // a sibling :editor:* module cwd
+            File(cwd, "editor/core/$relative"), // the repo/worktree-root cwd (the harness)
         ).firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
 
+    /**
+     * The APP-LEVEL shell manifest resolver: same tolerant pattern, pointed
+     * at the :editor:app shell that carries the application attributes, the
+     * APPLICATION-level r46 fallback marker, and the r41 INTERNET strip.
+     */
+    private fun appManifestFile(): File {
+        val cwd = File(System.getProperty("user.dir") ?: ".")
+        return sequenceOf(
+            File(cwd, "app/src/main/AndroidManifest.xml"), // a sibling :editor:app cwd
+            File(cwd.parentFile, "app/src/main/AndroidManifest.xml"), // the Gradle module cwd (:editor:core)
+            File(cwd, "editor/app/src/main/AndroidManifest.xml"), // the repo/worktree-root cwd (the harness)
+        ).firstOrNull { it.exists() }
+            ?: error("Cannot locate the :editor:app shell manifest from ${cwd.absolutePath}")
+    }
+
     private fun manifestText(): String = moduleFile("src/main/AndroidManifest.xml").readText()
 
-    private fun manifest() = DocumentBuilderFactory.newInstance()
+    private fun appManifestText(): String = appManifestFile().readText()
+
+    private fun parse(file: File) = DocumentBuilderFactory.newInstance()
         .apply { isNamespaceAware = true }
         .newDocumentBuilder()
-        .parse(moduleFile("src/main/AndroidManifest.xml"))
+        .parse(file)
+
+    private fun manifest() = parse(moduleFile("src/main/AndroidManifest.xml"))
+
+    private fun appManifest() = parse(appManifestFile())
 
     // ---- The launch surface (spec section 1) ----
 
@@ -148,7 +181,7 @@ class EditManifestConformanceTest {
      * value, or null when the application carries no marker at all.
      */
     private fun applicationLevelContractVersion(): Int? {
-        val doc = manifest()
+        val doc = appManifest()
         val application = doc.getElementsByTagName("application").item(0)
         val children = application.childNodes
         for (i in 0 until children.length) {
@@ -264,7 +297,7 @@ class EditManifestConformanceTest {
         // all. Every occurrence of the INTERNET string in the source
         // manifest must therefore live inside that strip directive and
         // nowhere else: no request, no allowlist, ever (contract 4.5).
-        val doc = manifest()
+        val doc = appManifest()
         val permissions = doc.getElementsByTagName("uses-permission")
         var internetStrips = 0
         for (i in 0 until permissions.length) {
@@ -278,39 +311,58 @@ class EditManifestConformanceTest {
                 internetStrips += 1
             }
         }
-        assertEquals("exactly one INTERNET strip directive", 1, internetStrips)
-        val text = manifestText()
+        assertEquals("exactly one INTERNET strip directive on the app shell", 1, internetStrips)
+        val text = appManifestText()
         val mentions = Regex("android\\.permission\\.INTERNET").findAll(text).count()
         assertEquals(
             "every dotted INTERNET mention is the strip directive itself (comments say INTERNET, never the dotted form)",
             internetStrips,
             mentions,
         )
+        assertEquals(
+            "the :editor:core contract manifest carries no dotted INTERNET mention (the strip is the app shell's alone)",
+            0,
+            Regex("android\\.permission\\.INTERNET").findAll(manifestText()).count(),
+        )
     }
 
     @Test
     fun `the only declared permission REQUEST is the pre-Q capped storage write`() {
+        // Phase 1 layout: the legacy write request rides :editor:core (both
+        // installable shells merge it); the APP shell's only uses-permission
+        // element is the r41 INTERNET strip directive, which requests
+        // nothing.
         val doc = manifest()
         val permissions = doc.getElementsByTagName("uses-permission")
-        // Two uses-permission ELEMENTS: the legacy write request + the
-        // r41 INTERNET strip directive (which requests nothing).
-        assertEquals("the write request + the INTERNET strip", 2, permissions.length)
-        var realRequests = 0
-        for (i in 0 until permissions.length) {
-            val p = permissions.item(i)
-            if (p.attributes.getNamedItem("tools:node")?.nodeValue == "remove") continue
-            realRequests += 1
-            assertEquals(
-                "android.permission.WRITE_EXTERNAL_STORAGE",
-                p.attributes.getNamedItem("android:name").nodeValue,
-            )
-            assertEquals(
-                "the legacy write grant must be capped at API 28 (Q+ inserts need no permission)",
-                "28",
-                p.attributes.getNamedItem("android:maxSdkVersion").nodeValue,
-            )
-        }
-        assertEquals("exactly one real permission request", 1, realRequests)
+        // Exactly one uses-permission ELEMENT on the library: the legacy
+        // write request (the r41 INTERNET strip lives on the :editor:app
+        // shell, asserted below).
+        assertEquals("exactly the legacy write request on the library", 1, permissions.length)
+        val p = permissions.item(0)
+        assertEquals(
+            "android.permission.WRITE_EXTERNAL_STORAGE",
+            p.attributes.getNamedItem("android:name").nodeValue,
+        )
+        assertEquals(
+            "the legacy write grant must be capped at API 28 (Q+ inserts need no permission)",
+            "28",
+            p.attributes.getNamedItem("android:maxSdkVersion").nodeValue,
+        )
+        // And the shell: exactly one element, the strip, no real request.
+        val appDoc = appManifest()
+        val appPermissions = appDoc.getElementsByTagName("uses-permission")
+        assertEquals(
+            "the APP shell carries exactly one uses-permission element (the INTERNET strip)",
+            1,
+            appPermissions.length,
+        )
+        val strip = appPermissions.item(0)
+        assertEquals(
+            "the APP shell's uses-permission is the r41 strip, never a request",
+            "android.permission.INTERNET",
+            strip.attributes.getNamedItem("android:name").nodeValue,
+        )
+        assertEquals("remove", strip.attributes.getNamedItem("tools:node").nodeValue)
     }
 
     // ---- The application identity ----
@@ -319,7 +371,8 @@ class EditManifestConformanceTest {
     fun `allowBackup is off for the editor prototype`() {
         // The prototype holds no user data worth backing up; the gallery's
         // backup-exclusion posture carries over as the conservative default.
-        val doc = manifest()
+        // (Phase 1: the application attributes ride the :editor:app shell.)
+        val doc = appManifest()
         val application = doc.getElementsByTagName("application").item(0)
         assertEquals("false", application.attributes.getNamedItem("android:allowBackup").nodeValue)
     }

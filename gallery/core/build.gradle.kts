@@ -40,6 +40,15 @@ android {
         // the code sees the same constants as before the split.
         buildConfigField("int", "VERSION_CODE", "46")
         buildConfigField("String", "VERSION_NAME", "\"0.4.5-alpha\"")
+        // r55 launcher-alias placeholder: the LIBRARY manifest carries the
+        // MAIN/LAUNCHER activity-alias whose enabled state is a placeholder,
+        // so library-level manifest processing (the unit-test manifest merge
+        // the Roborazzi gate runs, and the release-resource verification
+        // CodeQL's autobuild `assemble` triggers) needs the value too ---
+        // without it the merge fails with "no value for <launcherAliasEnabled>
+        // is provided". Mirrors the app-side defaultConfig value; the app
+        // flavors still override (basic=true, engine/semantic/face=false).
+        manifestPlaceholders["launcherAliasEnabled"] = true
     }
 
     buildFeatures {

@@ -3006,3 +3006,240 @@ artifact lands them, then verify re-activates.
 (pinch-zoom) and F-73 (Regions→Draw) opened as ledger-only by the
 approved item 8; F-69's registry structure landed, the Settings
 tri-state UI is its own round; PAT revocation advised again.
+
+## 2026-11-09 — r63-fix window (the unified editor was never in the APK — F-74; versionCode 44)
+
+**Directive.** The maintainer's fresh-install round on the unified r63
+build: "uninstall the old APKs, install only the unified r63 build." The
+Edit tap resolved Ready and the launch died on a class that was never
+there. The dex probe on the shipped vc42/vc43 artifacts proved ZERO
+`io/github/dukeoftoad/gallery/edit` strings in every unified dex since
+r59: the r59 legacy `.java.srcDirs(...)` call silently stopped feeding
+the AGP 9 built-in Kotlin compiler while the same legacy API on
+res/assets kept merging (resources shipped, classes never did). Older
+devices never noticed because the separately-installed edit APK answered
+the contract. PR #160 (squash `2fc6e74`, merged into unified-app).
+
+**The eight rounds that closed F-74.** The fix was layered across eight
+CI-driven rounds on `fix/r63-unified-editor-embedded`, each one caught
+honestly by the next gate:
+
+- **Round 1** — the `.java.directories` new API (the one main provably
+  uses). The new embedded-code hard gate in unified-apk.yml (scans every
+  `classes*.dex` for the editor entry classes + the engine JNI library,
+  dies before upload if absent) caught the miss: assemble green, classes
+  still absent.
+- **Round 2** — the operative registration is the KOTLIN directory set,
+  not java. The offline config probe pinned the wiring: every Android
+  source set carries a dedicated kotlin directory set (main seeds
+  `[src/main/java, src/main/kotlin]` by DEFAULT — why main always
+  compiled; unified seeded only `[src/unified/java, src/unified/kotlin]`).
+  The unified flavor now registers `../edit/src/main/kotlin` via
+  `.kotlin.srcDirs(...)`. CI run #12 is the first unified build to ever
+  compile the editor sources.
+- **Round 3** — the R-compat shim. The editor sources resolve R through
+  `io.github.dukeoftoad.gallery.edit.R`, which has no generated target
+  inside the gallery module. `RCompat.kt`: a single typealias
+  `R = io.github.dukeoftoad.gallery.R` (under
+  `android.nonTransitiveRClass=true` every referenced resource is
+  module-OWN).
+- **Round 4** — the Variant-API registration + the R-seam goes public.
+  Belt-and-braces at BOTH layers: the sourceSets kotlin directory set
+  (line-level) AND `variant.sources.kotlin.addStaticSourceDirectory(...)`
+  (the compile task's direct documented input; the method name pinned by
+  javap of gradle-api-9.2.1).
+- **Round 5** — the R-jar diagnostic. Four rounds in, the alias question
+  was still open; this round added an always()-diagnostic capturing every
+  jar under `build/intermediates`+`build/generated` carrying R classes
+  into an rjar-diagnostic artifact. The artifact proved: the compile
+  R.jar carries all 277 editor entries under
+  `io.github.dukeoftoad.gallery.R$string`, no edit-package R exists on
+  any compile surface, and K2 still fails all 351 member lookups through
+  the typealias.
+- **Round 6** — the edit-package R becomes a GENERATED source class.
+  `generateEditRCompat` reads the unified variant's compile symbol list
+  (`intermediates/compile_symbol_list`) and generates
+  `io/github/dukeoftoad/gallery/edit/R.java` — a real source class
+  (source classes beat every other resolution candidate) delegating every
+  resource field to `io.github.dukeoftoad.gallery.R`. Fields stay
+  non-final ints so the delegation reads the runtime-baked real IDs at
+  class-init (the same contract the runtime R replacement relies on).
+  `EditorRAlias.kt` removed. apps/edit untouched.
+- **Round 7** — the Gradle 9 configuration-context fix.
+  `generateEditRCompat.configure{...}` called from inside another task's
+  realization context is a Gradle 9 container-mutation error. Replaced
+  with a lazy STRING `dependsOn(generateUnifiedReleaseRFile)` declared on
+  the generator itself at top level — legal, resolves in the task graph,
+  no container mutation.
+- **Round 8** — the generated R becomes a first-class Variant-API
+  generated source. `GenerateEditRCompatTask` (`@InputFiles` symbol
+  lists, `@OutputDirectory` output, `@TaskAction` generator) registered
+  through `variant.sources.java.addGeneratedSourceDirectory(...)` — the
+  API whose entire purpose is wiring a generated source dir into every
+  consuming task (kotlin, javac, KSP, lint) in one declaration.
+
+**Verification.** Local: a real Android SDK + JDK 17 in the sandbox;
+`:apps:gallery:compileUnifiedDebugKotlin` + the full assemble green
+after every round. CI: the embedded-code hard gate (every `classes*.dex`
+scanned), the packaging-discipline guard covering `Unified`, and the
+signature gates. The maintainer's device round on vc44 confirmed: "All
+are working..!"
+
+**Remaining.** F-74 FIXED this round (the unified editor is in the APK);
+F-71's header-pinning JVM signature stays in place, the vc44 device
+check is the maintainer's "All are working..!" round; F-72 (pinch-zoom)
+and F-73 (Regions→Draw) remain ledger-only; F-69's registry structure
+landed, the Settings tri-state UI is its own round; carried items
+unchanged, PAT revocation advised again.
+
+## 2026-11-09 — r64 window (the Settings re-craft — pinned tabs, icon-badged card rows, the REAL Theme preference; the dev surfaces retire; versionCode 45)
+
+**Directive.** The maintainer's post-vc44 directive: "All are
+working..! Now polish, fix the flaws, make the app modern, remove
+development progress in setting page, add more features to setting tab
+with ux redesign, scrollable, more features in ui(hand written) with
+ux." Landed on `feat/r64-settings-modern` (branched from unified-app @
+`2fc6e74`). PR #161 (squash `682f69d`, merged into unified-app).
+
+**Changes.** All hand-written on the house tokens, zero new dependencies:
+
+1. **The modern carded Settings page** — the segmented tabs (General |
+   AI | System) are PINNED above a scrollable body (the switcher stays
+   reachable however far the content scrolls; the scroll resets on every
+   switch). Sections render as rounded group cards of icon-badged rows:
+   `SettingsIconBadge` (40dp tonal container, primary at 12% alpha, on
+   `ToadShapes.medium`), `SettingsNavRow` (badge + title + supporting +
+   chevron, whole row the tap target), `SettingsToggleRow` (the r50
+   whole-row-toggle idiom on the new shape). Three badge glyphs
+   hand-drawn in res/drawable (theme contrast circle, stories ring+play,
+   picker photo-frame); the bin/vault rows reuse `ic_trash`/`ic_vault`,
+   the Material slots ride the core icon set only.
+2. **A REAL new Theme preference** — `ThemeMode` (System/Light/Dark,
+   persisted under `"theme_mode"`, the same forgiving NAME wire format
+   as GroupBy/LayoutStyle), resolved by the shell at the
+   `ToadGalleryTheme` call so the whole app re-themes live. Default
+   SYSTEM = the pre-r64 render. The r62 Material You dynamic-color
+   toggle joins it in one Theme card.
+3. **REMOVED — "Development progress" (F-1) in full**: the Settings
+   entry, the progress route, `ProgressScreen.kt`, the `ProgressSnapshot`
+   parser + its test, the twelve `settings_progress_*` strings, and the
+   build-time `progress.json` asset mirror (copyProgressJson + the
+   generated/progressAssets srcDir + the merge*Assets/lintVital wiring).
+   The product UI carries no dev-dashboard bytes.
+4. **REMOVED — "Installed components" (the r55 family probe)**: in the
+   unified build the maintainer ships, the PackageManager probe read
+   "Not installed" for Engine/Semantic/Face/Edit — capabilities embedded
+   all along. `probeGalleryComponentRows`/`openGalleryComponent` and the
+   fourteen `settings_components_*` strings go; the manifest `<queries>`
+   entries stay (LauncherConsolidationTest still pins the consolidation).
+   The About card's BuildShape-derived build line is the honest
+   replacement.
+5. **SYSTEM tab consolidation** — the recycle-bin and hidden-vault
+   sections fold into the Storage card as its first rows; the duplicate
+   vault/trash measurement rows merge away (a locked vault still leaks
+   no count or size).
+6. **Editor polish** — the video Adjust chips go name-only (nine new
+   `editor_adjust_name_*` strings); the header keeps the live "Name: N",
+   the chips stop repeating it (the device screenshot's "Contr..."
+   half-cut chip).
+
+**The CI-driven fixes riding the round.** (a) XML comments cannot
+contain `--` — the house em-dash (`---`) is illegal inside XML comments;
+five resource files reworded (colon/period separators), every touched
+XML parses under minidom. (b) `joinToString`'s transform is not inline —
+the composable `stringResource(it)` call moved to a `map` first (inline,
+legal), then `join` the already-resolved strings. (c) the F-74
+generator's latent debug-variant dependency gap — ci.yml's
+`compileUnifiedDebugKotlin` step surfaced it: the `symbolLists` input is
+now scoped to the UNIFIED flavor's two symbol-list dirs
+(`compile_symbol_list/unifiedRelease` + `unifiedDebug`) and `dependsOn`
+declares BOTH `generateUnifiedReleaseRFile` and `generateUnifiedDebugRFile`.
+(d) the r63-fix round-5 R-jar diagnostic retired from unified-apk.yml
+(vc44 confirmed the generated R-compat class end-to-end). (e) the
+orphaned r60 `settings_about_entry` string retired.
+
+**Verification.** Local: `tools/kotlin_lex_check.py` green on all
+touched Kotlin; every touched XML parses under minidom before the push.
+JVM: `AppearanceTest` pins the ThemeMode contract (defaults, forgiving
+parse, round-trip, equality); `AccessibilityWiringTest` drops the
+removed ProgressScreen from the heading map. CI: the full check suite;
+the unified debug + release gates.
+
+**Remaining.** F-68 (date-format + video-autoplay appearance extras),
+F-69 (accent picker beyond the Material You toggle — the EditorPalette
+registry the r63b re-pin landed IS its plug-in point), F-70 (storage
+dashboard deep-links) all carried; F-72 (pinch-zoom) and F-73
+(Regions→Draw) still open; the r63 proposal cross-verification is the
+next round; carried items unchanged, PAT revocation advised again.
+
+## 2026-11-09 — r65 window (F-72 lands — the photo editor canvas zooms; the r63 proposal cross-verified; versionCode 46)
+
+**Directive.** The maintainer's 2026-11-09 directive: follow up on the
+green CI, CROSS-VERIFY the repo against the r63 editor redesign proposal
+(the approved design document), and fix whatever still matches that
+document's "before" audit, using the proposal as the spec. PR #162
+(squash `e61cafc`, merged into unified-app).
+
+**The cross-verification (the proposal vs the shipped r63/vc44-45
+code).** Every §3–§5 spec item audited against the current sources — and
+the r63 implementation matches the approved proposal:
+
+- **§3 the toad-green re-pin**: `EditorPalette.Toad` carries the exact
+  hex table, and the video surface's own scheme maps the same registry
+  (violet retired; zero violet chrome anywhere — the one remaining
+  violet hex is the filter-thumb gradient's hue-wheel reference stop,
+  CONTENT not chrome, now honestly commented).
+- **§4 the photo chrome**: the 56dp icon header (close/settings/undo/redo
+  at 48dp touch, the CTA pill 40dp/20dp radius/maxLines=1), the grouped
+  auto-scrolling tab bar (68dp rows, the 30dp @14% selected halo, the
+  1dp separators, the 26dp conditional fade padders) in the approved
+  Adjust·Looks·Color ‖ Crop·AI·Text·Stickers·Draw·Regions ‖ Frames
+  order, the tappable honesty chip, the floating compare chip, the
+  promoted tool-header Reset, and the Ente tune-rail (34dp conic value
+  rings, one active slider, tap-to-toggle-zero).
+- **§5 the video chassis**: the expanded preview frame, canvas-tap
+  transport + 44dp overlay + ±10s double-tap seek, trim-on-filmstrip,
+  the mono Time row, six flex tabs, the Frame/GIF renames.
+
+The ONLY spec item the r63 rounds deferred was **F-72** — the proposal's
+own escape hatch. F-73 (Regions→Draw merge) stays OPEN by design.
+
+**F-72 lands, the proposal's P4 line verbatim** ("pinch-zoom +
+double-tap-to-fit (clamped 1×–4×)"):
+
+- **CanvasZoomMath** — the pure transform arithmetic (ADR-0011,
+  JVM-pinned by `CanvasZoomMathTest`: bounds, centroid-kept, overflow
+  parking, the exact re-center on zoom-out, ceiling absorption, identity),
+  driving a `graphicsLayer` pose layer in EditActivity that transforms
+  the preview AND its crop overlay together; the compare chip/badge stay
+  chrome, outside the pose; `clipToBounds` so the zoomed canvas never
+  paints over the header or the tab bar.
+- **Gesture discipline** — the transform is a CUSTOM two-pointer loop,
+  NOT `detectTransformGestures` (the generic detector consumes one-finger
+  drags too, which would cancel the compare press-hold the moment a held
+  finger moved — `waitForUpOrCancellation` treats a consumed position
+  change as a cancellation). The F-72 loop reacts and consumes ONLY
+  while two or more pointers are down, so the compare hold's
+  single-finger event stream stays byte-identical to the pre-F-72 shape.
+  Double-tap-to-fit rides `detectTapGestures` AFTER the compare's
+  detector. The zoom resets on every tool entry (the ten tool canvases
+  keep their unzoomed coordinate space — Ente's split) and is inert
+  while an export runs.
+
+**The CI-driven fix riding the round.** The `graphicsLayer` lambda
+overload lives in `androidx.compose.ui.graphics`, not
+`androidx.compose.ui.draw` — the draw-package import only resolves the
+parameter overload; the lambda overload (the one the gallery's own
+ViewerScreen zoom uses) is the correct import. Swapped; nothing else
+changed.
+
+**Verification.** Local: `CanvasZoomMathTest` (pure, JVM) pins the
+transform contract; `:apps:edit:compileDebugKotlin` +
+`:apps:gallery:compileUnifiedDebugKotlin` green. CI: the full check
+suite gates the final head. versionCode 45 → 46.
+
+**Remaining.** F-72 FIXED this round; F-73 (Regions→Draw merge — its
+own consent-free UX pass) stays open per the proposal's own rule;
+F-68/F-69/F-70 carried; the v1.0 stable cut + the F-Droid submission +
+every on-device verification row remain the human remainder (the
+standing directive); PAT revocation advised again.

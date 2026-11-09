@@ -93,7 +93,7 @@ jobs:
           FLAVOR: ${{ matrix.flavor }}
         run: |
           FLAVOR_LC="$(echo "$FLAVOR" | tr '[:upper:]' '[:lower:]')"
-          APK="$(ls gallery/app/build/outputs/apk/$FLAVOR_LC/debug/*.apk)"
+          APK="$(ls gallery/app/build/outputs/apk/"$FLAVOR_LC"/debug/*.apk)"
           echo "APK: $APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"

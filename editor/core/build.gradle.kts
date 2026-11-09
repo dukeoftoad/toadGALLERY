@@ -22,6 +22,18 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+// --- Roborazzi capture output location (r56, docs/phase-11/roborazzi.md) ---
+// The gallery block's r47 reasoning applies verbatim: the plugin's default
+// output dir is a build/ directory no baseline can be committed from, so the
+// output dir is pinned to the test resources tree --- recordRoborazziDebug
+// writes the PNGs STRAIGHT into the directory they are committed from, and
+// verifyRoborazziDebug reads its baselines from the same place. (Restored at
+// the Phase-1 split's cost: the block was lost when :apps:edit became
+// :editor:core --- the pre-split wording, verbatim.)
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/resources/roborazzi"))
+}
+
 android {
     namespace = "com.toadgallery.editor"
     compileSdk = libs.versions.app.build.compileSDKVersion.get().toInt()

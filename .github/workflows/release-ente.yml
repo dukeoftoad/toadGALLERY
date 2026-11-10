@@ -18,8 +18,10 @@ name: Release (ente --- the vendored Ente engine APK)
 #
 # ADR-0018: the APK is release-key signed via the TG_* secrets contract
 # and passes the HARD apksigner gate (pinned signer digest) before it
-# publishes; the R8 mapping.txt ships with the release (the mapping
-# lineage) and the engine native libraries are hard-verified in the APK
+# publishes; the APK is the ONLY release asset --- the R8 mapping.txt
+# and the checksum ride the run's Actions artifacts (rel-ente), not the
+# release page --- and the engine native libraries are hard-verified in
+# the APK
 # (libtoad_ml_jni.so + libonnxruntime.so, staged by
 # engine/scripts/build-android.sh via the buildRustEngine Exec task).
 # A release is only ever cut from an already-reviewed, already-green SHA
@@ -200,9 +202,7 @@ jobs:
             echo "- The Ente product is the engine-flavor gallery build carrying the vendored Ente Rust engine (the ente-* crates + the toad-ml-jni bridge) and the ONNX runtime."
             echo "- applicationId com.toadgallery.engine (shared with the gallery fork's Engine product --- same product, different fork tip; they replace each other on install)."
             echo "- Signed with the ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
-            echo "- Verify your download: sha256sum -c <apk>.sha256."
             echo "- The engine native libraries (libtoad_ml_jni.so + libonnxruntime.so) are hard-verified as packaged."
-            echo "- The -mapping.txt asset is the R8 mapping for crash de-obfuscation of THIS APK."
             echo "- Requires Android 8.0+ (minSdk 26)."
             echo "- Built by the manual release-ente pipeline (workflow_dispatch only, no automated triggers); dispatch run ${GITHUB_RUN_ID}."
           } > "$NOTES"
@@ -223,5 +223,5 @@ jobs:
             --target "$RELEASE_SHA" \
             --title "toadGALLERY Ente ${TAG_NAME}" \
             --notes-file "$NOTES" \
-            "$STAGE"/*
+            "$STAGE"/*.apk
           gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

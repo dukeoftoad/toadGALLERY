@@ -41,7 +41,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'The release tag, e.g. v0.4.5-alpha-r50 (required: the operator names every release). A trailing -r<N> drives the asset file names; otherwise the run number is used.'
+        description: 'The release tag, e.g. v1.0.0 (required: the operator names every release). A trailing -r<N> drives the asset file names; otherwise the run number is used.'
         type: string
         required: true
       prerelease:
@@ -296,7 +296,7 @@ jobs:
           retention-days: 14
 
   publish:
-    name: Publish the master release
+    name: Publish the stable release
     needs: [ products-main ]
     runs-on: ubuntu-latest
     timeout-minutes: 15

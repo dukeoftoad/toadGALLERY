@@ -44,11 +44,6 @@ on:
         description: 'The release tag, e.g. v0.4.5-alpha-r50 (required: the operator names every release). A trailing -r<N> drives the asset file names; otherwise the run number is used.'
         type: string
         required: true
-      prerelease:
-        description: 'Publish this alpha/beta release as a pre-release.'
-        type: boolean
-        default: true
-
 permissions:
   contents: read
 
@@ -365,7 +360,6 @@ jobs:
       - name: Compose the release notes
         env:
           TAG_NAME: ${{ inputs.tag_name }}
-          PRERELEASE: ${{ inputs.prerelease }}
           SHA_UNIFIED: ${{ needs.products-unified.outputs.sha_unified }}
           VERSION_GALLERY: ${{ needs.products-unified.outputs.version_gallery }}
           VERSION_EDITOR: ${{ needs.products-unified.outputs.version_editor }}
@@ -394,15 +388,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ inputs.tag_name }}
-          PRERELEASE: ${{ inputs.prerelease }}
           SHA_UNIFIED: ${{ needs.products-unified.outputs.sha_unified }}
         run: |
-          ARGS=()
-          if [[ "$PRERELEASE" == "true" ]]; then
-            ARGS+=(--prerelease)
-          fi
           gh release create "$TAG_NAME" \
-            "${ARGS[@]}" \
+            --prerelease \
             --target "$SHA_UNIFIED" \
             --title "toadGALLERY alpha/beta bundle ${TAG_NAME}" \
             --notes-file "$NOTES" \

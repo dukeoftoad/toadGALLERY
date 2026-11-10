@@ -11,24 +11,14 @@ name: CI
 # also runs the vendored photos-side crates' test suites explicitly (the
 # workspace check/clippy gates cover them automatically --- no crate lists
 # anywhere --- but no workspace test step existed before).
-# Since r46 the gallery is a FOUR-FLAVOR matrix (one "engine" dimension:
-# basic / engine / semantic / face --- docs/phase-11/apk-matrix.md), so the
-# unflavored assembleDebug/lintDebug/testDebugUnitTest task names no longer
-# exist for :gallery:app: the canonical gate builds+lints+tests the BASIC
-# flavor, and additionally runs the ENGINE flavor's JVM unit tests (no
-# -PwithEngine needed --- unit tests compile no native code) so the
-# engine-shaped BuildConfig suite stays compiled and green on every PR.
-# r49 (the workflow-organization round): the four opt-in APK test builders
-# (apk-build-engine.yml, engine-apk.yml, modelpack-apk.yml,
-# editor-apk-build.yml) consolidated into ONE dispatch surface ---
-# .github/workflows/apk-build.yml; this file stays the canonical gate and
-# gains the repo-wide least-privilege baseline (explicit contents: read ---
-# every non-release workflow now declares its permissions).
+# The gate validates the four product family: Basic Gallery, Gallery Engine,
+# Editor, and Unified. The integration PR gate for unified lives in
+# unified-ci.yml; this workflow protects stable promotion PRs targeting main.
+# Release publication is separate and remains manual.
 
 on:
-  # Phase 2: push-to-main removed --- main-release.yml is the post-merge
-  # 5-APK release build now. This workflow stays the canonical PR gate
-  # (pull_request on main + manual dispatch for on-demand verification).
+  # Stable promotion PRs target main only after unified has passed its
+  # integration gate. This workflow is the pre-merge stable promotion gate.
   pull_request:
     branches: [ main ]
   # 2026-11-03 (orchestrator): dispatch added after pull_request event
@@ -129,15 +119,17 @@ jobs:
       - name: Run unit tests (basic + engine flavors)
         run: ./gradlew :gallery:app:testBasicDebugUnitTest :gallery:app:testEngineDebugUnitTest --no-daemon --stacktrace
 
-      # r59 (the unified-app round): the canonical gate ALSO compiles the
-      # unified flavor's Kotlin --- the editor app's sources compiled
-      # in-process into the gallery module (sourceSets at apps/edit
-      # verbatim). compileDebugKotlin proves the whole unified source
-      # graph (gallery + editor + both shared modules) resolves and
-      # compiles on EVERY PR, without packaging the heavy APK here (the
-      # unified-apk.yml dispatch workflow assembles it on demand).
-      - name: Compile the unified flavor (editor-in-gallery source graph)
-        run: ./gradlew :unified:app:compileDebugKotlin -PwithEngine --no-daemon --stacktrace
+      # Build the actual combined APK on the stable-promotion PR. A Kotlin-only
+      # compile is not enough to verify native packaging and the final APK.
+      - name: Assemble the Unified APK (engine-enabled)
+        run: ./gradlew :unified:app:assembleDebug -PwithEngine --no-daemon --stacktrace
+
+      - name: Verify Unified native libraries are packaged
+        run: |
+          APK="$(find unified/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
         # Binding since the issue #20 privacy policy tests landed; lint stays
         # non-binding until the Phase 2 cleanup pass.
 

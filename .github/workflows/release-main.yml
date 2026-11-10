@@ -1,4 +1,4 @@
-name: Release (main --- the 5-APK master bundle)
+name: Release (main --- four-product stable bundle)
 
 # Phase 3 manual release pipelines --- the Virtual Fork master release.
 #
@@ -7,23 +7,12 @@ name: Release (main --- the 5-APK master bundle)
 # tags / schedule) --- a release exists only when a human operator
 # dispatches this workflow and names the tag.
 #
-# The master release builds ALL FIVE product APKs under one tag:
+# The stable release builds the four canonical product APKs under one tag:
 #
 #   basic    :gallery:app:assembleBasicRelease    (main tip, property-less)
 #   engine   :gallery:app:assembleEngineRelease   (main tip, -PwithEngine)
 #   editor   :editor:app:assembleRelease          (main tip)
-#   ente     :gallery:app:assembleEngineRelease   (ENTE FORK TIP, -PwithEngine)
 #   unified  :unified:app:assembleRelease         (main tip, -PwithEngine)
-#
-# The Ente product is built from the ENTE FORK TIP, not main: per the
-# Phase 1 deviation Ente is vendored Rust (engine/), not a Kotlin module,
-# and the Ente APK IS the engine-flavor gallery build (ente-ci.yml is its
-# canonical definition). Sourcing it from the ente fork keeps every
-# product released from its canonical branch (the Virtual Fork
-# semantics); the release notes record each artifact's source ref + SHA.
-# Engine (main tip) and Ente (ente tip) share the engine-flavor
-# applicationId (com.toadgallery.engine) --- they are the same product
-# cut from different fork tips and replace each other on install.
 #
 # TWO gradle invocations, deliberately (the r46 lesson, now verbatim
 # policy): -PwithEngine is a GLOBAL property --- one invocation would
@@ -35,8 +24,7 @@ name: Release (main --- the 5-APK master bundle)
 #
 # Ref pinning (the PR #164 wrong-baseline lesson): every checkout below
 # pins its canonical branch --- the ref this workflow is dispatched from
-# is ignored by design, so release-main always releases main (+ the ente
-# fork tip for the Ente product).
+# is ignored by design, so release-main always releases the stable main tip.
 #
 # Signing + gates (ADR-0018): the keystore lives only in GitHub Encrypted
 # Secrets (TG_RELEASE_KEYSTORE_BASE64 / _PASSWORD / TG_RELEASE_KEY_ALIAS /
@@ -44,8 +32,8 @@ name: Release (main --- the 5-APK master bundle)
 # contract, step-level (never interpolated into the script body). Every
 # APK passes a HARD apksigner gate against the pinned release-certificate
 # digest before anything publishes --- an unsigned or debug-signed build
-# can never reach the release page. The five APKs are the ONLY release
-# assets: the per-APK checksums and all five R8 mapping.txt files
+# can never reach the release page. The four APKs are the ONLY release
+# assets: the per-APK checksums and all four R8 mapping.txt files
 # (bundled into ONE zip) are published as workflow-run artifacts (the
 # Actions tab), not on the release page.
 
@@ -262,7 +250,7 @@ jobs:
       # THE MAPPING LINEAGE (Phase 3): every release build is R8-minified,
       # so every APK's mapping.txt is mandatory --- a missing mapping is a
       # hard failure, not a warning. Names carry the product + version +
-      # round (a generic mapping.txt is ambiguous across five APKs).
+      # round (a generic mapping.txt is ambiguous across four APKs).
       - name: Stage the release artifacts (main-tip products)
         run: |
           STAGE="$GITHUB_WORKSPACE/staging"
@@ -307,138 +295,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  product-ente:
-    name: Ente product (ente fork tip, engine-flavor APK)
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    outputs:
-      version_ente: ${{ steps.versions.outputs.version_ente }}
-      sha_ente: ${{ steps.versions.outputs.sha_ente }}
-    steps:
-      - name: 'Checkout (pinned: ente fork tip)'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ente
-
-      - name: Set up the toolchain (Rust Android cross + Android)
-        uses: ./.github/actions/toad-setup
-        with:
-          rust: android
-
-      - name: Decode the ADR-0018 release keystore
-        env:
-          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          printf '%s' "$TG_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
-          chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
-          if [[ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]]; then
-            echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
-            exit 1
-          fi
-
-      - name: Resolve the tag, the round and the Ente version
-        id: versions
-        env:
-          TAG_NAME: ${{ inputs.tag_name }}
-        run: |
-          if [[ -z "$TAG_NAME" || "$TAG_NAME" =~ [[:space:]] ]]; then
-            echo "::error::tag_name is required and must not contain whitespace"
-            exit 1
-          fi
-          if [[ "$TAG_NAME" =~ -r([0-9]+)$ ]]; then
-            ROUND="${BASH_REMATCH[1]}"
-          else
-            ROUND="$GITHUB_RUN_NUMBER"
-          fi
-          VERSION_ENTE="$(grep -oP 'versionName = "\K[^"]+' gallery/app/build.gradle.kts | head -n1)"
-          if [[ -z "$VERSION_ENTE" ]]; then
-            echo "::error::could not extract versionName from the ente fork's gallery/app/build.gradle.kts"
-            exit 1
-          fi
-          SHA_ENTE="$(git rev-parse HEAD)"
-          echo "tag=$TAG_NAME round=$ROUND ente=$VERSION_ENTE sha=$SHA_ENTE"
-          {
-            echo "TAG_NAME=$TAG_NAME"
-            echo "ROUND=$ROUND"
-            echo "VERSION_ENTE=$VERSION_ENTE"
-            echo "SHA_ENTE=$SHA_ENTE"
-          } >> "$GITHUB_ENV"
-          {
-            echo "version_ente=$VERSION_ENTE"
-            echo "sha_ente=$SHA_ENTE"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build the signed Ente APK (engine flavor, -PwithEngine)
-        env:
-          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
-          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
-          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
-          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
-        run: ./gradlew :gallery:app:assembleEngineRelease -PwithEngine --no-daemon --stacktrace
-
-      - name: Verify the Ente APK (signature + engine-library gates)
-        run: |
-          APKSIGNER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/apksigner"
-          if [[ ! -x "$APKSIGNER" ]]; then
-            APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -path '*36.0.0*/apksigner' -print -quit)"
-          fi
-          if [[ -z "$APKSIGNER" || ! -x "$APKSIGNER" ]]; then
-            echo "::error::apksigner not found under build-tools 36.0.0"
-            exit 1
-          fi
-          EXPECTED_SHA256="8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494"
-          APK_DIR="gallery/app/build/outputs/apk/engine/release"
-          SIGNED_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*unsigned*' -print -quit)"
-          if [[ -z "$SIGNED_APK" ]]; then
-            echo "::error::no signed release APK for ente in $APK_DIR --- the build did not sign; check the TG_* env contract (ADR-0018)"
-            exit 1
-          fi
-          "$APKSIGNER" verify --print-certs "$SIGNED_APK" > "$RUNNER_TEMP/ente-apk-certs.txt"
-          ACTUAL_SHA256="$(grep -oP 'Signer #1 certificate SHA-256 digest: \K[0-9a-fA-F]+' "$RUNNER_TEMP/ente-apk-certs.txt" | tr '[:upper:]' '[:lower:]')"
-          if [[ -z "$ACTUAL_SHA256" ]]; then
-            echo "::error::ente: apksigner reported no signer certificate --- signature did not verify"
-            exit 1
-          fi
-          if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
-            echo "::error::ente signer mismatch: expected $EXPECTED_SHA256, got $ACTUAL_SHA256 --- NOT the ADR-0018 release key; refusing to publish"
-            exit 1
-          fi
-          echo "ente signature gate OK --- $SIGNED_APK"
-          for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
-            if ! unzip -l "$SIGNED_APK" | grep -q "$LIB"; then
-              echo "::error::the ENTE APK must carry $LIB"
-              exit 1
-            fi
-          done
-          echo "ENTE_APK=$SIGNED_APK" >> "$GITHUB_ENV"
-
-      - name: Stage the release artifacts (Ente product)
-        run: |
-          STAGE="$GITHUB_WORKSPACE/staging"
-          mkdir -p "$STAGE"
-          ENTE_NAME="toadGALLERY-ente-${VERSION_ENTE}-r${ROUND}"
-          cp "$ENTE_APK" "$STAGE/$ENTE_NAME.apk"
-          MAP="gallery/app/build/outputs/mapping/engineRelease/mapping.txt"
-          if [[ ! -s "$MAP" ]]; then
-            echo "::error::no R8 mapping at $MAP for the Ente APK --- the mapping lineage is mandatory on a release"
-            exit 1
-          fi
-          cp "$MAP" "$STAGE/$ENTE_NAME-mapping.txt"
-          ( cd "$STAGE" && for f in ./*.apk; do sha256sum "$f" > "$f.sha256"; done )
-          ls -l "$STAGE"
-
-      - name: Upload the staged release artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: rel-main-ente
-          path: staging/*
-          if-no-files-found: warn
-          retention-days: 14
-
   publish:
     name: Publish the master release
-    needs: [ products-main, product-ente ]
+    needs: [ products-main ]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -458,19 +317,19 @@ jobs:
           SHA_N="$(find "$STAGE" -maxdepth 1 -name '*.apk.sha256' | wc -l)"
           MAP_N="$(find "$STAGE" -maxdepth 1 -name '*-mapping.txt' | wc -l)"
           echo "APKs=$APK_N checksums=$SHA_N mappings=$MAP_N"
-          if [[ "$APK_N" != 5 || "$SHA_N" != 5 || "$MAP_N" != 5 ]]; then
-            echo "::error::the master bundle must be exactly 5 APKs + 5 checksums + 5 mappings (got $APK_N/$SHA_N/$MAP_N)"
+          if [[ "$APK_N" != 4 || "$SHA_N" != 4 || "$MAP_N" != 4 ]]; then
+            echo "::error::the stable bundle must be exactly 4 APKs + 4 checksums + 4 mappings (got $APK_N/$SHA_N/$MAP_N)"
             ls -l "$STAGE"
             exit 1
           fi
           ( cd "$STAGE" && sha256sum -c --strict ./*.apk.sha256 )
           echo "STAGE=$STAGE" >> "$GITHUB_ENV"
 
-      # THE MAPPING LINEAGE (the Phase 3 deliverable): all five R8
+      # THE MAPPING LINEAGE (the Phase 3 deliverable): all four R8
       # mapping.txt files bundled into ONE zip, published as the
       # rel-main-mappings run artifact (the Actions tab) --- not a
       # release asset.
-      - name: Bundle the five R8 mappings into one zip
+      - name: Bundle the four R8 mappings into one zip
         env:
           TAG_NAME: ${{ inputs.tag_name }}
         run: |
@@ -511,25 +370,21 @@ jobs:
           VERSION_GALLERY: ${{ needs.products-main.outputs.version_gallery }}
           VERSION_EDITOR: ${{ needs.products-main.outputs.version_editor }}
           VERSION_UNIFIED: ${{ needs.products-main.outputs.version_unified }}
-          SHA_ENTE: ${{ needs.product-ente.outputs.sha_ente }}
-          VERSION_ENTE: ${{ needs.product-ente.outputs.version_ente }}
         run: |
           NOTES="$RUNNER_TEMP/notes.md"
           {
-            echo "**toadGALLERY master bundle --- the 5-APK release ${TAG_NAME}.**"
+            echo "**toadGALLERY stable bundle --- the four-product release ${TAG_NAME}.**"
             echo ""
-            echo "Five products, one tag (the Virtual Fork master release). Each product is built from its canonical branch tip:"
+            echo "Four products, one tag. All artifacts are built from the approved stable main commit:"
             echo ""
             echo "| product | source ref | commit | version | applicationId |"
             echo "|---|---|---|---|---|"
             echo "| basic (gallery, no engine) | main | ${SHA_MAIN} | ${VERSION_GALLERY} | com.toadgallery |"
             echo "| engine (gallery + full AI stack) | main | ${SHA_MAIN} | ${VERSION_GALLERY} | com.toadgallery.engine |"
             echo "| editor (companion editor) | main | ${SHA_MAIN} | ${VERSION_EDITOR} | com.toadgallery.editor |"
-            echo "| ente (vendored Ente Rust engine build) | ente | ${SHA_ENTE} | ${VERSION_ENTE} | com.toadgallery.engine |"
             echo "| unified (everything-in-one shell) | main | ${SHA_MAIN} | ${VERSION_UNIFIED} | com.toadgallery.unified |"
             echo ""
-            echo "- Ente and engine share the engine-flavor applicationId (com.toadgallery.engine): they are the same product cut from different fork tips and replace each other on install."
-            echo "- All five APKs are signed with the same ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
+            echo "- All four APKs are signed with the same ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
             echo "- Requires Android 8.0+ (minSdk 26)."
             echo "- Built by the manual release-main pipeline (workflow_dispatch only, no automated triggers); dispatch run ${GITHUB_RUN_ID}."
           } > "$NOTES"
@@ -549,7 +404,7 @@ jobs:
           gh release create "$TAG_NAME" \
             "${ARGS[@]}" \
             --target "$SHA_MAIN" \
-            --title "toadGALLERY master bundle ${TAG_NAME}" \
+            --title "toadGALLERY stable bundle ${TAG_NAME}" \
             --notes-file "$NOTES" \
             "$STAGE"/*.apk
           gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

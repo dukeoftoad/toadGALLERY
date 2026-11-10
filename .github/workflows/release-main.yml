@@ -47,7 +47,7 @@ on:
       prerelease:
         description: 'Mark the release as a pre-release (default; the stable v1.0 cut is a human decision per ADR-0018).'
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read

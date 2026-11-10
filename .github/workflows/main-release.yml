@@ -1,16 +1,8 @@
-name: Main release (5-APK matrix)
+name: Stable branch verification (four products)
 
-# Phase 2 branch isolation --- the main branch builds ALL 5 APKs of the
-# toadGALLERY family on every push (merge). This is the authoritative
-# release-verification build: the 4 gallery flavors (basic, engine,
-# semantic, face) + the unified app. The standalone editor APK is verified
-# on the editor branch (the Virtual Fork isolation); it is NOT rebuilt
-# here.
-#
-# This workflow takes over the push-to-main trigger from ci.yml (which
-# becomes PR-only after Phase 2). ci.yml stays the canonical PR gate
-# (engine cargo gates + 1 basic APK + editor + unified compile + unit
-# tests); this workflow is the post-merge 5-APK release build.
+# Post-merge verification for main. main receives only approved stable
+# promotions from unified. This workflow builds the four-product family;
+# it does not publish a release. Stable publication is release-main.yml.
 
 on:
   push:
@@ -25,116 +17,104 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  engine-gates:
-    name: Vendored engine (cargo check + fmt + clippy)
+  engine-host:
+    name: Vendored engine host checks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Set up the toolchain (Rust host gates)
+      - name: Set up Rust host toolchain
         uses: ./.github/actions/toad-setup
         with:
           rust: host
-          android: 'false'
-
+          android: false
       - name: cargo check
         working-directory: engine
         run: cargo check --workspace --all-targets
-
       - name: cargo fmt
         working-directory: engine
         run: cargo fmt --all -- --check
-
       - name: cargo clippy
         working-directory: engine
         run: cargo clippy --workspace
+      - name: cargo test (photos-side crates)
+        working-directory: engine
+        run: cargo test -p ente-vecdb -p ente-photos-ml
 
-  gallery:
-    name: Gallery ${{ matrix.flavor }} debug APK
+  products:
+    name: Build ${{ matrix.product }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
         include:
-          - flavor: Basic
+          - product: Basic Gallery
             task: :gallery:app:assembleBasicDebug
-            with_engine: false
+            artifact: gallery/app/build/outputs/apk/basic/debug/*.apk
             rust: ''
-          - flavor: Engine
+            with_engine: false
+            native: false
+          - product: Gallery Engine
             task: :gallery:app:assembleEngineDebug
-            with_engine: true
+            artifact: gallery/app/build/outputs/apk/engine/debug/*.apk
             rust: android
-          - flavor: Semantic
-            task: :gallery:app:assembleSemanticDebug
             with_engine: true
+            native: true
+          - product: Editor
+            task: :editor:app:assembleDebug
+            artifact: editor/app/build/outputs/apk/debug/*.apk
+            rust: ''
+            with_engine: false
+            native: false
+          - product: Unified
+            task: :unified:app:assembleDebug
+            artifact: unified/app/build/outputs/apk/debug/*.apk
             rust: android
-          - flavor: Face
-            task: :gallery:app:assembleFaceDebug
             with_engine: true
-            rust: android
+            native: true
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Set up the toolchain
+      - name: Set up toolchain
         uses: ./.github/actions/toad-setup
         with:
           rust: ${{ matrix.rust }}
-
-      - name: Assemble ${{ matrix.flavor }} debug APK
+      - name: Assemble ${{ matrix.product }}
         run: ./gradlew ${{ matrix.task }} ${{ matrix.with_engine && '-PwithEngine' || '' }} --no-daemon --stacktrace
-
-      - name: Verify native libraries are packaged (engine flavors only)
-        if: matrix.with_engine
+      - name: Verify APK exists
         env:
-          FLAVOR: ${{ matrix.flavor }}
+          APK_GLOB: ${{ matrix.artifact }}
         run: |
-          FLAVOR_LC="$(echo "$FLAVOR" | tr '[:upper:]' '[:lower:]')"
-          APK="$(ls gallery/app/build/outputs/apk/"$FLAVOR_LC"/debug/*.apk)"
-          echo "APK: $APK"
+          APK="$(find "$(dirname "$APK_GLOB")" -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          echo "Verified artifact: $APK"
+      - name: Verify native libraries (Engine and Unified)
+        if: matrix.native
+        env:
+          APK_GLOB: ${{ matrix.artifact }}
+        run: |
+          APK="$(find "$(dirname "$APK_GLOB")" -maxdepth 1 -name '*.apk' -print -quit)"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
-
-      - name: Upload ${{ matrix.flavor }} APK
+      - name: Verify Basic Gallery excludes engine native libraries
+        if: matrix.product == 'Basic Gallery'
+        env:
+          APK_GLOB: ${{ matrix.artifact }}
+        run: |
+          APK="$(find "$(dirname "$APK_GLOB")" -maxdepth 1 -name '*.apk' -print -quit)"
+          for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
+            if unzip -l "$APK" | grep -q "$LIB"; then
+              echo "::error::Basic Gallery must not package $LIB"
+              exit 1
+            fi
+          done
+      - name: Upload ${{ matrix.product }} APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: main-gallery-${{ matrix.flavor }}-debug-apk
-          path: gallery/app/build/outputs/apk/*/debug/*.apk
-          if-no-files-found: warn
-          retention-days: 14
-
-  unified:
-    name: Unified debug APK (arm64-v8a)
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Set up the toolchain (Rust Android cross + Android)
-        uses: ./.github/actions/toad-setup
-        with:
-          rust: android
-
-      - name: Assemble Unified debug APK
-        run: ./gradlew :unified:app:assembleDebug -PwithEngine --no-daemon --stacktrace
-
-      - name: Verify native libraries are packaged
-        run: |
-          APK="$(ls unified/app/build/outputs/apk/debug/*.apk)"
-          echo "APK: $APK"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
-
-      - name: Upload Unified APK
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: main-unified-debug-apk
-          path: unified/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: warn
+          name: main-${{ matrix.product }}-debug-apk
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
           retention-days: 14

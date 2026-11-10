@@ -4,6 +4,15 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — photo editor UX polish (2026-11-10)
+
+### Changed
+
+- Keep tool navigation available across photo tools; improve selected-tab
+  readability and accessibility.
+- Skip duplicate bitmap work for identity previews and remove panel crossfades.
+- Record Editor screenshot baselines and add direct-switch coverage.
+
 ## [Unreleased] — the r65 round (F-72 lands: the photo editor's canvas zooms — the r63 proposal's deferred craft; unified versionCode 46, versionName stays 0.4.5-alpha)
 
 The maintainer's 2026-11-09 directive, with vc45 device-side: follow up on

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-09",
-  "updatedBy": "r63-r65 editor craft rounds landed (PRs #159-#162, unified-app vc44-46: the r63 editor re-craft + the F-74 unified-editor-in-APK fix, the r64 Settings re-craft + Theme preference, F-72 canvas zoom); phase scope unchanged — editor/UI polish within the done Phase 6/7 envelope",
+  "updatedAt": "2026-11-10",
+  "updatedBy": "Photo editor UX polish: direct tool switching, selected-tab accessibility, identity-preview fast path, and Editor screenshot baselines; device performance remains unmeasured",
   "statusFactors": {
     "done": 1,
     "in-progress": 0.5,

@@ -3243,3 +3243,12 @@ own consent-free UX pass) stays open per the proposal's own rule;
 F-68/F-69/F-70 carried; the v1.0 stable cut + the F-Droid submission +
 every on-device verification row remain the human remainder (the
 standing directive); PAT revocation advised again.
+
+## 2026-11-10 — Photo editor UX and preview responsiveness
+
+- Kept tool navigation available across photo tools, improved selected-tab
+  readability/accessibility, and cleared transient paint modes on switches.
+- Removed the panel crossfade and reused the decoded image for identity previews.
+- Fixed Editor screenshot recording and added selected-tool coverage.
+- Verified: `:editor:core:testDebugUnitTest` and
+  `:editor:core:verifyRoborazziDebug`. Device performance remains unmeasured.

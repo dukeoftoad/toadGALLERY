@@ -42,9 +42,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
@@ -209,7 +211,7 @@ internal fun PhotoToolHeader(
  * grouped order ([PhotoTabGroups]) with
  *
  * - 68dp touch rows and 56dp-minimum tab widths;
- * - 22dp glyphs over 9sp micro-labels;
+ * - 22dp glyphs over readable Material `labelSmall` labels;
  * - the selected tab = the accent glyph inside a 30dp accent-pill halo
  *   (14% alpha) --- the §4 selected language, superseding the r56
  *   40x28dp pill + underline;
@@ -245,8 +247,8 @@ internal fun PhotoTabBar(
         val tabCenters = remember { mutableStateMapOf<PhotoScreen, Int>() }
         // The §4 auto-scroll: bring the SELECTED tab to the viewport's
         // horizontal center. Re-runs when the selection changes OR when the
-        // selected tab's first position arrives; `Main` is never a tab, so
-        // the main-chassis bar (the only current user) never scrolls.
+        // selected tab's first position arrives; when a tool is active it
+        // stays centered so direct tool-to-tool navigation remains visible.
         LaunchedEffect(current, tabCenters[current]) {
             val center = tabCenters[current] ?: return@LaunchedEffect
             scrollState.animateScrollTo((center - viewportWidth / 2).coerceAtLeast(0))
@@ -280,6 +282,7 @@ internal fun PhotoTabBar(
                     }
                     for (tab in group) {
                         val selected = tab == current
+                        val isCurrent = selected
                         val tint = if (selected) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -289,7 +292,8 @@ internal fun PhotoTabBar(
                             modifier = Modifier
                                 .widthIn(min = 56.dp)
                                 .fillMaxHeight()
-                                .clickable(enabled = enabled) { onSelect(tab) }
+                                .clickable(enabled = enabled, role = Role.Tab) { onSelect(tab) }
+                                .semantics { this.selected = isCurrent }
                                 .onGloballyPositioned { coords ->
                                     tabCenters[tab] = (coords.positionInParent().x +
                                         coords.size.width / 2f).roundToInt()
@@ -324,7 +328,7 @@ internal fun PhotoTabBar(
                             Text(
                                 text = stringResource(tab.labelRes),
                                 color = tint,
-                                fontSize = 9.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
                             )
                         }

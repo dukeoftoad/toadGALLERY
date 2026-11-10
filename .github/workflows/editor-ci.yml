@@ -2,9 +2,8 @@ name: Editor CI
 
 # Phase 2 branch isolation --- the editor integration branch builds ONLY
 # the standalone editor APK. Editor-side changes (the editor modules, the
-# shared contract, the Gradle catalog) trigger this workflow; gallery,
-# engine, and unified changes do not. The editor branch merges to main
-# via a manual PR.
+# shared contract, the Gradle catalog) trigger this workflow; gallery and unrelated feature changes do not. The editor branch contributes
+# to unified through a reviewed PR; unified validates the integrated product family.
 
 on:
   push:

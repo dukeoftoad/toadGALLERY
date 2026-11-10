@@ -24,7 +24,7 @@ name: Release (unified --- four-product alpha/beta bundle)
 #
 # Ref pinning (the PR #164 wrong-baseline lesson): every checkout below
 # pins its canonical branch --- the ref this workflow is dispatched from
-# is ignored by design, so release-unified always releases the stable unified tip.
+# is ignored by design, so release-unified always releases the unified branch tip.
 #
 # Signing + gates (ADR-0018): the keystore lives only in GitHub Encrypted
 # Secrets (TG_RELEASE_KEYSTORE_BASE64 / _PASSWORD / TG_RELEASE_KEY_ALIAS /
@@ -67,7 +67,7 @@ jobs:
       version_unified: ${{ steps.versions.outputs.version_unified }}
       sha_unified: ${{ steps.versions.outputs.sha_unified }}
     steps:
-      - name: 'Checkout (pinned: main)'
+      - name: 'Checkout (pinned: unified)'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: unified
@@ -290,7 +290,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: rel-main-products
+          name: rel-unified-products
           path: staging/*
           if-no-files-found: warn
           retention-days: 14
@@ -309,7 +309,7 @@ jobs:
         run: |
           STAGE="$GITHUB_WORKSPACE/staging"
           mkdir -p "$STAGE"
-          gh run download "$GITHUB_RUN_ID" --pattern 'rel-main-*' --dir "$STAGE"
+          gh run download "$GITHUB_RUN_ID" --pattern 'rel-unified-*' --dir "$STAGE"
           while IFS= read -r -d '' f; do mv "$f" "$STAGE/"; done < <(find "$STAGE" -mindepth 2 -type f -print0)
           find "$STAGE" -mindepth 1 -type d -empty -delete
 
@@ -327,7 +327,7 @@ jobs:
 
       # THE MAPPING LINEAGE (the Phase 3 deliverable): all four R8
       # mapping.txt files bundled into ONE zip, published as the
-      # rel-main-mappings run artifact (the Actions tab) --- not a
+      # rel-unified-mappings run artifact (the Actions tab) --- not a
       # release asset.
       - name: Bundle the four R8 mappings into one zip
         env:
@@ -341,7 +341,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: rel-main-mappings
+          name: rel-unified-mappings
           path: staging/toadGALLERY-mappings-*.zip
           if-no-files-found: warn
           retention-days: 14

@@ -1,0 +1,227 @@
+name: Release (ente --- the vendored Ente engine APK)
+
+# Phase 3 manual release pipelines --- the ente fork's single-APK release.
+# ABSOLUTE CONTROL: workflow_dispatch ONLY, zero automated triggers
+# (push / tags / schedule).
+#
+# WHAT THE ENTE APK IS (the Phase 1 deviation, verbatim policy): Ente is
+# vendored Rust (engine/ --- the ente-* crates + the toad-ml-jni bridge),
+# NOT a Kotlin module. The Ente APK IS the engine-flavor gallery build
+# (:gallery:app:assembleEngineRelease -PwithEngine), the canonical
+# definition ente-ci.yml builds on every push. applicationId:
+# com.toadgallery.engine (shared with the gallery fork's Engine product ---
+# they are the same product cut from different fork tips).
+#
+# Ref pinning (the PR #164 wrong-baseline lesson): the checkout pins the
+# ente branch --- the ref this workflow is dispatched from is ignored by
+# design, so release-ente always releases the ente fork tip.
+#
+# ADR-0018: the APK is release-key signed via the TG_* secrets contract
+# and passes the HARD apksigner gate (pinned signer digest) before it
+# publishes; the R8 mapping.txt ships with the release (the mapping
+# lineage) and the engine native libraries are hard-verified in the APK
+# (libtoad_ml_jni.so + libonnxruntime.so, staged by
+# engine/scripts/build-android.sh via the buildRustEngine Exec task).
+# A release is only ever cut from an already-reviewed, already-green SHA
+# (ADR-0013): the cargo gates live in ente-ci.yml, not here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'The release tag, e.g. v0.4.5-alpha-ente-r50 (required). A trailing -r<N> drives the asset file names; otherwise the run number is used.'
+        type: string
+        required: true
+      prerelease:
+        description: 'Mark the release as a pre-release (default; the stable v1.0 cut is a human decision per ADR-0018).'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ente
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + publish the Ente APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: 'Checkout (pinned: ente fork tip)'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ente
+
+      - name: Set up the toolchain (Rust Android cross + Android)
+        uses: ./.github/actions/toad-setup
+        with:
+          rust: android
+
+      - name: Decode the ADR-0018 release keystore
+        env:
+          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$TG_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
+          chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
+          if [[ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]]; then
+            echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
+            exit 1
+          fi
+
+      - name: Resolve the tag, the round and the version
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          if [[ -z "$TAG_NAME" || "$TAG_NAME" =~ [[:space:]] ]]; then
+            echo "::error::tag_name is required and must not contain whitespace"
+            exit 1
+          fi
+          if [[ "$TAG_NAME" =~ -r([0-9]+)$ ]]; then
+            ROUND="${BASH_REMATCH[1]}"
+          else
+            ROUND="$GITHUB_RUN_NUMBER"
+          fi
+          VERSION_ENTE="$(grep -oP 'versionName = "\K[^"]+' gallery/app/build.gradle.kts | head -n1)"
+          if [[ -z "$VERSION_ENTE" ]]; then
+            echo "::error::could not extract versionName from the ente fork's gallery/app/build.gradle.kts"
+            exit 1
+          fi
+          RELEASE_SHA="$(git rev-parse HEAD)"
+          echo "tag=$TAG_NAME round=$ROUND ente=$VERSION_ENTE sha=$RELEASE_SHA"
+          {
+            echo "TAG_NAME=$TAG_NAME"
+            echo "ROUND=$ROUND"
+            echo "VERSION_ENTE=$VERSION_ENTE"
+            echo "RELEASE_SHA=$RELEASE_SHA"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the signed Ente APK (engine flavor, -PwithEngine)
+        env:
+          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :gallery:app:assembleEngineRelease -PwithEngine --no-daemon --stacktrace
+
+      - name: Verify the Ente APK (signature + engine-library gates)
+        run: |
+          APKSIGNER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/apksigner"
+          if [[ ! -x "$APKSIGNER" ]]; then
+            APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -path '*36.0.0*/apksigner' -print -quit)"
+          fi
+          if [[ -z "$APKSIGNER" || ! -x "$APKSIGNER" ]]; then
+            echo "::error::apksigner not found under build-tools 36.0.0"
+            exit 1
+          fi
+          EXPECTED_SHA256="8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494"
+          APK_DIR="gallery/app/build/outputs/apk/engine/release"
+          SIGNED_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*unsigned*' -print -quit)"
+          if [[ -z "$SIGNED_APK" ]]; then
+            echo "::error::no signed release APK in $APK_DIR (unsigned present: $(find "$APK_DIR" -maxdepth 1 -name '*unsigned*.apk' -print -quit || echo none)) --- the build did not sign; check the TG_* env contract (ADR-0018)"
+            exit 1
+          fi
+          "$APKSIGNER" verify --print-certs "$SIGNED_APK" > "$RUNNER_TEMP/ente-apk-certs.txt"
+          cat "$RUNNER_TEMP/ente-apk-certs.txt"
+          ACTUAL_SHA256="$(grep -oP 'Signer #1 certificate SHA-256 digest: \K[0-9a-fA-F]+' "$RUNNER_TEMP/ente-apk-certs.txt" | tr '[:upper:]' '[:lower:]')"
+          if [[ -z "$ACTUAL_SHA256" ]]; then
+            echo "::error::ente: apksigner reported no signer certificate --- signature did not verify"
+            exit 1
+          fi
+          if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
+            echo "::error::ente signer mismatch: expected $EXPECTED_SHA256, got $ACTUAL_SHA256 --- NOT the ADR-0018 release key; refusing to publish"
+            exit 1
+          fi
+          echo "ente signature gate OK --- $SIGNED_APK"
+          for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
+            if ! unzip -l "$SIGNED_APK" | grep -q "$LIB"; then
+              echo "::error::the ENTE APK must carry $LIB"
+              exit 1
+            fi
+          done
+          echo "packaging gate OK --- both engine native libraries are packaged."
+          echo "ENTE_APK=$SIGNED_APK" >> "$GITHUB_ENV"
+
+      - name: Stage the release artifacts
+        run: |
+          STAGE="$GITHUB_WORKSPACE/staging"
+          mkdir -p "$STAGE"
+          NAME="toadGALLERY-ente-${VERSION_ENTE}-r${ROUND}"
+          cp "$ENTE_APK" "$STAGE/$NAME.apk"
+          MAP="gallery/app/build/outputs/mapping/engineRelease/mapping.txt"
+          if [[ ! -s "$MAP" ]]; then
+            echo "::error::no R8 mapping at $MAP --- the mapping lineage is mandatory on a release"
+            exit 1
+          fi
+          cp "$MAP" "$STAGE/$NAME-mapping.txt"
+          ( cd "$STAGE" && for f in ./*.apk; do sha256sum "$f" > "$f.sha256"; done )
+          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+          ls -l "$STAGE"
+
+      - name: Upload the staged release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: rel-ente
+          path: staging/*
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Guard --- the tag and the release must not already exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          if git ls-remote --tags origin "refs/tags/${TAG_NAME}" | grep -q "refs/tags/${TAG_NAME}"; then
+            echo "::error::tag ${TAG_NAME} already exists on origin --- pick a new tag (a release tag is never reused)"
+            exit 1
+          fi
+          if gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::a GitHub release named ${TAG_NAME} already exists --- pick a new tag"
+            exit 1
+          fi
+          echo "tag guard OK --- ${TAG_NAME} is fresh"
+
+      - name: Compose the release notes
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          NOTES="$RUNNER_TEMP/notes.md"
+          {
+            echo "**toadGALLERY Ente --- the vendored Ente engine APK, release ${TAG_NAME}.**"
+            echo ""
+            echo "Built from the ente fork tip (ente @ ${RELEASE_SHA}), version ${VERSION_ENTE}."
+            echo ""
+            echo "- The Ente product is the engine-flavor gallery build carrying the vendored Ente Rust engine (the ente-* crates + the toad-ml-jni bridge) and the ONNX runtime."
+            echo "- applicationId com.toadgallery.engine (shared with the gallery fork's Engine product --- same product, different fork tip; they replace each other on install)."
+            echo "- Signed with the ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
+            echo "- Verify your download: sha256sum -c <apk>.sha256."
+            echo "- The engine native libraries (libtoad_ml_jni.so + libonnxruntime.so) are hard-verified as packaged."
+            echo "- The -mapping.txt asset is the R8 mapping for crash de-obfuscation of THIS APK."
+            echo "- Requires Android 8.0+ (minSdk 26)."
+            echo "- Built by the manual release-ente pipeline (workflow_dispatch only, no automated triggers); dispatch run ${GITHUB_RUN_ID}."
+          } > "$NOTES"
+          echo "NOTES=$NOTES" >> "$GITHUB_ENV"
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          ARGS=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "$TAG_NAME" \
+            "${ARGS[@]}" \
+            --target "$RELEASE_SHA" \
+            --title "toadGALLERY Ente ${TAG_NAME}" \
+            --notes-file "$NOTES" \
+            "$STAGE"/*
+          gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

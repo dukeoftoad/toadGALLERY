@@ -89,7 +89,7 @@ jobs:
         run: ./gradlew ${{ matrix.task }} ${{ matrix.with_engine && '-PwithEngine' || '' }} --no-daemon --stacktrace
       - name: Verify APK exists
         env:
-          APK_DIR: ${{ matrix.artifact }}
+          APK_DIR: ${{ matrix.artifact_dir }}
         run: |
           APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -print -quit)"
           test -n "$APK"
@@ -97,7 +97,7 @@ jobs:
       - name: Verify native libraries (Engine and Unified)
         if: matrix.native
         env:
-          APK_DIR: ${{ matrix.artifact }}
+          APK_DIR: ${{ matrix.artifact_dir }}
         run: |
           APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -print -quit)"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
@@ -105,7 +105,7 @@ jobs:
       - name: Verify Basic Gallery excludes engine native libraries
         if: matrix.product == 'Basic Gallery'
         env:
-          APK_DIR: ${{ matrix.artifact }}
+          APK_DIR: ${{ matrix.artifact_dir }}
         run: |
           APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -print -quit)"
           for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
@@ -119,6 +119,6 @@ jobs:
         if: always()
         with:
           name: main-${{ matrix.product }}-debug-apk
-          path: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact_dir }}
           if-no-files-found: error
           retention-days: 14

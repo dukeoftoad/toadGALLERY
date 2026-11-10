@@ -22,6 +22,10 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/resources/roborazzi"))
+}
+
 android {
     namespace = "com.toadgallery.editor"
     compileSdk = libs.versions.app.build.compileSDKVersion.get().toInt()

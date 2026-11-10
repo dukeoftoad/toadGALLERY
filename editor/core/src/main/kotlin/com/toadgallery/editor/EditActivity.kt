@@ -20,7 +20,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
@@ -1790,6 +1789,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         previewImage = withContext(Dispatchers.Default) {
             val width = base.width
             val height = base.height
+            val plan = EditGeometryPlan.plan(effective, width, height)
+            previewCropRect = plan.cropPixelRect
+            if (displayRecipe.isIdentity) {
+                return@withContext base.asImageBitmap()
+            }
             val pixels = IntArray(width * height)
             base.getPixels(pixels, 0, width, 0, 0, width, height)
             // r41: the AI stages replay over the SAME resolved artifact
@@ -1801,10 +1805,6 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             val pipelined = EditPipeline.apply(pixels, width, height, displayRecipe, look, ai)
             val out = Bitmap.createBitmap(pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888)
             out.setPixels(pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height)
-            // The crop overlay rect rides the POST-geometry frame of the
-            // same recipe (plan computed over the pipeline's own dims).
-            val plan = EditGeometryPlan.plan(effective, width, height)
-            previewCropRect = plan.cropPixelRect
             val crop = plan.cropPixelRect
             // r35: stickers are scene objects --- they composite BELOW the
             // text pass, through the same crop-region output canvas.
@@ -2116,8 +2116,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // deliberate behavior change; the modes were unreachable from other
     // sections' controls anyway).
     fun enterTool(target: PhotoScreen) {
-        if (target == PhotoScreen.Main) return
+        if (target == PhotoScreen.Main || target == screen) return
         sweepPendingDrafts()
+        if (screen != PhotoScreen.Main) {
+            drawMode = false
+            regionMode = false
+            eraseMode = false
+        }
         entryRecipe = committed
         screen = target
     }
@@ -2924,13 +2929,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // r56: the tool swap gets a crossfade (the video chassis's screen
-            // feel) --- the canvas above is untouched (ONE preview, never
-            // recomposed away); only the panel content fades.
-            Crossfade(targetState = screen, label = "photo-tool-panel") { tool ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PhotoPanelHost(
-                        tool = tool,
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                PhotoPanelHost(
+                        tool = screen,
                         committed = committed,
                         draft = draft,
                         onDraftChange = { draft = it },
@@ -2998,8 +2999,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         selectSky = { id, fresh -> selectSky(id, fresh) },
                         selectedBand = selectedBand,
                         onSelectedBandChange = { selectedBand = it },
-                    )
-                }
+                )
             }
             // ---- The always-visible honesty chip (the r54 chassis's Main
             // home: the export decision surface; tool screens don't repeat
@@ -3049,15 +3049,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
         }
 
-        // ---- The r54 main-screen tab bar (full-bleed: outside the
-        // controls' padding, docked below the canvas column) ----
-        if (screen == PhotoScreen.Main) {
-            PhotoTabBar(
-                current = screen,
-                enabled = !exporting,
-                onSelect = { enterTool(it) },
-            )
-        }
+        // Keep the tool rail docked below the canvas on every screen so
+        // switching tools never requires returning to the main canvas.
+        PhotoTabBar(
+            current = screen,
+            enabled = !exporting,
+            onSelect = { enterTool(it) },
+        )
     }
 }
 

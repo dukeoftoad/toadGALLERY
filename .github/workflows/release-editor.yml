@@ -10,10 +10,12 @@ name: Release (editor --- the companion editor APK)
 #
 # ADR-0018: the APK is release-key signed via the TG_* secrets contract
 # and passes the HARD apksigner gate (pinned signer digest) before it
-# publishes; the R8 mapping.txt ships with the release (the mapping
-# lineage). The editor's release-variant privacy gate (NO INTERNET in the
-# merged manifest, no allowlist) runs transitively via assembleRelease
-# (ADR-0014), so every published editor APK is offline-by-construction.
+# publishes; the APK is the ONLY release asset --- the R8 mapping.txt
+# and the checksum ride the run's Actions artifact (rel-editor), not
+# the release page. The editor's release-variant privacy gate (NO
+# INTERNET in the merged manifest, no allowlist) runs transitively
+# via assembleRelease (ADR-0014), so every published editor APK is
+# offline-by-construction.
 # No Rust toolchain: the editor embeds no native engine.
 
 on:
@@ -186,8 +188,6 @@ jobs:
             echo "- applicationId com.toadgallery.editor; install it alongside ANY gallery flavor."
             echo "- Offline-by-construction: the editor's merged manifest carries NO INTERNET (the privacy gate has no allowlist and fails the build otherwise, ADR-0014)."
             echo "- Signed with the ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
-            echo "- Verify your download: sha256sum -c <apk>.sha256."
-            echo "- The -mapping.txt asset is the R8 mapping for crash de-obfuscation of THIS APK."
             echo "- Built by the manual release-editor pipeline (workflow_dispatch only, no automated triggers); dispatch run ${GITHUB_RUN_ID}."
           } > "$NOTES"
           echo "NOTES=$NOTES" >> "$GITHUB_ENV"
@@ -207,5 +207,5 @@ jobs:
             --target "$RELEASE_SHA" \
             --title "toadGALLERY Editor ${TAG_NAME}" \
             --notes-file "$NOTES" \
-            "$STAGE"/*
+            "$STAGE"/*.apk
           gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

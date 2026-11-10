@@ -69,11 +69,11 @@ accident is structurally impossible to repeat.
 
 | workflow | dispatch on | builds | release assets | inputs |
 |---|---|---|---|---|
-| `release-main.yml` | anywhere (pinned to `main` + the `ente` tip) | the 5-APK master bundle: basic + engine + editor (all from `main`) + ente (from the `ente` tip) + unified | 5 signed APKs + 5 `.sha256` + **`toadGALLERY-mappings-<tag>.zip` (all five R8 mappings in one zip)** | `tag_name` (required), `prerelease` (default true) |
-| `release-unified.yml` | anywhere (pinned to `unified`) | `:unified:app:assembleRelease -PwithEngine` | Unified APK + `.sha256` + mapping.txt | `tag_name` (required), `prerelease` |
-| `release-gallery.yml` | anywhere (pinned to `gallery`) | operator's choice: basic (property-less), engine (`-PwithEngine`), or both (two deliberate invocations) | chosen APK(s) + `.sha256` + per-APK mapping.txt | `variant` (basic/engine/both), `tag_name` (required), `prerelease` |
-| `release-editor.yml` | anywhere (pinned to `editor`) | `:editor:app:assembleRelease` | Editor APK + `.sha256` + mapping.txt | `tag_name` (required), `prerelease` |
-| `release-ente.yml` | anywhere (pinned to `ente`) | `:gallery:app:assembleEngineRelease -PwithEngine` on the `ente` tip | Ente APK + `.sha256` + mapping.txt | `tag_name` (required), `prerelease` |
+| `release-main.yml` | anywhere (pinned to `main` + the `ente` tip) | the 5-APK master bundle: basic + engine + editor (all from `main`) + ente (from the `ente` tip) + unified | 5 signed APKs (the ONLY release assets) + Actions artifacts: 5 `.sha256` + `rel-main-mappings` (`toadGALLERY-mappings-<tag>.zip`, all five R8 mappings in one zip) | `tag_name` (required), `prerelease` (default true) |
+| `release-unified.yml` | anywhere (pinned to `unified`) | `:unified:app:assembleRelease -PwithEngine` | Unified APK (the ONLY release asset) + Actions artifacts: `.sha256` + mapping.txt | `tag_name` (required), `prerelease` |
+| `release-gallery.yml` | anywhere (pinned to `gallery`) | operator's choice: basic (property-less), engine (`-PwithEngine`), or both (two deliberate invocations) | chosen APK(s) (the ONLY release assets) + Actions artifacts: `.sha256` + per-APK mapping.txt | `variant` (basic/engine/both), `tag_name` (required), `prerelease` |
+| `release-editor.yml` | anywhere (pinned to `editor`) | `:editor:app:assembleRelease` | Editor APK (the ONLY release asset) + Actions artifacts: `.sha256` + mapping.txt | `tag_name` (required), `prerelease` |
+| `release-ente.yml` | anywhere (pinned to `ente`) | `:gallery:app:assembleEngineRelease -PwithEngine` on the `ente` tip | Ente APK (the ONLY release asset) + Actions artifacts: `.sha256` + mapping.txt | `tag_name` (required), `prerelease` |
 
 Pipeline mechanics (identical in all five):
 
@@ -94,11 +94,14 @@ Pipeline mechanics (identical in all five):
 - **The mapping lineage:** every release build is R8-minified
   (`isMinifyEnabled = true` on every release buildType), so every APK's
   `mapping.txt` is MANDATORY --- a missing or empty mapping fails the
-  pipeline. `release-main.yml` bundles all five into one
-  `toadGALLERY-mappings-<tag>.zip` attached to the release; the
-  single-APK pipelines attach each APK's mapping directly. Mappings are
-  named per product + version + round (a generic `mapping.txt` is
-  ambiguous across five APKs and dozens of releases).
+  pipeline. The release page carries the APKs ONLY; mappings and
+  `.sha256` checksums publish as workflow-run artifacts (the Actions
+  tab): `release-main.yml` bundles all five mappings into one
+  `toadGALLERY-mappings-<tag>.zip` (`rel-main-mappings`), and the
+  single-APK pipelines ship theirs inside the `rel-*` staging
+  artifacts. Mappings are named per product + version + round (a
+  generic `mapping.txt` is ambiguous across five APKs and dozens of
+  releases).
 - **Two-invocation rule:** `-PwithEngine` is a GLOBAL gradle property.
   Basic-flavor builds always run in a property-less invocation, separate
   from every engine-bearing build.
@@ -140,9 +143,11 @@ Pipeline mechanics (identical in all five):
 3. For the gallery fork, pick `variant`: `basic`, `engine`, or `both`.
 4. The pipeline builds, gates (signature + packaging + mapping), stages,
    guards the tag, publishes the GitHub release, and lists the assets.
-5. Symbolicating a crash trace: download the matching
-   `*-mapping.txt` (or the bundle zip from a master release) for that
-   tag, and `retrace` the obfuscated stack against it.
+5. Symbolicating a crash trace: open the dispatch run in the Actions
+   tab and download the matching `*-mapping.txt` from the run's
+   artifacts (or the `rel-main-mappings` bundle zip from a master
+   release) for that tag, and `retrace` the obfuscated stack against
+   it.
 
 ## 6. Legacy and superseded workflows
 
@@ -174,8 +179,10 @@ Pipeline mechanics (identical in all five):
    unified → main direction is human-only, permanently.
 4. Unsigned or debug-signed APKs can never reach a release (the hard
    `apksigner` gate, the pinned ADR-0018 digest).
-5. Every published APK ships its R8 mapping (per-APK or in the master
-   bundle zip); a missing mapping fails the release.
+5. Every published APK's R8 mapping and checksum ride the run's
+   Actions artifacts (the `rel-*` staging artifacts, or the master
+   bundle's `rel-main-mappings` zip); a missing mapping fails the
+   release. The release page itself carries the APKs only.
 6. The refactor phases are over: release pipelines build existing gradle
    targets only --- no Kotlin, XML, or gradle changes ride a release PR.
 7. One release key signs every APK (update-in-place across the family;

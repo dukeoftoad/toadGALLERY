@@ -44,8 +44,10 @@ name: Release (main --- the 5-APK master bundle)
 # contract, step-level (never interpolated into the script body). Every
 # APK passes a HARD apksigner gate against the pinned release-certificate
 # digest before anything publishes --- an unsigned or debug-signed build
-# can never reach the release page. All five R8 mapping.txt files are
-# bundled into ONE zip and attached to the release (the mapping lineage).
+# can never reach the release page. The five APKs are the ONLY release
+# assets: the per-APK checksums and all five R8 mapping.txt files
+# (bundled into ONE zip) are published as workflow-run artifacts (the
+# Actions tab), not on the release page.
 
 on:
   workflow_dispatch:
@@ -465,7 +467,9 @@ jobs:
           echo "STAGE=$STAGE" >> "$GITHUB_ENV"
 
       # THE MAPPING LINEAGE (the Phase 3 deliverable): all five R8
-      # mapping.txt files bundled into ONE zip, attached to the release.
+      # mapping.txt files bundled into ONE zip, published as the
+      # rel-main-mappings run artifact (the Actions tab) --- not a
+      # release asset.
       - name: Bundle the five R8 mappings into one zip
         env:
           TAG_NAME: ${{ inputs.tag_name }}
@@ -473,6 +477,15 @@ jobs:
           ( cd "$STAGE" && zip -q "toadGALLERY-mappings-${TAG_NAME}.zip" ./*-mapping.txt )
           unzip -l "$STAGE/toadGALLERY-mappings-${TAG_NAME}.zip"
           echo "MAPPINGS_ZIP=toadGALLERY-mappings-${TAG_NAME}.zip" >> "$GITHUB_ENV"
+
+      - name: Upload the mappings zip as a run artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: rel-main-mappings
+          path: staging/toadGALLERY-mappings-*.zip
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Guard --- the tag and the release must not already exist
         env:
@@ -517,8 +530,6 @@ jobs:
             echo ""
             echo "- Ente and engine share the engine-flavor applicationId (com.toadgallery.engine): they are the same product cut from different fork tips and replace each other on install."
             echo "- All five APKs are signed with the same ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
-            echo "- Verify your download: sha256sum -c <apk>.sha256."
-            echo "- toadGALLERY-mappings-${TAG_NAME}.zip bundles all five R8 mapping.txt files (one per APK, named per product) for crash de-obfuscation."
             echo "- Requires Android 8.0+ (minSdk 26)."
             echo "- Built by the manual release-main pipeline (workflow_dispatch only, no automated triggers); dispatch run ${GITHUB_RUN_ID}."
           } > "$NOTES"
@@ -540,5 +551,5 @@ jobs:
             --target "$SHA_MAIN" \
             --title "toadGALLERY master bundle ${TAG_NAME}" \
             --notes-file "$NOTES" \
-            "$STAGE"/*
+            "$STAGE"/*.apk
           gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

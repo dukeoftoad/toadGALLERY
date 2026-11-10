@@ -17,8 +17,9 @@ name: Release (gallery --- Basic | Engine | both)
 #
 # ADR-0018: the APKs are release-key signed via the TG_* secrets contract
 # and pass the HARD apksigner gate (pinned signer digest) before they
-# publish; the R8 mapping.txt of every built APK ships with the release
-# (the mapping lineage).
+# publish; the APKs are the ONLY release assets --- the checksums and
+# the R8 mapping.txt of every built APK ride the run's Actions artifact
+# (rel-gallery), not the release page.
 
 on:
   workflow_dispatch:
@@ -276,8 +277,6 @@ jobs:
               echo "- toadGALLERY-engine-${VERSION_GALLERY}-r${ROUND}.apk --- the ENGINE flavor: everything basic has PLUS the vendored Ente Rust engine (face clustering AND Magic Search + Things). applicationId com.toadgallery.engine; installs SEPARATELY from basic."
             fi
             echo "- Signed with the ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
-            echo "- Verify your download: sha256sum -c <apk>.sha256."
-            echo "- Each -mapping.txt asset is the R8 mapping for crash de-obfuscation of its APK."
             echo "- Requires Android 8.0+ (minSdk 26)."
             echo "- Built by the manual release-gallery pipeline (workflow_dispatch only, no automated triggers); dispatch run ${GITHUB_RUN_ID}."
           } > "$NOTES"
@@ -298,5 +297,5 @@ jobs:
             --target "$RELEASE_SHA" \
             --title "toadGALLERY (gallery fork) ${TAG_NAME} --- ${VARIANT}" \
             --notes-file "$NOTES" \
-            "$STAGE"/*
+            "$STAGE"/*.apk
           gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

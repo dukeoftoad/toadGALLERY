@@ -44,11 +44,6 @@ on:
         description: 'The release tag, e.g. v1.0.0 (required: the operator names every release). A trailing -r<N> drives the asset file names; otherwise the run number is used.'
         type: string
         required: true
-      prerelease:
-        description: 'Mark the release as a pre-release (default; the stable v1.0 cut is a human decision per ADR-0018).'
-        type: boolean
-        default: false
-
 permissions:
   contents: read
 
@@ -365,7 +360,6 @@ jobs:
       - name: Compose the release notes
         env:
           TAG_NAME: ${{ inputs.tag_name }}
-          PRERELEASE: ${{ inputs.prerelease }}
           SHA_MAIN: ${{ needs.products-main.outputs.sha_main }}
           VERSION_GALLERY: ${{ needs.products-main.outputs.version_gallery }}
           VERSION_EDITOR: ${{ needs.products-main.outputs.version_editor }}
@@ -394,15 +388,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ inputs.tag_name }}
-          PRERELEASE: ${{ inputs.prerelease }}
           SHA_MAIN: ${{ needs.products-main.outputs.sha_main }}
         run: |
-          ARGS=()
-          if [[ "$PRERELEASE" == "true" ]]; then
-            ARGS+=(--prerelease)
-          fi
           gh release create "$TAG_NAME" \
-            "${ARGS[@]}" \
             --target "$SHA_MAIN" \
             --title "toadGALLERY stable bundle ${TAG_NAME}" \
             --notes-file "$NOTES" \

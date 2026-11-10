@@ -3,8 +3,7 @@ name: Gallery CI
 # Phase 2 branch isolation --- the "Virtual Fork" strategy. The gallery
 # integration branch builds ONLY the gallery APK: changes pushed to
 # editor/**, engine/**, or unified/** on other branches never trigger
-# this workflow. The gallery branch merges to main via a manual PR (no
-# auto-merge, per the Phase 2 guardrails).
+# this workflow. The gallery branch contributes to unified through a reviewed PR; unified is the integration gate.
 #
 # Push fires the Basic build (the offline-first core gallery, no native
 # code --- the lighter CI leg). The manual dispatch input lets the
@@ -16,6 +15,7 @@ on:
     branches: [ gallery ]
     paths:
       - 'gallery/**'
+      - 'engine/**'
       - 'shared/**'
       - 'gradle/**'
       - 'build.gradle.kts'

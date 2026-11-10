@@ -2,6 +2,19 @@ name: Release
 
 # toadGALLERY release workflow --- issue #59, ADR-0018 (docs/integration-decisions.md)
 #
+# PHASE 3 SUPERSESSION (2026-11-10): this pre-refactor pipeline is
+# SUPERSEDED by the five Phase 3 release workflows (release-main.yml,
+# release-unified.yml, release-gallery.yml, release-editor.yml,
+# release-ente.yml --- see .github/BRANCH_STRATEGY.md). Two reasons it is
+# retired rather than repaired:
+#   1. The Phase 3 constraint: ZERO automated triggers are permitted for
+#      releases --- this file's automated `push: tags: [v*]` trigger is
+#      REMOVED below; it is workflow_dispatch only now.
+#   2. Its gradle targets and artifact paths are the PRE-Phase-1 monolith
+#      (:apps:gallery, :apps:edit, apps/*/build/...) which no longer exist
+#      in the post-Phase-1 module layout --- a dispatch fails fast and
+#      safely. The file is left in the tree for history.
+#
 # Dedicated PRE-RELEASE pipeline for SIGNED testing APKs. User directive
 # (issue #59): release APKs for pre-release testing must be signed, and they
 # are produced by this dedicated release workflow --- not mixed into the
@@ -55,8 +68,10 @@ on:
         type: string
         required: false
         default: ''
-  push:
-    tags: [ 'v*' ]
+  # Phase 3 (2026-11-10): the automated `push: tags: [ 'v*' ]` trigger was
+  # REMOVED --- the zero-automated-triggers constraint for releases. This
+  # pipeline is dispatch-only now and SUPERSEDED by the five Phase 3
+  # release workflows (see the header + .github/BRANCH_STRATEGY.md).
 
 jobs:
   release:

@@ -119,18 +119,12 @@ jobs:
       - name: Run unit tests (basic + engine flavors)
         run: ./gradlew :gallery:app:testBasicDebugUnitTest :gallery:app:testEngineDebugUnitTest --no-daemon --stacktrace
 
-        # Binding since the issue #20 privacy policy tests landed; lint stays
-        # non-binding until the Phase 2 cleanup pass.
-
       # --- r29 (Issue #14 gate): the toadGALLERY Edit app + the shared
       # contract module join the canonical gate. The editor's assemble ALSO
       # runs its own stricter merged-manifest INTERNET gate (no allowlist
       # mechanism at all); the contract module is pure JVM.
-      # r48: the label drops the "prototype" qualifier the step carried
-      # since r29 --- the editor shipped as a RELEASE deliverable in
-      # v0.4.5-alpha-r45/r46 (both-APK close-out), so the gate builds the
-      # editor app, not a Phase 6 prototype. The step's command and scope
-      # are unchanged; only the stale label is.
+      # The standalone Editor is one of the four canonical products and is
+      # included in the stable-promotion gate.
       - name: Build editor debug APK
         run: ./gradlew :editor:app:assembleDebug --no-daemon --stacktrace
 
@@ -177,9 +171,9 @@ jobs:
           retention-days: 14
 
   engine-android:
-    name: Vendored engine (Android ABI + engine-enabled assemble)
+    name: Vendored engine + Unified (Android ABI builds)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     steps:
       - name: Checkout

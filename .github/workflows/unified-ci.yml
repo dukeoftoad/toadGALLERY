@@ -1,28 +1,41 @@
-name: Unified CI
+name: Unified Integration CI
 
-# Phase 2 branch isolation --- the unified integration branch builds ONLY
-# the unified APK (the everything-in-one app: gallery shell + editor code
-# + the vendored Rust engine, all via standard project dependencies on
-# :gallery:core, :editor:core, :shared:editor-contract, :shared:video-edit).
-# The unified branch merges to main via a manual PR.
-#
-# Path filter: unified-side sources + the modules the unified app depends
-# on (gallery/core, editor/core, shared/*). Engine-only changes route to
-# the ente branch, not here.
+# Primary integration gate. Product/feature branches contribute to unified;
+# this workflow validates the complete four-product family on pushes and PRs.
+# Alpha/beta releases are cut from this branch after the integration gate passes.
 
 on:
   push:
     branches: [ unified ]
     paths:
-      - 'unified/**'
       - 'gallery/**'
       - 'editor/**'
+      - 'unified/**'
+      - 'engine/**'
       - 'shared/**'
+      - 'models/**'
       - 'gradle/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradle.properties'
-      - '.github/workflows/unified-ci.yml'
+      - 'gradle/libs.versions.toml'
+      - '.github/workflows/**'
+      - '.github/actions/toad-setup/**'
+  pull_request:
+    branches: [ unified ]
+    paths:
+      - 'gallery/**'
+      - 'editor/**'
+      - 'unified/**'
+      - 'engine/**'
+      - 'shared/**'
+      - 'models/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'gradle/libs.versions.toml'
+      - '.github/workflows/**'
       - '.github/actions/toad-setup/**'
   workflow_dispatch:
 
@@ -34,30 +47,113 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unified-apk:
-    name: Unified debug APK (engine-enabled)
+  engine-host:
+    name: Vendored engine host checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Rust host toolchain
+        uses: ./.github/actions/toad-setup
+        with:
+          rust: host
+          android: false
+      - name: cargo check
+        working-directory: engine
+        run: cargo check --workspace --all-targets
+      - name: cargo fmt
+        working-directory: engine
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        working-directory: engine
+        run: cargo clippy --workspace
+      - name: cargo test (photos-side crates)
+        working-directory: engine
+        run: cargo test -p ente-vecdb -p ente-photos-ml
+
+  gallery-basic:
+    name: Basic Gallery build, lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Android toolchain
+        uses: ./.github/actions/toad-setup
+      - name: Build Basic Gallery
+        run: ./gradlew :gallery:app:assembleBasicDebug --no-daemon --stacktrace
+      - name: Run Basic Gallery lint
+        run: ./gradlew :gallery:app:lintBasicDebug --no-daemon --stacktrace
+      - name: Run Gallery unit tests (Basic + Engine configurations)
+        run: ./gradlew :gallery:app:testBasicDebugUnitTest :gallery:app:testEngineDebugUnitTest --no-daemon --stacktrace
+      - name: Verify Basic Gallery excludes engine native libraries
+        run: |
+          APK="$(find gallery/app/build/outputs/apk/basic/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
+            if unzip -l "$APK" | grep -q "$LIB"; then
+              echo "::error::Basic Gallery must not package $LIB"
+              exit 1
+            fi
+          done
+
+  gallery-engine:
+    name: Gallery Engine build and native packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Rust Android + Android toolchain
+        uses: ./.github/actions/toad-setup
+        with:
+          rust: android
+      - name: Build Gallery Engine
+        run: ./gradlew :gallery:app:assembleEngineDebug -PwithEngine --no-daemon --stacktrace
+      - name: Verify engine native libraries are packaged
+        run: |
+          APK="$(find gallery/app/build/outputs/apk/engine/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
+
+  editor:
+    name: Editor build, lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Android toolchain
+        uses: ./.github/actions/toad-setup
+      - name: Build Editor
+        run: ./gradlew :editor:app:assembleDebug --no-daemon --stacktrace
+      - name: Run Editor lint
+        run: ./gradlew :editor:app:lintDebug --no-daemon --stacktrace
+      - name: Run Editor and shared contract tests
+        run: ./gradlew :editor:app:testDebugUnitTest :shared:editor-contract:test --no-daemon --stacktrace
+
+  unified:
+    name: Unified build and native packaging
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Set up the toolchain (Rust Android cross + Android)
+      - name: Set up Rust Android + Android toolchain
         uses: ./.github/actions/toad-setup
         with:
           rust: android
-
-      - name: Assemble the unified debug APK
+      - name: Build Unified
         run: ./gradlew :unified:app:assembleDebug -PwithEngine --no-daemon --stacktrace
-
-      - name: Verify the engine native libraries are packaged
+      - name: Verify Unified native libraries are packaged
         run: |
-          APK="$(ls unified/app/build/outputs/apk/debug/*.apk)"
-          echo "APK: $APK"
+          APK="$(find unified/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
-
-      - name: Upload unified APK artifact
+      - name: Upload Unified debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

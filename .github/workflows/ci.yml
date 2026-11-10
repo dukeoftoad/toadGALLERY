@@ -119,17 +119,6 @@ jobs:
       - name: Run unit tests (basic + engine flavors)
         run: ./gradlew :gallery:app:testBasicDebugUnitTest :gallery:app:testEngineDebugUnitTest --no-daemon --stacktrace
 
-      # Build the actual combined APK on the stable-promotion PR. A Kotlin-only
-      # compile is not enough to verify native packaging and the final APK.
-      - name: Assemble the Unified APK (engine-enabled)
-        run: ./gradlew :unified:app:assembleDebug -PwithEngine --no-daemon --stacktrace
-
-      - name: Verify Unified native libraries are packaged
-        run: |
-          APK="$(find unified/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
-          test -n "$APK"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
         # Binding since the issue #20 privacy policy tests landed; lint stays
         # non-binding until the Phase 2 cleanup pass.
 
@@ -224,5 +213,17 @@ jobs:
         run: |
           APK="$(ls gallery/app/build/outputs/apk/engine/debug/*.apk)"
           echo "APK: $APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
+
+      # Build the complete Unified APK in this Rust-enabled job so its
+      # native engine libraries are compiled and verified on the stable PR.
+      - name: Assemble the Unified APK (engine-enabled)
+        run: ./gradlew :unified:app:assembleDebug -PwithEngine --no-daemon --stacktrace
+
+      - name: Verify Unified native libraries are packaged
+        run: |
+          APK="$(find unified/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"

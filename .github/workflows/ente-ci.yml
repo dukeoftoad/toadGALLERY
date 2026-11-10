@@ -1,16 +1,13 @@
 name: Ente CI
 
-# Phase 2 branch isolation --- the ente integration branch gates the
-# vendored Rust engine (engine/) AND builds the engine-enabled gallery
-# APK (:gallery:app:assembleEngineDebug -PwithEngine). Per the Phase 1
-# deviations: Ente is vendored Rust, not a Kotlin module; CI builds the
-# Rust engine directly (cargo check/fmt/clippy/test + the Android ABI
-# cross-build via cargo-ndk) and the Gallery Engine flavor APK that
-# packages it.
+# Ente is an occasional upstream synchronization lane, not a fifth product.
+# This workflow validates reviewed upstream changes staged on ente before
+# their contribution is proposed to unified. It checks the vendored engine
+# and the Gallery Engine integration build.
 #
-# Path filter: engine sources + the gallery app (engine flavor wiring) +
-# the Gradle catalog. Editor and unified sources do not trigger this
-# workflow.
+# Path filter: engine sources + Gallery Engine wiring + Gradle/toolchain
+# files. This is intentionally push/manual validation for upstream syncs;
+# it is not a daily release lane.
 
 on:
   push:

@@ -53,24 +53,28 @@ jobs:
           - product: Basic Gallery
             task: :gallery:app:assembleBasicDebug
             artifact: gallery/app/build/outputs/apk/basic/debug/*.apk
+            artifact_dir: gallery/app/build/outputs/apk/basic/debug
             rust: ''
             with_engine: false
             native: false
           - product: Gallery Engine
             task: :gallery:app:assembleEngineDebug
             artifact: gallery/app/build/outputs/apk/engine/debug/*.apk
+            artifact_dir: gallery/app/build/outputs/apk/engine/debug
             rust: android
             with_engine: true
             native: true
           - product: Editor
             task: :editor:app:assembleDebug
             artifact: editor/app/build/outputs/apk/debug/*.apk
+            artifact_dir: editor/app/build/outputs/apk/debug
             rust: ''
             with_engine: false
             native: false
           - product: Unified
             task: :unified:app:assembleDebug
             artifact: unified/app/build/outputs/apk/debug/*.apk
+            artifact_dir: unified/app/build/outputs/apk/debug
             rust: android
             with_engine: true
             native: true
@@ -85,25 +89,25 @@ jobs:
         run: ./gradlew ${{ matrix.task }} ${{ matrix.with_engine && '-PwithEngine' || '' }} --no-daemon --stacktrace
       - name: Verify APK exists
         env:
-          APK_GLOB: ${{ matrix.artifact }}
+          APK_DIR: ${{ matrix.artifact }}
         run: |
-          APK="$(find "$(dirname "$APK_GLOB")" -maxdepth 1 -name '*.apk' -print -quit)"
+          APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -print -quit)"
           test -n "$APK"
           echo "Verified artifact: $APK"
       - name: Verify native libraries (Engine and Unified)
         if: matrix.native
         env:
-          APK_GLOB: ${{ matrix.artifact }}
+          APK_DIR: ${{ matrix.artifact }}
         run: |
-          APK="$(find "$(dirname "$APK_GLOB")" -maxdepth 1 -name '*.apk' -print -quit)"
+          APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -print -quit)"
           unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
       - name: Verify Basic Gallery excludes engine native libraries
         if: matrix.product == 'Basic Gallery'
         env:
-          APK_GLOB: ${{ matrix.artifact }}
+          APK_DIR: ${{ matrix.artifact }}
         run: |
-          APK="$(find "$(dirname "$APK_GLOB")" -maxdepth 1 -name '*.apk' -print -quit)"
+          APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -print -quit)"
           for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
             if unzip -l "$APK" | grep -q "$LIB"; then
               echo "::error::Basic Gallery must not package $LIB"

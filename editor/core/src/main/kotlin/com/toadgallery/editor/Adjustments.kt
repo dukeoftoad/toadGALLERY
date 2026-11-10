@@ -25,8 +25,17 @@ object LutBuilder {
     /** The stage's composition order, exported for tests and the recipe docs. */
     const val ORDER: String = "exposure -> brightness -> contrast -> highlights -> shadows"
 
+    private const val SLIDER_MIN = -100
+    private const val SLIDER_MAX = 100
+    private const val SLIDER_SPAN_D = 100.0
+    private const val BYTE_MAX = 255
+    private const val BYTE_MAX_D = 255.0
+    private const val PIVOT_D = 128.0
+    private const val HALF_D = 127.5
+    private const val PER_STEP = 2.55
+
     /**
-     * Builds the composed LUT.
+     * Builds the composed 256-entry LUT.
      *
      *  - exposure e: EV = e/100 stops, v' = v * 2^EV (0 = +0 EV, identity).
      *  - brightness b: v' = v + 2.55*b (the r29 rule).
@@ -44,26 +53,32 @@ object LutBuilder {
         highlights: Int,
         shadows: Int,
     ): IntArray {
-        require(brightness in -100..100 && contrast in -100..100 && exposure in -100..100)
-        require(highlights in -100..100 && shadows in -100..100)
-        val ev = exposure / 100.0
-        val gain = 2.0.pow(ev)
-        val contrastPercent = contrast * 2.55
-        val contrastFactor = (259.0 * (contrastPercent + 255.0)) / (255.0 * (259.0 - contrastPercent))
+        require(brightness in SLIDER_MIN..SLIDER_MAX) { "brightness=$brightness out of [-100, 100]" }
+        require(contrast in SLIDER_MIN..SLIDER_MAX) { "contrast=$contrast out of [-100, 100]" }
+        require(exposure in SLIDER_MIN..SLIDER_MAX) { "exposure=$exposure out of [-100, 100]" }
+        require(highlights in SLIDER_MIN..SLIDER_MAX) { "highlights=$highlights out of [-100, 100]" }
+        require(shadows in SLIDER_MIN..SLIDER_MAX) { "shadows=$shadows out of [-100, 100]" }
+
+        // Loop-invariant coefficients (computed once, not per-entry).
+        val gain = 2.0.pow(exposure / SLIDER_SPAN_D)
+        val brightnessOffset = brightness * PER_STEP
+        val contrastPercent = contrast * PER_STEP
+        val contrastFactor = (259.0 * (contrastPercent + BYTE_MAX_D)) /
+            (BYTE_MAX_D * (259.0 - contrastPercent))
+        // 127.5/100 is numerically EXACT (127.5 = 255/2 is representable)
+        // where s * 2.55 * 0.5 carries binary float dust (2.55 is not
+        // representable; 100 * 2.55 * 0.5 = 127.49999... rounds to 127,
+        // one off the documented +127.5 half-scale). Same scaling, exact
+        // at the slider extremes.
+        val hlScale = highlights * HALF_D / SLIDER_SPAN_D
+        val shScale = shadows * HALF_D / SLIDER_SPAN_D
+
         return IntArray(256) { v ->
-            var out = v * gain
-            out += brightness * 2.55
-            out = (out - 128.0) * contrastFactor + 128.0
-            // 127.5/100 is numerically EXACT (127.5 = 255/2 is representable)
-            // where s * 2.55 * 0.5 carries binary float dust (2.55 is not
-            // representable; 100 * 2.55 * 0.5 = 127.49999... rounds to 127,
-            // one off the documented +127.5 half-scale). Same scaling, exact
-            // at the slider extremes.
-            val hlWeight = smoothstep(128.0, 255.0, out)
-            out += highlights * 127.5 / 100.0 * hlWeight
-            val shWeight = 1.0 - smoothstep(0.0, 128.0, out)
-            out += shadows * 127.5 / 100.0 * shWeight
-            out.roundToInt().coerceIn(0, 255)
+            var out = v * gain + brightnessOffset
+            out = (out - PIVOT_D) * contrastFactor + PIVOT_D
+            out += hlScale * smoothstep(PIVOT_D, BYTE_MAX_D, out)
+            out += shScale * (1.0 - smoothstep(0.0, PIVOT_D, out))
+            out.roundToInt().coerceIn(0, BYTE_MAX)
         }
     }
 
@@ -79,8 +94,31 @@ object LutBuilder {
 /**
  * The full-pixel stage: saturation (luma pull), temperature (warm/cool)
  * and tint (magenta/green). Zero parameters are skipped for exact identity.
+ *
+ * Also hosts [applyLut] --- the per-channel stage that [LutBuilder] produces.
+ *
+ * Pixel layout is the packed ARGB format used throughout the editor:
+ * `0xAARRGGBB`.
  */
 object PixelOps {
+
+    private const val SLIDER_MIN = -100
+    private const val SLIDER_MAX = 100
+    private const val CHANNEL_MAX = 255
+    private const val CHANNEL_MASK = 0xFF
+    private const val ALPHA_SHIFT = 24
+    private const val RED_SHIFT = 16
+    private const val GREEN_SHIFT = 8
+    /** `0xFF000000` in two's complement 32-bit --- mask that keeps the alpha byte. */
+    private const val ALPHA_MASK = -0x1000000
+
+    private const val LUMA_R = 299
+    private const val LUMA_G = 587
+    private const val LUMA_B = 114
+    private const val LUMA_DIV = 1000
+
+    private const val TEMP_SCALE = 255
+    private const val TEMP_DIV = 400
 
     /**
      * Saturation in [-100, 100]: 0 = untouched; +100 doubles the distance
@@ -88,20 +126,20 @@ object PixelOps {
      * v' = lum + (v - lum) * (100 + sat) / 100.
      */
     fun applySaturation(pixels: IntArray, saturation: Int) {
-        require(saturation in -100..100)
+        require(saturation in SLIDER_MIN..SLIDER_MAX) { "saturation=$saturation out of [-100, 100]" }
         if (saturation == 0) return
         val factorPct = 100 + saturation
         for (i in pixels.indices) {
             val p = pixels[i]
-            val r = (p ushr 16) and 0xFF
-            val g = (p ushr 8) and 0xFF
-            val b = p and 0xFF
-            val a = (p ushr 24) and 0xFF
-            val lum = (r * 299 + g * 587 + b * 114) / 1000
-            val nr = lum + ((r - lum) * factorPct) / 100
-            val ng = lum + ((g - lum) * factorPct) / 100
-            val nb = lum + ((b - lum) * factorPct) / 100
-            pixels[i] = (a shl 24) or (nr.coerceIn(0, 255) shl 16) or (ng.coerceIn(0, 255) shl 8) or nb.coerceIn(0, 255)
+            val a = (p ushr ALPHA_SHIFT) and CHANNEL_MASK
+            val r = (p ushr RED_SHIFT) and CHANNEL_MASK
+            val g = (p ushr GREEN_SHIFT) and CHANNEL_MASK
+            val b = p and CHANNEL_MASK
+            val lum = (r * LUMA_R + g * LUMA_G + b * LUMA_B) / LUMA_DIV
+            val nr = (lum + ((r - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
+            val ng = (lum + ((g - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
+            val nb = (lum + ((b - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
+            pixels[i] = (a shl ALPHA_SHIFT) or (nr shl RED_SHIFT) or (ng shl GREEN_SHIFT) or nb
         }
     }
 
@@ -111,22 +149,54 @@ object PixelOps {
      * greener). Max shift at the extremes: 255/4 ~ 64 per channel.
      */
     fun applyTemperatureTint(pixels: IntArray, temperature: Int, tint: Int) {
-        require(temperature in -100..100 && tint in -100..100)
+        require(temperature in SLIDER_MIN..SLIDER_MAX) { "temperature=$temperature out of [-100, 100]" }
+        require(tint in SLIDER_MIN..SLIDER_MAX) { "tint=$tint out of [-100, 100]" }
         if (temperature == 0 && tint == 0) return
-        val tShift = (temperature * 255) / 400 // +/- 63
-        val tintShift = (tint * 255) / 400
+        val tShift = (temperature * TEMP_SCALE) / TEMP_DIV // +/- 63
+        val tintShift = (tint * TEMP_SCALE) / TEMP_DIV
         for (i in pixels.indices) {
             val p = pixels[i]
-            val a = (p ushr 24) and 0xFF
-            val r = ((p ushr 16) and 0xFF) + tShift
-            val g = ((p ushr 8) and 0xFF) - tintShift
-            val b = (p and 0xFF) - tShift
-            pixels[i] = (
-                (a shl 24) or
-                    (r.coerceIn(0, 255) shl 16) or
-                    (g.coerceIn(0, 255) shl 8) or
-                    b.coerceIn(0, 255)
-                )
+            val a = (p ushr ALPHA_SHIFT) and CHANNEL_MASK
+            val r = (((p ushr RED_SHIFT) and CHANNEL_MASK) + tShift).coerceIn(0, CHANNEL_MAX)
+            val g = (((p ushr GREEN_SHIFT) and CHANNEL_MASK) - tintShift).coerceIn(0, CHANNEL_MAX)
+            val b = ((p and CHANNEL_MASK) - tShift).coerceIn(0, CHANNEL_MAX)
+            pixels[i] = (a shl ALPHA_SHIFT) or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b
         }
+    }
+
+    /**
+     * Applies a pre-built 256-entry LUT to every pixel's R, G and B channel
+     * (alpha preserved). This is the per-channel stage; feed it the array
+     * returned by [LutBuilder.build]. All LUT entries must already be
+     * clamped to [0, 255] (as [LutBuilder.build] guarantees).
+     */
+    fun applyLut(pixels: IntArray, lut: IntArray) {
+        require(lut.size == 256) { "LUT must have 256 entries, got ${lut.size}" }
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val a = p and ALPHA_MASK
+            val r = lut[(p ushr RED_SHIFT) and CHANNEL_MASK]
+            val g = lut[(p ushr GREEN_SHIFT) and CHANNEL_MASK]
+            val b = lut[p and CHANNEL_MASK]
+            pixels[i] = a or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b
+        }
+    }
+
+    /**
+     * Full pipeline convenience: applies [applyLut], then [applySaturation],
+     * then [applyTemperatureTint]. Order matches the documented stage
+     * ordering; passing all-neutral defaults makes every stage a no-op,
+     * so this is a guaranteed identity in that case.
+     */
+    fun applyAll(
+        pixels: IntArray,
+        lut: IntArray,
+        saturation: Int = 0,
+        temperature: Int = 0,
+        tint: Int = 0,
+    ) {
+        applyLut(pixels, lut)
+        applySaturation(pixels, saturation)
+        applyTemperatureTint(pixels, temperature, tint)
     }
 }

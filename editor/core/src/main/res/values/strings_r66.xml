@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r66: the editor's honest-feedback round (the live tonal histogram on
+     the Adjust panel, the honest sky thumbnails on the AI panel, the
+     neutral notch on the bipolar sliders). Only NEW concepts live here;
+     everything else reuses the r30-r65 strings in their original files. -->
+<resources>
+    <!-- The Adjust panel's histogram: the a11y NAME (the r32 contract ---
+         the chart announces what it is; the zones below are its state). -->
+    <string name="editor_r66_histogram_a11y">Tonal histogram</string>
+    <!-- The histogram's a11y STATE: the three luma zones as whole percents
+         (EditorHistogram.zoneFractions, pinned by EditorHistogramTest ---
+         the percents always sum to exactly 100). -->
+    <string name="editor_a11y_r66_histogram_state">Shadows %1$d%%, midtones %2$d%%, highlights %3$d%%</string>
+</resources>

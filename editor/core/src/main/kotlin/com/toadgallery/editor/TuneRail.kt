@@ -185,6 +185,12 @@ private fun TuneRing(value: Int) {
  * THAT parameter to zero (draft write -> finish, the exact r56 sequence).
  * Caller-owned value, exactly like LabeledSlider: every tick calls
  * [onChange], the release calls [onFinish].
+ *
+ * r66: the neutral notch rides the track's exact center (the
+ * [NeutralNotch] contract in PhotoControls.kt) --- the rail's fixed
+ * [-100, 100] range is symmetric around zero, so the center IS the zero
+ * the double-tap returns to, and the symmetric-zero guard keeps an
+ * asymmetric future range honest.
  */
 @Composable
 internal fun TuneRailSlider(
@@ -212,30 +218,40 @@ internal fun TuneRailSlider(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
             )
         }
-        Slider(
-            value = value,
-            onValueChange = { onChange(it.toInt()) },
-            onValueChangeFinished = onFinish,
-            valueRange = valueRange,
-            enabled = enabled,
+        // r66: the Box carries the row weight so the slider's slot can
+        // host the neutral notch overlay at the track's exact center
+        // (the layout is byte-identical --- the Box only adds the paint).
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 10.dp)
-                .semantics {
-                    contentDescription = name
-                    stateDescription = state
-                }
-                .pointerInput(enabled) {
-                    if (enabled) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                onChange(0)
-                                onFinish?.invoke()
-                            },
-                        )
+                .padding(start = 10.dp),
+        ) {
+            Slider(
+                value = value,
+                onValueChange = { onChange(it.toInt()) },
+                onValueChangeFinished = onFinish,
+                valueRange = valueRange,
+                enabled = enabled,
+                modifier = Modifier
+                    .semantics {
+                        contentDescription = name
+                        stateDescription = state
                     }
-                },
-        )
+                    .pointerInput(enabled) {
+                        if (enabled) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    onChange(0)
+                                    onFinish?.invoke()
+                                },
+                            )
+                        }
+                    },
+            )
+            if (valueRange.start + valueRange.endInclusive == 0f) {
+                NeutralNotch(modifier = Modifier.matchParentSize())
+            }
+        }
     }
 }
 

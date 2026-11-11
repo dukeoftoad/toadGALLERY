@@ -304,7 +304,9 @@ jobs:
         run: |
           STAGE="$GITHUB_WORKSPACE/staging"
           mkdir -p "$STAGE"
-          gh run download "$GITHUB_RUN_ID" --pattern 'rel-unified-*' --dir "$STAGE"
+          # No checkout in this job --- every gh call names -R explicitly
+          # (git-remote detection cannot work without a .git directory).
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" --pattern 'rel-unified-*' --dir "$STAGE"
           while IFS= read -r -d '' f; do mv "$f" "$STAGE/"; done < <(find "$STAGE" -mindepth 2 -type f -print0)
           find "$STAGE" -mindepth 1 -type d -empty -delete
 
@@ -390,7 +392,7 @@ jobs:
           TAG_NAME: ${{ inputs.tag_name }}
           SHA_UNIFIED: ${{ needs.products-unified.outputs.sha_unified }}
         run: |
-          gh release create "$TAG_NAME" \
+          gh release create "$TAG_NAME" -R "$GITHUB_REPOSITORY" \
             --prerelease \
             --target "$SHA_UNIFIED" \
             --title "toadGALLERY alpha/beta bundle ${TAG_NAME}" \

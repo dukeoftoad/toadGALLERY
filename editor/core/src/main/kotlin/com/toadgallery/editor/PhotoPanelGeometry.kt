@@ -147,6 +147,9 @@ internal fun CropPanel(
             onDraftChange(null)
         },
         resetValue = 0,
+        // r66: the straighten row is bipolar (-15..15, zero at the exact
+        // center) --- the notch makes the double-tap target discoverable.
+        neutralTick = true,
     )
 
     // ---- Crop aspect presets (centered fits over the post-geometry frame) ----

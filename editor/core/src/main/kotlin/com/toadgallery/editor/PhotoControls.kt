@@ -3,6 +3,7 @@ package com.toadgallery.editor
 import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.widget.TextView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -158,6 +160,20 @@ internal fun renderFrameThumb(frameId: String, colorArgb: Long): Bitmap {
 }
 
 /**
+ * The bundled sky's honest thumbnail (r66): the parametric render at the
+ * reference strip's own raster, through the SAME `BundledSkies.render`
+ * the sky stage blends through at commit --- what the chip shows is what
+ * the stage paints. An unresolvable id (the tolerance contract) returns
+ * null and the chip degrades to its name, like the None chip.
+ */
+internal fun renderSkyThumb(skyId: String): Bitmap? {
+    val pixels = BundledSkies.render(skyId, THUMB_WIDTH, THUMB_HEIGHT) ?: return null
+    return Bitmap
+        .createBitmap(THUMB_WIDTH, THUMB_HEIGHT, Bitmap.Config.ARGB_8888)
+        .also { it.setPixels(pixels, 0, THUMB_WIDTH, 0, 0, THUMB_WIDTH, THUMB_HEIGHT) }
+}
+
+/**
  * The r56 slider row: the label and a LIVE value pill on one line, the
  * slider under them, and a double-tap that returns to a control's neutral
  * (the pill makes the number readable at a glance; the double-tap replaces
@@ -168,6 +184,15 @@ internal fun renderFrameThumb(frameId: String, colorArgb: Long): Bitmap {
  * live preview re-renders exactly as before) and the release calls
  * [onFinish] (the caller commits its draft and clears it). The a11y contract
  * is verbatim: name = [name], state = [label].
+ *
+ * r66: [neutralTick] opts a bipolar control into the NEUTRAL NOTCH --- a
+ * hairline vertical mark at the track's exact center, where the thumb
+ * sits at 0 for any range symmetric around zero ([-100, 100], [-15, 15]).
+ * The double-tap-to-reset affordance becomes DISCOVERABLE (the mark is
+ * what you double-tap back to); unipolar controls (0..100
+ * strength/opacity rows) must NOT opt in --- their zero is the track's
+ * end, not its center. The guard is honest: an asymmetric range draws
+ * nothing even if a caller passes true.
  */
 @Composable
 internal fun LabeledSlider(
@@ -180,6 +205,7 @@ internal fun LabeledSlider(
     onChange: (Int) -> Unit,
     onFinish: (() -> Unit)? = null,
     resetValue: Int? = null,
+    neutralTick: Boolean = false,
 ) {
     Column {
         Row(
@@ -204,28 +230,36 @@ internal fun LabeledSlider(
                 )
             }
         }
-        Slider(
-            value = value,
-            onValueChange = { onChange(it.toInt()) },
-            onValueChangeFinished = onFinish,
-            valueRange = valueRange,
-            enabled = enabled,
-            modifier = Modifier
-                .semantics {
-                    contentDescription = name
-                    stateDescription = label
-                }
-                .pointerInput(resetValue, enabled) {
-                    if (resetValue != null && enabled) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                onChange(resetValue)
-                                onFinish?.invoke()
-                            },
-                        )
+        Box {
+            Slider(
+                value = value,
+                onValueChange = { onChange(it.toInt()) },
+                onValueChangeFinished = onFinish,
+                valueRange = valueRange,
+                enabled = enabled,
+                modifier = Modifier
+                    .semantics {
+                        contentDescription = name
+                        stateDescription = label
                     }
-                },
-        )
+                    .pointerInput(resetValue, enabled) {
+                        if (resetValue != null && enabled) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    onChange(resetValue)
+                                    onFinish?.invoke()
+                                },
+                            )
+                        }
+                    },
+            )
+            // r66: the neutral notch, drawn only for the honest case ---
+            // a range symmetric around zero puts the thumb's 0 at the
+            // track's exact center (the M3 travel insets are symmetric).
+            if (neutralTick && valueRange.start + valueRange.endInclusive == 0f) {
+                NeutralNotch(modifier = Modifier.matchParentSize())
+            }
+        }
     }
 }
 
@@ -234,6 +268,11 @@ internal fun LabeledSlider(
  * LOCAL (the band commits once on release --- the r32 contract) while the
  * pill shows the live number during the drag. Signature unchanged, so the
  * Color screen's call sites are untouched.
+ *
+ * r66: the neutral notch rides the track (see [LabeledSlider]'s neutralTick
+ * note) --- every band row is bipolar with a zero neutral (hue -180..180,
+ * saturation/luminance -100..100), so the mark needs no opt-in here; the
+ * symmetric-zero guard still keeps a hypothetical asymmetric band honest.
  */
 @Composable
 internal fun HslBandSlider(
@@ -269,21 +308,50 @@ internal fun HslBandSlider(
                 )
             }
         }
-        Slider(
-            value = live,
-            onValueChange = { dragValue = it },
-            onValueChangeFinished = {
-                dragValue?.let { onCommit(it.toInt()) }
-                dragValue = null
-            },
-            valueRange = range,
-            enabled = enabled,
-            // r32 a11y: the band control announces "BAND: CONTROL" as its name
-            // and the formatted label (with the value) as its state.
-            modifier = Modifier.semantics {
-                contentDescription = name
-                stateDescription = label
-            },
+        Box {
+            Slider(
+                value = live,
+                onValueChange = { dragValue = it },
+                onValueChangeFinished = {
+                    dragValue?.let { onCommit(it.toInt()) }
+                    dragValue = null
+                },
+                valueRange = range,
+                enabled = enabled,
+                // r32 a11y: the band control announces "BAND: CONTROL" as its name
+                // and the formatted label (with the value) as its state.
+                modifier = Modifier.semantics {
+                    contentDescription = name
+                    stateDescription = label
+                },
+            )
+            if (range.start + range.endInclusive == 0f) {
+                NeutralNotch(modifier = Modifier.matchParentSize())
+            }
+        }
+    }
+}
+
+/**
+ * The r66 neutral notch: a 2dp hairline at the track's exact center,
+ * half the track height tall, in the outline role. The caller hosts it
+ * as a `matchParentSize` overlay INSIDE the same Box as the Slider (the
+ * Box is what keeps the slider's layout byte-identical --- the overlay
+ * only paints). Purely decorative: no semantics, nothing for TalkBack
+ * to read that the slider's own state does not already say.
+ */
+@Composable
+internal fun NeutralNotch(modifier: Modifier = Modifier) {
+    val tint = MaterialTheme.colorScheme.outline
+    Canvas(modifier = modifier) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val half = 6.dp.toPx()
+        drawLine(
+            color = tint,
+            start = Offset(cx, cy - half),
+            end = Offset(cx, cy + half),
+            strokeWidth = 2.dp.toPx(),
         )
     }
 }
@@ -348,6 +416,62 @@ internal fun FrameThumbChip(
     thumb: Bitmap?,
     onPick: () -> Unit,
 ) {
+    FilterChip(
+        selected = selected,
+        onClick = onPick,
+        enabled = enabled,
+        label = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(vertical = 4.dp),
+            ) {
+                if (thumb != null) {
+                    Image(
+                        bitmap = thumb.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier
+                            .padding(bottom = 4.dp)
+                            .size(width = 66.dp, height = 44.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                shape = RoundedCornerShape(6.dp),
+                            ),
+                    )
+                }
+                Text(label, style = MaterialTheme.typography.labelLarge)
+            }
+        },
+        modifier = Modifier.padding(end = 8.dp),
+    )
+}
+
+/**
+ * One sky chip (r66): the honest thumb over the sky's name, the
+ * LookThumbChip/FrameThumbChip contract applied to the last text-only
+ * picker row. [bundled] renders through `renderSkyThumb` (the same
+ * `BundledSkies.render` the sky stage blends through, remembered per
+ * sky id); an imported sky shows [imported] --- its own bitmap (the
+ * imported-frame precedent: the chip shows the pixels the stage would
+ * paste). Both null renders the None chip: name only --- "no sky" has
+ * nothing honest to preview.
+ */
+@Composable
+internal fun SkyThumbChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    bundled: BundledSkies.Entry?,
+    imported: Bitmap?,
+    onPick: () -> Unit,
+) {
+    val thumb: Bitmap? = when {
+        bundled != null -> remember(bundled.id) { renderSkyThumb(bundled.id) }
+        imported != null -> imported
+        else -> null
+    }
     FilterChip(
         selected = selected,
         onClick = onPick,

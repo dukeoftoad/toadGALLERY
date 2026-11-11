@@ -4,6 +4,48 @@ All notable changes to toadGALLERY are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions track
 `versionName` in `apps/gallery/build.gradle.kts` (pre-1.0 alphas).
 
+## [Unreleased] — the r66 round (the editor UI's honest-feedback kit: the live tonal histogram, the honest sky thumbnails, the neutral notch)
+
+The maintainer's 2026-11-11 instruction: develop and enrich the photo
+editor's UI components — the files under the editor tree's UI layer.
+
+### Added
+
+- **The live tonal histogram** (`EditorHistogram` + `HistogramChart`): the
+  Adjust panel now leads with the classic RGB channel chart, counted from
+  the SAME pipelined pixels the canvas shows (live during a drag, never
+  disagreeing with the preview), drawn with Screen-blended channel fills,
+  and SPOKEN to TalkBack as three luma zones (whole percents that always
+  sum to exactly 100, JVM-pinned).
+- **Honest sky thumbnails**: the AI panel's sky chips stop being text-only —
+  the five bundled parametric skies render through the same
+  `BundledSkies.render` the sky stage uses, and imported skies show their
+  own bitmap (the look/frame chip contract).
+- **The neutral notch**: bipolar sliders (the tune rail's active slider, the
+  three HSL band rows, the straighten row) gain a hairline mark at the
+  track's exact center — the zero the double-tap returns to becomes
+  discoverable. Unipolar rows are untouched; asymmetric ranges honestly
+  draw nothing.
+
+### Changed
+
+- The Adjust panel's signature gains a defaulted `previewHistogram` (the
+  screenshot fixtures and pre-r66 call sites compile unchanged); the panel
+  host seam carries it from the chassis.
+- The identity-preview short-circuit reads the decode once more — the
+  histogram needs the pixels; the preview bitmap itself still reuses the
+  decode.
+
+### Verification
+
+- `EditorHistogramTest` pins the counting (bin accounting, the pure-red
+  bins, the 85/170 zone thirds, the exact-100 percent sum, determinism,
+  the empty degrade).
+- editor-ci (assemble + lint + app tests) gates the head. The pinned PNGs
+  that gain the notch/chart (`tuneRail`, `tuneRailLiveDraft`,
+  `cropPanelStraightenSlider`) need one `recordRoborazziDebug` pass on a
+  JDK+SDK machine.
+
 ## [Unreleased] — photo editor UX polish (2026-11-10)
 
 ### Changed

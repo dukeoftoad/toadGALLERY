@@ -37,6 +37,10 @@ import org.robolectric.annotation.GraphicsMode
  * The header captures pin the promoted Reset in both states (enabled and
  * the spec's 38%-alpha disabled).
  *
+ * r66: the at-rest capture also pins the live tonal histogram (the
+ * reference-strip raster as the deterministic fixture) and the neutral
+ * notch on the rail's active slider.
+ *
  * The PNG names are pinned by the module's
  * `roborazzi.record.namingStrategy = fullyQualifiedName` property:
  * `com.toadgallery.editor.TuneRailScreenshotTest.<method>.png`
@@ -79,6 +83,13 @@ class TuneRailScreenshotTest {
                             onDraftChange = {},
                             exporting = false,
                             commit = {},
+                            // r66: the histogram fixture --- the reference
+                            // strip's pure raster (deterministic, no decode,
+                            // the PhotoControlsTest subject), so the chart
+                            // rides the pinned surface with the rail.
+                            previewHistogram = EditorHistogram.fromPixels(
+                                thumbGradientPixels(THUMB_WIDTH, THUMB_HEIGHT),
+                            ),
                         )
                     }
                 }

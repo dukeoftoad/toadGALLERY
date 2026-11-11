@@ -997,6 +997,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var exportChoice by remember { mutableStateOf<ExportChoice?>(null) }
     var previewBase by remember { mutableStateOf<Bitmap?>(null) }
     var previewImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    // r66: the Adjust panel's live tonal histogram --- recomputed by the
+    // preview render from the SAME pipelined pixels the canvas shows,
+    // re-keyed with the render's own keys (the committed recipe + the ONE
+    // draft slot), so the chart follows a drag tick for tick and can
+    // never disagree with the preview.
+    var previewHistogram by remember { mutableStateOf<EditorHistogram?>(null) }
     var previewCropRect by remember { mutableStateOf<PixelRect?>(null) }
     var exporting by remember { mutableStateOf(false) }
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
@@ -1792,6 +1798,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             val plan = EditGeometryPlan.plan(effective, width, height)
             previewCropRect = plan.cropPixelRect
             if (displayRecipe.isIdentity) {
+                // r66: the identity short-circuit still owes the Adjust
+                // panel its histogram --- one read of the decode for the
+                // counting (the preview bitmap itself still reuses the
+                // decode, the 2026-11-10 rule).
+                val raw = IntArray(width * height)
+                base.getPixels(raw, 0, width, 0, 0, width, height)
+                previewHistogram = EditorHistogram.fromPixels(raw)
                 return@withContext base.asImageBitmap()
             }
             val pixels = IntArray(width * height)
@@ -1803,6 +1816,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // re-renders immediately.
             val ai = activity.resolveAiStageInputs(displayRecipe)
             val pipelined = EditPipeline.apply(pixels, width, height, displayRecipe, look, ai)
+            // r66: the tone-honest histogram source --- the pipeline
+            // output BEFORE the scene layers composite (a sticker or a
+            // caption is not a tonal state), the same uncropped working
+            // grid the AI seam reads.
+            previewHistogram = EditorHistogram.fromPixels(pipelined.pixels)
             val out = Bitmap.createBitmap(pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888)
             out.setPixels(pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height)
             val crop = plan.cropPixelRect
@@ -2937,6 +2955,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         onDraftChange = { draft = it },
                         exporting = exporting,
                         previewBase = previewBase,
+                        previewHistogram = previewHistogram,
                         commit = { commit(it) },
                         activity = activity,
                         uiScope = uiScope,

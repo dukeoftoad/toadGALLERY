@@ -36,6 +36,12 @@ import androidx.compose.ui.unit.dp
  * The bodies are the r31/r32 adjust contracts and the r47 HSL band contract,
  * unchanged; the chassis state arrives as explicit value + `on...Change`
  * pairs. The committed Roborazzi chassis baselines are the regression proof.
+ *
+ * r66 adds the LIVE TONAL HISTOGRAM above the rail ([previewHistogram],
+ * defaulted null so the screenshot fixtures and any pre-r66 call site
+ * compile unchanged): the chart of the same pipelined pixels the canvas
+ * shows, counted by the preview render. Absent (never a placeholder)
+ * until the first preview lands.
  */
 @Composable
 internal fun AdjustPanel(
@@ -44,6 +50,7 @@ internal fun AdjustPanel(
     onDraftChange: (Pair<String, Int>?) -> Unit,
     exporting: Boolean,
     commit: (EditRecipe) -> Unit,
+    previewHistogram: EditorHistogram? = null,
 ) {
 
     // ---- The adjustment suite ----
@@ -52,6 +59,13 @@ internal fun AdjustPanel(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelLarge,
     )
+    // r66: the live tonal readout --- the Adjust panel leads with the
+    // histogram the way every serious photo editor does, drawn from the
+    // SAME pipelined pixels the canvas shows (see EditorHistogram's
+    // header for the wiring).
+    previewHistogram?.let { histogram ->
+        HistogramChart(histogram = histogram)
+    }
     TuneRail(
         specs = ADJUST_SLIDERS,
         committed = committed,

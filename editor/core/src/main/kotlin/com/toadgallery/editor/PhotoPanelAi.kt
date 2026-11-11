@@ -192,6 +192,11 @@ internal fun AiPanel(
     // first (once, cancellable); a re-detect is a deliberate
     // re-apply. The opacity slider re-renders from the stored
     // mask --- no re-inference.
+    //
+    // r66: the sky chips wear HONEST THUMBS now (SkyThumbChip) --- the
+    // bundled five render through the same BundledSkies.render the sky
+    // stage blends through, the imports show their own bitmap (the
+    // look/frame chip contract; this row was the last text-only picker).
     Text(
         text = stringResource(R.string.editor_section_ai_sky),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -206,27 +211,29 @@ internal fun AiPanel(
             modifier = Modifier.padding(end = 8.dp),
         )
         BundledSkies.ORDERED.forEach { entry ->
-            FilterChip(
+            SkyThumbChip(
+                label = entry.displayName,
                 selected = committed.sky?.skyId == entry.id,
-                onClick = {
+                enabled = !exporting && !aiBusy,
+                bundled = entry,
+                imported = null,
+                onPick = {
                     sweepPendingDrafts()
                     selectSky(entry.id, false)
                 },
-                enabled = !exporting && !aiBusy,
-                label = { Text(entry.displayName) },
-                modifier = Modifier.padding(end = 8.dp),
             )
         }
         importedSkies.keys.sorted().forEach { id ->
-            FilterChip(
+            SkyThumbChip(
+                label = id,
                 selected = committed.sky?.skyId == id,
-                onClick = {
+                enabled = !exporting && !aiBusy,
+                bundled = null,
+                imported = importedSkies[id],
+                onPick = {
                     sweepPendingDrafts()
                     selectSky(id, false)
                 },
-                enabled = !exporting && !aiBusy,
-                label = { Text(id) },
-                modifier = Modifier.padding(end = 8.dp),
             )
         }
         AssistChip(

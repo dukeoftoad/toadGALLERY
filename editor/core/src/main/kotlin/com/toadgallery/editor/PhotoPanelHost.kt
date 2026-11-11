@@ -20,6 +20,9 @@ import kotlinx.coroutines.CoroutineScope
 // verbatim; the ONLY behavioral surface (which value each assignment lands
 // in) is preserved by construction, and the committed Roborazzi chassis
 // baselines gate the round to zero pixel drift.
+//
+// r66: `previewHistogram` rides the seam to the Adjust panel (the live
+// tonal chart's source, computed by the chassis's preview render).
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -30,6 +33,7 @@ internal fun PhotoPanelHost(
     onDraftChange: (Pair<String, Int>?) -> Unit,
     exporting: Boolean,
     previewBase: Bitmap?,
+    previewHistogram: EditorHistogram?,
     commit: (EditRecipe) -> Unit,
     activity: EditActivity,
     uiScope: CoroutineScope,
@@ -95,7 +99,7 @@ internal fun PhotoPanelHost(
 ) {
     when (tool) {
         PhotoScreen.Crop -> CropPanel(committed, draft, onDraftChange, exporting, previewBase, commit)
-        PhotoScreen.Adjust -> AdjustPanel(committed, draft, onDraftChange, exporting, commit)
+        PhotoScreen.Adjust -> AdjustPanel(committed, draft, onDraftChange, exporting, commit, previewHistogram)
         PhotoScreen.Looks -> LooksPanel(activity, uiScope, committed, draft, onDraftChange, exporting, commit, looks, onLooksVersionChange, importError, importLauncher)
         PhotoScreen.Text -> TextPanel(activity, committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedLayer, commitTextDraftIfPending, textDraft, onTextDraftChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)
         PhotoScreen.Stickers -> StickersPanel(committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedStickerLayer, importedStickers, stickerImportError, stickerImportLauncher, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)

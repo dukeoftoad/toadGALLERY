@@ -122,7 +122,7 @@ internal fun PhotoPanelHost(
         PhotoScreen.Regions -> RegionsPanel(committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedRegionLayer, drawMode, onDrawModeChange, regionMode, onRegionModeChange, eraseMode, onEraseModeChange, regionKind, onRegionKindChange, regionStrength, onRegionStrengthChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedDrawLayerId, onSelectDrawLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)
         PhotoScreen.Frames -> FramesPanel(committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, importedFrames, frameImportError, frameImportLauncher)
         PhotoScreen.Ai -> AiPanel(activity, committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, drawMode, onDrawModeChange, regionMode, onRegionModeChange, eraseMode, onEraseModeChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedDrawLayerId, onSelectDrawLayerChange, selectedRegionLayerId, onSelectRegionLayerChange, selectedEraseLayerId, onSelectEraseLayerChange, aiBusy, importedSkies, skyImportError, skyImportLauncher, retouchConsent, onRetouchConsentChange, retouchConsentDialog, onRetouchConsentDialogChange, runBokehEstimate, runRetouchDetect, selectSky)
-        PhotoScreen.Color -> ColorPanel(committed, exporting, commit, selectedBand, onSelectedBandChange)
+        PhotoScreen.Color -> ColorPanel(committed, draft, onDraftChange, exporting, commit, selectedBand, onSelectedBandChange)
         PhotoScreen.Main -> Unit
     }
 }

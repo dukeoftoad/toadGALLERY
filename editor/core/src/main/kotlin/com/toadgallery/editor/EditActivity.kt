@@ -1236,6 +1236,29 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 else -> effective
             }
         }
+        // r68 (C5): the HSL band drags preview live too --- the rows'
+        // release-commit contract needs the chassis draft merged, exactly
+        // like the text layers' per-layer sliders (the key shape is
+        // theirs: "hsl-<field>@<band>", one commit on release).
+        val hslSlider = d?.takeIf { it.first.startsWith("hsl-") }
+            ?.let { (key, value) ->
+                val parts = key.removePrefix("hsl-").split("@", limit = 2)
+                if (parts.size == 2) Triple(parts[0], parts[1], value) else null
+            }
+        if (hslSlider != null) {
+            val bands = effective.hslBands
+            val current = HSL_BANDS.firstOrNull { it.first == hslSlider.second }?.second(bands)
+            if (current != null) {
+                val updated = when (hslSlider.first) {
+                    "hue" -> current.copy(hue = hslSlider.third)
+                    "sat" -> current.copy(saturation = hslSlider.third)
+                    else -> current.copy(luminance = hslSlider.third)
+                }
+                effective = effective.copy(
+                    hslBands = bands.withBand(hslSlider.second, updated),
+                )
+            }
+        }
         // r34: the text LIVE state --- per-layer slider drafts (keys
         // "text-size@<id>" / "text-opacity@<id>" / "text-rotation@<id>"),
         // the TextField draft and the position drag all apply over the
@@ -3393,8 +3416,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 // The r56 move: PhotoToolHeader and PhotoTabBar live in `PhotoChrome.kt`
 // (same package, internal --- the call sites in this file are unchanged).
 
-// The r56 move: HslBandSlider lives in `PhotoControls.kt` (the r56 control
-// kit --- same signature, live value pill added).
+// r68 (C5): the HSL band rows moved ONTO the ProSlider kit (the Color
+// panel's own ProSlider rows, led by the band's hue swatch); the
+// r32-skinned HslBandSlider that lived in `PhotoControls.kt` retired
+// with the round.
 
 
 @Composable

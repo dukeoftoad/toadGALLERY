@@ -1004,6 +1004,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     // draft slot), so the chart follows a drag tick for tick and can
     // never disagree with the preview.
     var previewHistogram by remember { mutableStateOf<EditorHistogram?>(null) }
+    // r68: the pro scopes' chassis state --- the Adjust board's scope mode
+    // (Histogram/Parade, a view preference) and the ZEBRA overlay's toggle.
+    // The zebra bitmap is a pure reader of the preview render's pipelined
+    // pixels (the histogram's source, verbatim): recomputed inside the
+    // render pass, only while the overlay is on, so it follows a drag tick
+    // for tick and can never disagree with the canvas.
+    var scopeMode by remember { mutableStateOf(PhotoScopeMode.Histogram) }
+    var zebraActive by remember { mutableStateOf(false) }
+    var previewZebra by remember { mutableStateOf<ImageBitmap?>(null) }
     var previewCropRect by remember { mutableStateOf<PixelRect?>(null) }
     var exporting by remember { mutableStateOf(false) }
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
@@ -1788,11 +1797,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         paintDraft, brushColor, brushWidth, brushOpacity, brushSmoothing,
         regionPaintDraft, regionKind, regionStrength,
         looks, importedStickers, importedFrames, importedSkies, retouchConsent,
+        zebraActive,
     ) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
         val displayRecipe = effective.copy(crop = CropRect(0.0, 0.0, 1.0, 1.0))
         val look = effective.lut?.let { looks[it.lutId] }
+        previewZebra = null
         previewImage = withContext(Dispatchers.Default) {
             val width = base.width
             val height = base.height
@@ -1802,10 +1813,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 // r66: the identity short-circuit still owes the Adjust
                 // panel its histogram --- one read of the decode for the
                 // counting (the preview bitmap itself still reuses the
-                // decode, the 2026-11-10 rule).
+                // decode, the 2026-11-10 rule). r68: the zebra reads the
+                // same pixels (the untouched decode IS the tonal state
+                // here).
                 val raw = IntArray(width * height)
                 base.getPixels(raw, 0, width, 0, 0, width, height)
                 previewHistogram = EditorHistogram.fromPixels(raw)
+                if (zebraActive) {
+                    previewZebra = buildZebraOverlayImage(raw, width, height)
+                }
                 return@withContext base.asImageBitmap()
             }
             val pixels = IntArray(width * height)
@@ -1820,8 +1836,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             // r66: the tone-honest histogram source --- the pipeline
             // output BEFORE the scene layers composite (a sticker or a
             // caption is not a tonal state), the same uncropped working
-            // grid the AI seam reads.
+            // grid the AI seam reads. r68: the zebra reads the same
+            // pixels (the clipping state IS the tonal state).
             previewHistogram = EditorHistogram.fromPixels(pipelined.pixels)
+            if (zebraActive) {
+                previewZebra = buildZebraOverlayImage(pipelined.pixels, pipelined.width, pipelined.height)
+            }
             val out = Bitmap.createBitmap(pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888)
             out.setPixels(pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height)
             val crop = plan.cropPixelRect
@@ -2650,6 +2670,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
+                // r68: the clipping zebra --- painted over the preview
+                // (never over the compare's original: a press-and-hold
+                // comparison shows the unedited truth, stripes would be
+                // editorializing), under the crop dim. No pointer input:
+                // the canvas's compare, zoom and crop gestures stay live.
+                if (!showOriginal) {
+                    ZebraOverlay(zebra = previewZebra)
+                }
                 val crop = previewCropRect
                 if (crop != null && (crop.x0 > 0 || crop.y0 > 0 ||
                         crop.x1 < image.width || crop.y1 < image.height)
@@ -3029,6 +3057,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         selectSky = { id, fresh -> selectSky(id, fresh) },
                         selectedBand = selectedBand,
                         onSelectedBandChange = { selectedBand = it },
+                        scopeMode = scopeMode,
+                        onScopeModeChange = { scopeMode = it },
+                        zebraActive = zebraActive,
+                        onZebraActiveChange = { zebraActive = it },
                 )
             }
             // ---- The always-visible honesty chip (the r54 chassis's Main

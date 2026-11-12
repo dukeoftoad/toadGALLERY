@@ -47,6 +47,12 @@ import androidx.compose.ui.unit.dp
  * state arrives as explicit value + `on...Change` pairs. The committed
  * Roborazzi chassis baselines are the regression proof (re-recorded as
  * the round's deliberate baseline pass).
+ *
+ * r68: the board leads with the SCOPE ROW --- the Histogram/Parade chart
+ * modes plus the Zebra overlay toggle ([ScopeRow]) --- and the chart
+ * under it follows the mode. The states arrive as explicit pairs, the
+ * host's hoisting pattern; the chassis owns them because the zebra
+ * paints the CANVAS (the panel only owns its toggle chip).
  */
 @Composable
 internal fun AdjustPanel(
@@ -56,14 +62,30 @@ internal fun AdjustPanel(
     exporting: Boolean,
     commit: (EditRecipe) -> Unit,
     previewHistogram: EditorHistogram? = null,
+    scopeMode: PhotoScopeMode = PhotoScopeMode.Histogram,
+    onScopeModeChange: (PhotoScopeMode) -> Unit = {},
+    zebraActive: Boolean = false,
+    onZebraActiveChange: (Boolean) -> Unit = {},
 ) {
-    // r66: the live tonal readout --- the board leads with the histogram
-    // the way every serious photo editor does, drawn from the SAME
-    // pipelined pixels the canvas shows (see EditorHistogram's header
-    // for the wiring). Absent (never a placeholder) until the first
-    // preview lands.
+    // r68: the scope row leads the board (the tonal readout is a CHOICE
+    // of scope now), and the chart below follows the mode.
+    ScopeRow(
+        scopeMode = scopeMode,
+        onScopeModeChange = onScopeModeChange,
+        zebraActive = zebraActive,
+        onZebraActiveChange = onZebraActiveChange,
+        enabled = !exporting,
+    )
+    // r66/r68: the live tonal readout, drawn from the SAME pipelined
+    // pixels the canvas shows (see EditorHistogram's header for the
+    // wiring). Absent (never a placeholder) until the first preview
+    // lands. The mode picks the chart: the overlaid RGB histogram, or
+    // the side-by-side parade.
     previewHistogram?.let { histogram ->
-        HistogramChart(histogram = histogram)
+        when (scopeMode) {
+            PhotoScopeMode.Histogram -> HistogramChart(histogram = histogram)
+            PhotoScopeMode.Parade -> ParadeChart(histogram = histogram)
+        }
     }
     // r67: the BOARD --- one ProSlider per parameter, every value visible
     // at once. Each row reads the committed recipe (or its own draft slot

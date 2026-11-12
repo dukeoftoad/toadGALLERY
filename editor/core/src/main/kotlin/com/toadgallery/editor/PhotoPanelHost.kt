@@ -96,10 +96,17 @@ internal fun PhotoPanelHost(
     selectSky: (String, Boolean) -> Unit,
     selectedBand: String,
     onSelectedBandChange: (String) -> Unit,
+    scopeMode: PhotoScopeMode,
+    onScopeModeChange: (PhotoScopeMode) -> Unit,
+    zebraActive: Boolean,
+    onZebraActiveChange: (Boolean) -> Unit,
 ) {
     when (tool) {
         PhotoScreen.Crop -> CropPanel(committed, draft, onDraftChange, exporting, previewBase, commit)
-        PhotoScreen.Adjust -> AdjustPanel(committed, draft, onDraftChange, exporting, commit, previewHistogram)
+        PhotoScreen.Adjust -> AdjustPanel(
+            committed, draft, onDraftChange, exporting, commit, previewHistogram,
+            scopeMode, onScopeModeChange, zebraActive, onZebraActiveChange,
+        )
         PhotoScreen.Looks -> LooksPanel(activity, uiScope, committed, draft, onDraftChange, exporting, commit, looks, onLooksVersionChange, importError, importLauncher, previewBase)
         PhotoScreen.Text -> TextPanel(activity, committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedLayer, commitTextDraftIfPending, textDraft, onTextDraftChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)
         PhotoScreen.Stickers -> StickersPanel(committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedStickerLayer, importedStickers, stickerImportError, stickerImportLauncher, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)

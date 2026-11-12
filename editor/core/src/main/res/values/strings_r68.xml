@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r68: the photo pro round (Phase 2 of the editor rebirth plan,
+     docs/editor/lilypad-design.md): the tone curve deck, the RGB parade
+     and clipping zebra scopes, the history strip, the crop dial and the
+     HSL rows on ProSlider. Only NEW concepts live here; everything else
+     reuses the r30-r67 strings in their original files. XML comments use
+     single dashes (the r66 lesson: a double dash inside an XML comment
+     breaks aapt). -->
+<resources>
+    <!-- The Adjust panel's scope row (r68): the Histogram/Parade chart
+         modes and the Zebra overlay toggle. -->
+    <string name="editor_r68_scope_histogram">Histogram</string>
+    <string name="editor_r68_scope_parade">Parade</string>
+    <string name="editor_r68_scope_zebra">Zebra</string>
+    <!-- The parade chart's a11y NAME (the r32 contract: the chart
+         announces what it is; the histogram's zone percents are its
+         state, the same string the histogram chart reads). -->
+    <string name="editor_r68_parade_a11y">RGB parade</string>
+</resources>

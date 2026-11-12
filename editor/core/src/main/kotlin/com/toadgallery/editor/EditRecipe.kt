@@ -40,6 +40,17 @@ data class EditRecipe(
     val hslBands: HslBands = HslBands(),
     val vignette: Int = 0,
     val sharpness: Int = 0,
+    // ---- Curve (r68, Phase 2 of the editor rebirth: the tone curve) ----
+    // Absent = a pre-r68 sidecar / a clean session / a played-with curve
+    // straightened back to the diagonal (the panel normalizes at commit).
+    // The MASTER curve composes into the pipeline's tone LUT after the
+    // shadows stage; the per-channel curves ride as forward state (see
+    // ToneCurves.kt). The schema version STAYS 1: the field rides as an
+    // optional key exactly like lut/textLayers/stickerLayers before it
+    // (absent defaults to identity, older readers ignore the unknown key
+    // --- the additive-versioning rule), and bumping would falsely
+    // declare every existing sidecar unsupported.
+    val toneCurves: ToneCurves? = null,
     // ---- Filter (r33, Phase 7 v2: the .cube look layer) ----
     val lut: LutSelection? = null,
     // ---- Text (r34, Phase 7 v2: the OFL-font layer system) ----
@@ -91,7 +102,8 @@ data class EditRecipe(
     val isAdjustmentIdentity: Boolean
         get() = exposure == 0 && brightness == 0 && contrast == 0 && highlights == 0 &&
             shadows == 0 && saturation == 0 && temperature == 0 && tint == 0 &&
-            hslBands.isIdentity && vignette == 0 && sharpness == 0
+            hslBands.isIdentity && vignette == 0 && sharpness == 0 &&
+            (toneCurves == null || toneCurves.isIdentity)
 
     /** A selected look at intensity 0 is dialed out --- no contribution. */
     val isFilterIdentity: Boolean
@@ -236,6 +248,18 @@ object EditRecipeCodec {
         root.put("hsl", hsl)
         root.put("vignette", recipe.vignette)
         root.put("sharpness", recipe.sharpness)
+        // r68: the curve key exists only for a non-null state (the lut
+        // family's rule), so a pre-r68 sidecar and a clean session
+        // round-trip byte-clean. Channel lists ride only when non-empty
+        // (the layer-family rule).
+        recipe.toneCurves?.let { curves ->
+            val curveObj = org.json.JSONObject()
+            curveObj.put("master", curvePointsJson(curves.master))
+            if (curves.red.isNotEmpty()) curveObj.put("red", curvePointsJson(curves.red))
+            if (curves.green.isNotEmpty()) curveObj.put("green", curvePointsJson(curves.green))
+            if (curves.blue.isNotEmpty()) curveObj.put("blue", curvePointsJson(curves.blue))
+            root.put("toneCurves", curveObj)
+        }
         recipe.lut?.let {
             root.put(
                 "lut",
@@ -436,6 +460,7 @@ object EditRecipeCodec {
             hslBands = hsl,
             vignette = root.optInt("vignette", 0).coerceIn(-100, 100),
             sharpness = root.optInt("sharpness", 0).coerceIn(-100, 100),
+            toneCurves = readToneCurves(root.optJSONObject("toneCurves")),
             lut = readLut(root.optJSONObject("lut")),
             textLayers = readTextLayers(root.optJSONArray("textLayers")),
             stickerLayers = readStickerLayers(root.optJSONArray("stickerLayers")),
@@ -668,6 +693,56 @@ object EditRecipeCodec {
     private fun readColorArgb(s: String): Long =
         if (s.length == 8 && s.all { it in "0123456789abcdefABCDEF" }) s.toLong(16)
         else TextLayer.DEFAULT_COLOR
+
+    /** One channel's points as [x, y] pairs; the receiver of readToneCurves' arrays. */
+    private fun curvePointsJson(points: List<CurvePoint>): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        for (p in points) {
+            arr.put(org.json.JSONArray().put(p.x).put(p.y))
+        }
+        return arr
+    }
+
+    /**
+     * The optional `toneCurves` object (r68): absent means NO curve (a
+     * pre-r68 sidecar loads clean). The tolerance set is the draw-layer
+     * family's (points are the curve's own data --- there is no foreign id
+     * to resolve): a point entry that is not a 2-element numeric array is
+     * dropped; surviving coordinates coerce into 0..1; the list sorts by
+     * x, drops duplicate-x stragglers and caps at the model cap
+     * (LilypadCurveMath.sanitize, the tolerant-read convention). A MASTER
+     * under two surviving points reads the WHOLE container as absent: this
+     * round's engine and deck are master-driven, and a channel-only state
+     * has no honest render or edit surface here. Channels under two
+     * points read empty.
+     */
+    private fun readToneCurves(curves: org.json.JSONObject?): ToneCurves? {
+        if (curves == null) return null
+        val master = LilypadCurveMath.sanitize(readCurvePoints(curves.optJSONArray("master")))
+        if (master.size < LilypadCurveMath.MIN_POINTS) return null
+        return ToneCurves(
+            master = master,
+            red = LilypadCurveMath.sanitize(readCurvePoints(curves.optJSONArray("red"))),
+            green = LilypadCurveMath.sanitize(readCurvePoints(curves.optJSONArray("green"))),
+            blue = LilypadCurveMath.sanitize(readCurvePoints(curves.optJSONArray("blue"))),
+        )
+    }
+
+    /** The raw tolerant point read (coordinate coercion and capping live in sanitize). */
+    private fun readCurvePoints(arr: org.json.JSONArray?): List<CurvePoint> {
+        if (arr == null) return emptyList()
+        val pts = ArrayList<CurvePoint>(minOf(arr.length(), LilypadCurveMath.MAX_POINTS))
+        for (i in 0 until arr.length()) {
+            val pair = arr.optJSONArray(i) ?: continue
+            if (pair.length() != 2) continue
+            val x = pair.optDouble(0, Double.NaN)
+            val y = pair.optDouble(1, Double.NaN)
+            if (x.isNaN() || y.isNaN()) continue
+            pts.add(CurvePoint(x, y))
+            if (pts.size >= LilypadCurveMath.MAX_POINTS) break
+        }
+        return pts
+    }
 
     /**
      * The optional `aiErase` array (r41): absent or empty means NO erase

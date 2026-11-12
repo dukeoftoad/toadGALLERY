@@ -78,7 +78,7 @@ import androidx.compose.ui.unit.dp
 // HAPTICS, per the LilypadTokens vocabulary only: ZERO_TICK when a
 // dragged handle crosses the identity diagonal (the curve's neutral ---
 // the light TextHandleMove stand-in the ProSlider documents), and
-// COMMIT_SOFT when a draft lands (the KeyboardTap stand-in; the
+// COMMIT_SOFT when a draft lands (the TextHandleMove stand-in; the
 // platform exposes no dedicated draft-landing id, the same honest
 // substitution ProSlider.kt pins for ZERO_TICK).
 //
@@ -173,7 +173,7 @@ internal fun CurveDeck(
     fun finishEdit() {
         if (draggingIndex >= 0) {
             draggingIndex = -1
-            haptics.performHapticFeedback(HapticFeedbackType.KeyboardTap)
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         currentOnFinish()
     }
@@ -286,7 +286,7 @@ internal fun CurveDeck(
                                     if (next != null) {
                                         emitDraft(next)
                                         haptics.performHapticFeedback(
-                                            HapticFeedbackType.KeyboardTap,
+                                            HapticFeedbackType.TextHandleMove,
                                         )
                                         currentOnFinish()
                                     }
@@ -305,7 +305,7 @@ internal fun CurveDeck(
                                     if (next != null) {
                                         emitDraft(next)
                                         haptics.performHapticFeedback(
-                                            HapticFeedbackType.KeyboardTap,
+                                            HapticFeedbackType.TextHandleMove,
                                         )
                                         currentOnFinish()
                                     }

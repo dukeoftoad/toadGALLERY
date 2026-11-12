@@ -324,13 +324,12 @@ private fun bandNameRes(name: String): Int = when (name) {
 }
 
 /**
- * The band-apply helper (the r31 Color panel's own, verbatim): now
- * INTERNAL --- r68's C5 moved the rows onto the chassis draft contract,
- * so effectiveRecipe's live merge (EditActivity) applies the drafted
- * band through the SAME helper the release commit does, one shape for
- * both writers.
+ * The band-apply helper (the r31 Color panel's own, verbatim): stays
+ * FILE-PRIVATE --- EditActivity carries its own twin beside HSL_BANDS
+ * (the r31 original's location), and the two file-local copies are the
+ * one shape both writers share without a cross-file surface.
  */
-internal fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = when (name) {
+private fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = when (name) {
     "red" -> copy(red = band)
     "orange" -> copy(orange = band)
     "yellow" -> copy(yellow = band)

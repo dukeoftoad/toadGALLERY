@@ -65,7 +65,7 @@ import androidx.compose.ui.unit.dp
 //    (LilypadDialMath.snappedToDetent pulls values within 1.5 deg of level
 //    home), and every emission rides ONE wrapper whose crossedNeutral
 //    check fires the light TextHandleMove tick --- the P0 stand-in for
-//    ZERO_TICK, exactly as ProSlider pins it. COMMIT_SOFT (the KeyboardTap
+//    ZERO_TICK, exactly as ProSlider pins it. COMMIT_SOFT (the TextHandleMove
 //    stand-in the curve deck pins) lands when a released drag commits.
 //    DETENT_DOUBLE stays silent this round: the vocabulary's snap-point
 //    pulse has no platform stand-in, and conflating it with either of the
@@ -165,7 +165,7 @@ internal fun LilypadDial(
 
     /** A release-commit: the COMMIT_SOFT pulse, then the caller's ONE commit. */
     fun finishDrag() {
-        haptics.performHapticFeedback(HapticFeedbackType.KeyboardTap)
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         currentOnFinish?.invoke()
     }
 

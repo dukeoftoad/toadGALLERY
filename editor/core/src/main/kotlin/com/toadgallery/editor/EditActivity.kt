@@ -3320,7 +3320,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         onZebraActiveChange = { zebraActive = it },
                         curveDeckOpen = curveDeckOpen,
                         onCurveDeckOpenChange = { setCurveDeckOpen(it) },
-                )
+                    )
+                }
             }
             // ---- The always-visible honesty chip (the r54 chassis's Main
             // home: the export decision surface; tool screens don't repeat

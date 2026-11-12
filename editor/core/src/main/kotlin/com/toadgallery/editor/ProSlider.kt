@@ -30,6 +30,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -181,7 +182,7 @@ internal fun ProSlider(
             .semantics {
                 contentDescription = name
                 stateDescription = state
-                progressBarRangeInfo(value = value, range = valueRange)
+                progressBarRangeInfo = ProgressBarRangeInfo(value = value, range = valueRange)
             }
             // Double-tap: back to the row's neutral (the r56 reset
             // sequence re-targeted: draft write -> finish).

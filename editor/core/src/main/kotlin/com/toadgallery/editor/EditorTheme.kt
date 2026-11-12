@@ -11,10 +11,6 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 
 // ---------------------------------------------------------------------------
 // The editor's Material 3 theme --- r63b (the chrome round: violet retires).
@@ -96,7 +92,6 @@ internal data class EditorPalette(
             inversePrimary = Color(LilypadTokens.Roles.EMBER_DIM.toInt()),
             secondary = Color(LilypadTokens.Roles.STEEL.toInt()),
             onSecondary = Color(LilypadTokens.Roles.ON_STEEL.toInt()),
-            secondaryContainer = Color(LilypadTokens.Roles.STEEL_DEEP.toInt()),
             onSecondaryContainer = Color(LilypadTokens.Roles.ON_EMBER_CONTAINER.toInt()),
             tertiary = Color(LilypadTokens.REED.toInt()),
             onTertiary = Color(LilypadTokens.PAD.toInt()),

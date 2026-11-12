@@ -132,7 +132,7 @@ internal fun LilypadDeck(
         // finite height constraint; an unbounded one falls back to a sane
         // 640dp rather than NaN arithmetic.
         val maxHeightPx = with(density) {
-            if (constraints.hasBoundedHeight()) {
+            if (constraints.hasBoundedHeight) {
                 maxHeight.toPx()
             } else {
                 DECK_UNBOUNDED_FALLBACK_HEIGHT_DP.dp.toPx()

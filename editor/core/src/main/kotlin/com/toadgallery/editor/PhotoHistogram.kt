@@ -285,6 +285,9 @@ internal fun LuminanceChart(
     modifier: Modifier = Modifier,
 ) {
     val name = stringResource(R.string.editor_scope_luminance)
+    // Hoisted out of the Canvas draw lambda (the DrawScope is not
+    // composable --- the ParadeChart's own hoist, verbatim).
+    val gridTint = MaterialTheme.colorScheme.outlineVariant
     // The state rides the zone percents computed by the caller from the
     // same pixels (passed in --- this chart holds only the bins).
     Canvas(
@@ -296,7 +299,6 @@ internal fun LuminanceChart(
         val w = size.width
         val h = size.height
         val hairline = 1.dp.toPx()
-        val gridTint = MaterialTheme.colorScheme.outlineVariant
         // The reed hairline quarter grid (the histogram's, verbatim).
         for (quarter in 1..3) {
             val x = w * quarter / 4f

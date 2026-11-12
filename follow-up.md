@@ -1311,3 +1311,31 @@ the public remote each time.
   module without Gradle or the Android SDK. Worth a script under tools/
   when a second pure module wants it; not done this round to keep the
   diff on the feature.
+
+## 2026-11-12 — the r71 window (Phase 2's declared follow-up lands)
+
+- **The per-channel curve composition (FIXED this round).** Phase 2's
+  documented pending item --- "the channels' composition is the declared
+  follow-up" --- is landed: `LutBuilder.buildChannels` composes
+  master-then-channel per channel table (`redLut[v] =
+  redCurve(masterCurve(base[v]))`, the five frozen sliders feeding the
+  chain first), `PixelOps.applyChannelLuts` applies the three tables in
+  one pass, and `EditPipeline` routes to the three-table path only when
+  `ToneCurves.hasChannelCurves` (an honest curve, not a degenerate
+  list). The r68 master-only path stays byte-frozen; the no-channel
+  equivalence and the three-copies-of-one-table equivalence are pinned
+  in `LilypadChannelCurveTest`. No migration: an r68 sidecar that
+  carried channel curves as forward state renders its promised colour
+  today, pinned by test. Local verification per the F-79 recipe:
+  kotlinc 2.3.10 + JUnit (+ org.json + the contract enums), **119
+  tests green** before the push.
+- **F-79 progress (2026-11-12, updated) — the toolchain note.** The
+  recipe now covers the editor/core pure subset too (the tone chain's
+  dependency closure: Adjustments, ToneCurves, the curve/keystone
+  maths, EditRecipe's codec, EditPipeline, Geometry, PixelAdjuster,
+  AiRender + EditAiStore + BundledSkies, the layer families, CubeLut,
+  ExportPlan, plus the contract enums). Two additions beyond r70's
+  shape: the `org.json` jar on the classpath (the codec's only
+  non-Kotlin dependency) and the Kotlin stdlib at RUNTIME (JUnitCore
+  needs `kotlin.NoWhenBranchMatchedException` etc. on the java -cp).
+  Still worth a tools/ script when a third consumer appears.

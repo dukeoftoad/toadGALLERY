@@ -61,11 +61,11 @@ import androidx.compose.ui.unit.dp
 //
 // THE CHANNELS. Master/R/G/B chips (FilterChips --- the r52 ember pill
 // when selected) switch which curve the plot edits; the model carries
-// all four and the wire round-trips them, while the ENGINE composes the
-// master curve this round (the per-channel apply path is the sanctioned
-// next step; see LilypadCurveMath's header). The chips drive the model
-// anyway: a channel curve stays honest in the sidecar across the round
-// that turns it on.
+// all four, the wire round-trips them, and since r71 the ENGINE
+// composes them all (master-then-channel per channel table,
+// LutBuilder.buildChannels --- the forward state's promised landing).
+// The chips drove the model even when only the master rendered: a
+// channel curve stayed honest in the sidecar across the gap.
 //
 // THE DRAFT CONTRACT (the r32 one, verbatim in shape): every drag tick
 // writes the whole-curve draft (zero-ms --- the preview re-renders

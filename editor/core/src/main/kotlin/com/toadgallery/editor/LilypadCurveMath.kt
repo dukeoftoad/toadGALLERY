@@ -37,10 +37,13 @@ import kotlin.math.sqrt
 // stragglers, cap the count --- a hand-edited sidecar never loses its
 // whole session to one bad point.
 //
-// MASTER-ONLY THIS ROUND: the pipeline's composed stage applies the master
-// curve (applying per-channel curves needs a three-LUT apply path, an
-// engine change beyond this round's sanctioned curve extension). The
-// channel lists ride the model and the wire; the deck edits the master.
+// THE CHANNELS, COMPOSED SINCE r71: the pipeline's channel path composes
+// the master curve into every channel table, then the channel's own
+// curve over it (LutBuilder.buildChannels + PixelOps.applyChannelLuts
+// --- the three-LUT apply path Phase 2 declared as its follow-up). The
+// channel lists ride the model and the wire exactly as r68 wrote them;
+// this round only turned the engine on. No migration: an r68 sidecar
+// that carried channel curves renders today what it promised then.
 // ---------------------------------------------------------------------------
 
 /**

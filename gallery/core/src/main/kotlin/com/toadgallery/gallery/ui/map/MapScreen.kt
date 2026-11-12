@@ -211,10 +211,10 @@ fun MapScreen(
                             exifLine = (row.displayName ?: "MediaStore row") +
                                 " • " + ViewerInfoFormat.dimensions(row.width, row.height),
                             onBack = { showLightbox = false },
-                            onToggleFavorite = onToggleFavorite,
-                            onHideToVault = onHideToVault,
-                            onEdit = onEdit,
-                            onDelete = onDelete,
+                            onToggleFavorite = { onToggleFavorite(item) },
+                            onHideToVault = { onHideToVault(item) },
+                            onEdit = { onEdit(item) },
+                            onDelete = { onDelete(item) },
                         )
                     }
                 }

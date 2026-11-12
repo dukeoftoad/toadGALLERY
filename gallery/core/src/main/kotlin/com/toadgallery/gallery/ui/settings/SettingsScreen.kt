@@ -26,12 +26,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
@@ -115,6 +119,7 @@ import com.toadgallery.gallery.ui.theme.AllToadPalettes
 import com.toadgallery.gallery.ui.theme.ToadShapes
 import com.toadgallery.gallery.ui.theme.ToadTheme
 import com.toadgallery.gallery.ui.theme.ToadThemeId
+import com.toadgallery.gallery.data.vault.VaultBiometricReadiness
 import com.toadgallery.gallery.data.diag.DiagLog
 import com.toadgallery.gallery.data.DataSizeFormats
 import com.toadgallery.gallery.data.media.location.MediaLocationState
@@ -250,12 +255,12 @@ fun SettingsScreen(
     LaunchedEffect(subPage) {
         if (subPage != SettingsSubPage.HUB) hubRequest.requestHubReturn()
     }
-    // The shell consumes the one-shot flag on the tab tap; this side
-    // lands the pop. (Both sides are idempotent: an unconsumed flag on
-    // the HUB is harmless.)
-    LaunchedEffect(hubRequest) {
-        snapshotFlow { hubRequest.consume() }.collect { popped -> if (popped) subPage = SettingsSubPage.HUB }
-    }
+    // The shell's nav-bar handler consumes the one-shot flag on the
+    // Settings tab tap and pops (the shell owns the NavController); this
+    // screen does NOT re-collect the flag --- `consume()` is an
+    // AtomicBoolean getAndSet (not snapshot-state), so a snapshotFlow
+    // around it would never re-emit. The arm-side LaunchedEffect above is
+    // the screen's only hub-return responsibility.
 
     // The live search filter: a lowercase contains over each section's
     // title + row titles (the searchable inventory below --- one entry
@@ -325,18 +330,23 @@ fun SettingsScreen(
             targetState = subPage,
             transitionSpec = {
                 val forward = targetState != SettingsSubPage.HUB
-                val slide = if (forward) {
-                    (slideInHorizontally(ToadMotionSpec.SUBPAGE_MS) { it } +
-                        fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))) togetherWith
-                        (slideOutHorizontally(ToadMotionSpec.SUBPAGE_MS) { -it / 3 } +
-                            fadeOut(tween(ToadMotionSpec.SUBPAGE_MS)))
+                val enter = if (forward) {
+                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(fullWidth, 0) } +
+                        fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))
                 } else {
-                    (slideInHorizontally(ToadMotionSpec.SUBPAGE_MS) { -it / 3 } +
-                        fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))) togetherWith
-                        (slideOutHorizontally(ToadMotionSpec.SUBPAGE_MS) { it } +
-                            fadeOut(tween(ToadMotionSpec.SUBPAGE_MS)))
+                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(-fullWidth / 3, 0) } +
+                        fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))
                 }
-                slide.apply { targetContentZIndex = if (forward) 2f else 0f }
+                val exit = if (forward) {
+                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(-fullWidth / 3, 0) } +
+                        fadeOut(tween(ToadMotionSpec.SUBPAGE_MS))
+                } else {
+                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(fullWidth, 0) } +
+                        fadeOut(tween(ToadMotionSpec.SUBPAGE_MS))
+                }
+                (enter togetherWith exit).apply {
+                    targetContentZIndex = if (forward) 2f else 0f
+                }
             },
             label = "settingsSubPage",
         ) { page ->
@@ -960,15 +970,17 @@ fun SettingsScreen(
             SettingsSectionHeader(stringResource(R.string.settings_vault_title))
             // Biometric unlock (issue #57, ADR-0019): the REAL opt-in
             // binding state machine. Offered only where the hardware can
-            // prompt; the switch flips the same enable/disable functions
-            // the vault screen's own button drives.
+            // prompt (the readiness is the hardware answer); the switch
+            // flips the same enable/disable functions the vault screen's
+            // own button drives.
             val biometrics by vaultViewModel.biometrics.collectAsState()
-            if (biometrics.hardwareCanPrompt) {
+            val biometricReady = biometrics as? VaultBiometricReadiness.Supported
+            if (biometricReady != null) {
                 SettingsGroupCard {
                     SettingsToggleRow(
-                        title = stringResource(R.string.vault_biometric_unlock),
-                        supporting = stringResource(R.string.vault_biometric_body),
-                        checked = biometrics.enrolled,
+                        title = stringResource(R.string.vault_biometric_section_title),
+                        supporting = stringResource(R.string.vault_biometric_section_body),
+                        checked = biometricReady.bindingEnrolled,
                         onCheckedChange = { enabled ->
                             if (enabled) vaultViewModel.enableBiometricUnlock()
                             else vaultViewModel.disableBiometricUnlock()

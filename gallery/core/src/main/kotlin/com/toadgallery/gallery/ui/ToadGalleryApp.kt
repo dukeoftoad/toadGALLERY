@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FolderHeart
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
@@ -37,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,6 +95,7 @@ import com.toadgallery.gallery.ui.theme.ToadGalleryTheme
 import com.toadgallery.gallery.ui.trash.TrashScreen
 import com.toadgallery.gallery.ui.vault.VaultScreen
 import com.toadgallery.gallery.ui.vault.VaultUiState
+import com.toadgallery.gallery.data.vault.VaultBiometricReadiness
 import com.toadgallery.gallery.ui.vault.VaultViewModel
 import com.toadgallery.gallery.ui.viewer.ViewerScreen
 import com.toadgallery.gallery.ui.viewer.ViewerViewModel
@@ -267,7 +269,7 @@ private val bottomNavItems = listOf(
     ),
     TopLevelDestination(
         Destinations.ALBUMS, R.drawable.ic_nav_albums, R.string.nav_albums,
-        Icons.Filled.FolderHeart,
+        Icons.Filled.Collections,
     ),
     TopLevelDestination(
         Destinations.SEARCH, R.drawable.ic_nav_search, R.string.nav_search,
@@ -472,7 +474,7 @@ fun ToadGalleryApp() {
                         onOpenTrash = { navController.navigate(Destinations.TRASH) },
                         onAttemptVaultUnlock = vaultViewModel::attemptUnlock,
                         onVaultBiometric = vaultViewModel::requestBiometricUnlock,
-                        vaultBiometricAvailable = vaultBiometricsReady.hardwareCanPrompt,
+                        vaultBiometricAvailable = vaultBiometricsReady is VaultBiometricReadiness.Supported,
                         vaultSummary = when (val vs = vaultState) {
                             is VaultUiState.Unlocked ->
                                 "Unlocked • ${vs.entries.size} private items"

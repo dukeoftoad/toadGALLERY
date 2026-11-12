@@ -1362,3 +1362,17 @@ the public remote each time.
   owns" --- with the drag landed, the rows are the a11y/precision
   surface, no longer a stand-in (the Geometry panel's Perspective
   block now carries the corner-drag hint line).
+
+## 2026-11-12 — the r73 window (the end card: Lilypad closes)
+
+- **The campaign end card.** `docs/editor/lilypad-end-card.md` closes the
+  four-phase campaign: the shipped table (r67 foundation, r68+r71 photo
+  pro with the channel composition landed, r69-r70 video timeline,
+  r72 the corner drag), the numbers (169 Lilypad-prefixed JVM test
+  methods across 12 classes; 668 editor/core total; 133 shared/video-
+  edit; 5 revert seams; 12 pure-math objects), the discipline that held
+  (ADR-0011 every round, the forward-state honesty, the F-79 local
+  verification recipe, the revert seams), and the open tails honestly
+  (F-75/F-76/F-77/F-78 + Phase 4's remaining craft items as roadmap,
+  not debt). The design doc's Phase 4 line and Status header close with
+  it.

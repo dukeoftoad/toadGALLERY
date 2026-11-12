@@ -1,6 +1,6 @@
 # Lilypad — the editor rebirth design language
 
-**Status:** Active (Phase 1 shipped as r67 · Phase 2 shipped as r68) ·
+**Status:** Complete (r67-r72; the end card: docs/editor/lilypad-end-card.md) ·
 **Owner:** dukeoftoad ·
 **Source:** the founder's vision document ("Lilypad — the editor rebirth",
 November 2026) · **Implementation:** `editor/core/.../Lilypad*.kt`,
@@ -118,7 +118,7 @@ the ember marks selection, the live value, the CTA — nothing else.
   per-entry EditedMediaItems), multi-clip
   Composition, shared Looks on GL effects, text overlays, speed, music,
   Transformer export with foreground-service progress.
-- **Phase 4 — craft polish (r72 underway)**: the motion/haptics pass,
+- **Phase 4 — craft polish (r72 shipped: the corner drag)**: the motion/haptics pass,
   60fps scrubbing, keyframes and speed ramps, export reliability
   hardening, the perspective corner drag (**r72**: `LilypadCornerMath`
   + the `CornerOverlay` on the Geometry screen, behind the

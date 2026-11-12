@@ -107,10 +107,13 @@ the ember marks selection, the live value, the CTA — nothing else.
   + perspective, HSL rows on ProSlider. The per-channel R/G/B curves
   ride the recipe as forward state; the engine composes the master
   curve (the channels' composition is the declared follow-up).
-- **Phase 3 — the video timeline (r69 started)**: pinch-zoom timeline
+- **Phase 3 — the video timeline (r69-r70 underway)**: pinch-zoom timeline
   (**r69**: the `ClipTimeline` model + `LilypadTimelineMath` viewport
   geometry + the zoomable `TimelineStrip` on the video Main screen,
-  behind the `timelineZoomEnabled` seam), multi-clip
+  behind the `timelineZoomEnabled` seam; **r70**: the export realization
+  --- the seam grows a sealed `VideoExportJob` with the multi-clip
+  `ClipExportRequest`, the pure `ClipExportProjection`, and the runner's
+  per-entry EditedMediaItems), multi-clip
   Composition, shared Looks on GL effects, text overlays, speed, music,
   Transformer export with foreground-service progress.
 - **Phase 4 — craft polish**: the motion/haptics pass, 60fps scrubbing,

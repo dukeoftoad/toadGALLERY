@@ -6,22 +6,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The runner seam over a FAKE (r42, decision 7): the coordinator validates
- * before the runner sees anything, enforces single-flight, forwards typed
- * progress in order and delivers exactly one terminal result; cancellation
- * reaches the runner and maps to the Canceled result the runner emits.
- * Only the thin media3 implementation in the edit app touches Transformer.
+ * The runner seam over a FAKE (r42, decision 7; widened to the two-job
+ * seam in r70): the coordinator validates before the runner sees
+ * anything, enforces single-flight, forwards typed progress in order and
+ * delivers exactly one terminal result; cancellation reaches the runner
+ * and maps to the Canceled result the runner emits. Only the thin media3
+ * implementation in the edit app touches Transformer.
  */
 class VideoExportRunnerTest {
 
     /** The fake: records what it was handed, drives scripted events. */
     private class FakeRunner : VideoExportRunner {
-        var startedRequest: VideoExportRequest? = null
+        var startedJob: VideoExportJob? = null
         var cancelCount = 0
         var listener: VideoExportListener? = null
 
-        override fun start(request: VideoExportRequest, listener: VideoExportListener) {
-            startedRequest = request
+        override fun start(job: VideoExportJob, listener: VideoExportListener) {
+            startedJob = job
             this.listener = listener
         }
 
@@ -56,6 +57,29 @@ class VideoExportRunnerTest {
         workingDirPath = "/cache",
     )
 
+    /** A valid two-clip composition job (the r70 half of the seam). */
+    private fun clipRequest(mute: Boolean = false) = ClipExportRequest(
+        timeline = ClipTimeline(
+            listOf(
+                ClipTimelineEntry(
+                    sourceUri = "content://media/external/video/media/7",
+                    durationMs = 10_000,
+                    audioTrackPresent = true,
+                    trim = TimeRange(0, 4_000),
+                ),
+                ClipTimelineEntry(
+                    sourceUri = "content://media/external/video/media/9",
+                    durationMs = 6_000,
+                    audioTrackPresent = false,
+                    trim = TimeRange(1_000, 6_000),
+                    speedFactor = 0.5,
+                ),
+            ),
+        ),
+        mute = mute,
+        workingDirPath = "/cache",
+    )
+
     // ---- the plan validation gate runs BEFORE the runner ----
 
     @Test
@@ -70,7 +94,7 @@ class VideoExportRunnerTest {
         assertTrue(
             (outcome as VideoExportCoordinator.SubmitOutcome.Refused).reason.contains("past the clip duration"),
         )
-        assertNull("the runner must never see an invalid plan", fake.startedRequest)
+        assertNull("the runner must never see an invalid plan", fake.startedJob)
     }
 
     @Test
@@ -80,7 +104,47 @@ class VideoExportRunnerTest {
         val request = request()
         val outcome = coordinator.submit(request, RecordingListener())
         assertEquals(VideoExportCoordinator.SubmitOutcome.Started, outcome)
-        assertEquals(request, fake.startedRequest)
+        assertEquals(request, fake.startedJob)
+    }
+
+    // ---- the r70 composition jobs ride the same rules ----
+
+    @Test
+    fun `a valid composition job starts the runner and is remembered as the last job`() {
+        val fake = FakeRunner()
+        val coordinator = VideoExportCoordinator(fake)
+        val job = clipRequest()
+        val outcome = coordinator.submit(job, RecordingListener())
+        assertEquals(VideoExportCoordinator.SubmitOutcome.Started, outcome)
+        assertEquals(job, fake.startedJob)
+        assertEquals(job, coordinator.lastJob)
+    }
+
+    @Test
+    fun `an invalid composition job is refused and the runner never starts`() {
+        val fake = FakeRunner()
+        val coordinator = VideoExportCoordinator(fake)
+        val invalid = clipRequest().copy(
+            volume = 5f, // past the +6 dB ceiling
+        )
+        val outcome = coordinator.submit(invalid, RecordingListener())
+        assertTrue(outcome is VideoExportCoordinator.SubmitOutcome.Refused)
+        assertTrue(
+            (outcome as VideoExportCoordinator.SubmitOutcome.Refused).reason.contains("volume"),
+        )
+        assertNull("the runner must never see an invalid composition", fake.startedJob)
+    }
+
+    @Test
+    fun `a composition job and a plan job share the single-flight rule`() {
+        val fake = FakeRunner()
+        val coordinator = VideoExportCoordinator(fake)
+        coordinator.submit(clipRequest(), RecordingListener())
+        val second = coordinator.submit(request(), RecordingListener())
+        assertTrue(second is VideoExportCoordinator.SubmitOutcome.Refused)
+        assertTrue(
+            (second as VideoExportCoordinator.SubmitOutcome.Refused).reason.contains("already running"),
+        )
     }
 
     // ---- single flight ----
@@ -181,5 +245,5 @@ class VideoExportRunnerTest {
         assertTrue(listener.events.single().contains("the encoder refused this clip"))
     }
 
-    private fun FakeRunner.startedRequests(): Int = if (startedRequest != null) 1 else 0
+    private fun FakeRunner.startedRequests(): Int = if (startedJob != null) 1 else 0
 }

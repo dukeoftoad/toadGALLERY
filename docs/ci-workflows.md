@@ -7,7 +7,8 @@ run is required to merge any PR (ADR-0013). Release signing lives only in
 **Organization (r49, the workflow-organization round):** FIVE files, one
 job per concern — `ci.yml` (the canonical gate), `apk-build.yml` (all
 opt-in test-APK builds behind ONE dispatch surface), `screenshots.yml`
-(the Roborazzi record/verify gate), `release.yml` (the only signing +
+(the Roborazzi record/verify harness — **suspended as a PR gate in r68**,
+manual dispatch only), `release.yml` (the only signing +
 publishing path), `reproducible-build.yml` (the determinism verifier).
 The r49 pass also set the repo-wide least-privilege baseline: every
 workflow declares an explicit `permissions:` block (`contents: read`
@@ -99,6 +100,6 @@ versionCode >= 32 while the checkout moved to 38+).
 | --- | --- | --- |
 | `ci.yml` | push/PR to `main`, dispatch | Canonical gate: engine cargo check/fmt/clippy + tests, build + lint + JVM tests, engine-ABI assemble gate (no upload). `permissions: contents: read`. |
 | `apk-build.yml` | dispatch; push to `tg-engine-apk-*` / `tg-modelpack-*` | The consolidated opt-in test-APK builder: gallery-engine / gallery-modelpack / editor targets behind one input surface (see above). |
-| `screenshots.yml` | PR touching `apps/gallery/**` / the catalog / itself, dispatch | Roborazzi record/verify (r48: plugin-backed; the verify drift gate is live over the committed baselines at `apps/gallery/src/test/resources/roborazzi/` + `apps/gallery/roborazzi/`; the record pass is the README-screenshot regeneration source). |
+| `screenshots.yml` | **dispatch only (r68 suspension)** | Roborazzi record/verify, run MANUALLY: record = the deliberate per-phase baseline pass (gallery state cards at `gallery/core/src/test/resources/roborazzi/` + `gallery/core/roborazzi/`, editor chassis at `editor/core/src/test/resources/roborazzi/`); verify = on-demand drift check. The pull_request trigger was removed in r68 (2026-11-12): PRs are carried by the per-branch lint/assemble/unit lanes instead; re-arming is a three-line revert. |
 | `reproducible-build.yml` | push `v*` tags, dispatch | Byte-reproducibility measurement: two clean `--no-build-cache` release builds compared APK-pair + mapping-pair. `permissions: contents: read`. |
 | `release.yml` | push `v*` tags, dispatch | Signed pre-release publication (hard signature gate, ADR-0018). The only workflow with `contents: write`. |

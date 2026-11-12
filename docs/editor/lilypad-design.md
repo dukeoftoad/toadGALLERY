@@ -127,7 +127,12 @@ the ember marks selection, the live value, the CTA — nothing else.
 baselines by design; the mitigation is ONE deliberate re-record pass
 per phase merge (reviewed with a rendered diff), never scattered
 re-records. r67 ships the new fixtures (ProSliderScreenshotTest) and
-deletes the rail's; the record pass is a documented follow-up.
+deletes the rail's; the record pass is a documented follow-up. **r68
+suspension:** the Roborazzi PR gate itself is OFF (manual dispatch
+only, `screenshots.yml`) --- the per-round fixture churn taxed the
+build pace more than the drift gate paid, so lint debug, assemble, and
+the full unit suites carry the phases, and the deliberate record pass
+happens on demand per phase merge.
 
 **R2 — timeline performance** (Phase 3): thumbnail windows with LRU
 frame caching, reduced effect resolution during scrub.

@@ -29,4 +29,37 @@
     <string name="editor_r68_curve_state_points">Curve: %1$d points</string>
     <string name="editor_r68_curve_done">Done</string>
     <string name="editor_r68_curve_hint">Drag a point. Tap to add one. Touch and hold to remove.</string>
+
+    <!-- The history strip (r68): the Main header's entry pair (the
+         state-dependent a11y names the deck handle's convention), the
+         strip's heading, the launch chip, the chip a11y states, the
+         per-family chip words and the chip value formats. Everything
+         else reuses the r30-r67 strings (the slider names read through
+         ADJUST_SLIDERS's own spec, the None card's word, the percent
+         value). -->
+    <string name="editor_r68_history_show">Show history</string>
+    <string name="editor_r68_history_hide">Hide history</string>
+    <string name="editor_r68_history_heading">History</string>
+    <string name="editor_r68_history_original">Original</string>
+    <string name="editor_r68_history_state_current">Current</string>
+    <string name="editor_r68_history_state_redo">Undone</string>
+    <string name="editor_r68_history_deg">%1$d°</string>
+    <string name="editor_r68_history_curve">Curve</string>
+    <string name="editor_r68_history_curve_pts">%1$d pts</string>
+    <string name="editor_r68_history_look">Look</string>
+    <string name="editor_r68_history_crop">Crop</string>
+    <string name="editor_r68_history_rotate">Rotate</string>
+    <string name="editor_r68_history_flip">Flip</string>
+    <string name="editor_r68_history_perspective">Perspective</string>
+    <string name="editor_r68_history_color">Color</string>
+    <string name="editor_r68_history_text">Text</string>
+    <string name="editor_r68_history_stickers">Stickers</string>
+    <string name="editor_r68_history_draw">Draw</string>
+    <string name="editor_r68_history_regions">Regions</string>
+    <string name="editor_r68_history_frame">Frame</string>
+    <string name="editor_r68_history_sky">Sky</string>
+    <string name="editor_r68_history_bokeh">Bokeh</string>
+    <string name="editor_r68_history_retouch">Retouch</string>
+    <string name="editor_r68_history_erase">Erase</string>
+    <string name="editor_r68_history_edit">Edit</string>
 </resources>

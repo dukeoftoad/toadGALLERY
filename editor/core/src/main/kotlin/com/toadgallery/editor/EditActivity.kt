@@ -907,11 +907,27 @@ data class ExportChoice(
 /**
  * The session engine bridging the pure [EditSessionState] stack to Compose:
  * every commit/undo/redo returns a fresh [EditorUiState] the UI observes.
+ *
+ * r68 adds the history strip's readers: [depth]/[pointerIndex]/[entryAt]
+ * are the ring's READ-ONLY view (the engine commit's contract --- the
+ * pointer's only moves stay undo/redo/commit), and [jumpTo] walks the
+ * ring to a tapped index by REPEATED undo/redo --- the sanctioned moves
+ * only, never a new pointer path, so the strip the readers label can
+ * never corrupt the trail it renders.
  */
 private class EditSessionEngine(initial: EditRecipe) {
     private val stack = EditSessionState(initial)
 
     val initial: EditorUiState = EditorUiState(stack.current, stack.canUndo, stack.canRedo)
+
+    /** The number of snapshots the ring holds (the strip's chip count). */
+    val depth: Int get() = stack.depth
+
+    /** The pointer's position in the ring (the strip's current chip). */
+    val pointerIndex: Int get() = stack.pointerIndex
+
+    /** The snapshot at [index], or null outside the ring (the strip's label source). */
+    fun entryAt(index: Int): EditRecipe? = stack.entryAt(index)
 
     fun commit(recipe: EditRecipe): EditorUiState {
         stack.commit(recipe)
@@ -925,6 +941,19 @@ private class EditSessionEngine(initial: EditRecipe) {
 
     fun redo(): EditorUiState {
         stack.redo()
+        return EditorUiState(stack.current, stack.canUndo, stack.canRedo)
+    }
+
+    /**
+     * Moves the pointer to [index] by repeated undo/redo --- each step is
+     * the ring's own O(1) move, so even the cap-deep worst case is
+     * trivial. An index outside the ring clamps at its ends (the loops
+     * simply stop where the moves do), and the caller sweeps any pending
+     * gesture draft FIRST (the header undo/redo contract).
+     */
+    fun jumpTo(index: Int): EditorUiState {
+        while (stack.pointerIndex > index) stack.undo()
+        while (stack.pointerIndex < index) stack.redo()
         return EditorUiState(stack.current, stack.canUndo, stack.canRedo)
     }
 }
@@ -1024,6 +1053,17 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var curveDeckOpen by remember { mutableStateOf(false) }
     var curveChannel by remember { mutableStateOf(CurveChannel.Master) }
     var curveDraft by remember { mutableStateOf<ToneCurves?>(null) }
+    // r68: the history strip's chassis state --- the open flag (the Main
+    // header's History entry toggles it; a view preference like the scope
+    // mode, it commits nothing and rides LilypadFlags.historyStripEnabled)
+    // and the REVISION the strip's label model recomputes on. The revision
+    // exists because EditorUiState can compare EQUAL across a pointer move
+    // (adjacent ring snapshots of the same recipe, with canUndo/canRedo
+    // unchanged in the ring's interior), so the strip keys on this counter
+    // instead --- the ring's three mutation funnels (commit, the header
+    // undo/redo pair, the strip's own jump) each bump it.
+    var historyOpen by remember { mutableStateOf(false) }
+    var historyTick by remember { mutableStateOf(0) }
     var previewCropRect by remember { mutableStateOf<PixelRect?>(null) }
     var exporting by remember { mutableStateOf(false) }
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
@@ -1329,6 +1369,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     fun commit(recipe: EditRecipe) {
         uiState = engine.commit(recipe)
+        historyTick++
         // The ADR-0011 promise: every committed change persists the sidecar.
         try {
             activity.sidecarStore.save(activity.request.sourceUri, recipe)
@@ -2311,12 +2352,24 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 }
                 val undoLabel = stringResource(R.string.editor_undo)
                 val redoLabel = stringResource(R.string.editor_redo)
+                // r68: the history strip's entry, state-dependent like the
+                // deck handle's a11y (the label announces what the tap
+                // does). Beside the undo/redo pair it belongs to --- the
+                // three are one neighborhood: walk, walk, jump.
+                val historyA11y = stringResource(
+                    if (historyOpen) {
+                        R.string.editor_r68_history_hide
+                    } else {
+                        R.string.editor_r68_history_show
+                    },
+                )
                 val undoEnabled = uiState.canUndo && !exporting
                 val redoEnabled = uiState.canRedo && !exporting
                 IconButton(
                     onClick = {
                         sweepPendingDrafts()
                         uiState = engine.undo()
+                        historyTick++
                     },
                     enabled = undoEnabled,
                     modifier = Modifier.semantics { contentDescription = undoLabel },
@@ -2332,6 +2385,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     onClick = {
                         sweepPendingDrafts()
                         uiState = engine.redo()
+                        historyTick++
                     },
                     enabled = redoEnabled,
                     modifier = Modifier.semantics { contentDescription = redoLabel },
@@ -2342,6 +2396,22 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         tint = MaterialTheme.colorScheme.onBackground
                             .copy(alpha = if (redoEnabled) 1f else 0.38f),
                     )
+                }
+                // r68: the history strip's header entry --- visible on
+                // the Main chassis only, and only behind the round's
+                // revert seam (off reads as the r67 header verbatim).
+                if (LilypadFlags.historyStripEnabled) {
+                    IconButton(
+                        onClick = { historyOpen = !historyOpen },
+                        enabled = !exporting,
+                        modifier = Modifier.semantics { contentDescription = historyA11y },
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pt_history),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
                 }
                 if (exporting) {
                     CircularProgressIndicator(
@@ -2808,6 +2878,40 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     )
                 }
             }
+        }
+
+        // ---- r68: THE HISTORY STRIP (the design doc's third promise:
+        // "history you can scrub") ----
+        // Bottom-anchored between the canvas and the deck, on the Main
+        // chassis only (the tool screens own their own surfaces), behind
+        // the round's revert seam. The label model recomputes on the
+        // history REVISION (the state block's comment explains why
+        // uiState alone cannot drive it); the jump sweeps any pending
+        // gesture first, exactly like the header's undo/redo pair, then
+        // walks the ring's own moves.
+        if (LilypadFlags.historyStripEnabled && historyOpen && screen == PhotoScreen.Main) {
+            val historyChanges = remember(historyTick) {
+                List(engine.depth) { i ->
+                    val previous = engine.entryAt(i - 1)
+                    val next = engine.entryAt(i)
+                    if (i == 0 || previous == null || next == null) {
+                        null // the launch entry has no predecessor
+                    } else {
+                        LilypadHistoryNames.changeBetween(previous, next)
+                    }
+                }
+            }
+            HistoryStrip(
+                changes = historyChanges,
+                currentIndex = engine.pointerIndex,
+                looks = looks,
+                enabled = !exporting,
+                onJump = { index ->
+                    sweepPendingDrafts()
+                    uiState = engine.jumpTo(index)
+                    historyTick++
+                },
+            )
         }
 
         // ---- The r41 settings sheet (the editor's FIRST, one row) ----

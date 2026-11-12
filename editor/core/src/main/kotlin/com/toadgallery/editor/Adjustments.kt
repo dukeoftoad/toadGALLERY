@@ -129,8 +129,26 @@ object LutBuilder {
         highlights: Int,
         shadows: Int,
         toneCurves: ToneCurves,
+    ): ChannelToneLuts = buildChannels(
+        brightness, contrast, exposure, highlights, shadows, 0, 0, toneCurves,
+    )
+
+    /**
+     * The r74 channel overload: the seven-stage base (whites/blacks
+     * composed into the per-channel table), then the master and channel
+     * curves --- the r71 composition, verbatim, over the grown base.
+     */
+    fun buildChannels(
+        brightness: Int,
+        contrast: Int,
+        exposure: Int,
+        highlights: Int,
+        shadows: Int,
+        whites: Int,
+        blacks: Int,
+        toneCurves: ToneCurves,
     ): ChannelToneLuts {
-        val base = build(brightness, contrast, exposure, highlights, shadows)
+        val base = build(brightness, contrast, exposure, highlights, shadows, whites, blacks)
         val master = LilypadCurveMath.bakeLut(toneCurves.master)
         val mastered = if (toneCurves.master == LilypadCurveMath.IDENTITY) {
             base
@@ -147,6 +165,76 @@ object LutBuilder {
             green = withChannel(toneCurves.green),
             blue = withChannel(toneCurves.blue),
         )
+    }
+
+    /**
+     * The r74 seven-stage build: the r30 five frozen stages, then the
+     * WHITES and BLACKS stage (the plan doc's slider list, the Lightroom
+     * grammar): whites lifts ONLY the far bright end (a smoothstep mask
+     * from 192..255), blacks lifts ONLY the far dark end (the mirrored
+     * mask over 0..64), each at half scale so even +100 cannot clip a
+     * stop past the r30 shadows/highlights behaviour. Both compose into
+     * the SAME per-channel LUT --- O(1) per channel at render time, the
+     * stage's own shape, kept when the tone family grew.
+     *
+     * BYTE-FROZEN GUARANTEE: whites = 0 AND blacks = 0 reproduces the
+     * five-stage table EXACTLY (both masked adds are zero terms --- the
+     * regression test pins the arrays equal); every pre-r74 recipe value
+     * and test stays byte-compatible, the additive-versioning rule.
+     */
+    fun build(
+        brightness: Int,
+        contrast: Int,
+        exposure: Int,
+        highlights: Int,
+        shadows: Int,
+        whites: Int,
+        blacks: Int,
+    ): IntArray {
+        val base = build(brightness, contrast, exposure, highlights, shadows)
+        if (whites == 0 && blacks == 0) return base
+        // The exact-half-scale rule (the highlights/shadows precedent):
+        // 127.5/100 carries no float dust at the extremes.
+        val wScale = whites * HALF_D / SLIDER_SPAN_D
+        val bScale = blacks * HALF_D / SLIDER_SPAN_D
+        return IntArray(base.size) { v ->
+            var out = base[v].toDouble()
+            // Whites: the far bright end, smoothstep 192 -> 255.
+            out += wScale * smoothstep(WHITES_FLOOR_D, BYTE_MAX_D, out)
+            // Blacks: the far dark end, the mirrored mask over 0 -> 64.
+            out += bScale * (1.0 - smoothstep(0.0, BLACKS_CEILING_D, out))
+            out.roundToInt().coerceIn(0, BYTE_MAX)
+        }
+    }
+
+    /** The whites mask's floor: 192 (the far bright quarter). */
+    private const val WHITES_FLOOR_D = 192.0
+
+    /** The blacks mask's ceiling: 64 (the far dark quarter). */
+    private const val BLACKS_CEILING_D = 64.0
+
+    /**
+     * The r74 curve-composed overload: the seven-stage table, then the
+     * recipe's MASTER tone curve composed after it --- the r68 two-pass
+     * rule (lut[v] = curve(base[v])), extended by the same additive
+     * step that grew the five-stage form. A null or identity curve
+     * returns the seven-stage table untouched (the byte-identical
+     * guarantee).
+     */
+    fun build(
+        brightness: Int,
+        contrast: Int,
+        exposure: Int,
+        highlights: Int,
+        shadows: Int,
+        whites: Int,
+        blacks: Int,
+        toneCurves: ToneCurves?,
+    ): IntArray {
+        val base = build(brightness, contrast, exposure, highlights, shadows, whites, blacks)
+        if (toneCurves == null || toneCurves.isIdentity) return base
+        val curve = LilypadCurveMath.bakeLut(toneCurves.master)
+        return IntArray(base.size) { v -> curve[base[v]] }
     }
 
     /** The smoothstep used by the masked shifts: 0 at edge0, 1 at edge1, smooth between. */
@@ -225,6 +313,46 @@ object PixelOps {
             val g = (p ushr GREEN_SHIFT) and CHANNEL_MASK
             val b = p and CHANNEL_MASK
             val lum = (r * LUMA_R + g * LUMA_G + b * LUMA_B) / LUMA_DIV
+            val nr = (lum + ((r - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
+            val ng = (lum + ((g - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
+            val nb = (lum + ((b - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
+            pixels[i] = (a shl ALPHA_SHIFT) or (nr shl RED_SHIFT) or (ng shl GREEN_SHIFT) or nb
+        }
+    }
+
+    /**
+     * Vibrance in [-100, 100] (r74, the plan doc's slider list): the
+     * luma-WEIGHTED saturation --- the saturation grammar's own rule,
+     * verbatim, except the pull factor is scaled per pixel by how
+     * UNSATURATED the pixel already is (`1 - sat/255` over the channel
+     * distances' max), so a vibrance push lifts a flat grey jacket far
+     * more than an already-vivid flower. 0 = untouched (skipped, the
+     * exact-identity rule); +100 at a fully grey pixel doubles its
+     * distance from luma (the saturation +100 behaviour); +100 at a
+     * fully saturated pixel is a no-op (nothing left to lift --- the
+     * honest bound, pinned by tests).
+     */
+    fun applyVibrance(pixels: IntArray, vibrance: Int) {
+        require(vibrance in SLIDER_MIN..SLIDER_MAX) { "vibrance=$vibrance out of [-100, 100]" }
+        if (vibrance == 0) return
+        val basePct = 100 + vibrance
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val a = (p ushr ALPHA_SHIFT) and CHANNEL_MASK
+            val r = (p ushr RED_SHIFT) and CHANNEL_MASK
+            val g = (p ushr GREEN_SHIFT) and CHANNEL_MASK
+            val b = p and CHANNEL_MASK
+            val lum = (r * LUMA_R + g * LUMA_G + b * LUMA_B) / LUMA_DIV
+            val dr = kotlin.math.abs(r - lum)
+            val dg = kotlin.math.abs(g - lum)
+            val db = kotlin.math.abs(b - lum)
+            // The saturation measure 0..255: the max channel distance
+            // from luma (a grey pixel scores 0, a saturated one 255).
+            val sat = maxOf(dr, dg, db)
+            // The per-pixel weight: LESS boost the more saturated
+            // already (1 at grey, 0 at fully saturated).
+            val weight = (255 - sat)
+            val factorPct = 100 + (basePct - 100) * weight / 255
             val nr = (lum + ((r - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
             val ng = (lum + ((g - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)
             val nb = (lum + ((b - lum) * factorPct) / 100).coerceIn(0, CHANNEL_MAX)

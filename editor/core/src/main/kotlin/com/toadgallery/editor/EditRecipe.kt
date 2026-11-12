@@ -32,10 +32,20 @@ data class EditRecipe(
     val contrast: Int = 0,
     val highlights: Int = 0,
     val shadows: Int = 0,
+    // ---- Tone, r74 (the plan doc's slider list: whites/blacks join the
+    // LUT chain's far ends; see LutBuilder.build's seven-stage overload.
+    // The sidecar keys ride the additive-versioning rule --- absent in a
+    // pre-r74 sidecar reads as 0, and a 0 value never changes the baked
+    // table, so every existing recipe round-trips byte-clean) ----
+    val whites: Int = 0,
+    val blacks: Int = 0,
     // ---- Colour (the full-pixel stage) ----
     val saturation: Int = 0,
     val temperature: Int = 0,
     val tint: Int = 0,
+    // ---- Colour, r74: the luma-weighted saturation (the plan doc's
+    // slider list; PixelOps.applyVibrance) ----
+    val vibrance: Int = 0,
     // ---- Colour grade + detail ----
     val hslBands: HslBands = HslBands(),
     val vignette: Int = 0,
@@ -101,7 +111,8 @@ data class EditRecipe(
 
     val isAdjustmentIdentity: Boolean
         get() = exposure == 0 && brightness == 0 && contrast == 0 && highlights == 0 &&
-            shadows == 0 && saturation == 0 && temperature == 0 && tint == 0 &&
+            shadows == 0 && whites == 0 && blacks == 0 && saturation == 0 &&
+            temperature == 0 && tint == 0 && vibrance == 0 &&
             hslBands.isIdentity && vignette == 0 && sharpness == 0 &&
             (toneCurves == null || toneCurves.isIdentity)
 
@@ -233,9 +244,14 @@ object EditRecipeCodec {
         root.put("contrast", recipe.contrast)
         root.put("highlights", recipe.highlights)
         root.put("shadows", recipe.shadows)
+        // r74: the far-end tone pair rides the same flat-key shape (a
+        // pre-r74 sidecar never wrote them; the fromJson defaults are 0).
+        root.put("whites", recipe.whites)
+        root.put("blacks", recipe.blacks)
         root.put("saturation", recipe.saturation)
         root.put("temperature", recipe.temperature)
         root.put("tint", recipe.tint)
+        root.put("vibrance", recipe.vibrance)
         val hsl = org.json.JSONObject()
         hsl.put("red", bandJson(recipe.hslBands.red))
         hsl.put("orange", bandJson(recipe.hslBands.orange))
@@ -454,9 +470,13 @@ object EditRecipeCodec {
             contrast = root.optInt("contrast", 0).coerceIn(-100, 100),
             highlights = root.optInt("highlights", 0).coerceIn(-100, 100),
             shadows = root.optInt("shadows", 0).coerceIn(-100, 100),
+            // r74: absent keys (a pre-r74 sidecar) read as the neutral 0.
+            whites = root.optInt("whites", 0).coerceIn(-100, 100),
+            blacks = root.optInt("blacks", 0).coerceIn(-100, 100),
             saturation = root.optInt("saturation", 0).coerceIn(-100, 100),
             temperature = root.optInt("temperature", 0).coerceIn(-100, 100),
             tint = root.optInt("tint", 0).coerceIn(-100, 100),
+            vibrance = root.optInt("vibrance", 0).coerceIn(-100, 100),
             hslBands = hsl,
             vignette = root.optInt("vignette", 0).coerceIn(-100, 100),
             sharpness = root.optInt("sharpness", 0).coerceIn(-100, 100),

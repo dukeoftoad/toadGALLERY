@@ -1,6 +1,8 @@
 package com.toadgallery.editor
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,8 +17,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.awaitEachGesture
-import androidx.compose.ui.input.pointer.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -142,7 +142,7 @@ internal fun CornerOverlay(
                         val corners = LilypadCornerMath.quadCorners(
                             currentQuad, currentWidth, currentHeight,
                         )
-                        return LilypadCornerMath.hitCorner(corners, x, y, grabPx / scale)
+                        return LilypadCornerMath.hitCorner(corners, x, y, (grabPx / scale).toDouble())
                     }
 
                     val index = cornerAt(down.position)

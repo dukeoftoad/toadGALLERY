@@ -1290,3 +1290,24 @@ the public remote each time.
   follow-up: decode frames for the visible window on zoom settle (LRU
   cache keyed by source + timestamp bucket), so a zoomed timeline fills
   with real frames instead of gaps.
+
+## 2026-11-12 — the r70 window (the multi-clip export realization)
+
+- **F-77 progress (2026-11-12, updated) — the multi-clip surfaces.** The
+  export half of the chain LANDED this round: the seam grew a sealed
+  `VideoExportJob` (the v1 `VideoExportRequest` + the new
+  `ClipExportRequest`), the coordinator validates both, and
+  `Media3VideoExportRunner` resolves either into one flat spec list ---
+  the v1 plan path byte-identical to the r42-r66 shape (the ClipExportTest
+  equivalence pin holds it there), the timeline path one spec per entry
+  with per-entry strip decisions. The whole pure module is now verified
+  locally before push (standalone kotlinc + JUnit --- 133 tests green),
+  a first for the campaign. REMAINING: the in-editor clip picker, the
+  contract v3 extra, and the ExoPlayer playlist preview (per-clip speed
+  previewing honestly).
+- **F-79 (2026-11-12, open) — the toolchain note.** The local kotlinc
+  recipe (kotlinc 2.3.10 + junit-4.13.2 + hamcrest-1.3, compile the pure
+  module's two source trees together, run JUnitCore) verified the shared
+  module without Gradle or the Android SDK. Worth a script under tools/
+  when a second pure module wants it; not done this round to keep the
+  diff on the feature.

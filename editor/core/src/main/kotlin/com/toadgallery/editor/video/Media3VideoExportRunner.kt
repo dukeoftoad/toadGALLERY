@@ -21,40 +21,47 @@ import java.io.File
 
 /**
  * The media3 Transformer realization of the [VideoExportRunner] seam (r42,
- * contract decision 7 --- the ModelDownloader-seam precedent): the plan in,
+ * contract decision 7 --- the ModelDownloader-seam precedent): the job in,
  * typed progress + result out. This is the ONLY file whose export path
- * touches media3's Transformer; the JVM suite drives the same plans
+ * touches media3's Transformer; the JVM suite drives the same jobs
  * against a fake runner (VideoExportRunnerTest), so the seam contract
  * itself is test-pinned without a device.
  *
- * How the plan becomes a render (one realization, no drift with the pure
+ * How a job becomes a render (one realization, no drift with the pure
  * math; every API below verified against the media3 1.11.1 artifacts):
  *
- *  - [VideoEditMath.timelineRuns] expands the trim range into ordered
- *    (start, end, factor) runs --- the explicit speed segments plus the 1x
- *    gap runs. Each run becomes ONE [EditedMediaItem]:
- *    [MediaItem.ClippingConfiguration] carries the run's in/out points and
- *    [EditedMediaItem.Builder.setSpeed] the run's factor (a constant
- *    [SpeedProvider] per item --- media3 1.11.1 has no whole-item speed
- *    factor setter); the runs chain in one [EditedMediaItemSequence], so
- *    gaps riding at 1x and per-run speeds are exactly the plan's timeline.
+ *  - r70: a [VideoExportJob] resolves to ONE flat list of
+ *    [ClipExportItemSpec]s first ([resolvePlanJob] expands the v1 plan
+ *    through [VideoEditMath.timelineRuns] --- the explicit speed segments
+ *    plus the 1x gap runs, all over the one source; [resolveTimelineJob]
+ *    projects the r70 [ClipExportRequest] through [ClipExportProjection]
+ *    --- one spec per composition entry, each with its own source, trim,
+ *    speed and per-entry strip decision; the ClipExportTest equivalence
+ *    pin keeps the two resolvers from drifting). Each spec becomes ONE
+ *    [EditedMediaItem]: [MediaItem.ClippingConfiguration] carries the
+ *    spec's in/out points and [EditedMediaItem.Builder.setSpeed] its
+ *    factor (a constant [SpeedProvider] per item --- media3 1.11.1 has no
+ *    whole-item speed factor setter); the specs chain in one
+ *    [EditedMediaItemSequence], so the render IS the job's timeline.
  *  - the nine adjustments ride as ONE [VideoAdjustEffect] per item (the
  *    same effect + shader the ExoPlayer preview consumes); a neutral
  *    parameter set attaches NO effect at all --- an exact identity, not a
  *    no-op shader pass.
- *  - [MuteDecision.STRIP_AUDIO] maps to [EditedMediaItem.Builder
+ *  - audio: the strip decision is the SPEC's (the v1 plan-level decision
+ *    realized per run; the r70 composition's per-entry resolution).
+ *    [MuteDecision.STRIP_AUDIO] maps to [EditedMediaItem.Builder
  *    .setRemoveAudio]; a no-audio clip's recorded no-op maps to false
- *    (there is no track to strip; the plan recorded the fact).
+ *    (there is no track to strip; the job recorded the fact).
  *  - volume rides [GainProcessor] (media3 1.11.1's constant-capable gain
  *    AudioProcessor) in the effects chain's audio-processor slot --- the
  *    r52 CI catch is recorded here honestly: `EditedMediaItem.Builder
  *    .setVolume` does NOT exist at this pinned version (verified against
  *    the 1.11.1 artifacts, not guessed), so the gain is a
- *    [GainProcessor.GainProvider] returning the plan's constant factor.
- *    It is skipped on the strip-audio path (mute wins by construction:
- *    no track is left to scale) and skipped at the exact 1f identity
- *    (the same neutral-adjustment rule as the effects: a no-op pass is
- *    never attached). The PREVIEW realizes the same gain as
+ *    [GainProcessor.GainProvider] returning the job's constant factor.
+ *    It is skipped on every spec whose audio is stripped (mute wins by
+ *    construction: no track is left to scale) and skipped at the exact 1f
+ *    identity (the same neutral-adjustment rule as the effects: a no-op
+ *    pass is never attached). The PREVIEW realizes the same gain as
  *    `player.volume` --- one model, two realizations, no drift.
  *  - progress: [Transformer.getProgress] polled on the main looper into
  *    the seam's hundredths-of-a-percent; honest stages (PREPARING before
@@ -91,64 +98,66 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
     private var terminalDelivered: Boolean = false
     private var currentListener: VideoExportListener? = null
 
-    override fun start(request: VideoExportRequest, listener: VideoExportListener) {
+    override fun start(job: VideoExportJob, listener: VideoExportListener) {
         currentListener = listener
-        val plan = request.plan
-        val stripAudio = plan.muteDecision() == MuteDecision.STRIP_AUDIO
-        val videoEffects = if (plan.adjustments.isNeutral) {
+        val resolved = when (job) {
+            is VideoExportRequest -> resolvePlanJob(job)
+            is ClipExportRequest -> resolveTimelineJob(job)
+        }
+        val videoEffects = if (resolved.adjustments.isNeutral) {
             emptyList()
         } else {
-            listOf(VideoAdjustEffect(plan.adjustments))
+            listOf(VideoAdjustEffect(resolved.adjustments))
         }
-        // The r52 volume gain: attached only when it is neither moot (the
-        // strip-audio path has no track left to scale --- mute wins by
-        // construction) nor the exact 1f identity (the same
-        // neutral-adjustment rule the effects above follow: a no-op pass is
-        // never attached). The constant provider answers the SAM pair
-        // directly (isUnityUntil returns the CURRENT time --- unity ends
-        // now, so the processor stays active for a non-unity gain; the
-        // provider itself is only ever attached at non-unity gains).
-        val volumeGain = plan.volume
-        val applyVolumeGain = !stripAudio && volumeGain != 1f
-        val audioProcessors: List<AudioProcessor> = if (applyVolumeGain) {
-            listOf(
-                GainProcessor(
-                    object : GainProcessor.GainProvider {
-                        override fun getGainFactorAtSamplePosition(
-                            presentationTimeUs: Long,
-                            samplePosition: Int,
-                        ): Float = volumeGain
-
-                        override fun isUnityUntil(
-                            presentationTimeUs: Long,
-                            samplePosition: Int,
-                        ): Long = presentationTimeUs
-                    },
-                ),
-            )
-        } else {
-            emptyList()
-        }
-        val items = VideoEditMath.timelineRuns(plan).map { run ->
+        val volumeGain = resolved.volume
+        val items = resolved.specs.map { spec ->
             val mediaItem = MediaItem.Builder()
-                .setUri(request.sourceUri)
+                .setUri(spec.sourceUri)
                 .setClippingConfiguration(
                     MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(run.startMs)
-                        .setEndPositionMs(run.endMs)
+                        .setStartPositionMs(spec.range.startMs)
+                        .setEndPositionMs(spec.range.endMs)
                         .build(),
                 )
                 .build()
+            // The r52 volume gain, realized per spec: attached only when it
+            // is neither moot (this spec's audio is stripped --- mute wins by
+            // construction) nor the exact 1f identity (the same
+            // neutral-adjustment rule the effects follow: a no-op pass is
+            // never attached). The constant provider answers the SAM pair
+            // directly (isUnityUntil returns the CURRENT time --- unity ends
+            // now, so the processor stays active for a non-unity gain; the
+            // provider itself is only ever attached at non-unity gains).
+            val applyVolumeGain = !spec.removeAudio && volumeGain != 1f
+            val audioProcessors: List<AudioProcessor> = if (applyVolumeGain) {
+                listOf(
+                    GainProcessor(
+                        object : GainProcessor.GainProvider {
+                            override fun getGainFactorAtSamplePosition(
+                                presentationTimeUs: Long,
+                                samplePosition: Int,
+                            ): Float = volumeGain
+
+                            override fun isUnityUntil(
+                                presentationTimeUs: Long,
+                                samplePosition: Int,
+                            ): Long = presentationTimeUs
+                        },
+                    ),
+                )
+            } else {
+                emptyList()
+            }
             EditedMediaItem.Builder(mediaItem)
-                .setSpeed(SpeedParameters(ConstantSpeedProvider(run.speedFactor.toFloat()), /* shouldMaintainPitch= */ true))
-                .setRemoveAudio(stripAudio)
+                .setSpeed(SpeedParameters(ConstantSpeedProvider(spec.speedFactor.toFloat()), /* shouldMaintainPitch= */ true))
+                .setRemoveAudio(spec.removeAudio)
                 .setEffects(Effects(audioProcessors, videoEffects))
                 .build()
         }
         val composition = Composition.Builder(
             EditedMediaItemSequence.Builder(items).build(),
         ).build()
-        val output = File(request.workingDirPath, request.renderFileName)
+        val output = File(job.workingDirPath, job.renderFileName)
         val runner = Transformer.Builder(context).build()
         transformer = runner
         cancelRequested = false
@@ -159,7 +168,7 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
                     listener.onResult(
                         VideoExportResult.Success(
                             renderedFilePath = output.absolutePath,
-                            outputDurationMs = VideoEditMath.outputDurationMs(plan),
+                            outputDurationMs = resolved.outputDurationMs,
                         ),
                     )
                 }
@@ -253,6 +262,51 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
 
         override fun getNextSpeedChangeTimeUs(timestampUs: Long): Long = Long.MIN_VALUE
     }
+
+    /**
+     * A job resolved to the one flat shape the item builder consumes: the
+     * ordered specs, the shared treatment, the derived output duration.
+     * Both request types land here, so the builder below cannot favor
+     * either --- the ClipExportTest equivalence pin holds the v1 side.
+     */
+    private data class ResolvedJob(
+        val specs: List<ClipExportItemSpec>,
+        val adjustments: VideoAdjustParams,
+        val volume: Float,
+        val outputDurationMs: Long,
+    )
+
+    /** The v1 path: the plan's run expansion over the one source, byte-for-byte the r42-r66 shape. */
+    private fun resolvePlanJob(job: VideoExportRequest): ResolvedJob {
+        val stripAudio = job.plan.muteDecision() == MuteDecision.STRIP_AUDIO
+        return ResolvedJob(
+            specs = VideoEditMath.timelineRuns(job.plan).map { run ->
+                ClipExportItemSpec(
+                    sourceUri = job.sourceUri,
+                    range = TimeRange(run.startMs, run.endMs),
+                    speedFactor = run.speedFactor,
+                    removeAudio = stripAudio,
+                )
+            },
+            adjustments = job.plan.adjustments,
+            volume = job.plan.volume,
+            outputDurationMs = VideoEditMath.outputDurationMs(job.plan),
+        )
+    }
+
+    /**
+     * The r70 path: the composition's projection --- one spec per entry,
+     * each carrying its own source, trim, speed and per-entry strip
+     * decision. No caller yet (the picker is F-77's next link); the
+     * realization lands with its model so the surfaces arrive onto a
+     * working export, not a promise.
+     */
+    private fun resolveTimelineJob(job: ClipExportRequest): ResolvedJob = ResolvedJob(
+        specs = ClipExportProjection.itemSpecs(job),
+        adjustments = job.adjustments,
+        volume = job.volume,
+        outputDurationMs = ClipTimelineMath.outputDurationMs(job.timeline),
+    )
 
     private companion object {
         const val POLL_INTERVAL_MS: Long = 250

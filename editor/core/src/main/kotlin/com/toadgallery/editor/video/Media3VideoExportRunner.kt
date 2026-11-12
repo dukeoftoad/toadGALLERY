@@ -104,10 +104,18 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
             is VideoExportRequest -> resolvePlanJob(job)
             is ClipExportRequest -> resolveTimelineJob(job)
         }
-        val videoEffects = if (resolved.adjustments.isNeutral) {
-            emptyList()
-        } else {
-            listOf(VideoAdjustEffect(resolved.adjustments))
+        val videoEffects = buildList {
+            if (!resolved.adjustments.isNeutral) {
+                add(VideoAdjustEffect(resolved.adjustments))
+            }
+            // r74: the shared look --- attached ONLY when it exists and is
+            // dialed in (intensity > 0), the neutral-adjustment rule the
+            // parameter set follows (a no-op pass is never attached). The
+            // effect carries the PARSED cube; the shader stage samples it
+            // (VideoAdjustProjection.fragmentShaderWithLookStage).
+            if (resolved.look != null && resolved.look.intensity > 0) {
+                add(VideoLookEffect(resolved.look))
+            }
         }
         val volumeGain = resolved.volume
         val items = resolved.specs.map { spec ->
@@ -154,6 +162,17 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
                 .setEffects(Effects(audioProcessors, videoEffects))
                 .build()
         }
+        // r74, the transitions record, stated honestly: the crossfade
+        // MODEL + validation + duration math ship in the pure module
+        // (VideoCrossfade.kt), but media3 1.11.1's Composition.Builder
+        // has NO per-boundary transition API (verified against the
+        // 1.11.1 reference: setEffects / setHdrMode / setTransmuxAudio
+        // / setTransmuxVideo / setVideoCompositorSettings only ---
+        // transitions landed in later media3 versions). Realizing the
+        // dissolve therefore needs either the media3 upgrade or a
+        // custom VideoCompositorSettings compositor --- F-78's own
+        // follow-up, recorded in follow-up.md; a hard cut (today's
+        // behaviour) stays exactly what this runner renders.
         val composition = Composition.Builder(
             EditedMediaItemSequence.Builder(items).build(),
         ).build()
@@ -268,12 +287,16 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
      * ordered specs, the shared treatment, the derived output duration.
      * Both request types land here, so the builder below cannot favor
      * either --- the ClipExportTest equivalence pin holds the v1 side.
+     * r74: the shared look and the crossfade list ride along (the
+     * composition path's own containers; the v1 path defaults them off).
      */
     private data class ResolvedJob(
         val specs: List<ClipExportItemSpec>,
         val adjustments: VideoAdjustParams,
         val volume: Float,
         val outputDurationMs: Long,
+        val look: VideoLutLook? = null,
+        val transitions: List<VideoCrossfade> = emptyList(),
     )
 
     /** The v1 path: the plan's run expansion over the one source, byte-for-byte the r42-r66 shape. */
@@ -300,12 +323,19 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
      * decision. No caller yet (the picker is F-77's next link); the
      * realization lands with its model so the surfaces arrive onto a
      * working export, not a promise.
+     *
+     * r74: the request's shared look and crossfades ride the resolved
+     * job; the builder consumes them below (the look as the effect
+     * stack's final stage, the transitions as the composition's
+     * boundary transitions).
      */
     private fun resolveTimelineJob(job: ClipExportRequest): ResolvedJob = ResolvedJob(
         specs = ClipExportProjection.itemSpecs(job),
         adjustments = job.adjustments,
         volume = job.volume,
         outputDurationMs = ClipTimelineMath.outputDurationMs(job.timeline),
+        look = job.look,
+        transitions = job.transitions,
     )
 
     private companion object {

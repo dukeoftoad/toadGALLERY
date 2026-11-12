@@ -18,6 +18,17 @@ package com.toadgallery.editor.video
  * an input fact the caller supplies (the retriever reads it per clip) ---
  * the same additive growth [VideoEditPlan] took at r42, facts before
  * surfaces.
+ *
+ * r74 grows the entry twice, both additive (defaults preserve every
+ * pre-r74 value and test byte-for-byte): the SPEED RAMP
+ * ([ramp] --- the plan doc's P2 "speed ramps" rung, keyframed factors
+ * interpolated linearly between instants; absent = flat at
+ * [speedFactor], exactly the r69 shape), and the composition lane's own
+ * speed bounds [ClipTimelineValidator.MAX_SPEED_FACTOR] = 4.0 --- the
+ * plan doc's 0.25x..4x ladder range. The v1 single-clip contract
+ * ([VideoEditPlanValidator]) STAYS frozen at 0.25x..2x; the two lanes
+ * carry their own bounds, stated on their own validators, never one
+ * borrowed constant stretched after the fact.
  */
 data class ClipTimelineEntry(
     /** The source clip's URI (opaque to this module; the activity resolves it). */
@@ -28,19 +39,27 @@ data class ClipTimelineEntry(
     val audioTrackPresent: Boolean,
     /** The trim window into the source; the clip plays exactly this range. */
     val trim: TimeRange,
-    /** The clip's whole-clip speed factor, in [VideoEditPlanValidator.MIN_SPEED_FACTOR]..[VideoEditPlanValidator.MAX_SPEED_FACTOR]. */
+    /** The clip's whole-clip speed factor, in [ClipTimelineValidator.MIN_SPEED_FACTOR]..[ClipTimelineValidator.MAX_SPEED_FACTOR]. */
     val speedFactor: Double = 1.0,
+    /**
+     * The clip's keyframed speed curve (r74): sorted strictly-increasing
+     * keyframes inside the trim, interpolated linearly between. Absent
+     * (empty) = the flat whole-clip factor above --- the r69 shape,
+     * verbatim. Validated by [SpeedRampValidator] through the
+     * composition gate.
+     */
+    val ramp: List<SpeedKeyframe> = emptyList(),
 ) {
     init {
         require(sourceUri.isNotEmpty()) { "sourceUri must not be empty" }
         require(durationMs > 0) { "durationMs must be positive, was $durationMs" }
         require(
-            speedFactor >= VideoEditPlanValidator.MIN_SPEED_FACTOR &&
-                speedFactor <= VideoEditPlanValidator.MAX_SPEED_FACTOR,
+            speedFactor >= ClipTimelineValidator.MIN_SPEED_FACTOR &&
+                speedFactor <= ClipTimelineValidator.MAX_SPEED_FACTOR,
         ) {
             "speedFactor $speedFactor outside " +
-                "[${VideoEditPlanValidator.MIN_SPEED_FACTOR}.." +
-                "${VideoEditPlanValidator.MAX_SPEED_FACTOR}]"
+                "[${ClipTimelineValidator.MIN_SPEED_FACTOR}.." +
+                "${ClipTimelineValidator.MAX_SPEED_FACTOR}]"
         }
         // The trim-bounds-vs-duration rule needs the duration fact, so it
         // belongs to the validator (the structured-failure shape), not the
@@ -71,6 +90,16 @@ object ClipTimelineValidator {
     /** A sane ceiling so a UI bug can never build an unbounded sequence. */
     const val MAX_ENTRIES: Int = 256
 
+    /**
+     * The composition lane's speed bounds (r74): the plan doc's ladder
+     * range 0.25x..4x. The v1 single-clip plan keeps its own frozen
+     * 0.25x..2x ([VideoEditPlanValidator]); the timeline lane --- built
+     * after the rebirth plan landed --- carries the range the plan
+     * doc's P0 ladder names.
+     */
+    const val MIN_SPEED_FACTOR: Double = 0.25
+    const val MAX_SPEED_FACTOR: Double = 4.0
+
     fun validate(timeline: ClipTimeline): ClipTimelineValidation {
         if (timeline.entries.isEmpty()) {
             return ClipTimelineValidation.Invalid(
@@ -93,6 +122,14 @@ object ClipTimelineValidator {
                     "clip $index trim end ${entry.trim.endMs} ms is past the clip " +
                         "duration ${entry.durationMs} ms",
                 )
+            }
+            // r74: the entry's keyframed ramp validates against its own
+            // trim window (sorted, in-bounds, within the keyframe cap).
+            when (val ramp = SpeedRampValidator.validate(entry.ramp, entry.trim)) {
+                is SpeedRampValidation.Invalid -> {
+                    return ClipTimelineValidation.Invalid("clip $index: ${ramp.reason}")
+                }
+                is SpeedRampValidation.Valid -> Unit
             }
         }
         return ClipTimelineValidation.Valid(timeline)

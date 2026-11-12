@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r74 (the pending-ten round): the strings the round's surfaces and
+     a11y contracts carry. The a11y names join the r32 set's own file
+     family; one resource file per round, the repo's rule. -->
+<resources>
+    <!-- The whites/blacks/vibrance a11y names (the r32 slider-row
+         contract: name = contentDescription). -->
+    <string name="editor_a11y_whites">Whites</string>
+    <string name="editor_a11y_blacks">Blacks</string>
+    <string name="editor_a11y_vibrance">Vibrance</string>
+
+    <!-- The luminance scope mode's chip label (the third tap-cycle
+         state, after Histogram and Parade). -->
+    <string name="editor_scope_luminance">Luminance</string>
+
+    <!-- The copy-paste edits surface (the C6 history-scrubber family):
+         the header action and the paste state's honest notes. -->
+    <string name="editor_copy_edits">Copy edits</string>
+    <string name="editor_paste_edits">Paste edits</string>
+    <string name="editor_paste_edits_done">Edits pasted</string>
+    <string name="editor_copy_edits_done">Edits copied</string>
+    <string name="editor_paste_edits_empty">Nothing copied yet</string>
+</resources>

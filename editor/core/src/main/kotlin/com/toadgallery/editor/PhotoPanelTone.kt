@@ -101,12 +101,17 @@ internal fun AdjustPanel(
     // r66/r68: the live tonal readout, drawn from the SAME pipelined
     // pixels the canvas shows (see EditorHistogram's header for the
     // wiring). Absent (never a placeholder) until the first preview
-    // lands. The mode picks the chart: the overlaid RGB histogram, or
-    // the side-by-side parade.
+    // lands. The mode picks the chart: the overlaid RGB histogram, the
+    // side-by-side parade, or (r74) the luminance curve --- the plan
+    // doc's full tap cycle.
     previewHistogram?.let { histogram ->
         when (scopeMode) {
             PhotoScopeMode.Histogram -> HistogramChart(histogram = histogram)
             PhotoScopeMode.Parade -> ParadeChart(histogram = histogram)
+            PhotoScopeMode.Luminance -> LuminanceChart(
+                bins = histogram.luma,
+                peak = histogram.lumaPeak,
+            )
         }
     }
     // r67: the BOARD --- one ProSlider per parameter, every value visible

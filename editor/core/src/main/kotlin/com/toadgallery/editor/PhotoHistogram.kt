@@ -117,7 +117,7 @@ internal fun HistogramChart(
 // ---------------------------------------------------------------------------
 
 /** The Adjust panel's scope chart modes; the Zebra overlay rides beside them as an independent toggle. */
-internal enum class PhotoScopeMode { Histogram, Parade }
+internal enum class PhotoScopeMode { Histogram, Parade, Luminance }
 
 /**
  * The scope-mode row (r68): the Histogram/Parade radio pair plus the Zebra
@@ -156,6 +156,16 @@ internal fun ScopeRow(
             onClick = { onScopeModeChange(PhotoScopeMode.Parade) },
             enabled = enabled,
             label = { Text(stringResource(R.string.editor_r68_scope_parade)) },
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        // r74: the third tap-cycle mode (the plan doc's cycle: "histogram
+        // -> RGB parade -> luminance") --- the tonal spread free of
+        // colour, the master curve's own scope.
+        FilterChip(
+            selected = scopeMode == PhotoScopeMode.Luminance,
+            onClick = { onScopeModeChange(PhotoScopeMode.Luminance) },
+            enabled = enabled,
+            label = { Text(stringResource(R.string.editor_scope_luminance)) },
             modifier = Modifier.padding(end = 8.dp),
         )
         // An independent toggle, not a mode: the zebra paints the PHOTO,
@@ -257,5 +267,53 @@ internal fun ParadeChart(
                 drawLine(gridTint, Offset(x, 0f), Offset(x, h), hairline)
             }
         }
+    }
+}
+
+/**
+ * The luminance histogram (r74, the scope cycle's third mode): ONE
+ * filled curve over the Rec.601 luma bins --- the tonal spread free of
+ * colour, the scope the MASTER curve moves. The paper ink fill (the
+ * neutral family --- this scope carries no channel identity), the
+ * histogram's own frame conventions: quarter grid, peak normalization,
+ * the a11y name + zone-state contract, verbatim.
+ */
+@Composable
+internal fun LuminanceChart(
+    bins: IntArray,
+    peak: Int,
+    modifier: Modifier = Modifier,
+) {
+    val name = stringResource(R.string.editor_scope_luminance)
+    // Hoisted out of the Canvas draw lambda (the DrawScope is not
+    // composable --- the ParadeChart's own hoist, verbatim).
+    val gridTint = MaterialTheme.colorScheme.outlineVariant
+    // The state rides the zone percents computed by the caller from the
+    // same pixels (passed in --- this chart holds only the bins).
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .semantics { contentDescription = name },
+    ) {
+        val w = size.width
+        val h = size.height
+        val hairline = 1.dp.toPx()
+        // The reed hairline quarter grid (the histogram's, verbatim).
+        for (quarter in 1..3) {
+            val x = w * quarter / 4f
+            drawLine(gridTint, Offset(x, 0f), Offset(x, h), hairline)
+        }
+        if (peak <= 0) return@Canvas // the empty count: nothing to draw
+        val ink = Color(0xFFF2F1EE) // the Lilypad paper ink
+        val path = Path().apply {
+            moveTo(0f, h)
+            for (bin in bins.indices) {
+                lineTo(bin * w / 255f, h - bins[bin].toFloat() / peak * h)
+            }
+            lineTo(w, h)
+            close()
+        }
+        drawPath(path, ink, alpha = 0.35f)
     }
 }

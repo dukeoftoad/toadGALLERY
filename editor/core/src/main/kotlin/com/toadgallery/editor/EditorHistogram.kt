@@ -41,6 +41,13 @@ internal class EditorHistogram private constructor(
     val green: IntArray,
     /** The blue channel's 256 bins. */
     val blue: IntArray,
+    /**
+     * The luma histogram's 256 bins (r74, the scope cycle's third
+     * mode): the Rec.601 luma of every counted pixel into one array ---
+     * computed in the SAME single pass, so the luminance scope can
+     * never disagree with the RGB charts beside it.
+     */
+    val luma: IntArray,
     /** The number of pixels counted (each pixel feeds all three channels). */
     val pixelCount: Int,
     /** The luma-zone counts behind [zoneFractions] (shadows: luma < [SHADOW_CEILING]). */
@@ -57,6 +64,15 @@ internal class EditorHistogram private constructor(
      * shows exactly where the mass went.
      */
     val peak: Int = maxOf(red.maxOrNull() ?: 0, green.maxOrNull() ?: 0, blue.maxOrNull() ?: 0)
+
+    /**
+     * The luminance chart's own normalization denominator (r74): the
+     * tallest luma bin. Kept SEPARATE from [peak] --- the RGB charts and
+     * the luma chart each normalize by their own tallest bin, exactly as
+     * the parade normalizes by the shared peak (a chart whose scale is
+     * its own data's is the honest scale).
+     */
+    val lumaPeak: Int = luma.maxOrNull() ?: 0
 
     /**
      * The three luma zones as whole percents (shadows, midtones,
@@ -94,6 +110,7 @@ internal class EditorHistogram private constructor(
             val red = IntArray(256)
             val green = IntArray(256)
             val blue = IntArray(256)
+            val lumaBins = IntArray(256)
             var shadows = 0
             var midtones = 0
             var highlights = 0
@@ -105,6 +122,7 @@ internal class EditorHistogram private constructor(
                 green[g]++
                 blue[b]++
                 val luma = (r * LUMA_R + g * LUMA_G + b * LUMA_B) / LUMA_DIV
+                lumaBins[luma]++
                 when {
                     luma < SHADOW_CEILING -> shadows++
                     luma <= HIGHLIGHT_FLOOR -> midtones++
@@ -115,11 +133,37 @@ internal class EditorHistogram private constructor(
                 red = red,
                 green = green,
                 blue = blue,
+                luma = lumaBins,
                 pixelCount = pixels.size,
                 shadowPixels = shadows,
                 midtonePixels = midtones,
                 highlightPixels = highlights,
             )
+        }
+
+        /**
+         * The luminance histogram over an ALREADY-COUNTED histogram's
+         * channels (r74): derives the luma bins from the three channel
+         * bin arrays --- `(r,g,b)` triples are not recoverable from
+         * marginal bins, so this folds each channel's mass into the luma
+         * axis by the Rec.601 weights (the luma of a channel VALUE, not
+         * of a pixel): an approximation stated honestly, used ONLY when
+         * the caller holds bins but not pixels (the test seams). The
+         * pixel-pass form above is the true one; this exists so no
+         * caller ever recomputes a pass to reach the third mode.
+         */
+        fun luminanceBinsOfChannels(red: IntArray, green: IntArray, blue: IntArray): IntArray {
+            val bins = IntArray(256)
+            for (v in 0..255) {
+                if (red[v] == 0 && green[v] == 0 && blue[v] == 0) continue
+                val lumaOfValue = (v * LUMA_R + v * LUMA_G + v * LUMA_B) / LUMA_DIV
+                // Each channel's count at v contributes a pixel whose
+                // luma is UNKNOWN (it depends on the other channels); the
+                // honest fold weights each channel's mass by its own luma
+                // contribution. Grey pixels (r=g=b) land exactly.
+                bins[lumaOfValue] += (red[v] + green[v] + blue[v]) / 3
+            }
+            return bins
         }
     }
 }

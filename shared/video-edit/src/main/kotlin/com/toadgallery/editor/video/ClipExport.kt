@@ -25,6 +25,28 @@ data class ClipExportRequest(
     val volume: Float = 1f,
     /** The nine ADR-0012 adjustments applied to every clip (0 = neutral). */
     val adjustments: VideoAdjustParams = VideoAdjustParams(),
+    /**
+     * The shared look over the whole composition (r74, the "one
+     * language" promise): the SAME bundled `.cube` ids the photo Looks
+     * deck ships, with the r33 intensity grammar. Absent = no look ---
+     * the pre-r74 shape, byte-compatible.
+     */
+    val look: VideoLutLook? = null,
+    /**
+     * The text overlays, validated against the composition's derived
+     * output duration (r74, the P0 ladder's text rung). Absent = none.
+     */
+    val textOverlays: List<VideoTextOverlay> = emptyList(),
+    /**
+     * The music track (r74, the P1 ladder's "music import with
+     * ducking"). Absent = the clips' own audio only.
+     */
+    val music: VideoMusicTrack? = null,
+    /**
+     * The crossfade transitions (r74, the P1 ladder's rung), one per
+     * boundary. Absent = hard cuts, the r70 shape.
+     */
+    val transitions: List<VideoCrossfade> = emptyList(),
     /** The output container (v1: MP4 only --- the honest encodable set). */
     val container: VideoContainer = VideoContainer.MP4,
     /** A writable directory for the render (the activity passes its cache dir). */
@@ -89,6 +111,38 @@ object ClipExportValidator {
         // The colour parameters: the shared projection owns the ranges.
         VideoAdjustProjection.validate(request.adjustments)?.let { reason ->
             return ClipExportValidation.Invalid(reason)
+        }
+        // r74: the shared look's own grammar (intensity bounds, table shape).
+        when (val look = VideoLutLookValidator.validate(request.look)) {
+            is VideoLutLookValidation.Invalid -> return ClipExportValidation.Invalid(look.reason)
+            is VideoLutLookValidation.Valid -> Unit
+        }
+        // r74: the text overlays against the composition's derived duration.
+        when (
+            val overlays = VideoTextOverlayValidator.validate(
+                request.textOverlays,
+                ClipTimelineMath.outputDurationMs(request.timeline),
+            )
+        ) {
+            is VideoTextOverlayValidation.Invalid ->
+                return ClipExportValidation.Invalid(overlays.reason)
+            is VideoTextOverlayValidation.Valid -> Unit
+        }
+        // r74: the music track against the same derived duration.
+        when (val music = VideoMusicValidator.validate(request.music, request.timeline)) {
+            is VideoMusicValidation.Invalid -> return ClipExportValidation.Invalid(music.reason)
+            is VideoMusicValidation.Valid -> Unit
+        }
+        // r74: the transitions against the composition's boundaries.
+        when (
+            val transitions = VideoCrossfadeValidator.validate(
+                request.transitions,
+                request.timeline,
+            )
+        ) {
+            is VideoCrossfadeValidation.Invalid ->
+                return ClipExportValidation.Invalid(transitions.reason)
+            is VideoCrossfadeValidation.Valid -> Unit
         }
         return ClipExportValidation.Valid(request)
     }

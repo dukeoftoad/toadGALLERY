@@ -148,6 +148,15 @@ internal fun PhotoToolHeader(
     resetA11y: String,
     onReset: () -> Unit,
     resetEnabled: Boolean,
+    // r74: the copy-paste edits pair (C6's closing move). Optional so
+    // every existing call site stays source-compatible; the Adjust tool
+    // --- the grade's home --- carries the pair.
+    copyA11y: String? = null,
+    onCopy: () -> Unit = {},
+    copyEnabled: Boolean = true,
+    pasteA11y: String? = null,
+    onPaste: () -> Unit = {},
+    pasteEnabled: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -191,6 +200,46 @@ internal fun PhotoToolHeader(
                     MaterialTheme.colorScheme.onBackground.copy(alpha = 0.38f)
                 },
             )
+        }
+        // r74: the copy-paste edits pair (C6: "copy-paste edits between
+        // photos"). Copy lifts THIS session's grade into the chassis
+        // clipboard; Paste lands the clipboard's grade as ONE undoable
+        // commit through [EditTransfer.pasteGrade] --- geometry and scene
+        // layers stay this photo's own. The pair rides the Adjust tool
+        // only (the grade's home); the same disabled-alpha language.
+        if (copyA11y != null) {
+            IconButton(
+                onClick = onCopy,
+                enabled = copyEnabled,
+                modifier = Modifier.semantics { contentDescription = copyA11y },
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_copy_edits),
+                    contentDescription = null,
+                    tint = if (copyEnabled) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else {
+                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.38f)
+                    },
+                )
+            }
+        }
+        if (pasteA11y != null) {
+            IconButton(
+                onClick = onPaste,
+                enabled = pasteEnabled,
+                modifier = Modifier.semantics { contentDescription = pasteA11y },
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_paste_edits),
+                    contentDescription = null,
+                    tint = if (pasteEnabled) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else {
+                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.38f)
+                    },
+                )
+            }
         }
         IconButton(
             onClick = onConfirm,

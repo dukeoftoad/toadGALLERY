@@ -1,6 +1,8 @@
 # Licensing and Attribution
 
-**Status:** Living document (updated every phase) · **Last revised:** 2026-11-07 (v2.6 —
+**Status:** Living document (updated every phase) · **Last revised:** 2026-11-12 (v2.7 — r67
+records the Lilypad foundation round's bundled UI fonts, Manrope and JetBrains Mono, both OFL-1.1
+with their license texts at `docs/licenses/`; v2.6 —
 r51 commits the canonical AGPL-3.0 text as `engine/LICENSE` and records the explicit
 per-artifact license offer in §2/§3; v2.5 —
 r23 records the photos-side vendored crates `ente-vecdb` (whole upstream `vecdb`) and
@@ -31,6 +33,8 @@ rationale changes.
 | Jetpack Compose + Material 3 | `androidx.compose` | **Apache-2.0** | AndroidX metadata | Canonical UI toolkit (ADR-0009). |
 | `androidx.exifinterface` | `androidx.exifinterface` | **Apache-2.0** | AndroidX metadata | Replaces the planned Aves `exifinterface` fork port (ADR-0008). |
 | Ente ML engine (Rust) | `ente/ente` `rust/crates/{ml,assets,image}` + (r23) `rust/crates/vecdb` and the `photos` crate's `db`/`ml_db`/`ml_store`/`face_clustering` modules @ `423b2d80d9ec89d45f5680cb1e1d777bac225f41` | **AGPL-3.0** (c) Ente Services Pvt. Ltd. and contributors | 2026-11-02, repo LICENSE + crate tree | **Vendored + adapted** under ADR-0020 / maintainer direction (2026-11-02): `engine/` workspace, see `engine/NOTICE.md` |
+| Manrope (font, r67) | `google/fonts` `ofl/manrope` (variable master, instanced to 400/600/800) | **OFL-1.1** (c) 2018 The Manrope Project Authors | 2026-11-12, OFL.txt at `docs/licenses/manrope-OFL.txt` | **Bundled asset** at `editor/core/src/main/res/font/` — the editor's UI type family (Lilypad). |
+| JetBrains Mono (font, r67) | `google/fonts` `ofl/jetbrainsmono` (variable master, instanced to 600) | **OFL-1.1** (c) 2020 The JetBrains Mono Project Authors | 2026-11-12, OFL.txt at `docs/licenses/jetbrainsmono-OFL.txt` | **Bundled asset** at `editor/core/src/main/res/font/` — every value readout (Lilypad's mono value style). |
 
 ### Attribution chain
 

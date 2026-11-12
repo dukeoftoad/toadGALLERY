@@ -77,9 +77,10 @@ dlopen'd at runtime. Discovery order:
 2. `ORT_DYLIB_PATH` (ort's documented override) as the non-Android /
    diagnostics fallback.
 
-The packaged `libonnxruntime.so` is Microsoft's official 1.31.0 Android
-build (the exact version the rc.15 `api-31` bindings expect), fetched and
-sha256-pinned by `engine/scripts/build-android.sh` — see that script.
+The packaged `libonnxruntime.so` is Microsoft's official 1.31.1 Android
+build (the exact version the rc.15 `api-31` bindings expect, LOCKSTEP with
+the editor's Java ORT AAR — r75), fetched and sha256-pinned by
+`engine/scripts/build-android.sh` — see that script.
 
 ## Building for Android
 

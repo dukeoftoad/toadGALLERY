@@ -146,9 +146,10 @@ toadGALLERY code, not vendored** — they carry no upstream provenance:
 3. `scripts/build-android.sh` — the cargo-ndk Android build (NDK
    discovery + pinned fallback install, arm64-v8a / `--all` for x86_64)
    plus the ONNX Runtime supply: `libonnxruntime.so` comes from
-   Microsoft's official 1.31.0 Android AAR on Maven Central
+   Microsoft's official 1.31.1 Android AAR on Maven Central
    (sha256-pinned in the script — the exact version the ort-sys
-   2.0.0-rc.15 `api-31` bindings expect; the vendored crates use
+   2.0.0-rc.15 `api-31` bindings expect, LOCKSTEP with the editor's Java
+   ORT AAR (r75); the vendored crates use
    load-dynamic, so ort-sys's own Android dist (a static `.a`) is not
    usable and the shared library is a fetched supply, never a cargo
    artifact). Verified in the r22 local build proof: both staged `.so`

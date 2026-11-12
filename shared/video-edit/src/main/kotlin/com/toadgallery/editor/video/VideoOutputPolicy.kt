@@ -93,6 +93,93 @@ object VideoOutputPlan {
     enum class Recovery { CANCEL_PENDING_ROW, LEAVE_ROW }
 }
 
+/**
+ * The export PREFLIGHT verdict for the resolution-and-HDR tier (r74, the
+ * plan doc's P2 rung: "4K/HDR export policies --- surfaced honestly in
+ * export preflight"): PURE facts in, an honest verdict out. The model
+ * knows nothing about codec queries --- the caller supplies the device
+ * facts (max output width/height the encoders report, whether an HDR
+ * (10-bit) decode path exists, the API level) and the requested tier,
+ * and the verdict says EXACTLY what the export will do, never more.
+ *
+ * THE POLICY (each rule pinned by [VideoOutputPolicyTest]):
+ *  - SDR is always offered (the r42 default --- the tier the v1 editor
+ *    shipped); 4K SDR rides only when the encoder profile reports
+ *    3840x2160 or better;
+ *  - HDR10 requires BOTH the API-33+ gate (the plan doc names it: "HDR
+ *    requires API 33+ hardware") AND an HDR decode path; without either
+ *    the verdict REFUSES the tier with the honest reason --- it never
+ *    silently exports SDR and calls it HDR (the honest-software
+ *    principle, applied to a codec fact);
+ *  - a refusal is always a plain sentence the export sheet can show
+ *    verbatim (the human-readable-diagnosis budget rule).
+ */
+object VideoExportPreflight {
+
+    /** The 4K short edge pair (3840x2160), the tier the policy names. */
+    const val UHD_WIDTH: Int = 3840
+    const val UHD_HEIGHT: Int = 2160
+
+    /** The API level where 10-bit HDR output paths exist on the platform. */
+    const val HDR_MIN_API: Int = 33
+
+    /** The requested output tier (v1 shipped SDR only; the ladder adds the rest). */
+    enum class Tier { SDR, UHD_SDR, HDR10 }
+
+    /** The device facts the preflight weighs (a caller-supplied record, never guessed). */
+    data class DeviceFacts(
+        /** The API level of this device. */
+        val apiLevel: Int,
+        /** The widest video the device's encoders report (0 = unknown --- treated as refusing). */
+        val maxEncoderWidth: Int,
+        /** The tallest video the encoders report (0 = unknown). */
+        val maxEncoderHeight: Int,
+        /** Whether the device exposes a 10-bit HDR decode path. */
+        val hdrDecodePath: Boolean,
+    )
+
+    /** The verdict: offered (and at what honest ceiling) or refused (with the reason). */
+    sealed interface Verdict {
+        /** The tier is offered; the export runs at exactly [tier]. */
+        data class Offered(val tier: Tier) : Verdict
+
+        /** Refused, with the user-readable reason shown in the export sheet. */
+        data class Refused(val reason: String) : Verdict
+    }
+
+    /** The preflight: one honest answer per (tier, device). */
+    fun check(tier: Tier, facts: DeviceFacts): Verdict = when (tier) {
+        Tier.SDR -> Verdict.Offered(Tier.SDR)
+        Tier.UHD_SDR -> {
+            val widthOk = facts.maxEncoderWidth >= UHD_WIDTH && facts.maxEncoderHeight >= UHD_HEIGHT
+            if (widthOk) {
+                Verdict.Offered(Tier.UHD_SDR)
+            } else {
+                Verdict.Refused(
+                    "this device's encoders top out at ${facts.maxEncoderWidth}x" +
+                        "${facts.maxEncoderHeight} --- 4K (${UHD_WIDTH}x${UHD_HEIGHT}) needs a" +
+                        " UHD-capable encoder",
+                )
+            }
+        }
+        Tier.HDR10 -> {
+            if (facts.apiLevel < HDR_MIN_API) {
+                Verdict.Refused(
+                    "HDR10 export needs Android ${HDR_MIN_API}+ --- this device reports API" +
+                        " ${facts.apiLevel}",
+                )
+            } else if (!facts.hdrDecodePath) {
+                Verdict.Refused(
+                    "this device exposes no 10-bit HDR decode path --- the export would be" +
+                        " SDR wearing an HDR badge, and the editor does not ship that",
+                )
+            } else {
+                Verdict.Offered(Tier.HDR10)
+            }
+        }
+    }
+}
+
 /** Which MediaStore collection an output kind belongs to. */
 enum class VideoOutputStore { VIDEO, IMAGE }
 

@@ -36,13 +36,16 @@ class LilypadSliderMathTest {
 
     @Test
     fun `a half row-width drag maps half the span`() {
-        assertClose(50f, LilypadSliderMath.scrub(0f, 100f, 300f, 400f, bipolar))
+        // 200px over a 400px track is half the track: half of the 200-wide
+        // bipolar span is +100.
+        assertClose(100f, LilypadSliderMath.scrub(0f, 100f, 300f, 400f, bipolar))
     }
 
     @Test
     fun `fine mode is exactly one tenth`() {
-        // A drag that would move +100 at normal gain moves +10 in fine.
-        assertClose(10f, LilypadSliderMath.scrub(0f, 0f, 400f, 400f, bipolar, fine = true))
+        // A full-width drag moves the whole span (+200) at normal gain;
+        // the same drag in fine mode moves exactly one tenth of it (+20).
+        assertClose(20f, LilypadSliderMath.scrub(0f, 0f, 400f, 400f, bipolar, fine = true))
     }
 
     @Test

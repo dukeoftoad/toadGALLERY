@@ -673,7 +673,29 @@ class EditActivity : ComponentActivity() {
             // very large export is softer than its surroundings (the
             // contract's stated honest limitation).
             val ai = resolveAiStageInputs(export.recipe)
-            val pipelined = EditPipeline.apply(pixels, width, height, export.recipe, look, ai)
+            // r68: the keystone quad was authored on the PREVIEW grid; the
+            // export decodes the source at full resolution, so the SAME
+            // warp retargets first (the percents are the
+            // resolution-independent truth both grids agree on --- the
+            // scaling rule LilypadKeystoneMath pins). A 0 preview grid (no
+            // base decoded) or an identity quad rides verbatim.
+            val exportRecipe = if (
+                export.recipe.perspective != PerspectiveQuad.IDENTITY &&
+                export.previewWidth > 0 && export.previewHeight > 0
+            ) {
+                export.recipe.copy(
+                    perspective = LilypadKeystoneMath.scaledForExport(
+                        export.recipe.perspective,
+                        export.previewWidth,
+                        export.previewHeight,
+                        width,
+                        height,
+                    ),
+                )
+            } else {
+                export.recipe
+            }
+            val pipelined = EditPipeline.apply(pixels, width, height, exportRecipe, look, ai)
             val adjusted = Bitmap.createBitmap(
                 pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888,
             )
@@ -1170,6 +1192,37 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 // r32: the straighten drag previews live too (it previously
                 // waited for release, burning a per-tick re-render for nothing).
                 d.first == "straighten" -> effective.copy(straightenDeg = d.second.toDouble())
+                // r68: the keystone drags preview live too (the crop dial's
+                // own rule --- the drafted knob rides on top of the other
+                // knob's committed read-back, so what the drag shows is
+                // what the release lands, on the SAME preview grid the
+                // commit builds on; a draft with no decoded base drops ---
+                // the paint gesture's own honesty, never an invented quad).
+                d.first == KEYSTONE_VERTICAL || d.first == KEYSTONE_HORIZONTAL -> {
+                    val base = previewBase
+                    if (base != null) {
+                        val vertical = if (d.first == KEYSTONE_VERTICAL) {
+                            d.second
+                        } else {
+                            LilypadKeystoneMath.verticalPctOf(effective.perspective, base.width)
+                        }
+                        val horizontal = if (d.first == KEYSTONE_HORIZONTAL) {
+                            d.second
+                        } else {
+                            LilypadKeystoneMath.horizontalPctOf(effective.perspective, base.height)
+                        }
+                        effective.copy(
+                            perspective = LilypadKeystoneMath.quadFor(
+                                verticalPct = vertical,
+                                horizontalPct = horizontal,
+                                width = base.width,
+                                height = base.height,
+                            ),
+                        )
+                    } else {
+                        effective
+                    }
+                }
                 // r33: the intensity drag previews live, exactly like the
                 // adjustment sliders (the look commits on release).
                 d.first == "lut-intensity" -> {
@@ -2201,6 +2254,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         policy,
                         choice.metadataPolicy,
                     ),
+                    // r68: the grid the keystone quad was authored on (the
+                    // export retargets the same warp to the full decode ---
+                    // LilypadKeystoneMath.scaledForExport inside runExport).
+                    previewWidth = previewBase?.width ?: 0,
+                    previewHeight = previewBase?.height ?: 0,
                 ),
             )
         }

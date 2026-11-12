@@ -62,4 +62,16 @@
     <string name="editor_r68_history_retouch">Retouch</string>
     <string name="editor_r68_history_erase">Erase</string>
     <string name="editor_r68_history_edit">Edit</string>
+
+    <!-- The crop dial and the keystone rows (r68): the dial's degree
+         readout (the signed text ProSlider's pill already formats), the
+         Perspective block's heading, and the two keystone rows' name and
+         a11y-state pairs (the values read through the signed pill text,
+         the same as every slider row). -->
+    <string name="editor_r68_dial_deg">%1$s°</string>
+    <string name="editor_r68_section_perspective">Perspective</string>
+    <string name="editor_r68_keystone_vertical">Vertical keystone</string>
+    <string name="editor_r68_keystone_vertical_state">Vertical keystone %1$d</string>
+    <string name="editor_r68_keystone_horizontal">Horizontal keystone</string>
+    <string name="editor_r68_keystone_horizontal_state">Horizontal keystone %1$d</string>
 </resources>

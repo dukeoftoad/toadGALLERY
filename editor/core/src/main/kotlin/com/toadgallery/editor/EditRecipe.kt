@@ -922,6 +922,17 @@ data class ExportRequest(
     /** JPEG/WebP quality 1..100 (PNG ignores it --- lossless). */
     val quality: Int,
     val metadataPolicy: MetadataPolicy,
+    /**
+     * The PREVIEW grid's width the recipe was authored against (r68): the
+     * keystone quad is authored in preview pixels, and the export decodes
+     * the source at full resolution, so [LilypadKeystoneMath.scaledForExport]
+     * needs the authoring grid to retarget the same warp. 0 = unknown (no
+     * base decoded); a 0 grid never scales --- the quad rides verbatim,
+     * the only honest degrade for a grid that does not exist.
+     */
+    val previewWidth: Int = 0,
+    /** [previewWidth]'s height twin. */
+    val previewHeight: Int = 0,
 ) {
     init {
         require(quality in 1..100) { "quality must be in 1..100" }

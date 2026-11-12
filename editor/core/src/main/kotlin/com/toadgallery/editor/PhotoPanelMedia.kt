@@ -4,7 +4,11 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -26,14 +30,19 @@ import kotlinx.coroutines.withContext
 
 // ---------------------------------------------------------------------------
 // The r57 panel seam (F-58a): the media-registry family's tool panels,
-// extracted VERBATIM from `EditActivity.EditorContent`'s `PhotoScreen.Looks`
-// and `PhotoScreen.Frames` branches (plus `lookNameRes`, whose only reader
+// extracted from `EditActivity.EditorContent`'s `PhotoScreen.Looks` and
+// `PhotoScreen.Frames` branches (plus `lookNameRes`, whose only reader
 // lived in the Looks branch).
 //
-// The bodies are the r33 looks and r38 frames contracts --- the r56 honest
-// thumbs ride inside `LookThumbChip`/`FrameThumbChip` (PhotoControls.kt) ---
-// unchanged; the chassis state arrives as explicit value + `on...Change`
-// pairs. The committed Roborazzi chassis baselines are the regression proof.
+// r67, the Lilypad foundation round (docs/editor/lilypad-design.md): the
+// Looks panel becomes the CARD SHELF (C3, the B2 fix of the rebirth
+// audit --- "choices in a visual medium must be visual"): a two-column
+// grid of [LookCard]s whose thumbs render the editor's REAL preview base
+// through the SAME pipeline the preview and export use
+// ([renderLookCardThumb]), an intensity slider on the new [ProSlider],
+// and a press-and-hold COMPARE against the plain original. The import
+// machinery, the intensity draft contract and the removal rule ride
+// unchanged; the Frames panel below is untouched this round.
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -49,86 +58,23 @@ internal fun LooksPanel(
     onLooksVersionChange: () -> Unit,
     importError: String?,
     importLauncher: ManagedActivityResultLauncher<Array<String>, Uri?>,
+    previewBase: Bitmap? = null,
 ) {
 
-    // ---- Filters (r33: the bundled .cube looks at an intensity) ----
-    // One None chip + one chip per look that PARSED; the preview and
+    // ---- The r67 card shelf (C3) ------------------------------------------
+    // One None card + one card per look that PARSED; the preview and
     // the export resolve the selection through the same shared cache,
     // so what the user sees is what the pipeline exports. A selection
     // this build cannot resolve (a version-skewed sidecar) selects no
-    // chip --- the tolerance contract, shown honestly.
-    Text(
-        text = stringResource(R.string.editor_section_filters),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.labelLarge,
-    )
-    val selection = committed.lut
-    val bundledIds = remember { BundledLuts.ORDERED.map { it.id }.toSet() }
-    val importedIds = looks.keys.filter { it !in bundledIds }.sorted()
-    // r56: the look chips carry HONEST thumbnails --- the
-    // reference strip rendered through the SAME pipeline the
-    // preview and the export use (renderLookThumb), so what a
-    // chip shows is what the look does. No bitmap asset, no
-    // second rendering path.
+    // card --- the tolerance contract, shown honestly.
+
+    // The import action: SAF-pick a .cube (the zero-network editor reads
+    // local documents only), above the shelf where the hand already is.
     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-        LookThumbChip(
-            label = stringResource(R.string.editor_filter_none),
-            selected = selection == null,
-            enabled = !exporting,
-            lut = null,
-            onPick = { commit(committed.copy(lut = null)) },
-        )
-        BundledLuts.ORDERED
-            .filter { looks.containsKey(it.id) }
-            .forEach { entry ->
-                LookThumbChip(
-                    label = stringResource(lookNameRes(entry.id)),
-                    selected = selection?.lutId == entry.id,
-                    enabled = !exporting,
-                    lut = looks[entry.id],
-                    onPick = {
-                        // A new look keeps the current intensity
-                        // (continuity while auditioning looks).
-                        commit(
-                            committed.copy(
-                                lut = LutSelection(
-                                    lutId = entry.id,
-                                    intensity = selection?.intensity ?: 100,
-                                ),
-                            ),
-                        )
-                    },
-                )
-            }
-        // The user-imported looks (r33 extension), id-sorted; the
-        // store's collision rule makes the subtraction exact. The
-        // imported CubeLut renders through the same thumb path.
-        importedIds.forEach { id ->
-            val look = looks.getValue(id)
-            LookThumbChip(
-                label = look.title.ifBlank { id },
-                selected = selection?.lutId == id,
-                enabled = !exporting,
-                lut = look,
-                onPick = {
-                    commit(
-                        committed.copy(
-                            lut = LutSelection(
-                                lutId = id,
-                                intensity = selection?.intensity ?: 100,
-                            ),
-                        ),
-                    )
-                },
-            )
-        }
-        // The import action: SAF-pick a .cube (the zero-network
-        // editor reads local documents only).
         AssistChip(
             onClick = { importLauncher.launch(arrayOf("*/*")) },
             enabled = !exporting,
             label = { Text(stringResource(R.string.editor_filter_import)) },
-            modifier = Modifier.padding(end = 8.dp),
         )
     }
     importError?.let { reason ->
@@ -138,24 +84,101 @@ internal fun LooksPanel(
             style = MaterialTheme.typography.labelSmall,
         )
     }
+
+    val selection = committed.lut
+    val bundledIds = remember { BundledLuts.ORDERED.map { it.id }.toSet() }
+    val importedIds = looks.keys.filter { it !in bundledIds }.sorted()
+    // The COMPARE raster: the plain base, rendered once and shared by
+    // every card's press (renderPlainCardThumb is idempotent and cheap
+    // at the card width; null base -> null, and the compare quietly
+    // disappears with it).
+    val plainThumb = remember(previewBase) { renderPlainCardThumb(previewBase) }
+
+    // The shelf's card list, in the row order the chips had: None, the
+    // bundled looks (their ORDERED sequence), the imported (id-sorted).
+    val shelf: List<Pair<String, CubeLut?>> =
+        listOf(stringResource(R.string.editor_filter_none) to null) +
+            BundledLuts.ORDERED
+                .filter { looks.containsKey(it.id) }
+                .map { entry -> stringResource(lookNameRes(entry.id)) to looks.getValue(entry.id) } +
+            importedIds.map { id ->
+                val look = looks.getValue(id)
+                (look.title.ifBlank { id }) to look
+            }
+
+    // The two-column grid (non-lazy: the looks count is small; the
+    // deck's content column already scrolls --- a nested lazy grid
+    // would fight it). Cards share the row's width in equal weights; a
+    // lone last card keeps its half and the grid's shape.
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        shelf.chunked(2).forEach { rowCards ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for ((label, lut) in rowCards) {
+                    LookCard(
+                        label = label,
+                        selected = if (lut == null) {
+                            selection == null
+                        } else {
+                            selection?.lutId == lut.id
+                        },
+                        enabled = !exporting,
+                        thumb = if (lut == null) {
+                            // The None card previews the photo itself:
+                            // "no look" is the plain original, honestly.
+                            plainThumb
+                        } else {
+                            remember(lut.id, previewBase) {
+                                renderLookCardThumb(lut, previewBase)
+                            }
+                        },
+                        pressedThumb = if (lut == null) null else plainThumb,
+                        onPick = {
+                            if (lut == null) {
+                                commit(committed.copy(lut = null))
+                            } else {
+                                // A new look keeps the current intensity
+                                // (continuity while auditioning looks).
+                                commit(
+                                    committed.copy(
+                                        lut = LutSelection(
+                                            lutId = lut.id,
+                                            intensity = selection?.intensity ?: 100,
+                                        ),
+                                    ),
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (rowCards.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
     if (selection != null && looks.containsKey(selection.lutId)) {
-        // The intensity slider, live-dragged like every other
-        // slider (r32 pattern): the draft previews, release commits.
+        // The intensity slider, live-dragged like every other slider
+        // (r32 pattern): the draft previews, release commits --- now on
+        // the ProSlider (the r67 kit), with the percent value pill and
+        // the double-tap back to full intensity (neutral = 100).
         val live =
             if (draft?.first == "lut-intensity") draft!!.second else selection.intensity
         val intensityLabel = stringResource(R.string.editor_filter_intensity, live)
         val intensityName = stringResource(R.string.editor_a11y_filter_intensity)
-        // r56: the crafted slider row (the live value pill; the
-        // r32 draft contract verbatim, plus the double-tap reset
-        // to full intensity).
-        LabeledSlider(
+        ProSlider(
             name = intensityName,
-            label = intensityLabel,
-            valueText = live.toString(),
+            label = intensityName,
+            state = intensityLabel,
+            valueText = stringResource(R.string.editor_r67_percent_value, live),
             value = live.toFloat(),
             valueRange = 0f..100f,
+            neutral = 100f,
             enabled = !exporting,
-            onChange = { onDraftChange(Pair("lut-intensity", it))},
+            onChange = { onDraftChange(Pair("lut-intensity", it.toInt())) },
             onFinish = {
                 draft?.let { d ->
                     if (d.first == "lut-intensity" && committed.lut != null) {
@@ -164,7 +187,6 @@ internal fun LooksPanel(
                 }
                 onDraftChange(null)
             },
-            resetValue = 100,
         )
         // An IMPORTED look can be removed (bundled looks are part
         // of the app); removal clears the selection and reloads

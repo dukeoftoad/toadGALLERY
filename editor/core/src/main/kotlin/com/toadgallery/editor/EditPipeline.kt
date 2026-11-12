@@ -11,7 +11,10 @@ package com.toadgallery.editor
  *  4. quarter turns (90-degree steps)
  *  5. crop (the normalized rect over the post-geometry frame)
  *  6. the composed tone LUT (exposure -> brightness -> contrast ->
- *     highlights -> shadows, one pass)
+ *     highlights -> shadows -> curve, one pass; the master curve
+ *     composes after the five sliders since r68; the per-channel R/G/B
+ *     curves compose over the master since r71 --- the three-table
+ *     apply, Phase 2's declared follow-up landed)
  *  7. saturation
  *  8. temperature / tint
  *  9. per-channel HSL bands
@@ -104,17 +107,41 @@ object EditPipeline {
         }
 
         // ---- Tone (one composed per-channel pass) ----
+        // r68: the gate opens for the five sliders OR a non-identity
+        // curve; the six-parameter build composes the master curve after
+        // the shadows stage (see LutBuilder.ORDER). r71: a state with
+        // CHANNEL curves takes the three-table path (LutBuilder
+        // .buildChannels + PixelOps.applyChannelLuts --- the master-then-
+        // channel composition Phase 2's forward state waited for); the
+        // master-only path stays byte-frozen as the r68 contract.
+        val curves = recipe.toneCurves
         if (listOf(recipe.exposure, recipe.brightness, recipe.contrast, recipe.highlights, recipe.shadows)
-            .any { it != 0 }
+            .any { it != 0 } ||
+            curves?.isIdentity == false
         ) {
-            val lut = LutBuilder.build(
-                brightness = recipe.brightness,
-                contrast = recipe.contrast,
-                exposure = recipe.exposure,
-                highlights = recipe.highlights,
-                shadows = recipe.shadows,
-            )
-            PixelAdjuster.applyTo(current, lut)
+            if (curves != null && curves.hasChannelCurves) {
+                PixelOps.applyChannelLuts(
+                    current,
+                    LutBuilder.buildChannels(
+                        brightness = recipe.brightness,
+                        contrast = recipe.contrast,
+                        exposure = recipe.exposure,
+                        highlights = recipe.highlights,
+                        shadows = recipe.shadows,
+                        toneCurves = curves,
+                    ),
+                )
+            } else {
+                val lut = LutBuilder.build(
+                    brightness = recipe.brightness,
+                    contrast = recipe.contrast,
+                    exposure = recipe.exposure,
+                    highlights = recipe.highlights,
+                    shadows = recipe.shadows,
+                    toneCurves = curves,
+                )
+                PixelAdjuster.applyTo(current, lut)
+            }
         }
 
         // ---- Colour ----

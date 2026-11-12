@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- r72: the perspective corner overlay (Phase 4's corner drag):
+         the overlay's a11y pair and the hint line the Geometry panel
+         gains under its Perspective block. The no-double-dash comment
+         rule is the r66 lesson (it killed packageDebugResources once;
+         it never ships again). -->
+    <string name="editor_r72_corner_overlay_a11y">Perspective corners</string>
+    <string name="editor_r72_corner_state">Perspective: %1$d corners displaced</string>
+    <string name="editor_r72_corner_hint">Drag a corner to correct perspective. Release near its home position to reset it.</string>
+</resources>

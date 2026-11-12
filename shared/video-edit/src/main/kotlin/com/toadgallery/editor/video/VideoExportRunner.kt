@@ -1,26 +1,43 @@
 package com.toadgallery.editor.video
 
 /**
- * The export runner seam (r42, decision 7): the plan in, typed progress and
+ * The export runner seam (r42, decision 7): the job in, typed progress and
  * result out --- the ModelDownloader-seam precedent, so the JVM tests drive
- * the plan against a fake runner and ONLY the thin media3 implementation in
+ * the plans against a fake runner and ONLY the thin media3 implementation in
  * the edit app touches Transformer. No Android type crosses this seam:
  * URIs are strings, the render lands in a caller-supplied working directory
  * and the MediaStore insert (the non-destructive policy) stays with the
  * activity, exactly like the photo editor's ExportPlan execution.
+ *
+ * r70 grew the seam to TWO jobs under one parent: the v1 single-clip
+ * [VideoExportRequest] (a validated [VideoEditPlan] over one source) and
+ * the multi-clip [ClipExportRequest] (a validated [ClipTimeline]
+ * composition). One interface, one coordinator: the single-flight and
+ * exactly-once-terminal rules are the job's, not the plan shape's, so both
+ * requests ride the same [VideoExportCoordinator] and the runner picks its
+ * resolution by type.
  */
 
-/** What the runner should render, and where the rendered bytes may land. */
+/** What a runner may be asked to render, and where the rendered bytes may land. */
+sealed interface VideoExportJob {
+    /** A writable directory for the render (the activity passes its cache dir). */
+    val workingDirPath: String
+
+    /** The render file name inside the working dir. */
+    val renderFileName: String
+}
+
+/** The v1 single-clip job: the plan in, the one source it edits. */
 data class VideoExportRequest(
     /** The VALIDATED edit plan; the coordinator refuses anything else before the runner. */
     val plan: VideoEditPlan,
     /** The read-only source content URI (a string; the seam is pure). */
     val sourceUri: String,
     /** A writable directory for the render (the activity passes its cache dir). */
-    val workingDirPath: String,
+    override val workingDirPath: String,
     /** The render file name inside the working dir. */
-    val renderFileName: String = "video-edit-render.mp4",
-)
+    override val renderFileName: String = "video-edit-render.mp4",
+) : VideoExportJob
 
 /** The typed progress: hundredths of a percent (0..10000), monotonic from the runner. */
 data class VideoExportProgress(
@@ -55,15 +72,17 @@ interface VideoExportListener {
 
 /** The seam itself: start a render, or cancel the running one. */
 interface VideoExportRunner {
-    fun start(request: VideoExportRequest, listener: VideoExportListener)
+    fun start(job: VideoExportJob, listener: VideoExportListener)
     fun cancel()
 }
 
 /**
  * The coordinator over the seam (pure, JVM-tested over a fake): validates
- * the plan BEFORE the runner ever sees it, enforces single-flight (one
- * render at a time), forwards typed progress and delivers exactly one
- * terminal result per accepted request.
+ * the job BEFORE the runner ever sees it (by type --- the v1 plan through
+ * [VideoEditPlanValidator], the r70 composition through
+ * [ClipExportValidator]), enforces single-flight (one render at a time),
+ * forwards typed progress and delivers exactly one terminal result per
+ * accepted job.
  */
 class VideoExportCoordinator(private val runner: VideoExportRunner) : VideoExportListener {
 
@@ -76,24 +95,32 @@ class VideoExportCoordinator(private val runner: VideoExportRunner) : VideoExpor
     private var running: Boolean = false
     private var currentListener: VideoExportListener? = null
 
-    /** The last accepted request, exposed for the tests and the UI's narration. */
-    var lastRequest: VideoExportRequest? = null
+    /** The last accepted job, exposed for the tests and the UI's narration. */
+    var lastJob: VideoExportJob? = null
         private set
 
-    fun submit(request: VideoExportRequest, listener: VideoExportListener): SubmitOutcome {
+    fun submit(job: VideoExportJob, listener: VideoExportListener): SubmitOutcome {
         if (running) {
             return SubmitOutcome.Refused("an export is already running --- cancel it first")
         }
-        when (val validation = VideoEditPlanValidator.validate(request.plan)) {
-            is VideoPlanValidation.Invalid -> {
-                return SubmitOutcome.Refused(validation.reason)
+        when (job) {
+            is VideoExportRequest -> when (val validation = VideoEditPlanValidator.validate(job.plan)) {
+                is VideoPlanValidation.Invalid -> {
+                    return SubmitOutcome.Refused(validation.reason)
+                }
+                is VideoPlanValidation.Valid -> Unit
             }
-            is VideoPlanValidation.Valid -> Unit
+            is ClipExportRequest -> when (val validation = ClipExportValidator.validate(job)) {
+                is ClipExportValidation.Invalid -> {
+                    return SubmitOutcome.Refused(validation.reason)
+                }
+                is ClipExportValidation.Valid -> Unit
+            }
         }
         running = true
         currentListener = listener
-        lastRequest = request
-        runner.start(request, this)
+        lastJob = job
+        runner.start(job, this)
         return SubmitOutcome.Started
     }
 

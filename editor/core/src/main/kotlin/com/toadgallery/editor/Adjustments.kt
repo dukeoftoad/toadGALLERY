@@ -11,7 +11,9 @@ import kotlin.math.roundToInt
  *    single 256-entry LUT applied once per pixel (O(1) per channel at
  *    render time regardless of how many parameters are non-zero):
  *    exposure -> brightness -> contrast -> highlights -> shadows, in that
- *    fixed documented order.
+ *    fixed documented order. r68 appends the master tone CURVE after
+ *    shadows (the six-parameter overload below; the five-parameter form
+ *    is frozen bit-for-bit).
  *  - [PixelOps]: the FULL-PIXEL stage --- parameters that need the whole
  *    pixel (saturation needs the pixel's luma; temperature/tint cross
  *    channels). Applied per pixel; stages with a zero parameter are
@@ -23,7 +25,7 @@ import kotlin.math.roundToInt
 object LutBuilder {
 
     /** The stage's composition order, exported for tests and the recipe docs. */
-    const val ORDER: String = "exposure -> brightness -> contrast -> highlights -> shadows"
+    const val ORDER: String = "exposure -> brightness -> contrast -> highlights -> shadows -> curve"
 
     private const val SLIDER_MIN = -100
     private const val SLIDER_MAX = 100
@@ -82,12 +84,99 @@ object LutBuilder {
         }
     }
 
+    /**
+     * The r68 curve extension (Phase 2 of the editor rebirth): the SAME
+     * five frozen stages, then the recipe's MASTER tone curve composed
+     * AFTER them --- lut[v] = curve(base[v]), one table lookup per entry,
+     * exactly the two-pass apply a chain of LUT stages is. A null
+     * [toneCurves] (a pre-r68 recipe, a clean session) or the identity
+     * curve returns the five-stage table UNTOUCHED --- the byte-identical
+     * guarantee the regression test pins. r71: the per-channel curves
+     * compose through [buildChannels] (the three-LUT apply path --- Phase
+     * 2's declared follow-up); THIS overload stays the master-only
+     * table, byte-frozen as the r68 contract.
+     */
+    fun build(
+        brightness: Int,
+        contrast: Int,
+        exposure: Int,
+        highlights: Int,
+        shadows: Int,
+        toneCurves: ToneCurves?,
+    ): IntArray {
+        val base = build(brightness, contrast, exposure, highlights, shadows)
+        if (toneCurves == null || toneCurves.isIdentity) return base
+        val curve = LilypadCurveMath.bakeLut(toneCurves.master)
+        return IntArray(base.size) { v -> curve[base[v]] }
+    }
+
+    /**
+     * The r71 channel composition (Phase 2's declared follow-up): the
+     * same five frozen stages, then the MASTER curve and the channel's
+     * own curve composed after them --- redLut[v] =
+     * redCurve(masterCurve(base[v])), one table lookup per entry per
+     * stage, the chain-of-LUTs composition verbatim. A channel without
+     * an honest curve (an empty list, or a degenerate list
+     * [LilypadCurveMath.bakeLut] bakes to the identity ramp) reads back
+     * the MASTER-composed table --- the r68 apply, per channel. A state
+     * with no channel curves reproduces [build]'s one-table result in
+     * all three tables --- the equivalence the drift pin holds.
+     */
+    fun buildChannels(
+        brightness: Int,
+        contrast: Int,
+        exposure: Int,
+        highlights: Int,
+        shadows: Int,
+        toneCurves: ToneCurves,
+    ): ChannelToneLuts {
+        val base = build(brightness, contrast, exposure, highlights, shadows)
+        val master = LilypadCurveMath.bakeLut(toneCurves.master)
+        val mastered = if (toneCurves.master == LilypadCurveMath.IDENTITY) {
+            base
+        } else {
+            IntArray(base.size) { v -> master[base[v]] }
+        }
+        fun withChannel(points: List<CurvePoint>): IntArray {
+            if (points.size < LilypadCurveMath.MIN_POINTS) return mastered
+            val channel = LilypadCurveMath.bakeLut(points)
+            return IntArray(mastered.size) { v -> channel[mastered[v]] }
+        }
+        return ChannelToneLuts(
+            red = withChannel(toneCurves.red),
+            green = withChannel(toneCurves.green),
+            blue = withChannel(toneCurves.blue),
+        )
+    }
+
     /** The smoothstep used by the masked shifts: 0 at edge0, 1 at edge1, smooth between. */
     fun smoothstep(edge0: Double, edge1: Double, x: Double): Double {
         if (x <= edge0) return 0.0
         if (x >= edge1) return 1.0
         val t = (x - edge0) / (edge1 - edge0)
         return t * t * (3.0 - 2.0 * t)
+    }
+}
+
+/**
+ * The r71 three-table tone state: one composed 256-entry LUT per colour
+ * channel (see [LutBuilder.buildChannels]). The pipeline applies the
+ * three tables in ONE pass ([PixelOps.applyChannelLuts]) --- the
+ * per-channel stage's O(1)-per-channel shape, kept when the channels
+ * finally earned their own tables.
+ */
+class ChannelToneLuts(
+    /** The red channel's composed table (five sliders + master + red curve). */
+    val red: IntArray,
+    /** The green channel's composed table. */
+    val green: IntArray,
+    /** The blue channel's composed table. */
+    val blue: IntArray,
+) {
+    init {
+        require(red.size == 256 && green.size == 256 && blue.size == 256) {
+            "channel LUTs must have 256 entries each, got ${red.size}/${green.size}/${blue.size}"
+        }
     }
 }
 
@@ -178,6 +267,27 @@ object PixelOps {
             val r = lut[(p ushr RED_SHIFT) and CHANNEL_MASK]
             val g = lut[(p ushr GREEN_SHIFT) and CHANNEL_MASK]
             val b = lut[p and CHANNEL_MASK]
+            pixels[i] = a or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b
+        }
+    }
+
+    /**
+     * The r71 three-table apply (the per-channel stage's own shape, kept
+     * when the channels earned separate tables): red through [ChannelToneLuts.red],
+     * green through .green, blue through .blue, alpha preserved, ONE pass
+     * over the pixels. Feeding three copies of one table reproduces
+     * [applyLut] with it, byte-for-byte --- the equivalence pin.
+     */
+    fun applyChannelLuts(pixels: IntArray, luts: ChannelToneLuts) {
+        val rLut = luts.red
+        val gLut = luts.green
+        val bLut = luts.blue
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val a = p and ALPHA_MASK
+            val r = rLut[(p ushr RED_SHIFT) and CHANNEL_MASK]
+            val g = gLut[(p ushr GREEN_SHIFT) and CHANNEL_MASK]
+            val b = bLut[p and CHANNEL_MASK]
             pixels[i] = a or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b
         }
     }

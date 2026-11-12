@@ -1339,3 +1339,26 @@ the public remote each time.
   non-Kotlin dependency) and the Kotlin stdlib at RUNTIME (JUnitCore
   needs `kotlin.NoWhenBranchMatchedException` etc. on the java -cp).
   Still worth a tools/ script when a third consumer appears.
+
+## 2026-11-12 — the r72 window (Phase 4 opens: the corner drag)
+
+- **The perspective corner drag (FIXED this round).** Phase 4's named
+  item and the last of the user's two requested pending works:
+  `LilypadCornerMath` (pure JVM) owns the hit-test, the display<->grid
+  geometry and the drag clamp --- the displacement clamps into the
+  engine's own ±w/4/±h/4 bounds (`PerspectiveQuad.clamped`'s exact
+  rule), with an identity snap deadband on release. The `CornerOverlay`
+  composable (the r69 TimelineStrip's awaitEachGesture pattern) draws
+  the displaced quad's outline + four accent handles over the pre-warp
+  source fit box on the Geometry screen, drafts the whole quad per tick
+  (the curve draft's shape), and commits ONE recipe on release. The
+  r68 keystone rows stay as the a11y path to the same quad (one model,
+  two surfaces); the export scaling (`scaledForExport`) is inherited
+  free. Behind `LilypadFlags.cornerDragEnabled` --- the round's revert
+  seam. Local verification: **131 tests green** (the r71 recipe plus
+  LilypadCornerMathTest).
+- **The r68 stand-in note retires.** LilypadKeystoneMath's header
+  called the sliders "the r68 stand-in for the corner drag Phase 4
+  owns" --- with the drag landed, the rows are the a11y/precision
+  surface, no longer a stand-in (the Geometry panel's Perspective
+  block now carries the corner-drag hint line).

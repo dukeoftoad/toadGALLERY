@@ -40,6 +40,13 @@ package com.toadgallery.editor
  *    STRIP SURFACE only --- the trim drafts, the thumbnails contract and
  *    the seek callbacks are the video chassis's own contracts, never
  *    gated.
+ *  - `cornerDragEnabled` (r72) = true gives the Geometry tool screen
+ *    the perspective corner overlay (the displaced quad's outline and
+ *    four draggable handles over the preview --- Phase 4's corner
+ *    drag); false removes the overlay, leaving the r68 keystone rows
+ *    the model's only surface. The flag covers the OVERLAY SURFACE
+ *    only --- the quad, its engine stage, the keystone rows and the
+ *    export scaling are engine contracts, never gated.
  */
 internal object LilypadFlags {
     val decksEnabled: Boolean = true
@@ -52,4 +59,7 @@ internal object LilypadFlags {
 
     /** r69: the zoomable timeline strip's revert seam (the video Main screen). */
     val timelineZoomEnabled: Boolean = true
+
+    /** r72: the perspective corner overlay's revert seam (the Geometry screen). */
+    val cornerDragEnabled: Boolean = true
 }

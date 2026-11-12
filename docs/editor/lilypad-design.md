@@ -118,9 +118,13 @@ the ember marks selection, the live value, the CTA — nothing else.
   per-entry EditedMediaItems), multi-clip
   Composition, shared Looks on GL effects, text overlays, speed, music,
   Transformer export with foreground-service progress.
-- **Phase 4 — craft polish**: the motion/haptics pass, 60fps scrubbing,
-  keyframes and speed ramps, export reliability hardening, the
-  perspective corner drag.
+- **Phase 4 — craft polish (r72 underway)**: the motion/haptics pass,
+  60fps scrubbing, keyframes and speed ramps, export reliability
+  hardening, the perspective corner drag (**r72**: `LilypadCornerMath`
+  + the `CornerOverlay` on the Geometry screen, behind the
+  `cornerDragEnabled` seam --- any corner, any direction, the engine's
+  ±w/4 bounds, the identity snap on release; the keystone rows stay as
+  the a11y path to the same quad).
 
 ## 6. Budgets and risks
 

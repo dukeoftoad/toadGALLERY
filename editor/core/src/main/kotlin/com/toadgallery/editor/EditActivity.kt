@@ -1075,6 +1075,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var curveDeckOpen by remember { mutableStateOf(false) }
     var curveChannel by remember { mutableStateOf(CurveChannel.Master) }
     var curveDraft by remember { mutableStateOf<ToneCurves?>(null) }
+    // r72: the corner drag's live quad draft --- every clamped drag tick
+    // writes it (the curve draft's own shape: the whole model state, the
+    // preview re-rendering live), release snaps + commits ONE recipe.
+    var cornerDraft by remember { mutableStateOf<PerspectiveQuad?>(null) }
     // r68: the history strip's chassis state --- the open flag (the Main
     // header's History entry toggles it; a view preference like the scope
     // mode, it commits nothing and rides LilypadFlags.historyStripEnabled)
@@ -1440,6 +1444,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // granularity the round contract pins, the text-position
         // pattern's shape).
         curveDraft?.let { effective = effective.copy(toneCurves = it) }
+        // r72: the corner drag's LIVE state --- the overlay's clamped
+        // ticks draft the whole quad; ONE commit on release (the curve
+        // draft's own shape, the quad's grid being the preview grid the
+        // keystone rows commit on).
+        cornerDraft?.let { effective = effective.copy(perspective = it) }
         return effective
     }
 
@@ -1898,6 +1907,23 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
+     * Sweeps the corner drag's live draft into one snapshot (drag end
+     * covered by the overlay's own commit; this is the safety net for
+     * tool exit, export and the header's undo/redo --- a draft is never
+     * silently lost). A quad that came back to the identity leaves NO
+     * residue, and a gesture that changed nothing pushes NO history
+     * entry (the curve sweep's own honesty).
+     */
+    fun commitCornerDraftIfPending() {
+        val qd = cornerDraft ?: return
+        cornerDraft = null
+        val current = uiState.recipe
+        if (qd != current.perspective) {
+            commit(current.copy(perspective = qd))
+        }
+    }
+
+    /**
      * The ONE sweep point for every pending draft across the families
      * (r36): each pending draft commits as its own snapshot, exactly as
      * the r34 handlers did inline --- one helper so later rounds extend
@@ -1911,6 +1937,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitRegionPaintDraftIfPending()
         // r68: the curve deck's drag rides the same sweep.
         commitCurveDraftIfPending()
+        // r72: the corner drag's quad rides the same sweep.
+        commitCornerDraftIfPending()
         // r41: the erase gesture sweeps into its own ASYNC commit (the
         // inference IS the commit); it refuses while another AI commit or
         // an export runs --- the honest drop, same as a gesture released
@@ -2898,6 +2926,32 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             style = Stroke(width = 2.dp.toPx()),
                         )
                     }
+                }
+                // r72: THE PERSPECTIVE CORNER OVERLAY (Phase 4's corner
+                // drag) --- the displaced quad's outline and four
+                // draggable handles over the PRE-WARP source fit box,
+                // live on the Geometry (crop) tool screen only, behind
+                // the round's revert seam. Sits OUTSIDE the crop dim's
+                // Canvas but INSIDE the pose layer (it is canvas
+                // content): the handles must stay reachable at any crop,
+                // and the quad belongs to the source grid the keystone
+                // rows commit on, not the crop's output canvas.
+                if (LilypadFlags.cornerDragEnabled && screen == PhotoScreen.Crop && !showOriginal) {
+                    val base = previewBase
+                    CornerOverlay(
+                        quad = cornerDraft ?: effectiveRecipe().perspective,
+                        sourceWidth = base?.width ?: 0,
+                        sourceHeight = base?.height ?: 0,
+                        exporting = exporting,
+                        onDraftChange = { cornerDraft = it },
+                        onCommit = { released ->
+                            cornerDraft = null
+                            val current = uiState.recipe
+                            if (released != current.perspective) {
+                                commit(current.copy(perspective = released))
+                            }
+                        },
+                    )
                 }
                 } // F-72 pose layer (the graphicsLayer Box)
             } else {

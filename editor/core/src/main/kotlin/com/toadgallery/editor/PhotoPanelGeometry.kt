@@ -165,12 +165,22 @@ internal fun CropPanel(
     // The rows read their percents back out of the committed quad (the
     // recipe stores the QUAD, not the knobs --- LilypadKeystoneMath's
     // read-back), drafted against the PREVIEW grid the commit builds on,
-    // so what the drag shows is what the release lands.
+    // so what the drag shows is what the release lands. r72: the corner
+    // overlay owns the canvas's drag surface on this screen; the rows
+    // keep the model's a11y path (one model, two surfaces) and gain the
+    // hint that names the gesture.
     Text(
         text = stringResource(R.string.editor_r68_section_perspective),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelLarge,
     )
+    if (LilypadFlags.cornerDragEnabled) {
+        Text(
+            text = stringResource(R.string.editor_r72_corner_hint),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
 
     /**
      * The keystone commit: ONE recipe per release, the quad built from

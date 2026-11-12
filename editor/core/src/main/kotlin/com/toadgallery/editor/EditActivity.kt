@@ -1013,6 +1013,17 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var scopeMode by remember { mutableStateOf(PhotoScopeMode.Histogram) }
     var zebraActive by remember { mutableStateOf(false) }
     var previewZebra by remember { mutableStateOf<ImageBitmap?>(null) }
+    // r68: the curve deck's chassis state --- the Full-state host flag
+    // (the scope row's Curve chip opens it, the deck's own Done and any
+    // deck collapse close it), the edited CHANNEL (a view preference,
+    // like the scope mode --- it commits nothing), and the LIVE
+    // whole-curve draft (the text-position pattern's shape: every drag
+    // tick writes it, ONE recipe commit on release; the tap-insert and
+    // the long-press-delete are discrete gestures that draft and finish
+    // in the same breath).
+    var curveDeckOpen by remember { mutableStateOf(false) }
+    var curveChannel by remember { mutableStateOf(CurveChannel.Master) }
+    var curveDraft by remember { mutableStateOf<ToneCurves?>(null) }
     var previewCropRect by remember { mutableStateOf<PixelRect?>(null) }
     var exporting by remember { mutableStateOf(false) }
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
@@ -1308,6 +1319,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 },
             )
         }
+        // r68: the curve LIVE state --- the deck's point gestures draft
+        // the whole ToneCurves; ONE commit on release (the per-commit
+        // granularity the round contract pins, the text-position
+        // pattern's shape).
+        curveDraft?.let { effective = effective.copy(toneCurves = it) }
         return effective
     }
 
@@ -1747,6 +1763,24 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
+     * Sweeps the curve drag's live draft into one snapshot (drag end /
+     * cancel, tool exit, export --- the family conventions; a draft is
+     * never silently lost). The commit is the null-for-identity rule at
+     * the recipe's edge: a curve that came back to the diagonal leaves
+     * NO residue, and a gesture that changed nothing pushes NO history
+     * entry (an empty snapshot is a lie the strip would have to display).
+     */
+    fun commitCurveDraftIfPending() {
+        val cd = curveDraft ?: return
+        curveDraft = null
+        val normalized = LilypadCurveDeckMath.normalize(cd)
+        val current = uiState.recipe
+        if (normalized != current.toneCurves) {
+            commit(current.copy(toneCurves = normalized))
+        }
+    }
+
+    /**
      * The ONE sweep point for every pending draft across the families
      * (r36): each pending draft commits as its own snapshot, exactly as
      * the r34 handlers did inline --- one helper so later rounds extend
@@ -1758,6 +1792,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitStickerPosDraftIfPending()
         commitPaintDraftIfPending()
         commitRegionPaintDraftIfPending()
+        // r68: the curve deck's drag rides the same sweep.
+        commitCurveDraftIfPending()
         // r41: the erase gesture sweeps into its own ASYNC commit (the
         // inference IS the commit); it refuses while another AI commit or
         // an export runs --- the honest drop, same as a gesture released
@@ -1797,7 +1833,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         paintDraft, brushColor, brushWidth, brushOpacity, brushSmoothing,
         regionPaintDraft, regionKind, regionStrength,
         looks, importedStickers, importedFrames, importedSkies, retouchConsent,
-        zebraActive,
+        zebraActive, curveDraft,
     ) {
         val base = previewBase ?: return@LaunchedEffect
         val effective = effectiveRecipe()
@@ -2977,17 +3013,53 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // The working default per screen: tools open on the Half working
         // surface; the Main canvas collapses to the peek so the photo
         // stays the hero. The user's explicit handle tap/drag always wins
-        // until the next screen change.
+        // until the next screen change. r68: a screen change also CLOSES
+        // the curve deck --- the Full state's immersive host belongs to
+        // the Adjust board that opened it, never to the next tool.
         LaunchedEffect(screen) {
             deckState = if (screen == PhotoScreen.Main) {
                 LilypadDeckState.Collapsed
             } else {
                 LilypadDeckState.Half
             }
+            if (curveDeckOpen) curveDeckOpen = false
+        }
+        /**
+         * The curve deck's open/close pair (the scope row's Curve chip
+         * and the deck's own Done): opening sweeps any pending curve
+         * gesture, expands the deck to Full and swaps the deck's content
+         * to the curve editor; closing sweeps, drops back to Half and
+         * restores the tool board. The Full state IS the curve deck's
+         * host --- nothing else references it.
+         */
+        fun setCurveDeckOpen(open: Boolean) {
+            if (open == curveDeckOpen) return
+            commitCurveDraftIfPending()
+            curveDeckOpen = open
+            deckState = if (open) LilypadDeckState.Full else LilypadDeckState.Half
         }
         val panels: @Composable ColumnScope.() -> Unit = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                PhotoPanelHost(
+                // r68: THE CURVE DECK --- the Full state's reserved
+                // content. While it is open on the Adjust board, it
+                // REPLACES the board (the scope row's Curve chip is the
+                // entry; the deck's own Done is the exit); every other
+                // screen and the flag's off-rail keep the tool panels,
+                // verbatim.
+                if (LilypadFlags.curveDeckEnabled && curveDeckOpen && screen == PhotoScreen.Adjust) {
+                    CurveDeck(
+                        committed = committed,
+                        curveDraft = curveDraft,
+                        onCurveDraftChange = { curveDraft = it },
+                        onFinish = { commitCurveDraftIfPending() },
+                        channel = curveChannel,
+                        onChannelChange = { curveChannel = it },
+                        histogram = previewHistogram,
+                        exporting = exporting,
+                        onCollapse = { setCurveDeckOpen(false) },
+                    )
+                } else {
+                    PhotoPanelHost(
                         tool = screen,
                         committed = committed,
                         draft = draft,
@@ -3061,6 +3133,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         onScopeModeChange = { scopeMode = it },
                         zebraActive = zebraActive,
                         onZebraActiveChange = { zebraActive = it },
+                        curveDeckOpen = curveDeckOpen,
+                        onCurveDeckOpenChange = { setCurveDeckOpen(it) },
                 )
             }
             // ---- The always-visible honesty chip (the r54 chassis's Main
@@ -3112,10 +3186,19 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
         if (LilypadFlags.decksEnabled) {
             // The Lilypad Deck: the three-state sheet hosts the panels
-            // (Half by default on tools, the Collapsed peek on Main).
+            // (Half by default on tools, the Collapsed peek on Main; the
+            // Full state is the curve deck's immersive host). r68: a
+            // handle move OFF Full closes the curve deck with it --- the
+            // Full state and the curve surface are one thing.
             LilypadDeck(
                 state = deckState,
-                onStateChange = { deckState = it },
+                onStateChange = { next ->
+                    deckState = next
+                    if (next != LilypadDeckState.Full && curveDeckOpen) {
+                        commitCurveDraftIfPending()
+                        curveDeckOpen = false
+                    }
+                },
             ) {
                 panels()
             }

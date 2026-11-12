@@ -1,31 +1,45 @@
 package com.toadgallery.editor
 
 // ---------------------------------------------------------------------------
-// The r67 Lilypad feature flag (Phase 1 of the editor rebirth plan,
-// docs/editor/lilypad-design.md): ONE switch that decides whether the photo
-// chassis hosts its tool panels in the new three-state LilypadDeck or in
-// the r54 fixed window (the heightIn(max = 300dp) scroll column this round
-// retires as the DEFAULT but keeps as the explicit fallback).
+// The Lilypad rounds' feature flags (r67 foundation + r68 pro surfaces):
+// the compile-time switches that decide which chassis surfaces are live.
 //
-// The flag is deliberately a compile-time val, not a runtime setting: it is
-// the phase's revert seam, reviewed in the PR that flips it, exactly like
-// the chassis seams before it (r54's tab IA, r63c's rail). When Phase 2
-// (the pro surfaces round) lands, the fallback column and this flag both
-// retire: the Deck becomes the only chassis.
+// Each flag is deliberately a compile-time val, not a runtime setting:
+// it is the round's revert seam, reviewed in the PR that flips it,
+// exactly like the chassis seams before it (r54's tab IA, r63c's rail).
+// When a later phase confirms a surface, its flag and its fallback both
+// retire.
 //
-// What the flag does NOT gate: the TuneRail is retired unconditionally
-// (the Adjust panel's ProSlider board is the new surface in both states),
-// and the Lilypad palette is the theme in both states. The flag covers the
-// PANEL CONTAINER only.
+// What the flags do NOT gate: the engine (the recipe, the codec, the
+// pipeline), the palette and the panels' own behavior contracts --- a
+// seam covers one SURFACE, never a contract.
 // ---------------------------------------------------------------------------
 
 /**
- * The Lilypad round's chassis switches. `decksEnabled` = true hosts the
- * ten tool panels inside [LilypadDeck] (the three-state bottom sheet:
- * a 64dp collapsed peek, the 45% half working surface, the 78% full
- * immersive state); false restores the r54 fixed window. Flipping it is a
- * one-line reviewed change; nothing else may read it.
+ * The Lilypad rounds' chassis switches, each one a reviewed revert seam:
+ * flip it in a one-line reviewed change; nothing else may read it.
+ *
+ *  - `decksEnabled` = true hosts the ten tool panels inside [LilypadDeck]
+ *    (the three-state bottom sheet: a 64dp collapsed peek, the 45% half
+ *    working surface, the 78% full immersive state); false restores the
+ *    r54 fixed window. The flag covers the PANEL CONTAINER only.
+ *  - `curveDeckEnabled` (r68) = true gives the Adjust board its Curve
+ *    entry chip and the Deck's Full state the curve editor; false keeps
+ *    the board exactly its r67 shape (the Full state stays unreferenced,
+ *    as it was in Phase 1). The flag covers the SURFACE only --- the
+ *    recipe's curve field, its codec and the pipeline seam are engine
+ *    contracts, never gated.
+ *  - `historyStripEnabled` (r68) = true gives the Main header its
+ *    History entry and the chassis the bottom-anchored scrubber strip;
+ *    false removes both. The flag covers the STRIP only --- the
+ *    undo/redo ring, its icons and its semantics are untouched.
  */
 internal object LilypadFlags {
     val decksEnabled: Boolean = true
+
+    /** r68: the curve deck's revert seam (the Adjust entry + the Full-state host). */
+    val curveDeckEnabled: Boolean = true
+
+    /** r68: the history strip's revert seam (the header entry + the strip). */
+    val historyStripEnabled: Boolean = true
 }

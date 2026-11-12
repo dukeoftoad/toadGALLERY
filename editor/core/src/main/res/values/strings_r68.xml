@@ -16,4 +16,17 @@
          announces what it is; the histogram's zone percents are its
          state, the same string the histogram chart reads). -->
     <string name="editor_r68_parade_a11y">RGB parade</string>
+
+    <!-- The curve deck (r68): the scope row's Curve entry chip, the
+         deck's channel chips, its a11y pair, its Done affordance and
+         the gesture hint under the plot. -->
+    <string name="editor_r68_curve_chip">Curve</string>
+    <string name="editor_r68_curve_channel_master">Master</string>
+    <string name="editor_r68_curve_channel_red">Red</string>
+    <string name="editor_r68_curve_channel_green">Green</string>
+    <string name="editor_r68_curve_channel_blue">Blue</string>
+    <string name="editor_r68_curve_deck_a11y">Tone curve</string>
+    <string name="editor_r68_curve_state_points">Curve: %1$d points</string>
+    <string name="editor_r68_curve_done">Done</string>
+    <string name="editor_r68_curve_hint">Drag a point. Tap to add one. Touch and hold to remove.</string>
 </resources>

@@ -23,6 +23,11 @@ import kotlinx.coroutines.CoroutineScope
 //
 // r66: `previewHistogram` rides the seam to the Adjust panel (the live
 // tonal chart's source, computed by the chassis's preview render).
+//
+// r68: the scope pair (`scopeMode`/`zebraActive`) and the curve deck's
+// entry pair (`curveDeckOpen`) ride the seam the same way --- the
+// chassis owns them because they steer chassis-level surfaces (the
+// zebra paints the canvas; the curve deck hosts the Full state).
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -100,12 +105,15 @@ internal fun PhotoPanelHost(
     onScopeModeChange: (PhotoScopeMode) -> Unit,
     zebraActive: Boolean,
     onZebraActiveChange: (Boolean) -> Unit,
+    curveDeckOpen: Boolean = false,
+    onCurveDeckOpenChange: (Boolean) -> Unit = {},
 ) {
     when (tool) {
         PhotoScreen.Crop -> CropPanel(committed, draft, onDraftChange, exporting, previewBase, commit)
         PhotoScreen.Adjust -> AdjustPanel(
             committed, draft, onDraftChange, exporting, commit, previewHistogram,
             scopeMode, onScopeModeChange, zebraActive, onZebraActiveChange,
+            curveDeckOpen, onCurveDeckOpenChange,
         )
         PhotoScreen.Looks -> LooksPanel(activity, uiScope, committed, draft, onDraftChange, exporting, commit, looks, onLooksVersionChange, importError, importLauncher, previewBase)
         PhotoScreen.Text -> TextPanel(activity, committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedLayer, commitTextDraftIfPending, textDraft, onTextDraftChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)

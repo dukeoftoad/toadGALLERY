@@ -37,9 +37,9 @@ import androidx.compose.ui.unit.dp
  * The Adjust panel, rebuilt as the r67 Lilypad board: the r66 live
  * histogram at the top, then ONE ProSlider row per [ADJUST_SLIDERS]
  * parameter --- exposure through sharpness, the code's existing order
-// IS the board order. The panel stays a thin adapter over the chassis
-// state (committed + the ONE draft slot + commit); the a11y contract is
-// the r32 one, verbatim (name = contentDescription, formatted value =
+ * IS the board order. The panel stays a thin adapter over the chassis
+ * state (committed + the ONE draft slot + commit); the a11y contract is
+ * the r32 one, verbatim (name = contentDescription, formatted value =
  * stateDescription, plus the adjustability progressBarRangeInfo the
  * ProSlider carries).
  *
@@ -52,7 +52,10 @@ import androidx.compose.ui.unit.dp
  * modes plus the Zebra overlay toggle ([ScopeRow]) --- and the chart
  * under it follows the mode. The states arrive as explicit pairs, the
  * host's hoisting pattern; the chassis owns them because the zebra
- * paints the CANVAS (the panel only owns its toggle chip).
+ * paints the CANVAS (the panel only owns its toggle chip). The scope
+ * row also carries the CURVE entry chip ([curveDeckOpen]): the curve
+ * deck is the Deck's Full state, and its entry point belongs to the
+ * scope neighborhood --- the tonal instruments lead the tonal board.
  */
 @Composable
 internal fun AdjustPanel(
@@ -66,15 +69,21 @@ internal fun AdjustPanel(
     onScopeModeChange: (PhotoScopeMode) -> Unit = {},
     zebraActive: Boolean = false,
     onZebraActiveChange: (Boolean) -> Unit = {},
+    curveDeckOpen: Boolean = false,
+    onCurveDeckOpenChange: (Boolean) -> Unit = {},
 ) {
     // r68: the scope row leads the board (the tonal readout is a CHOICE
-    // of scope now), and the chart below follows the mode.
+    // of scope now), and the chart below follows the mode. The Curve
+    // chip rides the row (LilypadFlags.curveDeckEnabled is the reviewed
+    // revert seam; off reads as the r68 scope row without it).
     ScopeRow(
         scopeMode = scopeMode,
         onScopeModeChange = onScopeModeChange,
         zebraActive = zebraActive,
         onZebraActiveChange = onZebraActiveChange,
         enabled = !exporting,
+        curveDeckOpen = curveDeckOpen,
+        onCurveDeckOpenChange = onCurveDeckOpenChange,
     )
     // r66/r68: the live tonal readout, drawn from the SAME pipelined
     // pixels the canvas shows (see EditorHistogram's header for the

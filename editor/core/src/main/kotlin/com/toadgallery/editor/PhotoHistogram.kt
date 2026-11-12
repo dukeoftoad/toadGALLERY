@@ -124,6 +124,13 @@ internal enum class PhotoScopeMode { Histogram, Parade }
  * toggle, in the FilterChip language the panel rows already use. Selected
  * chips read as the r52 ember pill through the theme's selection mechanism
  * (zero per-chip overrides, the deck's convention).
+ *
+ * The row's end carries the CURVE entry chip (r68): the curve deck is the
+ * LilypadDeck's Full state, entered from the scope neighborhood where the
+ * tonal instruments live. The chip is a toggle-shaped ENTRY, not a chart
+ * mode --- opening it expands the deck to Full and swaps in the curve
+ * editor --- and it rides behind [LilypadFlags.curveDeckEnabled] (the
+ * reviewed revert seam; off reads as the scope row without it).
  */
 @Composable
 internal fun ScopeRow(
@@ -132,6 +139,8 @@ internal fun ScopeRow(
     zebraActive: Boolean,
     onZebraActiveChange: (Boolean) -> Unit,
     enabled: Boolean,
+    curveDeckOpen: Boolean = false,
+    onCurveDeckOpenChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.horizontalScroll(rememberScrollState())) {
@@ -156,7 +165,20 @@ internal fun ScopeRow(
             onClick = { onZebraActiveChange(!zebraActive) },
             enabled = enabled,
             label = { Text(stringResource(R.string.editor_r68_scope_zebra)) },
+            modifier = Modifier.padding(end = 8.dp),
         )
+        // The curve deck's entry: the Full-state surface, opened from
+        // the scope row it belongs to (the tonal board's fourth
+        // instrument). Collapsed/Half deck states keep their current
+        // content behavior --- the chip only ever EXPANDS to Full.
+        if (LilypadFlags.curveDeckEnabled) {
+            FilterChip(
+                selected = curveDeckOpen,
+                onClick = { onCurveDeckOpenChange(!curveDeckOpen) },
+                enabled = enabled,
+                label = { Text(stringResource(R.string.editor_r68_curve_chip)) },
+            )
+        }
     }
 }
 

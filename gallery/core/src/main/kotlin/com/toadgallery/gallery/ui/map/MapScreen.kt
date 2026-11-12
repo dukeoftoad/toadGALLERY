@@ -44,9 +44,13 @@ import com.toadgallery.gallery.data.catalogue.room.CatalogueLocationRow
 import com.toadgallery.gallery.data.media.identity.MediaIdentity
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.media.LoadingState
-import com.toadgallery.gallery.ui.theme.ToadShapes
-import com.toadgallery.gallery.ui.theme.ToadSpacing
 import com.toadgallery.gallery.ui.viewer.ViewerInfoFormat
+import com.toadgallery.gallery.ui.overlays.PhotoLightboxOverlay
+import com.toadgallery.gallery.ui.theme.ToadShapes
+import com.toadgallery.gallery.ui.screens.map.ToadMapHeader
+import com.toadgallery.gallery.ui.screens.map.ToadMapMemoryCard
+import com.toadgallery.gallery.ui.screens.map.ToadMapMode
+import com.toadgallery.gallery.ui.theme.ToadSpacing
 import java.util.Locale
 
 /**
@@ -76,6 +80,11 @@ fun MapScreen(
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
     onOpenSettings: () -> Unit,
     viewModel: MapViewModel = viewModel(),
+    /** r76: the memory card's lightbox actions (favorites/vault/edit/delete). */
+    onToggleFavorite: (MediaItem) -> Unit = {},
+    onHideToVault: (MediaItem) -> Unit = {},
+    onEdit: (MediaItem) -> Unit = {},
+    onDelete: (MediaItem) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     val outline by viewModel.outline.collectAsState()
@@ -134,19 +143,80 @@ fun MapScreen(
         }
 
         is MapContentState.Ready -> {
-            Box(
+            // r76: the redesign's map shell --- the header + mode toggle
+            // above the canvas, the selected-location memory card below.
+            // The mode is session-local UI state (the canvas renders the
+            // same clusters either way; HEATMAP only changes the visual).
+            var mapMode by remember { mutableStateOf(ToadMapMode.PINS) }
+            var selectedRow by remember(s.rows) { mutableStateOf(s.rows.firstOrNull()) }
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("map_state_ready"),
             ) {
-                WorldMapCanvas(
-                    outline = outline,
-                    rows = s.rows,
-                    contentDescription = stringResource(R.string.map_canvas_description),
-                    onClusterTapped = { tapped -> sheetRows = tapped },
+                ToadMapHeader(
+                    geotaggedCount = s.rows.size,
+                    mode = mapMode,
+                    onModeChange = { mapMode = it },
                 )
-                if (s.pendingUngrantedRows > 0) {
-                    PendingReindexFootnote(count = s.pendingUngrantedRows)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                ) {
+                    WorldMapCanvas(
+                        outline = outline,
+                        rows = s.rows,
+                        heatmap = mapMode == ToadMapMode.HEATMAP,
+                        contentDescription = stringResource(R.string.map_canvas_description),
+                        onClusterTapped = { tapped ->
+                            selectedRow = tapped.firstOrNull()
+                            sheetRows = tapped
+                        },
+                    )
+                    if (s.pendingUngrantedRows > 0) {
+                        PendingReindexFootnote(count = s.pendingUngrantedRows)
+                    }
+                }
+                selectedRow?.let { row ->
+                    // r76: the card's expand opens the lightbox overlay
+                    // (the redesign's quick viewer); the memory-grid rows
+                    // inside the sheet keep the full viewer hand-off.
+                    var showLightbox by remember { mutableStateOf(false) }
+                    ToadMapMemoryCard(
+                        thumbnailUri = row.canonicalUri,
+                        locationLabel = row.displayName ?: "Unknown place",
+                        title = row.displayName ?: "Geotagged memory",
+                        dateLine = java.text.DateFormat.getDateInstance(
+                            java.text.DateFormat.MEDIUM,
+                        ).format(java.util.Date(row.resolvedCaptureDateMillis ?: row.dateAddedMillis)) +
+                            " • Tap to inspect EXIF",
+                        onOpen = { showLightbox = true },
+                        modifier = Modifier.padding(16.dp),
+                    )
+                    if (showLightbox) {
+                        val item = row.asViewerItem()
+                        PhotoLightboxOverlay(
+                            item = item,
+                            dateLine = java.text.DateFormat.getDateInstance(
+                                java.text.DateFormat.MEDIUM,
+                            ).format(
+                                java.util.Date(
+                                    row.resolvedCaptureDateMillis ?: row.dateAddedMillis,
+                                ),
+                            ),
+                            locationLine = row.displayName,
+                            isFavorite = row.isFavorite,
+                            tagsLine = "Local EXIF • no cloud tags",
+                            exifLine = (row.displayName ?: "MediaStore row") +
+                                " • " + ViewerInfoFormat.dimensions(row.width, row.height),
+                            onBack = { showLightbox = false },
+                            onToggleFavorite = { onToggleFavorite(item) },
+                            onHideToVault = { onHideToVault(item) },
+                            onEdit = { onEdit(item) },
+                            onDelete = { onDelete(item) },
+                        )
+                    }
                 }
             }
         }

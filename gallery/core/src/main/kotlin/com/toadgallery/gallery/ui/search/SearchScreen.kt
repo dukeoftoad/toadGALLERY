@@ -1,24 +1,21 @@
 package com.toadgallery.gallery.ui.search
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,9 +35,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.buildshape.BuildShape
@@ -49,13 +48,19 @@ import com.toadgallery.gallery.data.SearchMediaType
 import com.toadgallery.gallery.data.SearchQuery
 import com.toadgallery.gallery.ml.search.MagicSearchQuery
 import com.toadgallery.gallery.ui.StateScreen
+import com.toadgallery.gallery.ui.components.ToadBodyFont
 import com.toadgallery.gallery.ui.media.LoadingState
 import com.toadgallery.gallery.ui.media.MediaGrid
 import com.toadgallery.gallery.ui.media.MediaPermissionState
 import com.toadgallery.gallery.ui.media.rememberMediaPermissionRequester
+import com.toadgallery.gallery.ui.screens.search.ToadClipOcrBadge
+import com.toadgallery.gallery.ui.screens.search.ToadPromptChips
+import com.toadgallery.gallery.ui.screens.search.ToadSearchHeader
+import com.toadgallery.gallery.ui.screens.search.ToadSearchPillField
 import com.toadgallery.gallery.ui.settings.LayoutStyle
 import com.toadgallery.gallery.ui.settings.SettingsViewModel
 import com.toadgallery.gallery.ui.theme.ToadSpacing
+import com.toadgallery.gallery.ui.theme.ToadTheme
 
 /**
  * The Search tab (issue #62, search tab v1): a name query over the media
@@ -185,9 +190,21 @@ fun SearchScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(ToadSpacing.xl),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        OutlinedTextField(
+        // r76: the redesign header + subtitle. The subtitle is honest per
+        // build shape: the semantic pipeline's "100% on-device semantic &
+        // screenshot text (OCR) search" line only where the SEMANTIC index
+        // exists; the plain Name pipeline states what it is.
+        ToadSearchHeader(
+            subtitle = if (BuildShape.semanticIndex) {
+                "100% on-device semantic & screenshot text (OCR) search"
+            } else {
+                "Search your library by name, fully on-device"
+            },
+        )
+        Spacer(Modifier.height(12.dp))
+        ToadSearchPillField(
             value = query,
             onValueChange = { value ->
                 // r26: the SAME text feeds both pipelines; each gates
@@ -195,45 +212,51 @@ fun SearchScreen(
                 viewModel.onQueryChange(value)
                 magicViewModel.onQueryChange(value)
             },
+            onClear = {
+                viewModel.onQueryChange("")
+                magicViewModel.onQueryChange("")
+            },
+            onSearch = { keyboard?.hide() },
+            hint = stringResource(R.string.search_field_label),
             modifier = Modifier
-                .fillMaxWidth()
                 .focusRequester(focusRequester)
-                .testTag("search_field"),
-            singleLine = true,
-            label = { Text(stringResource(R.string.search_field_label)) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = null, // decorative; the label carries meaning
-                )
-            },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(
-                        onClick = {
-                            viewModel.onQueryChange("")
-                            magicViewModel.onQueryChange("")
-                        },
-                        modifier = Modifier.testTag("search_field_clear"),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Clear,
-                            contentDescription = stringResource(R.string.cd_search_clear),
-                        )
-                    }
-                }
-            },
-            // ToadShapes.small (8dp) --- the token role for text fields
-            // (DesignTokens.kt, issue #11); reached through MaterialTheme
-            // so the shape system stays the single source.
-            shape = MaterialTheme.shapes.small,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                // The query pipeline is debounced in the ViewModel; the IME
-                // action just closes the keyboard so results are visible.
-                onSearch = { keyboard?.hide() },
-            ),
+                .testTag("search_field")
+                .border(1.dp, ToadTheme.palette.borderStrong, CircleShape),
         )
+        Spacer(Modifier.height(10.dp))
+        // r76: the suggested prompts --- one tap runs the query through
+        // the SAME onValueChange pipeline typing uses.
+        ToadPromptChips(
+            prompts = listOf("sunset", "receipt", "dogs", "nature", "notice", "coffee"),
+            activeQuery = query,
+            onPromptTap = { prompt ->
+                viewModel.onQueryChange(prompt)
+                magicViewModel.onQueryChange(prompt)
+            },
+        )
+        Spacer(Modifier.height(10.dp))
+        // r76: the results-count row's trailing badge --- only where the
+        // semantic surface could have contributed (the same gate as the
+        // mode row below).
+        if (BuildShape.semanticIndex) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Matches",
+                    color = ToadTheme.palette.textMuted,
+                    style = TextStyle(
+                        fontFamily = ToadBodyFont,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                    ),
+                )
+                ToadClipOcrBadge()
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         // The r26 "Search by" mode row: Name (the issue #62 filename
         // pipeline, untouched) vs Content (Magic Search). Switching the
         // mode flips BOTH pipelines' engagement through their own gates

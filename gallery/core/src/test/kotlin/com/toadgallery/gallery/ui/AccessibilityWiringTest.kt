@@ -35,34 +35,39 @@ import java.io.File
  */
 class AccessibilityWiringTest {
 
-    /** The module-relative prefix of every gallery screen source file. */
+    /**
+     * The module-relative prefix of every gallery screen source file.
+     * r76 fix: the #163 namespace migration moved the tree from
+     * `io/github/dukeoftoad/gallery/` to `com/toadgallery/gallery/` but
+     * this suite's prefix was never updated --- every test errored with
+     * "Cannot locate ..." on the gallery branch since. The prefix now
+     * matches the live tree.
+     */
     private val GALLERY_SRC =
-        "src/main/kotlin/io/github/dukeoftoad/gallery/"
+        "src/main/kotlin/com/toadgallery/gallery/"
 
     /** The edit module's one touched source file (full module-relative path). */
     private val EDIT_ACTIVITY =
-        "src/main/kotlin/io/github/dukeoftoad/gallery/edit/EditActivity.kt"
+        "src/main/kotlin/com/toadgallery/editor/EditActivity.kt"
 
     /**
-     * Unit-test working dir is the module dir under Gradle (apps/gallery)
-     * but is the repo root under the pre-push harness; be tolerant of both
-     * (the PrivacyPolicyTest moduleFile pattern, generalized to both apps).
-     * The THIRD candidate is the sibling-module case --- the gallery test
-     * task locating the EDIT app's file (apps/gallery cwd -> apps/edit);
-     * the merge-gate's second catch: the first draft had
-     * `cwd.parent + apps/<app>/...`, which resolves `apps/apps/edit/...`
-     * and never exists.
+     * Unit-test working dir is the module dir under Gradle (gallery/core
+     * since the #163 module split) but is the repo root under the pre-push
+     * harness; be tolerant of both. The sibling candidates cover the
+     * editor-module file from BOTH working dirs (gallery/core cwd ->
+     * editor/core via the repo root; repo-root cwd -> editor/core
+     * directly).
      */
     private fun sourceFile(app: String, moduleRelative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         val candidates = listOf(
             File(cwd, moduleRelative),
-            File(cwd, "apps/$app/$moduleRelative"),
-            File(cwd.parentFile, "$app/$moduleRelative"),
+            File(cwd, "$app/core/$moduleRelative"),
+            File(cwd.parentFile, "$app/core/$moduleRelative"),
         )
         return candidates.firstOrNull { it.exists() }
             ?: error(
-                "Cannot locate apps/$app/$moduleRelative from ${cwd.absolutePath}; " +
+                "Cannot locate $app/core/$moduleRelative from ${cwd.absolutePath}; " +
                     "checked: " + candidates.joinToString { it.path },
             )
     }

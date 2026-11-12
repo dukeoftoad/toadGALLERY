@@ -126,4 +126,31 @@ class TimelineFilterMediaStoreTest {
             projection.selectionArgs,
         )
     }
+
+    @Test
+    fun `clean feed projects the bucket_display_name exclusion clause`() {
+        // r76: the No-Screenshots pill's MediaStore leg --- NULL-named
+        // rows stay visible (the fail-open rule the in-memory predicate
+        // and the catalogue projection share).
+        assertEquals(
+            "(bucket_display_name IS NULL OR bucket_display_name NOT LIKE '%screenshot%')",
+            selectionOf(TimelineFilter(excludeScreenshots = true)).selection,
+        )
+        // Composes AND in the fixed clause order (last).
+        assertEquals(
+            "media_type = 1 AND " +
+                "(bucket_display_name IS NULL OR bucket_display_name NOT LIKE '%screenshot%')",
+            selectionOf(
+                TimelineFilter(
+                    types = setOf(FilterMediaType.PHOTOS),
+                    excludeScreenshots = true,
+                ),
+            ).selection,
+        )
+        // No args: the clause is vocabulary, not values.
+        assertEquals(
+            emptyList<String>(),
+            selectionOf(TimelineFilter(excludeScreenshots = true)).selectionArgs,
+        )
+    }
 }

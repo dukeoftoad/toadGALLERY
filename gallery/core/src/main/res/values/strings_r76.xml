@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  r76 (the Material 3 Expressive redesign): the Settings hub + sub-pages'
+  new copy. One file for the round, the strings_r39.xml convention.
+  Placeholder arguments follow the house style (%1$s / %1$d).
+-->
+<resources>
+    <!-- The hub's live search (the sticky header's field). -->
+    <string name="settings_search_hint">Search settings, AI models, vault, theme…</string>
+    <string name="settings_search_empty_title">No matching settings</string>
+    <string name="settings_search_empty_body">No options matched "%1$s"</string>
+    <string name="settings_search_empty_clear">Clear Search</string>
+
+    <!-- The hero status card. -->
+    <string name="settings_hero_offline_pill">100% Offline • NPU Ready</string>
+    <string name="settings_hero_title">On-Device Privacy &amp; AI</string>
+    <string name="settings_hero_body">Zero cloud uploads. Active palette: %1$s • %2$d-col timeline.</string>
+    <string name="settings_hero_cta">AI Status</string>
+
+    <!-- The AI Engine drill-down row. -->
+    <string name="settings_ai_engine_entry">AI Models &amp; Indexing Engine</string>
+    <string name="settings_ai_engine_ready">Engine present • model packs managed on-device</string>
+    <string name="settings_ai_engine_absent">Not in this build</string>
+
+    <!-- The Storage drill-down row + the vault sub-page's actions. -->
+    <string name="settings_storage_entry">Storage &amp; Cache Manager</string>
+    <string name="settings_vault_open">Open Vault</string>
+    <string name="settings_vault_change_pin">Change PIN</string>
+
+    <!-- The vault sub-page (biometric row reuses vault_biometric_section_*). -->
+    <string name="vault_autolock_title">Auto-lock timer</string>
+    <string name="vault_autolock_body">The vault locks itself when the app goes to the background (ADR-0017) — a fixed posture, not a preference.</string>
+    <string name="vault_autolock_value">On background</string>
+    <string name="vault_biometric_body">Fingerprint or face unlock, keyed in this phone\'s secure hardware. The PIN always keeps working.</string>
+</resources>

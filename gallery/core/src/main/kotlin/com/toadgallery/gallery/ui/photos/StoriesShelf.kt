@@ -1,17 +1,25 @@
 package com.toadgallery.gallery.ui.photos
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,20 +28,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.paging.compose.LazyPagingItems
 import coil.compose.AsyncImage
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.data.MediaItem
 import com.toadgallery.gallery.data.stories.StorySet
 import com.toadgallery.gallery.data.stories.StorySets
+import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.theme.ToadTheme
 import java.util.Locale
 
 /**
@@ -160,55 +175,93 @@ private fun StoryCard(
     locale: Locale,
     onClick: () -> Unit,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    // r76: the prototype's story card --- 128x160, `borderStrong` stroke,
+    // the bottom dark gradient scrim carrying the story title + date
+    // range, and the top-right circular play affordance. The card IS the
+    // tap target (the count rides the scrim, not a second line below).
+    val palette = ToadTheme.palette
+    Box(
         modifier = Modifier
-            .width(96.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .padding(bottom = 4.dp),
+            .size(width = 128.dp, height = 160.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, palette.borderStrong, RoundedCornerShape(16.dp))
+            .testTag("stories_card")
+            .then(
+                if (cover != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                },
+            ),
     ) {
+        if (cover != null) {
+            AsyncImage(
+                model = cover.uri,
+                contentDescription = stringResource(R.string.cd_story_cover),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        // The bottom scrim: story title + date range.
         Box(
             modifier = Modifier
-                .size(width = 96.dp, height = 128.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .testTag("stories_card")
-                .then(
-                    if (cover != null) {
-                        Modifier.clickable(onClick = onClick)
-                    } else {
-                        Modifier
-                    }
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(72.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color(0xE0000000)),
+                    ),
                 ),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(10.dp),
         ) {
-            if (cover != null) {
-                AsyncImage(
-                    model = cover.uri,
-                    contentDescription = stringResource(R.string.cd_story_cover),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            Text(
+                text = StorySets.rangeLabel(story, locale),
+                style = TextStyle(
+                    fontFamily = ToadBodyFont,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                ),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = pluralStringResource(
+                    R.plurals.stories_card_count,
+                    story.count,
+                    story.count,
+                ),
+                style = TextStyle(
+                    fontFamily = ToadBodyFont,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 10.sp,
+                ),
+                color = Color(0xB3FFFFFF),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Text(
-            text = StorySets.rangeLabel(story, locale),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Text(
-            text = pluralStringResource(
-                R.plurals.stories_card_count,
-                story.count,
-                story.count,
-            ),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
+        // The top-right circular play affordance.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Color(0x66000000)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }

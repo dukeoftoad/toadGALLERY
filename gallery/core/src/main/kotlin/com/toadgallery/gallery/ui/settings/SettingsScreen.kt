@@ -26,17 +26,33 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,6 +63,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -64,7 +81,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -78,13 +98,28 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.toadgallery.gallery.BuildConfig
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.buildshape.BuildShape
+import com.toadgallery.gallery.ui.LocalSettingsHubRequest
+import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.components.ToadDisplayFont
+import com.toadgallery.gallery.ui.components.ToadGlassSurface
+import com.toadgallery.gallery.ui.components.ToadMotionSpec
+import com.toadgallery.gallery.ui.components.ToadStatusPill
+import com.toadgallery.gallery.ui.components.ToadSubPageTopBar
+import com.toadgallery.gallery.ui.theme.AllToadPalettes
 import com.toadgallery.gallery.ui.theme.ToadShapes
+import com.toadgallery.gallery.ui.theme.ToadTheme
+import com.toadgallery.gallery.ui.theme.ToadThemeId
+import com.toadgallery.gallery.data.vault.VaultBiometricReadiness
 import com.toadgallery.gallery.data.diag.DiagLog
 import com.toadgallery.gallery.data.DataSizeFormats
 import com.toadgallery.gallery.data.media.location.MediaLocationState
@@ -178,6 +213,9 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { trashViewModel.refresh() }
     val vaultState by vaultViewModel.state.collectAsState()
     val useDynamicColor by settingsViewModel.useDynamicColor.collectAsState()
+    // r76: the Theme & Colors palette selection (the five prototype
+    // palettes; the shell theme call reads the same flow).
+    val toadPaletteId by settingsViewModel.toadPaletteId.collectAsState()
 
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(),
@@ -198,247 +236,268 @@ fun SettingsScreen(
         settingsViewModel.mediaLocation.onPermissionResult(granted)
     }
 
-    // r62: the segmented tabs (the maintainer's IA call: "General | AI |
-    // System --- flatter, fewer taps"). The scroll position resets on
-    // every switch so a tab never lands mid-page.
-    var selectedTab by rememberSaveable { mutableStateOf(SettingsTab.GENERAL) }
+    // r76: the prototype's Settings IA --- a HUB with five grouped
+    // sections + a live search field, and SIX drill-down sub-pages that
+    // slide in horizontally (AnimatedContent, 220ms) and return via the
+    // sub-page top bar's back button (or the nav bar's Settings tab ---
+    // the shell's hub-return signal). This replaces the r62 segmented
+    // tabs: everything the tabs carried is rehoused below, every test
+    // tag intact.
+    var subPage by rememberSaveable { mutableStateOf(SettingsSubPage.HUB) }
+    var settingsSearch by rememberSaveable { mutableStateOf("") }
     val settingsScroll = rememberScrollState()
-    LaunchedEffect(selectedTab) { settingsScroll.scrollTo(0) }
+    LaunchedEffect(subPage) { settingsScroll.scrollTo(0) }
 
-    // r64: the page is PINNED-HEADER + SCROLLABLE-BODY. The title stays
-    // the a11y heading anchor for the whole settings page; the tabs stay
-    // one tap away however far the body scrolls; the BODY column owns the
-    // scroll state (which the tab-switch reset above drives).
+    // The hub-return signal (the nav bar's Settings-pop rule): while ANY
+    // sub-page is composed the signal is armed, so tapping the Settings
+    // tab pops to the hub instead of switching tabs.
+    val hubRequest = LocalSettingsHubRequest.current
+    LaunchedEffect(subPage) {
+        if (subPage != SettingsSubPage.HUB) hubRequest.requestHubReturn()
+    }
+    // The shell's nav-bar handler consumes the one-shot flag on the
+    // Settings tab tap and pops (the shell owns the NavController); this
+    // screen does NOT re-collect the flag --- `consume()` is an
+    // AtomicBoolean getAndSet (not snapshot-state), so a snapshotFlow
+    // around it would never re-emit. The arm-side LaunchedEffect above is
+    // the screen's only hub-return responsibility.
+
+    // The live search filter: a lowercase contains over each section's
+    // title + row titles (the searchable inventory below --- one entry
+    // per hub row; the sub-pages are NOT searched, matching the
+    // prototype's hub-only search).
+    val query = settingsSearch.trim().lowercase()
+    val match: (String) -> Boolean = { label ->
+        query.isEmpty() || label.lowercase().contains(query)
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = stringResource(R.string.settings_title),
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            // r40 a11y: the screen title is the heading anchor for the
-            // whole settings page.
-            modifier = Modifier
-                .padding(start = 16.dp, top = 24.dp, end = 16.dp)
-                .semantics { heading() },
-        )
-
-        // ---- r62: the segmented tabs (General | AI | System), pinned ----
-        Spacer(Modifier.height(16.dp))
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            SettingsTab.entries.forEachIndexed { index, tab ->
-                SegmentedButton(
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = SettingsTab.entries.size,
-                    ),
-                    modifier = Modifier.testTag(
-                        when (tab) {
-                            SettingsTab.GENERAL -> "settings_tab_general"
-                            SettingsTab.AI -> "settings_tab_ai"
-                            SettingsTab.SYSTEM -> "settings_tab_system"
-                        }
-                    ),
-                ) {
-                    Text(stringResource(tab.labelRes))
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(settingsScroll)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-
-        // ---- The GENERAL tab: appearance, theme, access, location, about ----
-        if (selectedTab == SettingsTab.GENERAL) {
-
-        // ---- Appearance (Ente-inspired; the first section) ----
-        SettingsSectionHeader(stringResource(R.string.settings_section_appearance))
-        SettingsGroupCard {
-            Text(
-                text = stringResource(R.string.settings_layout_title),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 12.dp),
-            )
+        // ---- The sticky frosted header (r76): title + version pill ----
+        ToadGlassSurface(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                LayoutCard(
-                    title = stringResource(R.string.settings_layout_grid),
-                    body = stringResource(R.string.settings_layout_grid_body),
-                    selected = appearance.layout == LayoutStyle.GRID,
-                    onSelect = { settingsViewModel.setLayout(LayoutStyle.GRID) },
-                    uniformPreview = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("settings_layout_grid"),
-                )
-                LayoutCard(
-                    title = stringResource(R.string.settings_layout_collage),
-                    body = stringResource(R.string.settings_layout_collage_body),
-                    selected = appearance.layout == LayoutStyle.COLLAGE,
-                    onSelect = { settingsViewModel.setLayout(LayoutStyle.COLLAGE) },
-                    uniformPreview = false,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("settings_layout_collage"),
-                )
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
+                    .padding(start = 16.dp, top = 20.dp, end = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(R.string.settings_photos_per_row),
-                    style = MaterialTheme.typography.bodyLarge,
+                    text = stringResource(R.string.settings_title),
+                    style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(
-                    onClick = { settingsViewModel.setColumns(appearance.columns - 1) },
-                    enabled = appearance.columns > MIN_COLUMNS,
-                    modifier = Modifier.testTag("settings_columns_minus"),
-                ) {
-                    Icon(
-                        imageVector = RemoveIcon,
-                        contentDescription = stringResource(R.string.settings_columns_decrease),
-                    )
-                }
-                Text(
-                    text = appearance.columns.toString(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
+                    // r40 a11y: the screen title is the heading anchor for
+                    // the whole settings page.
                     modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .testTag("settings_columns_value"),
+                        .weight(1f)
+                        .semantics { heading() },
                 )
-                IconButton(
-                    onClick = { settingsViewModel.setColumns(appearance.columns + 1) },
-                    enabled = appearance.columns < MAX_COLUMNS,
-                    modifier = Modifier.testTag("settings_columns_plus"),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = stringResource(R.string.settings_columns_increase),
-                    )
-                }
+                ToadStatusPill(text = "v" + BuildConfig.VERSION_NAME)
             }
-            Text(
-                text = stringResource(R.string.settings_group_by),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 16.dp),
-            )
-            // r27: a FlowRow, not a Row --- the Moments round's WEEK option
-            // makes four chips, which no longer fit one narrow-screen line
-            // (the pre-r27 three did). FlowRow wraps instead of clipping.
-            FlowRow(
-                modifier = Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                GroupBy.entries.forEach { option ->
-                    FilterChip(
-                        selected = appearance.groupBy == option,
-                        onClick = { settingsViewModel.setGroupBy(option) },
-                        label = { Text(stringResource(option.labelRes)) },
-                        modifier = Modifier.testTag(
-                            when (option) {
-                                GroupBy.NONE -> "settings_group_by_none"
-                                GroupBy.DAY -> "settings_group_by_day"
-                                GroupBy.WEEK -> "settings_group_by_week"
-                                GroupBy.MONTH -> "settings_group_by_month"
-                            }
-                        ),
-                    )
-                }
-            }
-            // r62's Stories toggle rides the same Appearance flow; r64
-            // cards it under Appearance with its own badge glyph.
-            SettingsToggleRow(
-                title = stringResource(R.string.settings_stories_on_home),
-                supporting = stringResource(R.string.settings_stories_on_home_body),
-                checked = appearance.storiesOnHome,
-                onCheckedChange = { settingsViewModel.setStoriesOnHome(it) },
-                iconRes = R.drawable.ic_setting_stories,
-                testTag = "settings_toggle_stories_on_home",
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+        }
+
+        // ---- r76: the sticky sub-page top bar (rendered only while a
+        //      sub-page is open; the per-page titles/status pills live
+        //      here so the bar stays pinned above the scroll column). ----
+        if (subPage != SettingsSubPage.HUB) {
+            ToadSubPageTopBar(
+                title = when (subPage) {
+                    SettingsSubPage.THEME -> "Theme & Colors"
+                    SettingsSubPage.LAYOUT -> "Timeline Layout"
+                    SettingsSubPage.AI_ENGINE -> "AI Engine"
+                    SettingsSubPage.VAULT -> "Hidden Vault"
+                    SettingsSubPage.STORAGE -> "Storage & Cache"
+                    SettingsSubPage.HUB -> ""
+                },
+                statusPill = when (subPage) {
+                    SettingsSubPage.LAYOUT -> appearance.columns.toString() + " cols"
+                    SettingsSubPage.AI_ENGINE -> "On-device"
+                    SettingsSubPage.VAULT -> when (vaultState) {
+                        is VaultUiState.Unlocked -> "Unlocked"
+                        VaultUiState.Locked -> "Locked"
+                        VaultUiState.NotConfigured -> "Not set up"
+                        else -> "Encrypted"
+                    }
+                    else -> null
+                },
+                onBack = { subPage = SettingsSubPage.HUB },
             )
         }
 
-        // ---- Theme (r64: the new hand-written feature) ----
-        // A REAL light/dark/system preference, not a system-app shortcut:
-        // the shell resolves [ThemeMode] into the theme call's darkTheme
-        // argument, so the whole app re-themes live. Default SYSTEM = the
-        // pre-r64 behavior (the theme followed the OS on its own).
-        SettingsSectionHeader(stringResource(R.string.settings_theme_section))
-        SettingsGroupCard {
-            Row(
+        // ---- r76: the hub/sub-page router. The HUB composes the search
+        // field + the five sections; each sub-page composes the rehoused
+        // wired rows. Horizontal slide both directions (the prototype's
+        // slideInRight/slideOutLeft).
+        AnimatedContent(
+            targetState = subPage,
+            transitionSpec = {
+                val forward = targetState != SettingsSubPage.HUB
+                val enter = if (forward) {
+                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> fullWidth } +
+                        fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))
+                } else {
+                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> -fullWidth / 3 } +
+                        fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))
+                }
+                val exit = if (forward) {
+                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> -fullWidth / 3 } +
+                        fadeOut(tween(ToadMotionSpec.SUBPAGE_MS))
+                } else {
+                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> fullWidth } +
+                        fadeOut(tween(ToadMotionSpec.SUBPAGE_MS))
+                }
+                (enter togetherWith exit).apply {
+                    targetContentZIndex = if (forward) 2f else 0f
+                }
+            },
+            label = "settingsSubPage",
+        ) { page ->
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .fillMaxSize()
+                    .verticalScroll(settingsScroll)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                SettingsIconBadge(
-                    iconRes = R.drawable.ic_setting_theme,
-                    modifier = Modifier.padding(end = 16.dp),
+
+        if (page == SettingsSubPage.HUB) {
+
+        // ---- r76: the live settings search (the sticky header's field;
+        //      hidden while a sub-page is open) ----
+        OutlinedTextField(
+            value = settingsSearch,
+            onValueChange = { settingsSearch = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .testTag("settings_search_field"),
+            singleLine = true,
+            placeholder = {
+                Text(stringResource(R.string.settings_search_hint))
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
                 )
-                Text(
-                    text = stringResource(R.string.settings_theme_mode),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            // The mode body + the segmented control align under the row's
-            // title (badge 40dp + 16dp gap), the modern settings rhythm.
-            Column(modifier = Modifier.padding(start = 56.dp, top = 4.dp)) {
-                Text(
-                    text = stringResource(R.string.settings_theme_mode_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SingleChoiceSegmentedButtonRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                ) {
-                    ThemeMode.entries.forEachIndexed { index, mode ->
-                        SegmentedButton(
-                            selected = appearance.themeMode == mode,
-                            onClick = { settingsViewModel.setThemeMode(mode) },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = ThemeMode.entries.size,
-                            ),
-                            modifier = Modifier.testTag("settings_theme_" + mode.name),
-                        ) {
-                            Text(stringResource(mode.labelRes))
-                        }
+            },
+            trailingIcon = {
+                if (settingsSearch.isNotEmpty()) {
+                    IconButton(
+                        onClick = { settingsSearch = "" },
+                        modifier = Modifier.testTag("settings_search_clear"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = stringResource(R.string.cd_search_clear),
+                        )
                     }
                 }
-            }
-            // r62's Material You toggle, moved beside its sibling: the
-            // two color controls read as one Theme group.
-            SettingsToggleRow(
-                title = stringResource(R.string.settings_dynamic_color),
-                supporting = stringResource(R.string.settings_dynamic_color_body),
-                checked = useDynamicColor,
-                onCheckedChange = { settingsViewModel.setUseDynamicColor(it) },
-                iconVector = Icons.Filled.Settings,
-                testTag = "settings_toggle_dynamic_color",
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        )
+
+        // ---- r76: the HERO status card (hidden while searching) ----
+        if (query.isEmpty()) {
+            ToadHeroStatusCard(
+                paletteLabel = toadPaletteLabel(settingsViewModel),
+                appearance = appearance,
+                onAiStatus = { subPage = SettingsSubPage.AI_ENGINE },
             )
+            Spacer(Modifier.height(16.dp))
         }
 
+        // ---- r76 SECTION 1: Appearance & Timeline (two drill-downs) ----
+        if (match(stringResource(R.string.settings_section_appearance)) ||
+            match("theme") || match("timeline") || match("layout") || match("grid")
+        ) {
+            SettingsSectionHeader(stringResource(R.string.settings_section_appearance))
+            SettingsGroupCard {
+                SettingsNavRow(
+                    title = stringResource(R.string.settings_theme_mode),
+                    supporting = themeModeSupporting(appearance.themeMode, settingsViewModel),
+                    onClick = { subPage = SettingsSubPage.THEME },
+                    iconVector = Icons.Filled.Palette,
+                    testTag = "settings_theme_entry",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                SettingsNavRow(
+                    title = stringResource(R.string.settings_layout_title),
+                    supporting = layoutSupporting(appearance),
+                    onClick = { subPage = SettingsSubPage.LAYOUT },
+                    iconVector = Icons.Filled.GridView,
+                    // The tag the screenshot suite waits for: the hub's
+                    // FIRST layout control (the Readme test's
+                    // settings_layout_grid landmark --- carried by the
+                    // drill-down row since the r76 IA moved the layout
+                    // cards into the sub-page; same signal, still on the
+                    // hub, still every flavor).
+                    testTag = "settings_layout_grid",
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+        }
+
+        // ---- r76 SECTION 2: On-Device AI & Smart Features ----
+        if (BuildShape.withEngine && (match("ai") || match("people") ||
+            match("magic") || match("search") || match("things"))
+        ) {
+            SettingsSectionHeader(stringResource(R.string.settings_ai_section))
+            SettingsGroupCard {
+                if (BuildShape.faceIndex) {
+                    val peopleAlbumsEnabled by settingsViewModel.peopleAlbumsEnabled.collectAsState()
+                    SettingsToggleRow(
+                        title = stringResource(R.string.settings_people_albums),
+                        supporting = stringResource(R.string.settings_people_albums_body),
+                        checked = peopleAlbumsEnabled,
+                        onCheckedChange = { settingsViewModel.setPeopleAlbumsEnabled(it) },
+                        iconVector = Icons.Filled.Memory,
+                        testTag = "settings_toggle_people_albums",
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+                if (BuildShape.semanticIndex) {
+                    val magicSearchEnabled by settingsViewModel.magicSearchEnabled.collectAsState()
+                    SettingsToggleRow(
+                        title = stringResource(R.string.settings_magic_search),
+                        supporting = stringResource(R.string.settings_magic_search_body),
+                        checked = magicSearchEnabled,
+                        onCheckedChange = { settingsViewModel.setMagicSearchEnabled(it) },
+                        iconVector = Icons.Filled.Memory,
+                        testTag = "settings_toggle_magic_search",
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    val thingsAlbumsEnabled by settingsViewModel.thingsAlbumsEnabled.collectAsState()
+                    SettingsToggleRow(
+                        title = stringResource(R.string.settings_things_albums),
+                        supporting = stringResource(R.string.settings_things_albums_body),
+                        checked = thingsAlbumsEnabled,
+                        onCheckedChange = { settingsViewModel.setThingsAlbumsEnabled(it) },
+                        iconVector = Icons.Filled.Memory,
+                        testTag = "settings_toggle_things_albums",
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                SettingsNavRow(
+                    title = stringResource(R.string.settings_ai_engine_entry),
+                    supporting = aiEngineSupporting(),
+                    onClick = { subPage = SettingsSubPage.AI_ENGINE },
+                    iconVector = Icons.Filled.Memory,
+                    testTag = "settings_ai_entry",
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+            }
+        }
+
+        // ---- r76 SECTION 3: Privacy, Permissions & Vault ----
+        if (match("privacy") || match("permissions") || match("picker") ||
+            match("location") || match("gps") || match("vault") || match("exif")
+        ) {
+        // ---- Media access (issue #27) ----
+        // The prototype keeps "Use system Photo Picker" and "Location &
+        // EXIF GPS data" as INLINE switches (daily-gratification rows),
+        // plus the vault drill-down. The search-filter wrapper hides the
+        // whole section unless anything matches.
+        if (match("privacy") || match("permissions") || match("picker") ||
+            match("location") || match("gps") || match("vault") || match("exif")
+        ) {
         // ---- Media access (issue #27) ----
         SettingsSectionHeader(stringResource(R.string.settings_section_access))
         SettingsGroupCard {
@@ -599,12 +658,395 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
             )
         }
-        } // selectedTab == GENERAL
+        // ---- The hidden-vault drill-down (r76: hub section 3's own row,
+        //      beside the permission switches) ----
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            SettingsGroupCard {
+                SettingsNavRow(
+                    title = stringResource(R.string.settings_vault_title),
+                    supporting = when (val vault = vaultState) {
+                        VaultUiState.NotConfigured ->
+                            stringResource(R.string.vault_settings_not_configured)
+                        VaultUiState.Locked ->
+                            stringResource(R.string.vault_settings_locked)
+                        is VaultUiState.Unlocked -> pluralStringResource(
+                            R.plurals.vault_header_items,
+                            vault.entries.size,
+                            vault.entries.size,
+                        )
+                        else -> null
+                    },
+                    onClick = { subPage = SettingsSubPage.VAULT },
+                    iconRes = R.drawable.ic_vault,
+                    testTag = "settings_vault_entry",
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                )
+            }
+        }
+        } // the r76 search-filter wrapper (privacy + about sections)
 
-        // ---- The SYSTEM tab: storage (bin/vault entries folded in), privacy, dev tools ----
-        if (selectedTab == SettingsTab.SYSTEM) {
+        // ---- r76 SECTION 4: Storage & Data Management ----
+        if (query.isEmpty()) {
+            SettingsSectionHeader(stringResource(R.string.settings_storage_section))
+            SettingsGroupCard {
+                SettingsNavRow(
+                    title = stringResource(R.string.settings_storage_entry),
+                    supporting = stringResource(R.string.settings_storage_section_body),
+                    onClick = { subPage = SettingsSubPage.STORAGE },
+                    iconVector = Icons.Filled.Storage,
+                    testTag = "settings_storage_entry",
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                )
+            }
+        }
+        // ---- r76: the search empty state (nothing matched) ----
+        if (query.isNotEmpty() &&
+            !match(stringResource(R.string.settings_section_appearance)) &&
+            !match("theme") && !match("timeline") && !match("layout") &&
+            !match("grid") && !match("ai") && !match("people") &&
+            !match("magic") && !match("search") && !match("things") &&
+            !match("privacy") && !match("permissions") && !match("picker") &&
+            !match("location") && !match("gps") && !match("vault") &&
+            !match("exif") && !match("storage") && !match("about")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_search_empty_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.settings_search_empty_body, settingsSearch),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Button(
+                    onClick = { settingsSearch = "" },
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .testTag("settings_search_empty_clear"),
+                ) {
+                    Text(stringResource(R.string.settings_search_empty_clear))
+                }
+            }
+        }
+        } // SettingsSubPage.HUB
 
-        // ---- Storage (r62 dashboard + r64: the entries fold in) ----
+        // ---- r76 SUB-PAGE 2: Timeline Layout & Density ----
+        if (page == SettingsSubPage.LAYOUT) {
+            SettingsSectionHeader(stringResource(R.string.settings_layout_title))
+            SettingsGroupCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                LayoutCard(
+                    title = stringResource(R.string.settings_layout_grid),
+                    body = stringResource(R.string.settings_layout_grid_body),
+                    selected = appearance.layout == LayoutStyle.GRID,
+                    onSelect = { settingsViewModel.setLayout(LayoutStyle.GRID) },
+                    uniformPreview = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("settings_layout_grid"),
+                )
+                LayoutCard(
+                    title = stringResource(R.string.settings_layout_collage),
+                    body = stringResource(R.string.settings_layout_collage_body),
+                    selected = appearance.layout == LayoutStyle.COLLAGE,
+                    onSelect = { settingsViewModel.setLayout(LayoutStyle.COLLAGE) },
+                    uniformPreview = false,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("settings_layout_collage"),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_photos_per_row),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(
+                    onClick = { settingsViewModel.setColumns(appearance.columns - 1) },
+                    enabled = appearance.columns > MIN_COLUMNS,
+                    modifier = Modifier.testTag("settings_columns_minus"),
+                ) {
+                    Icon(
+                        imageVector = RemoveIcon,
+                        contentDescription = stringResource(R.string.settings_columns_decrease),
+                    )
+                }
+                Text(
+                    text = appearance.columns.toString(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .testTag("settings_columns_value"),
+                )
+                IconButton(
+                    onClick = { settingsViewModel.setColumns(appearance.columns + 1) },
+                    enabled = appearance.columns < MAX_COLUMNS,
+                    modifier = Modifier.testTag("settings_columns_plus"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.settings_columns_increase),
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.settings_group_by),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            // r27: a FlowRow, not a Row --- the Moments round's WEEK option
+            // makes four chips, which no longer fit one narrow-screen line
+            // (the pre-r27 three did). FlowRow wraps instead of clipping.
+            FlowRow(
+                modifier = Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GroupBy.entries.forEach { option ->
+                    FilterChip(
+                        selected = appearance.groupBy == option,
+                        onClick = { settingsViewModel.setGroupBy(option) },
+                        label = { Text(stringResource(option.labelRes)) },
+                        modifier = Modifier.testTag(
+                            when (option) {
+                                GroupBy.NONE -> "settings_group_by_none"
+                                GroupBy.DAY -> "settings_group_by_day"
+                                GroupBy.WEEK -> "settings_group_by_week"
+                                GroupBy.MONTH -> "settings_group_by_month"
+                            }
+                        ),
+                    )
+                }
+            }
+            // r62's Stories toggle rides the same Appearance flow; r64
+            // cards it under Appearance with its own badge glyph.
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_stories_on_home),
+                supporting = stringResource(R.string.settings_stories_on_home_body),
+                checked = appearance.storiesOnHome,
+                onCheckedChange = { settingsViewModel.setStoriesOnHome(it) },
+                iconRes = R.drawable.ic_setting_stories,
+                testTag = "settings_toggle_stories_on_home",
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+        }
+        } // SettingsSubPage.LAYOUT
+
+        // ---- r76 SUB-PAGE 1: Theme & Colors ----
+        if (page == SettingsSubPage.THEME) {
+            SettingsSectionHeader(stringResource(R.string.settings_theme_section))
+            SettingsGroupCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SettingsIconBadge(
+                    iconRes = R.drawable.ic_setting_theme,
+                    modifier = Modifier.padding(end = 16.dp),
+                )
+                Text(
+                    text = stringResource(R.string.settings_theme_mode),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            // The mode body + the segmented control align under the row's
+            // title (badge 40dp + 16dp gap), the modern settings rhythm.
+            Column(modifier = Modifier.padding(start = 56.dp, top = 4.dp)) {
+                Text(
+                    text = stringResource(R.string.settings_theme_mode_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    ThemeMode.entries.forEachIndexed { index, mode ->
+                        SegmentedButton(
+                            selected = appearance.themeMode == mode,
+                            onClick = { settingsViewModel.setThemeMode(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = ThemeMode.entries.size,
+                            ),
+                            modifier = Modifier.testTag("settings_theme_" + mode.name),
+                        ) {
+                            Text(stringResource(mode.labelRes))
+                        }
+                    }
+                }
+            }
+            } // the mode column + the first theme card
+            // r62's Material You toggle, moved beside its sibling: the
+            // two color controls read as one Theme group.
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_dynamic_color),
+                supporting = stringResource(R.string.settings_dynamic_color_body),
+                checked = useDynamicColor,
+                onCheckedChange = { settingsViewModel.setUseDynamicColor(it) },
+                iconVector = Icons.Filled.Settings,
+                testTag = "settings_toggle_dynamic_color",
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+            }
+            // r76: the five selectable palettes (the prototype's Theme &
+            // Colors cards). Checkmark = active.
+            Spacer(Modifier.height(12.dp))
+            SettingsSectionHeader("Palettes")
+            SettingsGroupCard {
+                AllToadPalettes.forEach { palette ->
+                    val selected = palette.id == toadPaletteId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { settingsViewModel.setToadPaletteId(palette.id) }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // The dual-tone circular swatch: primary core +
+                        // primaryContainer ring.
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(palette.primaryContainer)
+                                .border(2.dp, palette.primary, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(palette.primary),
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = toadPaletteLabelFor(palette.id),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
+        } // SettingsSubPage.THEME
+
+        // ---- r76 SUB-PAGE 4: Hidden Vault & Security ----
+        if (page == SettingsSubPage.VAULT) {
+            SettingsSectionHeader(stringResource(R.string.settings_vault_title))
+            // Biometric unlock (issue #57, ADR-0019): the REAL opt-in
+            // binding state machine. Offered only where the hardware can
+            // prompt (the readiness is the hardware answer); the switch
+            // flips the same enable/disable functions the vault screen's
+            // own button drives.
+            val biometrics by vaultViewModel.biometrics.collectAsState()
+            val biometricReady = biometrics as? VaultBiometricReadiness.Supported
+            if (biometricReady != null) {
+                SettingsGroupCard {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.vault_biometric_section_title),
+                        supporting = stringResource(R.string.vault_biometric_section_body),
+                        checked = biometricReady.bindingEnrolled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) vaultViewModel.enableBiometricUnlock()
+                            else vaultViewModel.disableBiometricUnlock()
+                        },
+                        iconRes = R.drawable.ic_vault,
+                        testTag = "settings_toggle_vault_biometric",
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+            // Auto-lock (ADR-0017): the vault session auto-locks when the
+            // app goes to the background (ON_STOP) --- a FIXED posture,
+            // not a preference. Rendered as the honest informational row
+            // (the prototype's 3-pill selector describes a setting this
+            // build does not have; a fake pill would lie).
+            SettingsGroupCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.vault_autolock_title),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.vault_autolock_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    ToadStatusPill(text = stringResource(R.string.vault_autolock_value))
+                }
+            }
+            // The two actions: open the (encrypted) vault screen, or set
+            // up / change the PIN there --- both route to the SAME vault
+            // screen, whose own flow handles setup vs unlock.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onOpenVault,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("settings_vault_open"),
+                ) {
+                    Text(stringResource(R.string.settings_vault_open))
+                }
+                OutlinedButton(
+                    onClick = onOpenVault,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("settings_vault_change_pin"),
+                ) {
+                    Text(stringResource(R.string.settings_vault_change_pin))
+                }
+            }
+        } // SettingsSubPage.VAULT
+
+        // ---- r76 SUB-PAGE 5: Storage & Cache Manager ----
         // What toadGALLERY keeps on this device, one card: the two
         // ENTRIES (recycle bin, hidden vault) lead --- r64 folds their old
         // standalone sections in as the card's first rows, so the
@@ -614,6 +1056,10 @@ fun SettingsScreen(
         // copy the standalone row always did). The measured rows keep
         // the r62 one-IO-walk-per-refresh behavior; the only destructive
         // action remains the disposable cache clear.
+        // ---- r76 SUB-PAGE 5: Storage & Cache Manager ----
+        if (page == SettingsSubPage.STORAGE) {
+        // The dashboard ViewModel stays here (the r62 wiring; hoisted out
+        // of the hub so only the sub-page pays for it).
         val storageViewModel: StorageInsightsViewModel = viewModel()
         val storageState by storageViewModel.state.collectAsState()
         SettingsSectionHeader(stringResource(R.string.settings_storage_section))
@@ -879,9 +1325,10 @@ fun SettingsScreen(
                 }
             } // BuildConfig.DEBUG
 
-        } // selectedTab == SYSTEM
-            // ---- The AI tab (r46 build-shape gate: engine builds only) ----
-            if (selectedTab == SettingsTab.AI) {
+        } // SettingsSubPage.STORAGE
+
+        // ---- r76 SUB-PAGE 3: AI Models & Indexing Engine ----
+        if (page == SettingsSubPage.AI_ENGINE && BuildShape.withEngine) {
     
             // ---- AI engine (r22 dogfood, ADR-0020) ----
             // The maintainer's window into the model-delivery path: FACE
@@ -1783,9 +2230,10 @@ fun SettingsScreen(
                     }
                 } // BuildShape.semanticIndex
             } // BuildShape.withEngine
-            } // selectedTab == AI
+        } // SettingsSubPage.AI_ENGINE
 
-        } // the scrollable body (r64: the title + the tabs stay pinned above it)
+            } // the per-page scrollable column
+        } // the AnimatedContent content lambda
         } // the pinned page column
 }
 @Composable
@@ -1927,10 +2375,29 @@ private val GroupBy.labelRes: Int
  * whole AI surface there), the same hide-not-crash posture the section
  * always had.
  */
-enum class SettingsTab(val labelRes: Int) {
-    GENERAL(R.string.settings_tab_general),
-    AI(R.string.settings_tab_ai),
-    SYSTEM(R.string.settings_tab_system),
+/**
+ * The r76 Settings destinations: the HUB plus the six animated drill-down
+ * sub-pages (the prototype's slide-in pages). rememberSaveable-stable via
+ * the enum NAME (the same wire discipline as every other preference).
+ */
+enum class SettingsSubPage {
+    /** The five-section hub (the default). */
+    HUB,
+
+    /** Theme & Colors: mode segmented control, dynamic color, palettes. */
+    THEME,
+
+    /** Timeline Layout & Density: cards, stepper, group-by, stories. */
+    LAYOUT,
+
+    /** AI Models & Indexing Engine (engine builds only). */
+    AI_ENGINE,
+
+    /** Hidden Vault & Security. */
+    VAULT,
+
+    /** Storage & Cache Manager. */
+    STORAGE,
 }
 
 /**
@@ -2202,3 +2669,127 @@ private fun SettingsToggleRow(
         )
     }
 }
+
+// ===========================================================================
+// r76: the hub's helper composables (the hero card + the drill-down rows'
+// live supporting lines)
+// ===========================================================================
+
+/**
+ * The prototype's HERO STATUS CARD: a `135deg` linear gradient from
+ * `primaryContainer` to `bgSurfaceHigh`, `borderStrong` stroke, the
+ * "100% Offline • NPU Ready" pill, the "On-Device Privacy & AI" summary
+ * showing the active palette + grid density, and the "AI Status" CTA.
+ */
+@Composable
+private fun ToadHeroStatusCard(
+    paletteLabel: String,
+    appearance: com.toadgallery.gallery.ui.settings.Appearance,
+    onAiStatus: () -> Unit,
+) {
+    val palette = ToadTheme.palette
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(palette.primaryContainer, palette.bgSurfaceHigh),
+                    start = Offset.Zero,
+                    end = Offset(120f, 120f),
+                ),
+            )
+            .border(1.dp, palette.borderStrong, RoundedCornerShape(24.dp))
+            .padding(16.dp),
+    ) {
+        ToadStatusPill(
+            text = stringResource(R.string.settings_hero_offline_pill),
+            background = palette.bgSurfaceHighest,
+            textColor = palette.onPrimaryContainer,
+        )
+        Text(
+            text = stringResource(R.string.settings_hero_title),
+            style = TextStyle(
+                fontFamily = ToadDisplayFont,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 16.sp,
+            ),
+            color = palette.textMain,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Text(
+            text = stringResource(
+                R.string.settings_hero_body,
+                paletteLabel,
+                appearance.columns,
+            ),
+            style = TextStyle(
+                fontFamily = ToadBodyFont,
+                fontWeight = FontWeight.Normal,
+                fontSize = 11.sp,
+            ),
+            color = palette.textMuted,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Button(
+            onClick = onAiStatus,
+            modifier = Modifier
+                .padding(top = 12.dp)
+                .testTag("settings_hero_ai_status"),
+        ) {
+            Text(stringResource(R.string.settings_hero_cta))
+        }
+    }
+}
+
+/** The active palette's display label (the Theme sub-page's card titles). */
+@Composable
+private fun toadPaletteLabel(viewModel: SettingsViewModel): String {
+    val id by viewModel.toadPaletteId.collectAsState()
+    return toadPaletteLabelFor(id)
+}
+
+/** The palette display label for [id] (non-composable overload). */
+fun toadPaletteLabelFor(id: ToadThemeId): String = when (id) {
+    ToadThemeId.TOAD -> "Toad Green"
+    ToadThemeId.AMBER -> "Dynamic Amber"
+    ToadThemeId.OCEAN -> "Ocean Slate"
+    ToadThemeId.OLED -> "OLED Pure Black"
+    ToadThemeId.LIGHT -> "Botanical Light"
+}
+
+/** The Theme drill-down row's live supporting line. */
+@Composable
+private fun themeModeSupporting(
+    mode: ThemeMode,
+    viewModel: SettingsViewModel,
+): String {
+    val id by viewModel.toadPaletteId.collectAsState()
+    val modeLabel = stringResource(mode.labelRes)
+    return modeLabel + " • " + toadPaletteLabelFor(id)
+}
+
+/** The Timeline Layout drill-down row's live supporting line. */
+@Composable
+private fun layoutSupporting(appearance: Appearance): String {
+    val layoutLabel = stringResource(
+        if (appearance.layout == LayoutStyle.GRID) {
+            R.string.settings_layout_grid
+        } else {
+            R.string.settings_layout_collage
+        },
+    )
+    return layoutLabel + " • " + appearance.columns + " • " +
+        stringResource(appearance.groupBy.labelRes)
+}
+
+/** The AI Engine drill-down row's live readiness line (engine builds). */
+@Composable
+private fun aiEngineSupporting(): String =
+    stringResource(
+        if (BuildShape.withEngine) {
+            R.string.settings_ai_engine_ready
+        } else {
+            R.string.settings_ai_engine_absent
+        },
+    )

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import com.toadgallery.gallery.data.media.location.AndroidMediaLocationAccess
+import com.toadgallery.gallery.ui.theme.ToadThemeId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -227,6 +228,25 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putBoolean(KEY_USE_DYNAMIC_COLOR, enabled).apply()
     }
 
+    // r76: the Theme & Colors palette selection --- one of the five
+    // prototype palettes (Toad/Amber/Ocean/OLED/Light), persisted beside
+    // the r64 theme mode with the same write-through shape. The shell
+    // theme call reads the flow directly (ToadGalleryApp), so a palette
+    // card tap re-themes every surface in the same session.
+    private val _toadPaletteId = MutableStateFlow(
+        parseToadThemeId(prefs.getString(KEY_TOAD_PALETTE_ID, null)),
+    )
+
+    /** The active Material 3 Expressive palette (r76; default [ToadThemeId.TOAD]). */
+    val toadPaletteId: StateFlow<ToadThemeId> = _toadPaletteId.asStateFlow()
+
+    /** r76: selects one of the five palettes; write-through, live re-theme. */
+    fun setToadPaletteId(id: ToadThemeId) {
+        if (id == _toadPaletteId.value) return
+        _toadPaletteId.value = id
+        prefs.edit().putString(KEY_TOAD_PALETTE_ID, id.name).apply()
+    }
+
     private companion object {
         /** Module-private settings file (issue #27). */
         const val PREFS_FILE = "toad_settings"
@@ -244,7 +264,19 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         /** r64: the light/dark/system mode key (default SYSTEM). */
         const val KEY_THEME_MODE = "theme_mode"
 
+        /** r76: the Theme & Colors palette key (default TOAD). */
+        const val KEY_TOAD_PALETTE_ID = "toad_palette_id"
+
         /** [Appearance.columns]' default; kept beside its keys for symmetry. */
         const val DEFAULT_COLUMNS = 3
     }
 }
+
+/**
+ * The forgiving parse for the r76 palette preference: the enum NAME is the
+ * wire format (the same posture as [parseThemeMode]/[parseLayout]); any
+ * unknown or corrupt stored value degrades to the [ToadThemeId.TOAD]
+ * default --- the pre-r76 render --- instead of crashing.
+ */
+fun parseToadThemeId(stored: String?): ToadThemeId =
+    stored?.let { raw -> ToadThemeId.entries.firstOrNull { it.name == raw } } ?: ToadThemeId.TOAD

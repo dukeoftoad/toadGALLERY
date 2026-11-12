@@ -367,8 +367,10 @@ fun ToadGalleryApp() {
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
         // r76: the vault's live state for the Albums tab's Utilities card
-        // summary (the same shell-scoped ViewModel the vault screen uses).
+        // summary (the same shell-scoped ViewModel the vault screen uses),
+        // plus the biometric readiness (the PIN dialog's trigger).
         val vaultState by vaultViewModel.state.collectAsState()
+        val vaultBiometricsReady by vaultViewModel.biometrics.collectAsState()
 
         // r76: the Settings hub-return signal (the nav bar's Settings-pop
         // rule; the Settings screen raises it while a sub-page is open).
@@ -461,10 +463,16 @@ fun ToadGalleryApp() {
                             navController.navigate(Destinations.thingsDetail(collectionId))
                         },
                         // r76: the Utilities & Privacy card's rows --- the
-                        // vault screen and the trash screen, with live
-                        // summaries from the shell-scoped vault state.
+                        // PIN dialog + the vault screen + the trash
+                        // screen, wired to the shell-scoped vault session
+                        // (the dialog hands the PIN to the session's async
+                        // attemptUnlock; the vault surface narrates the
+                        // wrong-PIN case).
                         onOpenVault = { navController.navigate(Destinations.VAULT) },
                         onOpenTrash = { navController.navigate(Destinations.TRASH) },
+                        onAttemptVaultUnlock = vaultViewModel::attemptUnlock,
+                        onVaultBiometric = vaultViewModel::requestBiometricUnlock,
+                        vaultBiometricAvailable = vaultBiometricsReady.hardwareCanPrompt,
                         vaultSummary = when (val vs = vaultState) {
                             is VaultUiState.Unlocked ->
                                 "Unlocked • ${vs.entries.size} private items"

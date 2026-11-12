@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -79,6 +80,7 @@ import com.toadgallery.gallery.ui.media.rememberMediaPermissionRequester
 import com.toadgallery.gallery.ui.people.PersonCard
 import com.toadgallery.gallery.ui.photos.collectionLabelRes
 import com.toadgallery.gallery.ui.places.PlaceRegionCard
+import com.toadgallery.gallery.ui.overlays.HiddenVaultPinDialog
 import com.toadgallery.gallery.ui.screens.albums.ToadAlbumsHeader
 import com.toadgallery.gallery.ui.screens.albums.ToadUtilitiesCard
 import kotlinx.coroutines.launch
@@ -155,6 +157,12 @@ fun AlbumsScreen(
     onOpenTrash: () -> Unit = {},
     /** r76: the vault row's live summary (from the shell-scoped vault state). */
     vaultSummary: String = "PIN & biometric locked storage",
+    /** r76: hands a typed PIN to the shell vault session's async unlock. */
+    onAttemptVaultUnlock: (CharArray) -> Unit = {},
+    /** r76: triggers the vault's biometric prompt (null = unavailable). */
+    onVaultBiometric: (() -> Unit)? = null,
+    /** r76: whether the vault biometric trigger is offered. */
+    vaultBiometricAvailable: Boolean = false,
     /** r76: the recycle row's live summary (from the trash store). */
     recycleSummary: String = "Deleted items",
     viewModel: AlbumsViewModel = viewModel(),
@@ -274,15 +282,48 @@ fun AlbumsScreen(
                         // daily-access rows for the Hidden Vault and the
                         // Recycle Bin (moved out of deep Settings, the
                         // prototype's own instruction).
+                        // r76: the vault row opens the PIN dialog first
+                        // (the prototype's HiddenVaultPinDialog); the
+                        // unlock validator + the biometric trigger come
+                        // from the shell (the shell-scoped vault session).
+                        var showVaultPin by remember { mutableStateOf(false) }
                         ToadUtilitiesCard(
                             vaultSummary = vaultSummary,
-                            onOpenVault = onOpenVault,
+                            onOpenVault = { showVaultPin = true },
                             recycleSummary = recycleSummary,
                             onOpenRecycleBin = onOpenTrash,
                             modifier = Modifier.padding(
                                 start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp,
                             ),
                         )
+                        if (showVaultPin) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0xBF000000)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                HiddenVaultPinDialog(
+                                    onDismiss = { showVaultPin = false },
+                                    // The ASYNC unlock contract: the dialog
+                                    // hands the PIN to the real vault
+                                    // session (the shell wires
+                                    // vaultViewModel::attemptUnlock), then
+                                    // routes to the vault screen --- whose
+                                    // own surface narrates a wrong PIN (the
+                                    // vault's throttle + messaging live
+                                    // there; a synchronous guess here would
+                                    // lie).
+                                    onPinEntered = { pin ->
+                                        onAttemptVaultUnlock(pin)
+                                        onOpenVault()
+                                        true
+                                    },
+                                    onBiometric = onVaultBiometric,
+                                    biometricAvailable = vaultBiometricAvailable,
+                                )
+                            }
+                        }
                     }
                 }
             }

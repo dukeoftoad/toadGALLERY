@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Icon
@@ -142,6 +144,13 @@ fun MediaPagingGrid(
     onItemLongPress: ((MediaItem) -> Unit)? = null,
     header: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
+    /**
+     * r76: the grid's scroll state, hoistable by the caller (the Photos
+     * tab's floating date scrubber drives + reads it). Defaults to the
+     * rememberLazyStaggeredGridState() the grid always used internally,
+     * so every existing call site keeps its behavior.
+     */
+    gridState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
 ) {
     // Grouped-timeline rows: recomputed reactively (itemSnapshotList is
     // snapshot-state backed, so appended windows and refreshes re-run the
@@ -159,6 +168,7 @@ fun MediaPagingGrid(
     val rows = grouping.first
     val headerCounts = grouping.second
     LazyVerticalStaggeredGrid(
+        state = gridState,
         columns = StaggeredGridCells.Fixed(columns),
         modifier = modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(2.dp),

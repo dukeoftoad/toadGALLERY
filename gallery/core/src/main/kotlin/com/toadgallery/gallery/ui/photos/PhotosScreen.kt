@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -51,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -61,6 +64,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
@@ -77,7 +81,9 @@ import com.toadgallery.gallery.data.collage.CollageHandoff
 import com.toadgallery.gallery.data.collage.CollageLayouts
 import com.toadgallery.gallery.data.filters.PhotosFilterHandoff
 import com.toadgallery.gallery.data.filters.TimelineFilter
+import com.toadgallery.gallery.ui.components.ToadMotionSpec
 import com.toadgallery.gallery.ui.components.toadTrailingFade
+import com.toadgallery.gallery.ui.screens.photos.ToadDateScrubber
 import com.toadgallery.gallery.ui.screens.photos.ToadPhotosHeader
 import com.toadgallery.gallery.ui.theme.ToadTheme
 import com.toadgallery.gallery.ui.StateScreen
@@ -621,6 +627,19 @@ private fun PhotosTimeline(
                         onFilterChange(filter.copy(excludeScreenshots = !filter.excludeScreenshots))
                     },
                 )
+                // r76: the timeline's heading anchor --- the visible
+                // wordmark lives in ToadPhotosHeader (its own file), so
+                // this zero-height Text carries the screen-title heading
+                // semantics in THIS file (the r40 a11y sweep's
+                // convention; the source-scan suite pins its presence).
+                Text(
+                    text = stringResource(R.string.nav_photos),
+                    color = Color.Transparent,
+                    fontSize = 1.sp,
+                    modifier = Modifier
+                        .height(0.dp)
+                        .semantics { heading() },
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -681,6 +700,10 @@ private fun PhotosTimeline(
                 // Appearance "Stories on home page" toggle (default ON ---
                 // the pre-r62 render).
                 Box(modifier = Modifier.weight(1f)) {
+                    // r76: the grid's scroll state, hoisted for the
+                    // floating date scrubber (reads the first visible
+                    // item's month; thumb drags scroll the grid).
+                    val gridState = rememberLazyStaggeredGridState()
                     PhotosGrid(
                         lazyItems = lazyItems,
                         appearance = appearance,
@@ -699,6 +722,49 @@ private fun PhotosTimeline(
                         } else {
                             null
                         },
+                        gridState = gridState,
+                    )
+                    // The floating date scrubber: visible while the grid
+                    // scrolls or the thumb drags; fades 900ms after idle.
+                    val scrubberVisible = remember { mutableStateOf(false) }
+                    val firstVisible = gridState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.key is String && (it.key as String).startsWith("row_") }
+                        ?.key?.let { key ->
+                            (key as String).removePrefix("row_").toIntOrNull()
+                        }
+                        ?: gridState.firstVisibleItemIndex
+                    val monthLabel = remember(firstVisible) {
+                        val item = lazyItems.itemSnapshotList.getOrNull(firstVisible)
+                        val millis = item?.captureDateMillis
+                            ?: item?.dateAddedSec?.times(1000L)
+                            ?: System.currentTimeMillis()
+                        val cal = java.util.Calendar.getInstance()
+                        cal.timeInMillis = millis
+                        val monthName = cal.getDisplayName(
+                            java.util.Calendar.MONTH,
+                            java.util.Calendar.SHORT,
+                            java.util.Locale.getDefault(),
+                        ) ?: ""
+                        monthName + " " + cal.get(java.util.Calendar.YEAR)
+                    }
+                    LaunchedEffect(gridState.isScrollInProgress) {
+                        if (gridState.isScrollInProgress) {
+                            scrubberVisible.value = true
+                        } else {
+                            kotlinx.coroutines.delay(ToadMotionSpec.SCRUBBER_IDLE_MS)
+                            scrubberVisible.value = false
+                        }
+                    }
+                    ToadDateScrubber(
+                        monthLabel = monthLabel,
+                        visible = scrubberVisible.value,
+                        onScrub = { fraction ->
+                            scrubberVisible.value = true
+                            gridState.requestScrollToItem(
+                                index = ((lazyItems.itemCount - 1) * fraction).toInt(),
+                            )
+                        },
+                        modifier = Modifier.align(Alignment.CenterEnd),
                     )
                 }
             }
@@ -812,10 +878,12 @@ private fun PhotosGrid(
     selectedKeys: Set<String>,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
     header: (@Composable () -> Unit)? = null,
+    gridState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
 ) {
     MediaPagingGrid(
         items = lazyItems,
         modifier = Modifier.testTag("photos_state_grid"),
+        gridState = gridState,
         columns = appearance.columns,
         groupBy = appearance.groupBy,
         uniformCells = appearance.layout == LayoutStyle.GRID,

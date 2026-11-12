@@ -15,9 +15,11 @@ class ClipTimelineTest {
         startMs: Long,
         endMs: Long,
         speed: Double = 1.0,
+        audio: Boolean = true,
     ) = ClipTimelineEntry(
         sourceUri = "content://test/$durationMs",
         durationMs = durationMs,
+        audioTrackPresent = audio,
         trim = TimeRange(startMs, endMs),
         speedFactor = speed,
     )

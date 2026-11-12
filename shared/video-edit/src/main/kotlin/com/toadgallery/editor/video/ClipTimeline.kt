@@ -13,12 +13,19 @@ package com.toadgallery.editor.video
  * models deliberately share [TimeRange] and the speed-factor bounds so the
  * single-clip lane can adopt the composition model without a translation
  * layer.
+ *
+ * r70 grew the entry's FACT set: [audioTrackPresent] joins durationMs as
+ * an input fact the caller supplies (the retriever reads it per clip) ---
+ * the same additive growth [VideoEditPlan] took at r42, facts before
+ * surfaces.
  */
 data class ClipTimelineEntry(
     /** The source clip's URI (opaque to this module; the activity resolves it). */
     val sourceUri: String,
     /** The source clip's duration in milliseconds (a fact, > 0). */
     val durationMs: Long,
+    /** The input fact: whether THIS clip has an audio track at all (r70; the retriever reads it per clip --- a composition may mix sounding and silent sources). */
+    val audioTrackPresent: Boolean,
     /** The trim window into the source; the clip plays exactly this range. */
     val trim: TimeRange,
     /** The clip's whole-clip speed factor, in [VideoEditPlanValidator.MIN_SPEED_FACTOR]..[VideoEditPlanValidator.MAX_SPEED_FACTOR]. */

@@ -44,8 +44,13 @@ jobs:
       - name: Run editor lint
         run: ./gradlew :editor:app:lintDebug --no-daemon --stacktrace
 
-      - name: Run editor + contract unit tests
-        run: ./gradlew :editor:app:testDebugUnitTest :shared:editor-contract:test --no-daemon --stacktrace
+      # r69: :shared:video-edit joins the lane --- the editor is the pure
+      # module's primary consumer, and its suite (VideoEditPlan, the r69
+      # ClipTimeline model) had NO workflow gate anywhere (the pre-r69
+      # rounds ran it only via the screenshots workflow's task graph, which
+      # the r68 suspension retired).
+      - name: Run editor + contract + video-edit unit tests
+        run: ./gradlew :editor:app:testDebugUnitTest :shared:editor-contract:test :shared:video-edit:test --no-daemon --stacktrace
 
       # r67 gated only the Lilypad-prefixed classes (the design system's
       # JVM-pinned tests). r68 (the suspension round) widens the net: the

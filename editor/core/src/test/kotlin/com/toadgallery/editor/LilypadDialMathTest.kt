@@ -149,12 +149,16 @@ class LilypadDialMathTest {
 
     @Test
     fun `a scrub never escapes its range`() {
+        // A quarter-turn clockwise past the ceiling: +90 deg of finger is
+        // +22.5 of span from a 40 anchor --- 62.5, clamped home to 45.
+        // (The overshoot is the point; the exact half-turn seam is pinned
+        // separately below, where its documented stable sign lives.)
         assertEquals(
             LilypadDialMath.RANGE_MAX_DEG,
             LilypadDialMath.scrub(
                 startValue = 40f,
                 startAngleDeg = 0f,
-                currentAngleDeg = 180f,
+                currentAngleDeg = 90f,
                 range = LilypadDialMath.RANGE_MIN_DEG..LilypadDialMath.RANGE_MAX_DEG,
             ),
             0f,
@@ -165,6 +169,24 @@ class LilypadDialMathTest {
                 startValue = -40f,
                 startAngleDeg = 0f,
                 currentAngleDeg = -180f,
+                range = LilypadDialMath.RANGE_MIN_DEG..LilypadDialMath.RANGE_MAX_DEG,
+            ),
+            0f,
+        )
+    }
+
+    @Test
+    fun `the exactly-half-turn seam reads stably negative`() {
+        // 0 -> 180 is the one genuinely ambiguous finger move (either
+        // half of the circle is an honest reading); the contract pins it
+        // to -180 so the sign is STABLE, never a coin flip between
+        // builds --- 40 anchored, -180/360 of the span: 40 - 45 = -5.
+        assertEquals(
+            -5f,
+            LilypadDialMath.scrub(
+                startValue = 40f,
+                startAngleDeg = 0f,
+                currentAngleDeg = 180f,
                 range = LilypadDialMath.RANGE_MIN_DEG..LilypadDialMath.RANGE_MAX_DEG,
             ),
             0f,

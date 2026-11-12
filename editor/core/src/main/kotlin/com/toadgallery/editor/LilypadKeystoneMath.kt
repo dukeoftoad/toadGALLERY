@@ -77,15 +77,23 @@ internal object LilypadKeystoneMath {
     fun quadFor(verticalPct: Int, horizontalPct: Int, width: Int, height: Int): PerspectiveQuad {
         val topShift = verticalPct / 100.0 * (width / 4.0)
         val leftShift = horizontalPct / 100.0 * (height / 4.0)
+        // Signed-zero hygiene: -topShift on a zero shift manufactures
+        // -0.0, and Double's equals() (the data class's comparison)
+        // distinguishes it from +0.0 --- the identity quad would then
+        // NOT equal PerspectiveQuad.IDENTITY and the read-back tests
+        // (and every isIdentity gate down the pipeline) would lie. A
+        // zero shift negates to exact zero, by rule.
+        val topPinch = if (topShift == 0.0) 0.0 else -topShift
+        val leftPinch = if (leftShift == 0.0) 0.0 else -leftShift
         return PerspectiveQuad(
             tlX = topShift,
             tlY = leftShift,
-            trX = -topShift,
+            trX = topPinch,
             trY = 0.0,
             brX = 0.0,
             brY = 0.0,
             blX = 0.0,
-            blY = -leftShift,
+            blY = leftPinch,
         )
     }
 

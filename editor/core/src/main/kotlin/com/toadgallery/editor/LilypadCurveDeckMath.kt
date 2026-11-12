@@ -119,17 +119,26 @@ internal object LilypadCurveDeckMath {
      * The commit normalization (the null-for-identity rule): an identity
      * channel list flattens to empty, and a state that came all the way
      * back to the identity flattens to NULL --- no residue on the wire,
-     * nothing in the pipeline's gate. The master of an empty-list state
-     * reads as the identity diagonal (the codec's tolerant shape).
+     * nothing in the pipeline's gate. Two deliberate reads of the
+     * diagonal: a curve whose EVERY point sits exactly ON the identity
+     * line (played with, dragged back) IS the identity however many
+     * points it still carries, so it flattens to null; an EMPTY master
+     * (the codec's tolerant degenerate shape) instead REPAIRS to the
+     * canonical two-point diagonal and stays a STATE --- the deck's own
+     * editable identity, never a null the caller would mistake for
+     * "never touched".
      */
     fun normalize(curves: ToneCurves): ToneCurves? {
         val master = curves.master.ifEmpty { LilypadCurveMath.IDENTITY }
         val out = ToneCurves(
-            master = master,
+            master = if (master.all { it.y == it.x }) LilypadCurveMath.IDENTITY else master,
             red = curves.red.identityToEmpty(),
             green = curves.green.identityToEmpty(),
             blue = curves.blue.identityToEmpty(),
         )
+        // The empty-master repair stays a state (see the KDoc); every
+        // other all-the-way-back curve leaves no residue.
+        if (curves.master.isEmpty()) return out
         return if (out.isIdentity) null else out
     }
 

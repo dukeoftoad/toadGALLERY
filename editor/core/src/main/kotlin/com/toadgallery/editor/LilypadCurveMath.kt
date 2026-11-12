@@ -198,13 +198,24 @@ internal object LilypadCurveMath {
         while (i < p.size - 2 && x > p[i + 1].x) i++
         val x0 = p[i].x
         val x1 = p[i + 1].x
+        val y0 = p[i].y
+        val y1 = p[i + 1].y
         val span = x1 - x0
         val t = (x - x0) / span
-        val h00 = 2.0 * t * t * t - 3.0 * t * t + 1.0
+        // The bases in the y0-ANCHORED form: y = y0 + h01*(y1-y0) +
+        // h10*m[i]*span + h11*m[i+1]*span. Algebraically the textbook
+        // h00*y0 + h01*y1 pair, but numerically its superior twin: a
+        // FLAT segment (y1 == y0) evaluates to y0 EXACTLY (the h01 term
+        // cancels to a literal 0.0, and the slopes are already pinned
+        // zero by the d == 0 rule), where the h00/h01 split leaves
+        // +-1ulp dust --- dust a 256-entry bake at a rounding boundary
+        // (0.3 * 255 = 76.4999...) turns into a one-step LUT inversion.
+        // The endpoints stay exact the same way: t = 0 collapses to y0,
+        // t = 1 to y0 + (y1 - y0).
         val h10 = t * t * t - 2.0 * t * t + t
         val h01 = -2.0 * t * t * t + 3.0 * t * t
         val h11 = t * t * t - t * t
-        return (h00 * p[i].y + h10 * m[i] * span +
-            h01 * p[i + 1].y + h11 * m[i + 1] * span).coerceIn(0.0, 1.0)
+        return (y0 + h01 * (y1 - y0) + h10 * m[i] * span +
+            h11 * m[i + 1] * span).coerceIn(0.0, 1.0)
     }
 }

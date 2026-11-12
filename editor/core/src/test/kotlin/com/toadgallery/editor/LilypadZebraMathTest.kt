@@ -93,18 +93,19 @@ class LilypadZebraMathTest {
 
     @Test
     fun `the shadow stripe is the opposite diagonal`() {
-        // The highlight tiling is constant along the (1, 1) direction and
-        // the shadow tiling along the (1, -1) direction --- opposite
-        // slopes, so the two zones read differently where they meet.
+        // The highlight tiling is constant along the (1, -1) direction
+        // (x + y unchanged) and the shadow tiling along the (1, 1)
+        // direction (x - y unchanged) --- opposite slopes, so the two
+        // zones read differently where they meet.
         for (y in 0 until 12) {
             for (x in 0 until 12) {
                 assertEquals(
                     LilypadZebraMath.highlightStripeOn(x, y),
-                    LilypadZebraMath.highlightStripeOn(x + 1, y + 1),
+                    LilypadZebraMath.highlightStripeOn(x + 1, y - 1),
                 )
                 assertEquals(
                     LilypadZebraMath.shadowStripeOn(x, y),
-                    LilypadZebraMath.shadowStripeOn(x + 1, y - 1),
+                    LilypadZebraMath.shadowStripeOn(x + 1, y + 1),
                 )
             }
         }

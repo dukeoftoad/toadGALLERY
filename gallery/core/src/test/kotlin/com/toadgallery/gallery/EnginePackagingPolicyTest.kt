@@ -1,6 +1,7 @@
 package com.toadgallery.gallery
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -167,6 +168,73 @@ class EnginePackagingPolicyTest {
             script.contains("PINNED_NDK_VERSION=\"28.1.13356709\""),
         )
     }
+
+    /**
+     * The r75 ORT LOCKSTEP: the staged `libonnxruntime.so` (this script's
+     * [ORT_VERSION]) MUST ship the same `.x` as the editor's Java ORT AAR
+     * (`gradle/libs.versions.toml`'s `onnxruntime-android` ref). The r22
+     * pin stayed at 1.31.0 while the editor AAR moved to 1.31.1, so a
+     * `-PwithEngine` unified APK packaged the 1.31.1 JNI wrapper
+     * (`libonnxruntime4j_jni.so`) against the script's staged 1.31.0
+     * runtime --- dlopen could not resolve `OrtGetApiBase@@VERS_1.31.1`
+     * and the editor crashed with `UnsatisfiedLinkError` (the same
+     * mixed-version family that broke `libtoad_ml_jni.so`'s
+     * `nativeRelease`). This test keeps the two supplies on the same
+     * `.x` so the lockstep can't drift silently again.
+     */
+    @Test
+    fun `the staged onnxruntime so is lockstep with the editor java ort aar`() {
+        val script = repoFile("engine/scripts/build-android.sh").readText()
+        val catalog = repoFile("gradle/libs.versions.toml").readText()
+
+        // The script's pin is single-sourced as ORT_VERSION (mirrors the
+        // NDK pin's discipline): the assignment line is the one truth the
+        // fetch + cache + error messages all read. Extract the quoted
+        // value with plain string ops so the lex checker stays happy
+        // (regex with an embedded `"$` confuses it --- see BackupRulesTest
+        // for the `contains`-style precedent this suite prefers).
+        val scriptAssign = script.lineSequence().firstOrNull { it.startsWith("ORT_VERSION=") }
+        assertNotNull(
+            "engine/scripts/build-android.sh must pin ONNX Runtime as ORT_VERSION " +
+                "(single-sourced, like PINNED_NDK_VERSION).",
+            scriptAssign,
+        )
+        val scriptVersion = scriptAssign!!.let {
+            val open = it.indexOf('"')
+            val close = it.lastIndexOf('"')
+            assertTrue("ORT_VERSION must be a double-quoted assignment.", open >= 0 && close > open)
+            it.substring(open + 1, close)
+        }
+
+        // The editor AAR's version ref in the catalog: the
+        // `onnxruntime-android = "x.y.z"` line.
+        val catalogLine = catalog.lineSequence().firstOrNull { line ->
+            line.startsWith("onnxruntime-android") && line.contains("=")
+        }
+        assertNotNull(
+            "gradle/libs.versions.toml must declare the onnxruntime-android version ref " +
+                "(the editor's Java ORT AAR).",
+            catalogLine,
+        )
+        val catalogVersion = catalogLine!!.let {
+            val open = it.indexOf('"')
+            val close = it.lastIndexOf('"')
+            assertTrue("onnxruntime-android must be a double-quoted ref.", open >= 0 && close > open)
+            it.substring(open + 1, close)
+        }
+
+        assertEquals(
+            "ORT lockstep broken (r75 root cause): the engine script stages " +
+                "libonnxruntime.so $scriptVersion but the editor's Java AAR is " +
+                "$catalogVersion. A -PwithEngine build packages the $catalogVersion JNI " +
+                "wrapper against the $scriptVersion runtime --- dlopen cannot resolve " +
+                "OrtGetApiBase and the editor crashes with UnsatisfiedLinkError. Keep " +
+                "ORT_VERSION and the onnxruntime-android catalog ref on the same version.",
+            catalogVersion,
+            scriptVersion,
+        )
+    }
+
 
     /**
      * The 16 KB page-size link discipline covers every Android target

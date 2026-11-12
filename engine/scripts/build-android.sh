@@ -5,8 +5,20 @@
 # ABIs with cargo-ndk, and stages BOTH native libraries the app must package:
 #
 #   libtoad_ml_jni.so   --- built here from the vendored engine
-#   libonnxruntime.so   --- ONNX Runtime 1.31.0, the exact version the
-#                           ort-sys 2.0.0-rc.15 bindings pin (api-31).
+#   libonnxruntime.so   --- ONNX Runtime 1.31.1, the exact version the
+#                           ort-sys 2.0.0-rc.15 bindings pin (api-31),
+#                           LOCKSTEP with the editor's Java ORT AAR
+#                           (`gradle/libs.versions.toml`'s
+#                           `onnxruntime-android` ref). r75 lockstep:
+#                           the r22 pin stayed at 1.31.0 while the editor
+#                           AAR moved to 1.31.1, so a `-PwithEngine`
+#                           unified APK packaged the 1.31.1 JNI wrapper
+#                           (`libonnxruntime4j_jni.so`) against this
+#                           script's staged 1.31.0 runtime --- the JNI
+#                           wrapper dlopens it, can't resolve
+#                           `OrtGetApiBase@@VERS_1.31.1`, and the editor
+#                           crashes with UnsatisfiedLinkError. Both
+#                           native supplies now ship the same .x.
 #                           The vendored crates use ort's load-dynamic mode,
 #                           so the shared library is a RUNTIME supply, not a
 #                           cargo build artifact (ort-sys's dist.tsv ships
@@ -160,13 +172,17 @@ NDK_ARGS=(-t arm64-v8a)
 ANDROID_NDK_HOME="$NDK_HOME" cargo ndk "${NDK_ARGS[@]}" -p 26 build --release --package toad-ml-jni
 
 # --- 4. ONNX Runtime shared library (official Android AAR, pinned) ----------
-# Verified against the 1.31.0 AAR (r22 local build proof): exports
-# OrtGetApiBase@@VERS_1.31.0 (the api-31 bindings' exact version) and its LOAD
-# segments are aligned 0x4000 (Android 16 KB page size). Cached under
+# Verified against the 1.31.1 AAR (r75 lockstep with the editor's Java ORT
+# AAR in `gradle/libs.versions.toml`): exports OrtGetApiBase@@VERS_1.31.1
+# (the api-31 bindings' exact version) and its LOAD segments are aligned
+# 0x4000 (Android 16 KB page size). The r22 pin stayed at 1.31.0 while the
+# editor AAR moved to 1.31.1; the staged runtime no longer matched the
+# packaged JNI wrapper, so dlopen could not resolve OrtGetApiBase and the
+# unified debug build crashed (UnsatisfiedLinkError). Cached under
 # engine/target/ort-cache/ (gitignored); ~55 MB, contains all four ABIs.
 
-ORT_VERSION="1.31.0"
-ORT_AAR_SHA256="72683787a80d0608a3121b967d8e1239aef48286826661c953211626690540a7"
+ORT_VERSION="1.31.1"
+ORT_AAR_SHA256="d4d50660300ed2c4f38ffdfd5ab5bfa3a22f995f282dda24f42ea3ea55467b49"
 ORT_CACHE_DIR="$ENGINE_DIR/target/ort-cache"
 ORT_AAR="$ORT_CACHE_DIR/onnxruntime-android-$ORT_VERSION.aar"
 ORT_EXTRACT="$ORT_CACHE_DIR/extracted"

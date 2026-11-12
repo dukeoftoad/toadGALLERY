@@ -82,11 +82,23 @@ class OrtEditAiInference(
     }
 
     private fun openSession(model: EditAiManifest.ModelFile): OrtSession? {
+        // The never-crash contract: an ORT native load failure is an
+        // [UnsatisfiedLinkError] (an [Error], NOT a [RuntimeException] ---
+        // the catch below it does NOT cover it), raised the first time the
+        // 1.31.x JNI wrapper dlopens against a packaged `libonnxruntime.so`
+        // it can't bind to (OrtGetApiBase@@VERS_1.31.x missing when the
+        // engine script staged a different .x than the editor AAR --- see
+        // `engine/scripts/build-android.sh` and the r75 lockstep). It must
+        // answer the SAME dedicated degradation as any other session
+        // failure, never escape to the editor caller (the contract: "a
+        // session that fails to load ... answers RUNTIME_BROKEN").
         return try {
             val bytes = openAsset(model.assetPath)?.use { it.readBytes() } ?: return null
             if (bytes.size.toLong() != model.bytes) return null
             val session = createSessionNnapiFirst(bytes)
             session
+        } catch (_: UnsatisfiedLinkError) {
+            null
         } catch (_: RuntimeException) {
             null
         } catch (_: java.io.IOException) {
@@ -104,6 +116,13 @@ class OrtEditAiInference(
             } finally {
                 options.close()
             }
+        } catch (_: UnsatisfiedLinkError) {
+            // The native surface could not bind (the lockstep failure this
+            // path now defends against): no CPU fallback can run without
+            // the JNI wrapper, so the honest answer is "no session" ---
+            // the caller degrades through RUNTIME_BROKEN (the never-crash
+            // contract), never an Error escape.
+            null
         } catch (_: RuntimeException) {
             // The honest fallback: the CPU EP is the default provider.
             val options = OrtSession.SessionOptions()
@@ -155,6 +174,12 @@ class OrtEditAiInference(
                     out
                 }
             }
+        } catch (_: UnsatisfiedLinkError) {
+            // Defense in depth: a bound session can still raise an Error on
+            // the first native call into a mismatched `libonnxruntime.so`
+            // (the lockstep failure). The contract is never-crash: every
+            // native failure answers RUNTIME_BROKEN, the editor carries on.
+            AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         } catch (_: RuntimeException) {
             AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         }
@@ -223,6 +248,12 @@ class OrtEditAiInference(
                     }
                 }
             }
+        } catch (_: UnsatisfiedLinkError) {
+            // Defense in depth: a bound session can still raise an Error on
+            // the first native call into a mismatched `libonnxruntime.so`
+            // (the lockstep failure). The contract is never-crash: every
+            // native failure answers RUNTIME_BROKEN, the editor carries on.
+            AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         } catch (_: RuntimeException) {
             AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         }
@@ -257,6 +288,12 @@ class OrtEditAiInference(
                     out
                 }
             }
+        } catch (_: UnsatisfiedLinkError) {
+            // Defense in depth: a bound session can still raise an Error on
+            // the first native call into a mismatched `libonnxruntime.so`
+            // (the lockstep failure). The contract is never-crash: every
+            // native failure answers RUNTIME_BROKEN, the editor carries on.
+            AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         } catch (_: RuntimeException) {
             AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         }
@@ -304,6 +341,12 @@ class OrtEditAiInference(
                     AiRun.Ok(boxes)
                 }
             }
+        } catch (_: UnsatisfiedLinkError) {
+            // Defense in depth: a bound session can still raise an Error on
+            // the first native call into a mismatched `libonnxruntime.so`
+            // (the lockstep failure). The contract is never-crash: every
+            // native failure answers RUNTIME_BROKEN, the editor carries on.
+            AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         } catch (_: RuntimeException) {
             AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
         }

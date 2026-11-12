@@ -89,6 +89,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.toadgallery.editor.EditorPalette
+import com.toadgallery.editor.LilypadFlags
 import com.toadgallery.editor.R
 import java.util.Locale
 import kotlin.math.abs
@@ -962,30 +963,62 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
             // dim scrim outside the window, clamped playhead); the Trim tab
             // below stays as the precision surface. The strip shows the LIVE
             // window --- the drafts, which equal committed at rest.
-            TrimStrip(
-                durationMs = durationMs,
-                trimStartMs = draftTrimStartMs,
-                trimEndMs = draftTrimEndMs,
-                playheadAbsoluteMs = committed.trimStartMs + positionMs,
-                enabled = !exporting,
-                filmstripA11yName = trimStripA11yName,
-                positionStateText = stringResource(
-                    R.string.editor_v2_filmstrip_state,
-                    formatTimestamp(committed.trimStartMs + positionMs),
-                ),
-                startHandleA11y = stringResource(R.string.editor_a11y_video_trim_start),
-                endHandleA11y = stringResource(R.string.editor_a11y_video_trim_end),
-                startHandleState = formatTimestamp(draftTrimStartMs),
-                endHandleState = formatTimestamp(draftTrimEndMs),
-                onDecodeThumbnails = { count, onDone -> activity.decodeThumbnails(count, onDone) },
-                onDragStarted = stripOnDragStarted,
-                onHandleDragFinished = stripOnHandleDragFinished,
-                onScrubFinished = stripOnScrubFinished,
-                onStartDrag = stripOnStartDrag,
-                onEndDrag = stripOnEndDrag,
-                onSeekAbsolute = seekToAbsolute,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            // r69: behind the Phase 3 seam the strip grows a viewport ---
+            // pinch-zoom onto detents, pan while zoomed, the trim/scrub/tap
+            // contract otherwise byte-identical (the flag's fallback is the
+            // r63d TrimStrip, one reviewed flip away).
+            if (LilypadFlags.timelineZoomEnabled) {
+                TimelineStrip(
+                    durationMs = durationMs,
+                    trimStartMs = draftTrimStartMs,
+                    trimEndMs = draftTrimEndMs,
+                    playheadAbsoluteMs = committed.trimStartMs + positionMs,
+                    enabled = !exporting,
+                    filmstripA11yName = trimStripA11yName,
+                    positionStateText = stringResource(
+                        R.string.editor_v2_filmstrip_state,
+                        formatTimestamp(committed.trimStartMs + positionMs),
+                    ),
+                    zoomStateFormat = stringResource(R.string.editor_r69_timeline_zoom_state),
+                    startHandleA11y = stringResource(R.string.editor_a11y_video_trim_start),
+                    endHandleA11y = stringResource(R.string.editor_a11y_video_trim_end),
+                    startHandleState = formatTimestamp(draftTrimStartMs),
+                    endHandleState = formatTimestamp(draftTrimEndMs),
+                    onDecodeThumbnails = { count, onDone -> activity.decodeThumbnails(count, onDone) },
+                    onDragStarted = stripOnDragStarted,
+                    onHandleDragFinished = stripOnHandleDragFinished,
+                    onScrubFinished = stripOnScrubFinished,
+                    onStartDrag = stripOnStartDrag,
+                    onEndDrag = stripOnEndDrag,
+                    onSeekAbsolute = seekToAbsolute,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            } else {
+                TrimStrip(
+                    durationMs = durationMs,
+                    trimStartMs = draftTrimStartMs,
+                    trimEndMs = draftTrimEndMs,
+                    playheadAbsoluteMs = committed.trimStartMs + positionMs,
+                    enabled = !exporting,
+                    filmstripA11yName = trimStripA11yName,
+                    positionStateText = stringResource(
+                        R.string.editor_v2_filmstrip_state,
+                        formatTimestamp(committed.trimStartMs + positionMs),
+                    ),
+                    startHandleA11y = stringResource(R.string.editor_a11y_video_trim_start),
+                    endHandleA11y = stringResource(R.string.editor_a11y_video_trim_end),
+                    startHandleState = formatTimestamp(draftTrimStartMs),
+                    endHandleState = formatTimestamp(draftTrimEndMs),
+                    onDecodeThumbnails = { count, onDone -> activity.decodeThumbnails(count, onDone) },
+                    onDragStarted = stripOnDragStarted,
+                    onHandleDragFinished = stripOnHandleDragFinished,
+                    onScrubFinished = stripOnScrubFinished,
+                    onStartDrag = stripOnStartDrag,
+                    onEndDrag = stripOnEndDrag,
+                    onSeekAbsolute = seekToAbsolute,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
             // r63a V5: the dead Spacer(weight(1f)) that parked ~40% of the
             // screen below the filmstrip is gone --- the preview's weight(1f)
             // above now takes this space, so the filmstrip and the tab bar

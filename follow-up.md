@@ -1269,3 +1269,24 @@ the public remote each time.
   suspension is reversible by design (re-add the `pull_request:` block to
   `screenshots.yml`). Revisit when the Lilypad phases land and the UI
   cadence slows: the harness, baselines, and plugin wiring all survive.
+
+## 2026-11-12 — the r69 window (Phase 3 starts: the timeline foundation)
+
+- **F-77 (2026-11-12, open) — the multi-clip surfaces.** The
+  `ClipTimeline` model (`shared/video-edit`, validator + math +
+  single-clip-equivalence pins) is landed and JVM-gated, but every
+  surface above it is still single-clip: the strip renders the session's
+  one source, the runner builds one clipped item per speed run of one
+  URI, and the editor contract (`EditRequest`) carries one `sourceUri`.
+  The follow-up chain: the in-editor clip picker (add / remove /
+  reorder), the contract v3 extra (a clip list or a picker round-trip),
+  `Media3VideoExportRunner` growing one `EditedMediaItem` per
+  `ClipTimelineEntry` (the per-item `Effects` structurally supports
+  per-clip looks already), and the ExoPlayer preview becoming a playlist
+  of clipped items so per-clip speed previews honestly.
+- **F-78 (2026-11-12, open) — window-aware thumbnail decode.** The r69
+  strip draws the whole-clip even decode at TRUE source positions (the
+  honest-sparse rule): correct but sparse when zoomed. The R2-budget
+  follow-up: decode frames for the visible window on zoom settle (LRU
+  cache keyed by source + timestamp bucket), so a zoomed timeline fills
+  with real frames instead of gaps.

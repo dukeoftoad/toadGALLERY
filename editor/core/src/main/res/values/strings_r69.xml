@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r69: the video timeline foundation (Phase 3 of the editor rebirth
+     plan, docs/editor/lilypad-design.md): the zoomable timeline strip on
+     the video editor's Main screen (pinch-zoom with detents, pan while
+     zoomed). Only NEW concepts live here; the strip reuses the r63d trim
+     and filmstrip strings in their original files. XML comments use
+     single dashes (the r66 lesson: a double dash inside an XML comment
+     breaks aapt). -->
+<resources>
+    <!-- The zoomable strip's a11y STATE suffix (the r32 contract): the
+         timeline's zoom level, appended to the filmstrip position state
+         the r63d strip already announces. The placeholder is the mono
+         multiplier label (1.0x through 16.0x). -->
+    <string name="editor_r69_timeline_zoom_state">timeline zoom %1$s</string>
+</resources>

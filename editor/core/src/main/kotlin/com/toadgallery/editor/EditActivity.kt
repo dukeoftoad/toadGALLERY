@@ -38,6 +38,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -471,11 +472,11 @@ class EditActivity : ComponentActivity() {
         val restored = sidecarStore.load(request.sourceUri) ?: EditRecipe()
 
         setContent {
-            // r47 ux fix: the family theme (toad-green, fixed dark) instead of
+            // r67: the family theme (Lilypad, fixed dark) instead of
             // the bare MaterialTheme whose baseline purple leaked through
             // every accent role (the maintainer's device screenshot).
             EditorTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
+                Surface(modifier = Modifier.fillMaxSize(), color = Color(LilypadTokens.POND.toInt())) {
                     EditorContent(activity = this@EditActivity, initialRecipe = restored)
                 }
             }
@@ -2189,11 +2190,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Color(LilypadTokens.POND.toInt()))
             // r47 ux fix: pay the system-bar insets once, at the root, so
             // the top bar and the control stack never sit under the
             // status/navigation bars (edge-to-edge is enforced at
-            // targetSdk 36+); the black background still reaches the bars.
+            // targetSdk 36+); the pond background still reaches the bars.
             .systemBarsPadding(),
     ) {
         // ---- Top bar: the r54 chassis header, r63b §4 icon chrome ----
@@ -2932,21 +2933,31 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             )
         }
 
-        // ---- Controls: the r54 per-tool panels ----
-        // The long-scroll sectioned IA retires: each tool's block now
-        // lives behind its tab, re-hosted VERBATIM (the r30-r41 behavior
-        // contracts --- commit-on-release, the draft machinery, the
-        // cross-family layer exclusivity --- are untouched; only the
-        // container changed). The panel shares the canvas above: ONE
-        // preview, never recomposed away (the video chassis's rule).
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 300.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
+        // ---- Controls: the r67 Lilypad Deck (the three-state sheet) ----
+        // The r54 fixed 300dp window retires as the DEFAULT: the panels
+        // ride the Deck --- Collapsed (the 64dp peek), Half (the 45%
+        // working surface), Full (78%, the Phase 2 curve deck) --- with
+        // the sheet's own scroll, spring motion and hairline top edge.
+        // LilypadFlags.decksEnabled is the round's reviewed revert seam:
+        // false restores the r54 window verbatim (the flag covers the
+        // PANEL CONTAINER only --- the TuneRail is retired either way).
+        // The panels themselves are untouched re-hosts (the r30-r41
+        // behavior contracts --- commit-on-release, the draft machinery,
+        // the cross-family layer exclusivity). ONE preview above,
+        // never recomposed away (the video chassis's rule).
+        var deckState by remember { mutableStateOf(LilypadDeckState.Half) }
+        // The working default per screen: tools open on the Half working
+        // surface; the Main canvas collapses to the peek so the photo
+        // stays the hero. The user's explicit handle tap/drag always wins
+        // until the next screen change.
+        LaunchedEffect(screen) {
+            deckState = if (screen == PhotoScreen.Main) {
+                LilypadDeckState.Collapsed
+            } else {
+                LilypadDeckState.Half
+            }
+        }
+        val panels: @Composable ColumnScope.() -> Unit = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 PhotoPanelHost(
                         tool = screen,
@@ -3065,6 +3076,30 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                     }
                 }
+            }
+        }
+        if (LilypadFlags.decksEnabled) {
+            // The Lilypad Deck: the three-state sheet hosts the panels
+            // (Half by default on tools, the Collapsed peek on Main).
+            LilypadDeck(
+                state = deckState,
+                onStateChange = { deckState = it },
+            ) {
+                panels()
+            }
+        } else {
+            // The r54 fallback window (the flag's other rail): the exact
+            // heightIn(max = 300dp) scroll column this round retires as
+            // the DEFAULT, kept as the reviewed revert seam.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                panels()
             }
         }
 

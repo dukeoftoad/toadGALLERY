@@ -14,34 +14,39 @@ import androidx.compose.ui.unit.dp
 
 // ---------------------------------------------------------------------------
 // The r57 panel seam (F-58a): the tone family's tool panels, extracted
-// VERBATIM from `EditActivity.EditorContent`'s `PhotoScreen.Adjust` and
-// `PhotoScreen.Color` branches (plus their private label/apply helpers,
-// `bandNameRes` and `withBand`, whose only readers lived in these branches).
+// from `EditActivity.EditorContent`'s `PhotoScreen.Adjust` and
+// `PhotoScreen.Color` branches.
 //
-// The bodies are the r31/r32 adjust contracts and the r47 HSL band contract,
-// unchanged; the chassis state arrives as explicit value + `on...Change`
-// pairs. The committed Roborazzi chassis baselines are the regression proof.
+// r67, the Lilypad foundation round (docs/editor/lilypad-design.md): the
+// Adjust panel becomes the full ProSlider BOARD --- every parameter of
+// [ADJUST_SLIDERS] visible at once, each row a ProSlider with its live
+// mono value pill (the B1 fix of the rebirth audit: the r63c one-slider
+// rail hid nine of the ten values behind a chip row; a photographer
+// adjusting exposure could not see what contrast or temperature were
+// set to). The TuneRail chassis this panel hosted retires with the
+// round; the r32 draft contract (drag ticks draft, release commits and
+// clears) and the r32 a11y contract (name + formatted state on every
+// row) ride unchanged, and the r66 live histogram still leads the
+// board.
+//
+// The Color panel keeps its r47 HSL band contract untouched this round
+// (the band rows' ProSlider migration is the pro-surfaces round, C5).
 // ---------------------------------------------------------------------------
 
 /**
- * The Adjust panel, rebuilt as the r63c tune-rail (the approved proposal's
- * Ente pattern): the stacked LabeledSliders retire here --- the section
- * heading stays, the slider stack becomes [TuneRail]'s chip-ring row plus
- * ONE active slider. The contract is unchanged: the panel is a thin
- * adapter over the chassis state (committed + the ONE draft slot + commit);
- * every parameter in [ADJUST_SLIDERS] rides the same draft/commit pipeline
- * as before, and the a11y contract is the r32 one, verbatim (see
- * TuneRail.kt). The non-tonal panels keep the LabeledSlider kit.
+ * The Adjust panel, rebuilt as the r67 Lilypad board: the r66 live
+ * histogram at the top, then ONE ProSlider row per [ADJUST_SLIDERS]
+ * parameter --- exposure through sharpness, the code's existing order
+// IS the board order. The panel stays a thin adapter over the chassis
+// state (committed + the ONE draft slot + commit); the a11y contract is
+// the r32 one, verbatim (name = contentDescription, formatted value =
+ * stateDescription, plus the adjustability progressBarRangeInfo the
+ * ProSlider carries).
  *
- * The bodies are the r31/r32 adjust contracts and the r47 HSL band contract,
- * unchanged; the chassis state arrives as explicit value + `on...Change`
- * pairs. The committed Roborazzi chassis baselines are the regression proof.
- *
- * r66 adds the LIVE TONAL HISTOGRAM above the rail ([previewHistogram],
- * defaulted null so the screenshot fixtures and any pre-r66 call site
- * compile unchanged): the chart of the same pipelined pixels the canvas
- * shows, counted by the preview render. Absent (never a placeholder)
- * until the first preview lands.
+ * The bodies are the r31/r32 adjust contracts, unchanged; the chassis
+ * state arrives as explicit value + `on...Change` pairs. The committed
+ * Roborazzi chassis baselines are the regression proof (re-recorded as
+ * the round's deliberate baseline pass).
  */
 @Composable
 internal fun AdjustPanel(
@@ -52,28 +57,42 @@ internal fun AdjustPanel(
     commit: (EditRecipe) -> Unit,
     previewHistogram: EditorHistogram? = null,
 ) {
-
-    // ---- The adjustment suite ----
-    Text(
-        text = stringResource(R.string.editor_section_adjust),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.labelLarge,
-    )
-    // r66: the live tonal readout --- the Adjust panel leads with the
-    // histogram the way every serious photo editor does, drawn from the
-    // SAME pipelined pixels the canvas shows (see EditorHistogram's
-    // header for the wiring).
+    // r66: the live tonal readout --- the board leads with the histogram
+    // the way every serious photo editor does, drawn from the SAME
+    // pipelined pixels the canvas shows (see EditorHistogram's header
+    // for the wiring). Absent (never a placeholder) until the first
+    // preview lands.
     previewHistogram?.let { histogram ->
         HistogramChart(histogram = histogram)
     }
-    TuneRail(
-        specs = ADJUST_SLIDERS,
-        committed = committed,
-        draft = draft,
-        onDraftChange = onDraftChange,
-        exporting = exporting,
-        commit = commit,
-    )
+    // r67: the BOARD --- one ProSlider per parameter, every value visible
+    // at once. Each row reads the committed recipe (or its own draft slot
+    // while live) and commits through the same draft/finish sequence the
+    // rail used: every drag tick writes the chassis draft slot (the
+    // preview re-renders live), release commits through the caller's
+    // `commit` and clears the draft.
+    ADJUST_SLIDERS.forEach { spec ->
+        val committedValue = spec.get(committed)
+        val live = if (draft?.first == spec.key) draft.second else committedValue
+        ProSlider(
+            name = stringResource(spec.a11yNameRes),
+            label = stringResource(spec.a11yNameRes),
+            state = stringResource(spec.label, live),
+            valueText = LilypadSliderMath.signedValueText(live),
+            value = live.toFloat(),
+            valueRange = -100f..100f,
+            neutral = 0f,
+            enabled = !exporting,
+            onChange = { v -> onDraftChange(spec.key to v.toInt()) },
+            onFinish = {
+                val d = draft
+                if (d != null && d.first == spec.key) {
+                    commit(spec.set(committed, d.second))
+                }
+                onDraftChange(null)
+            },
+        )
+    }
 }
 
 @Composable

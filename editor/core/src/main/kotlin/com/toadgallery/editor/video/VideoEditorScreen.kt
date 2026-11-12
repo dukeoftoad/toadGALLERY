@@ -105,9 +105,12 @@ import kotlinx.coroutines.delay
 // capability is the volume percent (task 2-a's VideoEditPlan contract).
 //
 // r63b: the violet retires --- this surface's pins re-point to the edit
-// app's toad-green [com.toadgallery.editor.EditorPalette.Toad]
-// registry (the approved §3 table; same module, so the r52 note's
+// app's [com.toadgallery.editor.EditorPalette] registry (the approved
+// §3 table; same module, so the r52 note's
 // "duplicated on purpose" hex fork has no dependency reason to survive).
+// r67: the registry's default is the Lilypad family now (the editor-
+// rebirth design language: one neutral ladder + the ember accent) --- the
+// video lane re-pins with it, one language across photo and video.
 // The fixed-dark, non-dynamic contract stands, and the r52 selection
 // mechanism survives re-colored (secondaryContainer = the #9CD8A2 accent,
 // labels in #00390F).
@@ -133,22 +136,22 @@ import kotlinx.coroutines.delay
 // ---------------------------------------------------------------------------
 
 // The video pins, sourced from the shared EditorPalette registry (the ONLY
-// toad-green source of truth in the edit app). VideoEditBg is shared with
+// Lilypad source of truth in the edit app). VideoEditBg is shared with
 // the activity's root Surface.
-internal val VideoEditBg = EditorPalette.Toad.background
-private val VideoSurface = EditorPalette.Toad.background
-private val VideoSurfaceHigh = EditorPalette.Toad.surfaceVariant
-private val VideoOutline = EditorPalette.Toad.outlineVariant
-private val VideoAccent = EditorPalette.Toad.primary
-private val VideoOnAccent = EditorPalette.Toad.onPrimary
-private val VideoAccentSoft = EditorPalette.Toad.secondary
-private val VideoTextPrimary = EditorPalette.Toad.onBackground
-private val VideoTextSecondary = EditorPalette.Toad.onSurfaceVariant
+internal val VideoEditBg = EditorPalette.Lilypad.background
+private val VideoSurface = EditorPalette.Lilypad.background
+private val VideoSurfaceHigh = EditorPalette.Lilypad.surfaceVariant
+private val VideoOutline = EditorPalette.Lilypad.outlineVariant
+private val VideoAccent = EditorPalette.Lilypad.primary
+private val VideoOnAccent = EditorPalette.Lilypad.onPrimary
+private val VideoAccentSoft = EditorPalette.Lilypad.secondary
+private val VideoTextPrimary = EditorPalette.Lilypad.onBackground
+private val VideoTextSecondary = EditorPalette.Lilypad.onSurfaceVariant
 private val VideoError = Color(0xFFF2B8B5)
 
 /**
  * The video surface's own fixed dark scheme (the §3 role mapping over the
- * toad-green registry): primary = the green accent, background/surface =
+ * Lilypad registry): primary = the ember accent, background/surface =
  * the warm near-black base, secondaryContainer = accent so a SELECTED
  * FilterChip is the accent-filled pill the design shows (no per-chip color
  * overrides anywhere). Deliberately not dynamic color, exactly like
@@ -161,17 +164,17 @@ internal fun VideoEditTheme(content: @Composable () -> Unit) {
         colorScheme = darkColorScheme(
             primary = VideoAccent,
             onPrimary = VideoOnAccent,
-            primaryContainer = EditorPalette.Toad.primaryContainer,
-            onPrimaryContainer = EditorPalette.Toad.onPrimaryContainer,
-            inversePrimary = EditorPalette.Toad.inversePrimary,
+            primaryContainer = EditorPalette.Lilypad.primaryContainer,
+            onPrimaryContainer = EditorPalette.Lilypad.onPrimaryContainer,
+            inversePrimary = EditorPalette.Lilypad.inversePrimary,
             secondary = VideoAccentSoft,
-            onSecondary = EditorPalette.Toad.onSecondary,
+            onSecondary = EditorPalette.Lilypad.onSecondary,
             secondaryContainer = VideoAccent,
             onSecondaryContainer = VideoOnAccent,
-            tertiary = EditorPalette.Toad.tertiary,
-            onTertiary = EditorPalette.Toad.onTertiary,
-            tertiaryContainer = EditorPalette.Toad.tertiaryContainer,
-            onTertiaryContainer = EditorPalette.Toad.onTertiaryContainer,
+            tertiary = EditorPalette.Lilypad.tertiary,
+            onTertiary = EditorPalette.Lilypad.onTertiary,
+            tertiaryContainer = EditorPalette.Lilypad.tertiaryContainer,
+            onTertiaryContainer = EditorPalette.Lilypad.onTertiaryContainer,
             background = VideoEditBg,
             onBackground = VideoTextPrimary,
             surface = VideoEditBg,
@@ -181,7 +184,7 @@ internal fun VideoEditTheme(content: @Composable () -> Unit) {
             surfaceTint = VideoAccent,
             inverseSurface = VideoTextPrimary,
             inverseOnSurface = Color(0xFF1D1C17),
-            outline = EditorPalette.Toad.outline,
+            outline = EditorPalette.Lilypad.outline,
             outlineVariant = VideoOutline,
             scrim = Color(0xFF000000),
             error = VideoError,

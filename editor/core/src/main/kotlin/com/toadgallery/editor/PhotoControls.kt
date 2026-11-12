@@ -361,47 +361,11 @@ internal fun NeutralNotch(modifier: Modifier = Modifier) {
  * selected state carried by FilterChip itself (the theme's accent-fill
  * mechanism). `lut == null` renders the None chip: name only, no thumb ---
  * "no look" has nothing honest to preview.
+ *
+ * r67: RETIRED --- the Looks panel's chips became the [LookCard] shelf
+ * (LilypadCards.kt); the composable is deleted, its honest-render helper
+ * `renderLookThumb` lives on as the card renderer's null-base fallback.
  */
-@Composable
-internal fun LookThumbChip(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    lut: CubeLut?,
-    onPick: () -> Unit,
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onPick,
-        enabled = enabled,
-        label = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(vertical = 4.dp),
-            ) {
-                if (lut != null) {
-                    val thumb = remember(lut.id) { renderLookThumb(lut) }
-                    Image(
-                        bitmap = thumb.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier
-                            .padding(bottom = 4.dp)
-                            .size(width = 66.dp, height = 44.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                shape = RoundedCornerShape(6.dp),
-                            ),
-                    )
-                }
-                Text(label, style = MaterialTheme.typography.labelLarge)
-            }
-        },
-        modifier = Modifier.padding(end = 8.dp),
-    )
-}
 
 /**
  * One frame chip: the composited parametric thumb (or the imported frame's

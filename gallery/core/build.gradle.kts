@@ -26,6 +26,22 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+// --- Roborazzi capture output location (r47, docs/phase-11/roborazzi.md) ----
+// The plugin's default output dir is build/outputs/roborazzi --- a BUILD
+// directory, which can never hold committed baselines (build/ is gitignored
+// and wiped by every clean). The F-34 verify gate needs the goldens committed
+// under the module, so the output dir is pointed at the test resources tree:
+// the recordRoborazziBasicDebug task writes the PNGs STRAIGHT into the
+// directory they are committed from, the verifyRoborazziBasicDebug task reads
+// them back from the same place, and no copy step ever exists between a
+// recorded artifact and the committed baseline. (Restored at the Phase-1
+// split's cost: the block was lost when the monolith became :gallery:core,
+// which is why the #93 verify leg could not find its originals --- the
+// pre-split wording from apps/gallery/build.gradle.kts, verbatim.)
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/resources/roborazzi"))
+}
+
 android {
     namespace = "com.toadgallery.gallery"
     compileSdk = libs.versions.app.build.compileSDKVersion.get().toInt()
@@ -40,6 +56,18 @@ android {
         // the code sees the same constants as before the split.
         buildConfigField("int", "VERSION_CODE", "46")
         buildConfigField("String", "VERSION_NAME", "\"0.4.5-alpha\"")
+        // Same story for APPLICATION_ID: an application module's BuildConfig
+        // carries it, a LIBRARY's does not --- but LauncherConsolidationTest
+        // (the r55 consolidation contract) names the offending family build
+        // in its failure message via BuildConfig.APPLICATION_ID. Mirror the
+        // shells' applicationId scheme (gallery/app defaultConfig
+        // "com.toadgallery" + the per-flavor suffixes; :unified:app keeps
+        // "com.toadgallery.unified"). Flavor-level fields below override the
+        // default per variant, so each engine-family task reports its own
+        // real install ID; build-type suffixes (".debug") are deliberately
+        // NOT mirrored --- the field exists to identify the FAMILY build in
+        // test diagnostics, not to sign manifests.
+        buildConfigField("String", "APPLICATION_ID", "\"com.toadgallery\"")
         // r55 launcher-alias placeholder: the LIBRARY manifest carries the
         // MAIN/LAUNCHER activity-alias whose enabled state is a placeholder,
         // so library-level manifest processing (the unit-test manifest merge
@@ -111,6 +139,9 @@ android {
             buildConfigField("boolean", "WITH_ENGINE", "true")
             buildConfigField("boolean", "INDEX_FACE", "true")
             buildConfigField("boolean", "INDEX_SEMANTIC", "true")
+            // The :gallery:app engine shell's install ID (applicationId
+            // "com.toadgallery" + ".engine" suffix).
+            buildConfigField("String", "APPLICATION_ID", "\"com.toadgallery.engine\"")
         }
         // Semantic-index-only: Magic Search + Things, no People.
         create("semantic") {
@@ -118,6 +149,7 @@ android {
             buildConfigField("boolean", "WITH_ENGINE", "true")
             buildConfigField("boolean", "INDEX_FACE", "false")
             buildConfigField("boolean", "INDEX_SEMANTIC", "true")
+            buildConfigField("String", "APPLICATION_ID", "\"com.toadgallery.semantic\"")
         }
         // Face-index-only: People, no Magic Search / Things.
         create("face") {
@@ -125,6 +157,7 @@ android {
             buildConfigField("boolean", "WITH_ENGINE", "true")
             buildConfigField("boolean", "INDEX_FACE", "true")
             buildConfigField("boolean", "INDEX_SEMANTIC", "false")
+            buildConfigField("String", "APPLICATION_ID", "\"com.toadgallery.face\"")
         }
         // r59: EVERYTHING in one installable. As a LIBRARY flavor this
         // variant exists so :unified:app (flavorless) can select it with
@@ -135,6 +168,8 @@ android {
             buildConfigField("boolean", "WITH_ENGINE", "true")
             buildConfigField("boolean", "INDEX_FACE", "true")
             buildConfigField("boolean", "INDEX_SEMANTIC", "true")
+            // :unified:app's applicationId (no suffix scheme there).
+            buildConfigField("String", "APPLICATION_ID", "\"com.toadgallery.unified\"")
         }
     }
 }

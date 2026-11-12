@@ -182,7 +182,7 @@ internal fun ProSlider(
             .semantics {
                 contentDescription = name
                 stateDescription = state
-                progressBarRangeInfo = ProgressBarRangeInfo(value = value, range = valueRange)
+                progressBarRangeInfo = ProgressBarRangeInfo(current = value, range = valueRange)
             }
             // Double-tap: back to the row's neutral (the r56 reset
             // sequence re-targeted: draft write -> finish).

@@ -5,17 +5,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,6 +77,9 @@ import com.toadgallery.gallery.data.collage.CollageHandoff
 import com.toadgallery.gallery.data.collage.CollageLayouts
 import com.toadgallery.gallery.data.filters.PhotosFilterHandoff
 import com.toadgallery.gallery.data.filters.TimelineFilter
+import com.toadgallery.gallery.ui.components.toadTrailingFade
+import com.toadgallery.gallery.ui.screens.photos.ToadPhotosHeader
+import com.toadgallery.gallery.ui.theme.ToadTheme
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.media.MediaPagingGrid
 import com.toadgallery.gallery.ui.media.MediaPermissionState
@@ -433,6 +439,7 @@ fun PhotosScreen(
                 else -> PhotosTimeline(
                     lazyItems = lazyItems,
                     appearance = appearance,
+                    onLayoutChange = settingsViewModel::setLayout,
                     sort = sort,
                     onSortChange = viewModel::onSortChange,
                     filter = filter,
@@ -480,6 +487,7 @@ fun PhotosScreen(
 private fun PhotosTimeline(
     lazyItems: LazyPagingItems<MediaItem>,
     appearance: Appearance,
+    onLayoutChange: (LayoutStyle) -> Unit,
     sort: TimelineSort,
     onSortChange: (TimelineSort) -> Unit,
     filter: TimelineFilter,
@@ -590,17 +598,57 @@ private fun PhotosTimeline(
             // hidden) and tap opens the full-screen viewer (issue #50) --- the
             // pre-#50 plain tap was a no-op.
             Column(modifier = Modifier.fillMaxSize()) {
-                PhotosHeaderBar(
-                    sort = sort,
-                    onSortChange = onSortChange,
+                // r76: the redesign's frosted header block --- the brand
+                // badge + wordmark, the quick Grid/Collage toggle (writes
+                // the shell Appearance preference, the same flow the
+                // Settings sub-page drives) and the Clean Feed pill (the
+                // r76 TimelineFilter.excludeScreenshots dimension), with
+                // the sort menu + slideshow action riding the same glass
+                // row as small trailing affordances.
+                ToadPhotosHeader(
+                    layoutIsCollage = appearance.layout == LayoutStyle.COLLAGE,
+                    onToggleLayout = {
+                        onLayoutChange(
+                            if (appearance.layout == LayoutStyle.COLLAGE) {
+                                LayoutStyle.GRID
+                            } else {
+                                LayoutStyle.COLLAGE
+                            },
+                        )
+                    },
+                    hideScreenshots = filter.excludeScreenshots,
+                    onToggleHideScreenshots = {
+                        onFilterChange(filter.copy(excludeScreenshots = !filter.excludeScreenshots))
+                    },
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(ToadTheme.palette.bgApp)
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     // r27: the slideshow launch (the round's overflow
                     // action) --- the run covers the timeline's loaded
                     // window, exactly the window a viewer tap hands off.
-                    onStartSlideshow = {
-                        val window = lazyItems.itemSnapshotList.filterNotNull()
-                        if (window.isNotEmpty()) onStartSlideshow(window)
-                    },
-                )
+                    IconButton(
+                        onClick = {
+                            val window = lazyItems.itemSnapshotList.filterNotNull()
+                            if (window.isNotEmpty()) onStartSlideshow(window)
+                        },
+                        modifier = Modifier.testTag("photos_action_slideshow"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = stringResource(
+                                R.string.cd_viewer_action_slideshow_start,
+                            ),
+                            tint = ToadTheme.palette.primary,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TimelineSortMenu(current = sort, onChange = onSortChange)
+                }
                 // The smart-filter chips (r17): under the header bar, plain
                 // timeline only (selection mode replaces the header with the
                 // count bar, and the chips would collide with the actions
@@ -608,17 +656,21 @@ private fun PhotosTimeline(
                 // paging generation (see PhotosViewModel.onFilterChange).
                 // Since r19b the row also carries the LEADING folder chip;
                 // its picker sheet and the chip's name state thread through
-                // the same ViewModel plumbing.
-                PhotosFilterChipsRow(
-                    filter = filter,
-                    onChange = onFilterChange,
-                    selectedFolderName = selectedFolderName,
-                    folders = folders,
-                    onFoldersRefresh = onFoldersRefresh,
-                    onFolderPick = onFolderPick,
-                    onFolderClear = onFolderClear,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                // the same ViewModel plumbing. r76: the strip carries the
+                // prototype's trailing-edge fade mask so chips dissolve
+                // instead of clipping.
+                Box(Modifier.toadTrailingFade()) {
+                    PhotosFilterChipsRow(
+                        filter = filter,
+                        onChange = onFilterChange,
+                        selectedFolderName = selectedFolderName,
+                        folders = folders,
+                        onFoldersRefresh = onFoldersRefresh,
+                        onFolderPick = onFolderPick,
+                        onFolderClear = onFolderClear,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 // r62: the Stories shelf moved INSIDE the scroll --- it is
                 // the grid's first full-line item and scrolls away with the
                 // content (the maintainer's "stories features is fixed on
@@ -736,52 +788,6 @@ private fun PhotosTimeline(
             onCancel = vaultViewModel::cancelMove,
         )
     }
-}
-
-/**
- * The plain-timeline header bar (issue #66): the tab title plus the sort
- * menu action. Slim by design --- the timeline's only header affordance
- * before #66 was nothing, and the sort control needs an anchor.
- * `windowInsets = 0` for the same reason [FileOpsSelectionBar] documents:
- * the shell Scaffold already consumed the status-bar inset, so a default
- * TopAppBar would double-pad.
- *
- * r27 adds the slideshow launch as a second action (the round's
- * "launchable from grid surfaces via an overflow action" --- the icon is
- * the viewer's own PlayArrow, so the two surfaces say "slideshow" with
- * the same glyph).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PhotosHeaderBar(
-    sort: TimelineSort,
-    onSortChange: (TimelineSort) -> Unit,
-    onStartSlideshow: () -> Unit,
-) {
-    TopAppBar(
-        title = {
-            Text(
-                text = stringResource(R.string.nav_photos),
-                modifier = Modifier.semantics { heading() },
-            )
-        },
-        actions = {
-            IconButton(
-                onClick = onStartSlideshow,
-                modifier = Modifier.testTag("photos_action_slideshow"),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(R.string.cd_viewer_action_slideshow_start),
-                )
-            }
-            TimelineSortMenu(
-                current = sort,
-                onChange = onSortChange,
-            )
-        },
-        windowInsets = WindowInsets(0, 0, 0, 0),
-    )
 }
 
 /**

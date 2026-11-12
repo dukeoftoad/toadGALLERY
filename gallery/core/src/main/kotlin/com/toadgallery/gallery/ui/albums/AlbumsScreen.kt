@@ -70,6 +70,7 @@ import com.toadgallery.gallery.data.places.PlacesRegionGrid
 import com.toadgallery.gallery.ml.people.PeopleContentState
 import com.toadgallery.gallery.ml.search.SemanticContentState
 import com.toadgallery.gallery.ml.things.ThingsCollection
+import com.toadgallery.gallery.ui.LocalToadToast
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.media.ErrorState
 import com.toadgallery.gallery.ui.media.LoadingState
@@ -78,6 +79,8 @@ import com.toadgallery.gallery.ui.media.rememberMediaPermissionRequester
 import com.toadgallery.gallery.ui.people.PersonCard
 import com.toadgallery.gallery.ui.photos.collectionLabelRes
 import com.toadgallery.gallery.ui.places.PlaceRegionCard
+import com.toadgallery.gallery.ui.screens.albums.ToadAlbumsHeader
+import com.toadgallery.gallery.ui.screens.albums.ToadUtilitiesCard
 import kotlinx.coroutines.launch
 
 /**
@@ -147,6 +150,13 @@ fun AlbumsScreen(
     onOpenPlace: (regionKey: String) -> Unit,
     /** r39: a Things collection chip's tap --- that collection's detail. */
     onOpenThing: (collectionId: String) -> Unit,
+    /** r76: the Utilities & Privacy card's two rows (vault + recycle bin). */
+    onOpenVault: () -> Unit = {},
+    onOpenTrash: () -> Unit = {},
+    /** r76: the vault row's live summary (from the shell-scoped vault state). */
+    vaultSummary: String = "PIN & biometric locked storage",
+    /** r76: the recycle row's live summary (from the trash store). */
+    recycleSummary: String = "Deleted items",
     viewModel: AlbumsViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -227,24 +237,53 @@ fun AlbumsScreen(
                         )
                     }
                 } else {
-                    AlbumGrid(
-                        albums = s.albums,
-                        peopleState = peopleState,
-                        placesState = placesState,
-                        thingsState = thingsState,
-                        thingsCollections = thingsCollections,
-                        onOpenAlbum = onOpenAlbum,
-                        onOpenCollection = onOpenCollection,
-                        onOpenPeople = onOpenPeople,
-                        onOpenPerson = onOpenPerson,
-                        onRetryPeople = viewModel::refreshPeople,
-                        onOpenPlaces = onOpenPlaces,
-                        onOpenPlace = onOpenPlace,
-                        onCreateThing = viewModel::createThing,
-                        onRemoveThing = viewModel::removeThing,
-                        onOpenThing = onOpenThing,
-                        onRetryThings = viewModel::refreshThings,
-                    )
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // r76: the redesign header (the ExtraBold title +
+                        // the New Album pill). The honest v1 action: a
+                        // toast pointing at the Things section's create
+                        // flow --- the app's one user-created collection
+                        // surface today (MediaStore buckets are
+                        // device-owned, so "new album" means a named smart
+                        // collection).
+                        val toast = LocalToadToast.current
+                        ToadAlbumsHeader(
+                            onNewAlbum = {
+                                toast.show("Create a collection under Things")
+                            },
+                        )
+                        AlbumGrid(
+                            albums = s.albums,
+                            peopleState = peopleState,
+                            placesState = placesState,
+                            thingsState = thingsState,
+                            thingsCollections = thingsCollections,
+                            onOpenAlbum = onOpenAlbum,
+                            onOpenCollection = onOpenCollection,
+                            onOpenPeople = onOpenPeople,
+                            onOpenPerson = onOpenPerson,
+                            onRetryPeople = viewModel::refreshPeople,
+                            onOpenPlaces = onOpenPlaces,
+                            onOpenPlace = onOpenPlace,
+                            onCreateThing = viewModel::createThing,
+                            onRemoveThing = viewModel::removeThing,
+                            onOpenThing = onOpenThing,
+                            onRetryThings = viewModel::refreshThings,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // r76: the surfaced Utilities & Privacy card ---
+                        // daily-access rows for the Hidden Vault and the
+                        // Recycle Bin (moved out of deep Settings, the
+                        // prototype's own instruction).
+                        ToadUtilitiesCard(
+                            vaultSummary = vaultSummary,
+                            onOpenVault = onOpenVault,
+                            recycleSummary = recycleSummary,
+                            onOpenRecycleBin = onOpenTrash,
+                            modifier = Modifier.padding(
+                                start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp,
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -275,10 +314,11 @@ private fun AlbumGrid(
     onRemoveThing: (collectionId: String) -> Unit,
     onOpenThing: (collectionId: String) -> Unit,
     onRetryThings: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
         contentPadding = PaddingValues(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -180,4 +180,28 @@ class TimelineFilterCatalogueTest {
         )
         assertEquals(listOf<Any>(7L, 1_700_000_000L, 1_700_008_640L), where.args)
     }
+
+    @Test
+    fun `clean feed projects the bucketDisplayName exclusion clause`() {
+        // r76: the No-Screenshots pill's Room leg --- NULL-named rows stay
+        // visible (the fail-open rule the in-memory predicate and the
+        // MediaStore projection share).
+        assertEquals(
+            "(bucketDisplayName IS NULL OR bucketDisplayName NOT LIKE '%screenshot%')",
+            whereOf(TimelineFilter(excludeScreenshots = true)).sql,
+        )
+        // Composes AND with the other dimensions, last in the fixed order.
+        assertEquals(
+            "mimeType NOT LIKE 'video/%' AND " +
+                "(bucketDisplayName IS NULL OR bucketDisplayName NOT LIKE '%screenshot%')",
+            whereOf(
+                TimelineFilter(
+                    types = setOf(FilterMediaType.PHOTOS),
+                    excludeScreenshots = true,
+                ),
+            ).sql,
+        )
+        // No args: the clause is vocabulary, not values.
+        assertTrue(whereOf(TimelineFilter(excludeScreenshots = true)).args.isEmpty())
+    }
 }

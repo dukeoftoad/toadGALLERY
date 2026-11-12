@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
@@ -67,6 +68,14 @@ fun WorldMapCanvas(
     rows: List<CatalogueLocationRow>,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    /**
+     * r76: the Heatmap mode (the Places Map's segmented toggle) ---
+     * radial thermal density gradients instead of the counted dots:
+     * the same cluster anchors, each drawn as a `primary`-cored radial
+     * brush whose radius scales with the cluster's count (the
+     * prototype's `.blur-2xl` glow blobs, vectorized).
+     */
+    heatmap: Boolean = false,
     onClusterTapped: (List<CatalogueLocationRow>) -> Unit,
 ) {
     // The canvas size, observed once per layout pass; the viewport (and
@@ -214,10 +223,30 @@ fun WorldMapCanvas(
 
         // 4. Photo dots: one circle per cluster at its mean anchor,
         // sized by the pure radius scale, with the member count labeled
-        // on multi-photo clusters.
+        // on multi-photo clusters. In HEATMAP mode (r76) the same
+        // anchors render as radial thermal gradients instead --- the
+        // count-label text pass is skipped (the glow IS the density
+        // signal).
         for (cluster in normalizedClusters) {
             val anchor = vp.toScreen(MapPoint(cluster.x, cluster.y))
             val center = Offset(anchor.x.toFloat(), anchor.y.toFloat())
+            if (heatmap) {
+                val glow = MapClusterGrid.dotRadiusDp(cluster.count).dp.toPx() * 3f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            dotColor.copy(alpha = 0.55f),
+                            dotColor.copy(alpha = 0.25f),
+                            dotColor.copy(alpha = 0f),
+                        ),
+                        center = center,
+                        radius = glow,
+                    ),
+                    center = center,
+                    radius = glow,
+                )
+                continue
+            }
             val radius = MapClusterGrid.dotRadiusDp(cluster.count).dp.toPx()
             drawCircle(color = dotColor, radius = radius, center = center)
             if (cluster.count > 1) {

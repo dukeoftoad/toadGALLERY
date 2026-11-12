@@ -22,11 +22,13 @@ class TimelineFilterTest {
         isVideo: Boolean = false,
         isFavorite: Boolean = false,
         dateAddedSec: Long = 1_000L,
+        bucketName: String? = null,
     ): TimelineFilterFields = TimelineFilterFields(
         mimeType = mime,
         isVideo = isVideo,
         isFavorite = isFavorite,
         dateAddedSec = dateAddedSec,
+        bucketName = bucketName,
     )
 
     // ------------------------------------------------------------------
@@ -200,5 +202,33 @@ class TimelineFilterTest {
                 dateRange = FilterDateRange(startMillis = 0L, endMillis = 1L),
             ).isActive,
         )
+    }
+
+    // ------------------------------------------------------------------
+    // r76 Clean Feed: excludeScreenshots (the header pill, NOT a chip)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `clean feed excludes screenshot-folder items and only those`() {
+        val filter = TimelineFilter(excludeScreenshots = true)
+        // A screenshot folder by naming convention: excluded.
+        assertFalse(filter.matches(fields(bucketName = "Screenshots")))
+        assertFalse(filter.matches(fields(bucketName = "screenshots")))
+        assertFalse(filter.matches(fields(bucketName = "My Screenshot Folder")))
+        // Every other name --- and unknown names --- stay visible
+        // (fail-open: hiding a photo is worse than showing a screenshot).
+        assertTrue(filter.matches(fields(bucketName = "Camera")))
+        assertTrue(filter.matches(fields(bucketName = "DCIM")))
+        assertTrue(filter.matches(fields(bucketName = null)))
+        // Without the flag nothing is excluded.
+        assertTrue(TimelineFilter().matches(fields(bucketName = "Screenshots")))
+    }
+
+    @Test
+    fun `clean feed is not part of isActive`() {
+        // The dimension drives the header pill, not the chips row's
+        // All-chip selection state: an active Clean Feed with no chips
+        // still renders "All" as selected.
+        assertFalse(TimelineFilter(excludeScreenshots = true).isActive)
     }
 }

@@ -28,6 +28,13 @@ material = "1.13.0"
 compose-bom = "2024.12.01"
 # Compose-first image loader (per compose-migration.md)
 coil-compose = "2.7.0"
+# Haze: the Material 3 Expressive frosted-glass backdrop blur (the r76
+# redesign's translucent sticky headers, bottom navigation bar and
+# overlays). Verified against the Maven Central POM: haze-android 1.2.0
+# compiles against EXACTLY this BOM's Compose 1.7.6 (ui/foundation) with
+# the Kotlin 2.1.0 stdlib --- no BOM bump needed. Pure rendering, no
+# permissions, no INTERNET (the ADR-0014 gate holds).
+haze = "1.2.0"
 # In-app video playback for the viewer (issue #50; roadmap L608 sanctions media3)
 media3 = "1.11.1"
 # Room: the ADR-0006 persistence layer for the Phase 4 media catalogue
@@ -112,6 +119,13 @@ compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 # Back-arrow icon for the album detail top bar (BOM-pinned, issue #29)
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
+# The full Material icon set (r76 redesign): the redesign's Lucide-prototype
+# icon language (sparkles, shield-check, folder-heart, compass, cpu, ...) maps
+# onto material-icons-extended; BOM-pinned like the core set. R8 shrinks the
+# unused glyphs out of release builds (shrinkResources is on in the shells).
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+# Haze frosted-glass blur (r76 redesign): see the version note above.
+haze = { module = "dev.chrisbanes.haze:haze-android", version.ref = "haze" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
 # Video frame decoding for thumbnails (issue #33)
 coil-video = { module = "io.coil-kt:coil-video", version.ref = "coil-compose" }

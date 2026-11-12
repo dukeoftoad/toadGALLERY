@@ -136,6 +136,15 @@ data class TimelineFilterFields(
     val isVideo: Boolean,
     val isFavorite: Boolean,
     val dateAddedSec: Long,
+    /**
+     * The item's folder/bucket DISPLAY NAME (r76): the Clean Feed
+     * dimension's in-memory signal (a screenshot folder by naming
+     * convention). `null` means "unknown on this path" --- the predicate
+     * treats an unknown name as NOT a screenshot folder (fail-open for a
+     * cosmetic declutter, the opposite of the bucketId dimension's
+     * fail-closed: hiding a photo is worse than showing a screenshot).
+     */
+    val bucketName: String? = null,
 )
 
 /**
@@ -163,6 +172,20 @@ data class TimelineFilter(
     val bucketId: Long? = null,
     /** The added-instant range; see [FilterDateRange]. Not surfaced in r17. */
     val dateRange: FilterDateRange? = null,
+    /**
+     * The r76 "Clean Feed" dimension: when true, items living in a
+     * SCREENSHOT folder (bucket display name containing "screenshot",
+     * case-insensitive --- the OEM folder naming convention) are excluded.
+     * Served by BOTH SQL projections via the bucket name (MediaStore
+     * `bucket_display_name`, catalogue `bucketDisplayName`) and by the
+     * in-memory predicate via [TimelineFilterFields.bucketName].
+     *
+     * Deliberately NOT part of [isActive]: that flag drives the CHIPS
+     * row's All-chip selection state, and Clean Feed is header chrome
+     * (the No-Screenshots pill), not a chip --- an active Clean Feed with
+     * no chips must still render "All" as selected.
+     */
+    val excludeScreenshots: Boolean = false,
 ) {
     /** Whether this filter narrows anything at all (drives the All chip). */
     val isActive: Boolean
@@ -183,6 +206,12 @@ fun TimelineFilter.matches(fields: TimelineFilterFields): Boolean {
     // rather than silently broad.
     if (bucketId != null) return false
     if (favoritesOnly && !fields.isFavorite) return false
+    // r76 Clean Feed: exclude screenshot-folder items by naming
+    // convention; an unknown bucket name is NOT treated as a screenshot
+    // folder (see TimelineFilterFields.bucketName's fail-open note).
+    if (excludeScreenshots && fields.bucketName?.contains("screenshot", ignoreCase = true) == true) {
+        return false
+    }
     when (typeCoverageOf(types)) {
         FilterTypeCoverage.ALL -> Unit
         FilterTypeCoverage.PHOTOS_ONLY -> if (fields.isVideo) return false

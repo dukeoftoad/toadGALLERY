@@ -136,6 +136,15 @@ object TimelineFilterMediaStore {
             args += (range.startMillis / 1000).toString()
             args += (range.endMillis / 1000).toString()
         }
+        if (filter.excludeScreenshots) {
+            // r76 Clean Feed: exclude screenshot folders by the OEM naming
+            // convention, case-insensitively. SQL `NOT LIKE` never matches
+            // NULL, and rows without a resolvable bucket display name must
+            // NOT vanish from the clean feed (the in-memory predicate's
+            // fail-open twin) --- hence the explicit `OR ... IS NULL`.
+            clauses += "(bucket_display_name IS NULL OR " +
+                "bucket_display_name NOT LIKE '%screenshot%')"
+        }
         return MediaStoreFilterSelection(
             selection = clauses.takeIf { it.isNotEmpty() }?.joinToString(separator = " AND "),
             selectionArgs = args,

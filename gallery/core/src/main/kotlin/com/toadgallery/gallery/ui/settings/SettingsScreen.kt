@@ -331,17 +331,17 @@ fun SettingsScreen(
             transitionSpec = {
                 val forward = targetState != SettingsSubPage.HUB
                 val enter = if (forward) {
-                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(fullWidth, 0) } +
+                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> fullWidth } +
                         fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))
                 } else {
-                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(-fullWidth / 3, 0) } +
+                    slideInHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> -fullWidth / 3 } +
                         fadeIn(tween(ToadMotionSpec.SUBPAGE_MS))
                 }
                 val exit = if (forward) {
-                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(-fullWidth / 3, 0) } +
+                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> -fullWidth / 3 } +
                         fadeOut(tween(ToadMotionSpec.SUBPAGE_MS))
                 } else {
-                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> IntOffset(fullWidth, 0) } +
+                    slideOutHorizontally(animationSpec = tween(ToadMotionSpec.SUBPAGE_MS)) { fullWidth -> fullWidth } +
                         fadeOut(tween(ToadMotionSpec.SUBPAGE_MS))
                 }
                 (enter togetherWith exit).apply {

@@ -75,14 +75,16 @@ internal object LilypadKeystoneMath {
      * the only honest quad for a grid that does not exist.
      */
     fun quadFor(verticalPct: Int, horizontalPct: Int, width: Int, height: Int): PerspectiveQuad {
+        // A grid that does not exist has exactly one honest quad (the
+        // KDoc's own rule) --- and the arithmetic below would otherwise
+        // leave signed-zero dust on it (a negative percent against a
+        // zero bound: -0.6 * 0.0 = -0.0, which Double's equals()
+        // distinguishes from the identity's +0.0).
+        if (width <= 0 || height <= 0) return PerspectiveQuad.IDENTITY
         val topShift = verticalPct / 100.0 * (width / 4.0)
         val leftShift = horizontalPct / 100.0 * (height / 4.0)
-        // Signed-zero hygiene: -topShift on a zero shift manufactures
-        // -0.0, and Double's equals() (the data class's comparison)
-        // distinguishes it from +0.0 --- the identity quad would then
-        // NOT equal PerspectiveQuad.IDENTITY and the read-back tests
-        // (and every isIdentity gate down the pipeline) would lie. A
-        // zero shift negates to exact zero, by rule.
+        // Signed-zero hygiene on the pinches too: -topShift on a zero
+        // shift manufactures -0.0 the same way.
         val topPinch = if (topShift == 0.0) 0.0 else -topShift
         val leftPinch = if (leftShift == 0.0) 0.0 else -leftShift
         return PerspectiveQuad(

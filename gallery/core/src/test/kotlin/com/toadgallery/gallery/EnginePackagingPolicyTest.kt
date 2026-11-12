@@ -67,7 +67,8 @@ class EnginePackagingPolicyTest {
      */
     @Test
     fun `engine native libraries ship only behind the withEngine property`() {
-        val buildScript = moduleFile("build.gradle.kts").readText()
+        // Phase-1 split: the packaging blocks moved verbatim to :gallery:app.
+        val buildScript = moduleFile("../app/build.gradle.kts").readText()
         val gate = buildScript.indexOf("providers.gradleProperty(\"withEngine\").isPresent")
         val srcDir = buildScript.indexOf("dir(\"rust-jniLibs\")")
         assertTrue(
@@ -94,7 +95,8 @@ class EnginePackagingPolicyTest {
      */
     @Test
     fun `the offline model pack ships only behind the withBundledModels property`() {
-        val buildScript = moduleFile("build.gradle.kts").readText()
+        // Phase-1 split: the packaging blocks moved verbatim to :gallery:app.
+        val buildScript = moduleFile("../app/build.gradle.kts").readText()
         val gate = buildScript.indexOf("providers.gradleProperty(\"withBundledModels\").isPresent")
         val srcDir = buildScript.indexOf("dir(\"bundled-models\")")
         assertTrue(

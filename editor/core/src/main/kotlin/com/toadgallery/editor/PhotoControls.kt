@@ -21,10 +21,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -264,75 +261,6 @@ internal fun LabeledSlider(
 }
 
 /**
- * The HSL band's slider (the r32 control, r56-skinned): the drag value stays
- * LOCAL (the band commits once on release --- the r32 contract) while the
- * pill shows the live number during the drag. Signature unchanged, so the
- * Color screen's call sites are untouched.
- *
- * r66: the neutral notch rides the track (see [LabeledSlider]'s neutralTick
- * note) --- every band row is bipolar with a zero neutral (hue -180..180,
- * saturation/luminance -100..100), so the mark needs no opt-in here; the
- * symmetric-zero guard still keeps a hypothetical asymmetric band honest.
- */
-@Composable
-internal fun HslBandSlider(
-    name: String,
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    enabled: Boolean,
-    onCommit: (Int) -> Unit,
-) {
-    var dragValue by remember(label) { mutableStateOf<Float?>(null) }
-    val live = dragValue ?: value
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = label,
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(
-                    text = live.toInt().toString(),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                )
-            }
-        }
-        Box {
-            Slider(
-                value = live,
-                onValueChange = { dragValue = it },
-                onValueChangeFinished = {
-                    dragValue?.let { onCommit(it.toInt()) }
-                    dragValue = null
-                },
-                valueRange = range,
-                enabled = enabled,
-                // r32 a11y: the band control announces "BAND: CONTROL" as its name
-                // and the formatted label (with the value) as its state.
-                modifier = Modifier.semantics {
-                    contentDescription = name
-                    stateDescription = label
-                },
-            )
-            if (range.start + range.endInclusive == 0f) {
-                NeutralNotch(modifier = Modifier.matchParentSize())
-            }
-        }
-    }
-}
-
-/**
  * The r66 neutral notch: a 2dp hairline at the track's exact center,
  * half the track height tall, in the outline role. The caller hosts it
  * as a `matchParentSize` overlay INSIDE the same Box as the Slider (the
@@ -361,47 +289,11 @@ internal fun NeutralNotch(modifier: Modifier = Modifier) {
  * selected state carried by FilterChip itself (the theme's accent-fill
  * mechanism). `lut == null` renders the None chip: name only, no thumb ---
  * "no look" has nothing honest to preview.
+ *
+ * r67: RETIRED --- the Looks panel's chips became the [LookCard] shelf
+ * (LilypadCards.kt); the composable is deleted, its honest-render helper
+ * `renderLookThumb` lives on as the card renderer's null-base fallback.
  */
-@Composable
-internal fun LookThumbChip(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    lut: CubeLut?,
-    onPick: () -> Unit,
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onPick,
-        enabled = enabled,
-        label = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(vertical = 4.dp),
-            ) {
-                if (lut != null) {
-                    val thumb = remember(lut.id) { renderLookThumb(lut) }
-                    Image(
-                        bitmap = thumb.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier
-                            .padding(bottom = 4.dp)
-                            .size(width = 66.dp, height = 44.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                shape = RoundedCornerShape(6.dp),
-                            ),
-                    )
-                }
-                Text(label, style = MaterialTheme.typography.labelLarge)
-            }
-        },
-        modifier = Modifier.padding(end = 8.dp),
-    )
-}
 
 /**
  * One frame chip: the composited parametric thumb (or the imported frame's

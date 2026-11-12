@@ -1250,3 +1250,129 @@ the public remote each time.
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69, F-70, F-73
   (Regions to Draw merge --- its own UX pass), PAT revocation (advised
   again).
+
+## 2026-11-12 — the r68 suspension window (the Roborazzi PR gates rest; the unit lane widens)
+
+- **F-75 (2026-11-12, open) — the instrumented E2E lane.** With Roborazzi's
+  PR gate suspended (manual dispatch only, `screenshots.yml`) the editor's
+  gates are lint debug + assemble + the FULL `:editor:core` unit suite
+  (widened this round from the r67 Lilypad\* filter). The third leg the
+  founder named --- E2E --- has no lane yet: the repo's only instrumented
+  test is gallery's `PrivacyEgressTest` and NO workflow runs
+  `connectedDebugAndroidTest` anywhere. The follow-up: an emulator-job
+  workflow (reactive-android/emulator runner or an actions/setup-java +
+  avd-manager shape) running the editor app's instrumented suite on the
+  editor branch, sized to the 20-minute budget the other jobs keep. Do NOT
+  bolt it onto editor-ci.yml --- a separate `editor-e2e.yml` keeps the fast
+  lane fast.
+- **F-76 (2026-11-12, open) — re-arming decision.** The Roborazzi PR gate
+  suspension is reversible by design (re-add the `pull_request:` block to
+  `screenshots.yml`). Revisit when the Lilypad phases land and the UI
+  cadence slows: the harness, baselines, and plugin wiring all survive.
+
+## 2026-11-12 — the r69 window (Phase 3 starts: the timeline foundation)
+
+- **F-77 (2026-11-12, open) — the multi-clip surfaces.** The
+  `ClipTimeline` model (`shared/video-edit`, validator + math +
+  single-clip-equivalence pins) is landed and JVM-gated, but every
+  surface above it is still single-clip: the strip renders the session's
+  one source, the runner builds one clipped item per speed run of one
+  URI, and the editor contract (`EditRequest`) carries one `sourceUri`.
+  The follow-up chain: the in-editor clip picker (add / remove /
+  reorder), the contract v3 extra (a clip list or a picker round-trip),
+  `Media3VideoExportRunner` growing one `EditedMediaItem` per
+  `ClipTimelineEntry` (the per-item `Effects` structurally supports
+  per-clip looks already), and the ExoPlayer preview becoming a playlist
+  of clipped items so per-clip speed previews honestly.
+- **F-78 (2026-11-12, open) — window-aware thumbnail decode.** The r69
+  strip draws the whole-clip even decode at TRUE source positions (the
+  honest-sparse rule): correct but sparse when zoomed. The R2-budget
+  follow-up: decode frames for the visible window on zoom settle (LRU
+  cache keyed by source + timestamp bucket), so a zoomed timeline fills
+  with real frames instead of gaps.
+
+## 2026-11-12 — the r70 window (the multi-clip export realization)
+
+- **F-77 progress (2026-11-12, updated) — the multi-clip surfaces.** The
+  export half of the chain LANDED this round: the seam grew a sealed
+  `VideoExportJob` (the v1 `VideoExportRequest` + the new
+  `ClipExportRequest`), the coordinator validates both, and
+  `Media3VideoExportRunner` resolves either into one flat spec list ---
+  the v1 plan path byte-identical to the r42-r66 shape (the ClipExportTest
+  equivalence pin holds it there), the timeline path one spec per entry
+  with per-entry strip decisions. The whole pure module is now verified
+  locally before push (standalone kotlinc + JUnit --- 133 tests green),
+  a first for the campaign. REMAINING: the in-editor clip picker, the
+  contract v3 extra, and the ExoPlayer playlist preview (per-clip speed
+  previewing honestly).
+- **F-79 (2026-11-12, open) — the toolchain note.** The local kotlinc
+  recipe (kotlinc 2.3.10 + junit-4.13.2 + hamcrest-1.3, compile the pure
+  module's two source trees together, run JUnitCore) verified the shared
+  module without Gradle or the Android SDK. Worth a script under tools/
+  when a second pure module wants it; not done this round to keep the
+  diff on the feature.
+
+## 2026-11-12 — the r71 window (Phase 2's declared follow-up lands)
+
+- **The per-channel curve composition (FIXED this round).** Phase 2's
+  documented pending item --- "the channels' composition is the declared
+  follow-up" --- is landed: `LutBuilder.buildChannels` composes
+  master-then-channel per channel table (`redLut[v] =
+  redCurve(masterCurve(base[v]))`, the five frozen sliders feeding the
+  chain first), `PixelOps.applyChannelLuts` applies the three tables in
+  one pass, and `EditPipeline` routes to the three-table path only when
+  `ToneCurves.hasChannelCurves` (an honest curve, not a degenerate
+  list). The r68 master-only path stays byte-frozen; the no-channel
+  equivalence and the three-copies-of-one-table equivalence are pinned
+  in `LilypadChannelCurveTest`. No migration: an r68 sidecar that
+  carried channel curves as forward state renders its promised colour
+  today, pinned by test. Local verification per the F-79 recipe:
+  kotlinc 2.3.10 + JUnit (+ org.json + the contract enums), **119
+  tests green** before the push.
+- **F-79 progress (2026-11-12, updated) — the toolchain note.** The
+  recipe now covers the editor/core pure subset too (the tone chain's
+  dependency closure: Adjustments, ToneCurves, the curve/keystone
+  maths, EditRecipe's codec, EditPipeline, Geometry, PixelAdjuster,
+  AiRender + EditAiStore + BundledSkies, the layer families, CubeLut,
+  ExportPlan, plus the contract enums). Two additions beyond r70's
+  shape: the `org.json` jar on the classpath (the codec's only
+  non-Kotlin dependency) and the Kotlin stdlib at RUNTIME (JUnitCore
+  needs `kotlin.NoWhenBranchMatchedException` etc. on the java -cp).
+  Still worth a tools/ script when a third consumer appears.
+
+## 2026-11-12 — the r72 window (Phase 4 opens: the corner drag)
+
+- **The perspective corner drag (FIXED this round).** Phase 4's named
+  item and the last of the user's two requested pending works:
+  `LilypadCornerMath` (pure JVM) owns the hit-test, the display<->grid
+  geometry and the drag clamp --- the displacement clamps into the
+  engine's own ±w/4/±h/4 bounds (`PerspectiveQuad.clamped`'s exact
+  rule), with an identity snap deadband on release. The `CornerOverlay`
+  composable (the r69 TimelineStrip's awaitEachGesture pattern) draws
+  the displaced quad's outline + four accent handles over the pre-warp
+  source fit box on the Geometry screen, drafts the whole quad per tick
+  (the curve draft's shape), and commits ONE recipe on release. The
+  r68 keystone rows stay as the a11y path to the same quad (one model,
+  two surfaces); the export scaling (`scaledForExport`) is inherited
+  free. Behind `LilypadFlags.cornerDragEnabled` --- the round's revert
+  seam. Local verification: **131 tests green** (the r71 recipe plus
+  LilypadCornerMathTest).
+- **The r68 stand-in note retires.** LilypadKeystoneMath's header
+  called the sliders "the r68 stand-in for the corner drag Phase 4
+  owns" --- with the drag landed, the rows are the a11y/precision
+  surface, no longer a stand-in (the Geometry panel's Perspective
+  block now carries the corner-drag hint line).
+
+## 2026-11-12 — the r73 window (the end card: Lilypad closes)
+
+- **The campaign end card.** `docs/editor/lilypad-end-card.md` closes the
+  four-phase campaign: the shipped table (r67 foundation, r68+r71 photo
+  pro with the channel composition landed, r69-r70 video timeline,
+  r72 the corner drag), the numbers (169 Lilypad-prefixed JVM test
+  methods across 12 classes; 668 editor/core total; 133 shared/video-
+  edit; 5 revert seams; 12 pure-math objects), the discipline that held
+  (ADR-0011 every round, the forward-state honesty, the F-79 local
+  verification recipe, the revert seams), and the open tails honestly
+  (F-75/F-76/F-77/F-78 + Phase 4's remaining craft items as roadmap,
+  not debt). The design doc's Phase 4 line and Status header close with
+  it.

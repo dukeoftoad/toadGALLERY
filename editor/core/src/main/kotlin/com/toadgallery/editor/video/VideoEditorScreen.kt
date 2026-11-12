@@ -89,6 +89,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.toadgallery.editor.EditorPalette
+import com.toadgallery.editor.LilypadFlags
 import com.toadgallery.editor.R
 import java.util.Locale
 import kotlin.math.abs
@@ -105,9 +106,12 @@ import kotlinx.coroutines.delay
 // capability is the volume percent (task 2-a's VideoEditPlan contract).
 //
 // r63b: the violet retires --- this surface's pins re-point to the edit
-// app's toad-green [com.toadgallery.editor.EditorPalette.Toad]
-// registry (the approved §3 table; same module, so the r52 note's
+// app's [com.toadgallery.editor.EditorPalette] registry (the approved
+// §3 table; same module, so the r52 note's
 // "duplicated on purpose" hex fork has no dependency reason to survive).
+// r67: the registry's default is the Lilypad family now (the editor-
+// rebirth design language: one neutral ladder + the ember accent) --- the
+// video lane re-pins with it, one language across photo and video.
 // The fixed-dark, non-dynamic contract stands, and the r52 selection
 // mechanism survives re-colored (secondaryContainer = the #9CD8A2 accent,
 // labels in #00390F).
@@ -133,22 +137,22 @@ import kotlinx.coroutines.delay
 // ---------------------------------------------------------------------------
 
 // The video pins, sourced from the shared EditorPalette registry (the ONLY
-// toad-green source of truth in the edit app). VideoEditBg is shared with
+// Lilypad source of truth in the edit app). VideoEditBg is shared with
 // the activity's root Surface.
-internal val VideoEditBg = EditorPalette.Toad.background
-private val VideoSurface = EditorPalette.Toad.background
-private val VideoSurfaceHigh = EditorPalette.Toad.surfaceVariant
-private val VideoOutline = EditorPalette.Toad.outlineVariant
-private val VideoAccent = EditorPalette.Toad.primary
-private val VideoOnAccent = EditorPalette.Toad.onPrimary
-private val VideoAccentSoft = EditorPalette.Toad.secondary
-private val VideoTextPrimary = EditorPalette.Toad.onBackground
-private val VideoTextSecondary = EditorPalette.Toad.onSurfaceVariant
+internal val VideoEditBg = EditorPalette.Lilypad.background
+private val VideoSurface = EditorPalette.Lilypad.background
+private val VideoSurfaceHigh = EditorPalette.Lilypad.surfaceVariant
+private val VideoOutline = EditorPalette.Lilypad.outlineVariant
+private val VideoAccent = EditorPalette.Lilypad.primary
+private val VideoOnAccent = EditorPalette.Lilypad.onPrimary
+private val VideoAccentSoft = EditorPalette.Lilypad.secondary
+private val VideoTextPrimary = EditorPalette.Lilypad.onBackground
+private val VideoTextSecondary = EditorPalette.Lilypad.onSurfaceVariant
 private val VideoError = Color(0xFFF2B8B5)
 
 /**
  * The video surface's own fixed dark scheme (the §3 role mapping over the
- * toad-green registry): primary = the green accent, background/surface =
+ * Lilypad registry): primary = the ember accent, background/surface =
  * the warm near-black base, secondaryContainer = accent so a SELECTED
  * FilterChip is the accent-filled pill the design shows (no per-chip color
  * overrides anywhere). Deliberately not dynamic color, exactly like
@@ -161,17 +165,17 @@ internal fun VideoEditTheme(content: @Composable () -> Unit) {
         colorScheme = darkColorScheme(
             primary = VideoAccent,
             onPrimary = VideoOnAccent,
-            primaryContainer = EditorPalette.Toad.primaryContainer,
-            onPrimaryContainer = EditorPalette.Toad.onPrimaryContainer,
-            inversePrimary = EditorPalette.Toad.inversePrimary,
+            primaryContainer = EditorPalette.Lilypad.primaryContainer,
+            onPrimaryContainer = EditorPalette.Lilypad.onPrimaryContainer,
+            inversePrimary = EditorPalette.Lilypad.inversePrimary,
             secondary = VideoAccentSoft,
-            onSecondary = EditorPalette.Toad.onSecondary,
+            onSecondary = EditorPalette.Lilypad.onSecondary,
             secondaryContainer = VideoAccent,
             onSecondaryContainer = VideoOnAccent,
-            tertiary = EditorPalette.Toad.tertiary,
-            onTertiary = EditorPalette.Toad.onTertiary,
-            tertiaryContainer = EditorPalette.Toad.tertiaryContainer,
-            onTertiaryContainer = EditorPalette.Toad.onTertiaryContainer,
+            tertiary = EditorPalette.Lilypad.tertiary,
+            onTertiary = EditorPalette.Lilypad.onTertiary,
+            tertiaryContainer = EditorPalette.Lilypad.tertiaryContainer,
+            onTertiaryContainer = EditorPalette.Lilypad.onTertiaryContainer,
             background = VideoEditBg,
             onBackground = VideoTextPrimary,
             surface = VideoEditBg,
@@ -181,7 +185,7 @@ internal fun VideoEditTheme(content: @Composable () -> Unit) {
             surfaceTint = VideoAccent,
             inverseSurface = VideoTextPrimary,
             inverseOnSurface = Color(0xFF1D1C17),
-            outline = EditorPalette.Toad.outline,
+            outline = EditorPalette.Lilypad.outline,
             outlineVariant = VideoOutline,
             scrim = Color(0xFF000000),
             error = VideoError,
@@ -959,30 +963,62 @@ internal fun VideoEditorScreen(activity: VideoEditActivity) {
             // dim scrim outside the window, clamped playhead); the Trim tab
             // below stays as the precision surface. The strip shows the LIVE
             // window --- the drafts, which equal committed at rest.
-            TrimStrip(
-                durationMs = durationMs,
-                trimStartMs = draftTrimStartMs,
-                trimEndMs = draftTrimEndMs,
-                playheadAbsoluteMs = committed.trimStartMs + positionMs,
-                enabled = !exporting,
-                filmstripA11yName = trimStripA11yName,
-                positionStateText = stringResource(
-                    R.string.editor_v2_filmstrip_state,
-                    formatTimestamp(committed.trimStartMs + positionMs),
-                ),
-                startHandleA11y = stringResource(R.string.editor_a11y_video_trim_start),
-                endHandleA11y = stringResource(R.string.editor_a11y_video_trim_end),
-                startHandleState = formatTimestamp(draftTrimStartMs),
-                endHandleState = formatTimestamp(draftTrimEndMs),
-                onDecodeThumbnails = { count, onDone -> activity.decodeThumbnails(count, onDone) },
-                onDragStarted = stripOnDragStarted,
-                onHandleDragFinished = stripOnHandleDragFinished,
-                onScrubFinished = stripOnScrubFinished,
-                onStartDrag = stripOnStartDrag,
-                onEndDrag = stripOnEndDrag,
-                onSeekAbsolute = seekToAbsolute,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            // r69: behind the Phase 3 seam the strip grows a viewport ---
+            // pinch-zoom onto detents, pan while zoomed, the trim/scrub/tap
+            // contract otherwise byte-identical (the flag's fallback is the
+            // r63d TrimStrip, one reviewed flip away).
+            if (LilypadFlags.timelineZoomEnabled) {
+                TimelineStrip(
+                    durationMs = durationMs,
+                    trimStartMs = draftTrimStartMs,
+                    trimEndMs = draftTrimEndMs,
+                    playheadAbsoluteMs = committed.trimStartMs + positionMs,
+                    enabled = !exporting,
+                    filmstripA11yName = trimStripA11yName,
+                    positionStateText = stringResource(
+                        R.string.editor_v2_filmstrip_state,
+                        formatTimestamp(committed.trimStartMs + positionMs),
+                    ),
+                    zoomStateFormat = stringResource(R.string.editor_r69_timeline_zoom_state),
+                    startHandleA11y = stringResource(R.string.editor_a11y_video_trim_start),
+                    endHandleA11y = stringResource(R.string.editor_a11y_video_trim_end),
+                    startHandleState = formatTimestamp(draftTrimStartMs),
+                    endHandleState = formatTimestamp(draftTrimEndMs),
+                    onDecodeThumbnails = { count, onDone -> activity.decodeThumbnails(count, onDone) },
+                    onDragStarted = stripOnDragStarted,
+                    onHandleDragFinished = stripOnHandleDragFinished,
+                    onScrubFinished = stripOnScrubFinished,
+                    onStartDrag = stripOnStartDrag,
+                    onEndDrag = stripOnEndDrag,
+                    onSeekAbsolute = seekToAbsolute,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            } else {
+                TrimStrip(
+                    durationMs = durationMs,
+                    trimStartMs = draftTrimStartMs,
+                    trimEndMs = draftTrimEndMs,
+                    playheadAbsoluteMs = committed.trimStartMs + positionMs,
+                    enabled = !exporting,
+                    filmstripA11yName = trimStripA11yName,
+                    positionStateText = stringResource(
+                        R.string.editor_v2_filmstrip_state,
+                        formatTimestamp(committed.trimStartMs + positionMs),
+                    ),
+                    startHandleA11y = stringResource(R.string.editor_a11y_video_trim_start),
+                    endHandleA11y = stringResource(R.string.editor_a11y_video_trim_end),
+                    startHandleState = formatTimestamp(draftTrimStartMs),
+                    endHandleState = formatTimestamp(draftTrimEndMs),
+                    onDecodeThumbnails = { count, onDone -> activity.decodeThumbnails(count, onDone) },
+                    onDragStarted = stripOnDragStarted,
+                    onHandleDragFinished = stripOnHandleDragFinished,
+                    onScrubFinished = stripOnScrubFinished,
+                    onStartDrag = stripOnStartDrag,
+                    onEndDrag = stripOnEndDrag,
+                    onSeekAbsolute = seekToAbsolute,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
             // r63a V5: the dead Spacer(weight(1f)) that parked ~40% of the
             // screen below the filmstrip is gone --- the preview's weight(1f)
             // above now takes this space, so the filmstrip and the tab bar

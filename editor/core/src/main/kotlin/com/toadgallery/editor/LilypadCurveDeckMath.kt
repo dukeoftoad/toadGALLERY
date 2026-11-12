@@ -28,12 +28,10 @@ package com.toadgallery.editor
 //    CONSTRUCTION and [LilypadCurveMath.validate] stays a programming
 //    error, never a user-facing one.
 //
-// THE CHANNELS. The model carries four curves (master + R/G/B); the
-// engine composes the MASTER this round (the per-channel apply path is
-// the forward state's documented next step --- see LilypadCurveMath's
-// header). The deck still EDITS all four --- the wire shape is complete,
-// the sidecar round-trips a channel curve, and the round that turns the
-// channels on in the pipeline needs no migration. [pointsFor] seeds an
+// THE CHANNELS. The model carries four curves (master + R/G/B); since
+// r71 the engine composes them all (the three-table apply path ---
+// LutBuilder.buildChannels, the forward state's promised landing). The
+// deck EDITS all four as it has since r68. [pointsFor] seeds an
 // empty channel with the identity diagonal (an untouched channel reads
 // as the straight line it is); [withPoints] writes one channel verbatim.
 //

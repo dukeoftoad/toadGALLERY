@@ -105,8 +105,10 @@ the ember marks selection, the live value, the CTA — nothing else.
 - **Phase 2 — the photo pro round (r68, shipped)**: tone curve editor
   (Full deck), RGB parade + clipping zebra, history scrubber, crop dial
   + perspective, HSL rows on ProSlider. The per-channel R/G/B curves
-  ride the recipe as forward state; the engine composes the master
-  curve (the channels' composition is the declared follow-up).
+  rode the recipe as r68's forward state; **r71 composed them in the
+  engine** (the three-table apply path --- `LutBuilder.buildChannels` +
+  `PixelOps.applyChannelLuts`, master-then-channel per channel, the r68
+  sidecar rendering its promised colour with no migration).
 - **Phase 3 — the video timeline (r69-r70 underway)**: pinch-zoom timeline
   (**r69**: the `ClipTimeline` model + `LilypadTimelineMath` viewport
   geometry + the zoomable `TimelineStrip` on the video Main screen,

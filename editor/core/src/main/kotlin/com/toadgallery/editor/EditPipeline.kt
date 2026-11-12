@@ -11,7 +11,10 @@ package com.toadgallery.editor
  *  4. quarter turns (90-degree steps)
  *  5. crop (the normalized rect over the post-geometry frame)
  *  6. the composed tone LUT (exposure -> brightness -> contrast ->
- *     highlights -> shadows, one pass)
+ *     highlights -> shadows -> curve, one pass; the r68 master curve
+ *     composes after the five sliders, MASTER-ONLY --- the per-channel
+ *     curves ride the recipe as forward state until the three-LUT apply
+ *     path lands)
  *  7. saturation
  *  8. temperature / tint
  *  9. per-channel HSL bands
@@ -104,8 +107,12 @@ object EditPipeline {
         }
 
         // ---- Tone (one composed per-channel pass) ----
+        // r68: the gate opens for the five sliders OR a non-identity
+        // curve; the six-parameter build composes the master curve after
+        // the shadows stage (see LutBuilder.ORDER).
         if (listOf(recipe.exposure, recipe.brightness, recipe.contrast, recipe.highlights, recipe.shadows)
-            .any { it != 0 }
+            .any { it != 0 } ||
+            recipe.toneCurves?.isIdentity == false
         ) {
             val lut = LutBuilder.build(
                 brightness = recipe.brightness,
@@ -113,6 +120,7 @@ object EditPipeline {
                 exposure = recipe.exposure,
                 highlights = recipe.highlights,
                 shadows = recipe.shadows,
+                toneCurves = recipe.toneCurves,
             )
             PixelAdjuster.applyTo(current, lut)
         }

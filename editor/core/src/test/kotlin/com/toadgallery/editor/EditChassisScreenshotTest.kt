@@ -194,14 +194,16 @@ class EditChassisScreenshotTest {
     }
 
     /**
-     * r58b: the Crop panel's straighten slider on the crafted LabeledSlider.
-     * Minimal fixture: `EditRecipe()` defaults (straightenDeg = 0.0). The
-     * capture pins the slider row + the geometry chip row + the crop aspect
-     * presets --- the r32 contract on the r56 control, the regression surface
-     * for the straighten conversion.
+     * r68: the Crop panel's straighten DIAL (the r58b LabeledSlider row it
+     * replaced). Minimal fixture: `EditRecipe()` defaults (straightenDeg =
+     * 0.0 --- the quiet dial: bare track, no ember arc, ink readout). The
+     * capture pins the dial + the keystone rows (the r68 Perspective block,
+     * neutral at a null preview base --- the honest 0 read-back) + the
+     * geometry chip row + the crop aspect presets --- the r32 contract on
+     * the r68 instruments, the regression surface for the dial conversion.
      */
     @Test
-    fun cropPanelStraightenSliderRecordsBaseline() {
+    fun cropPanelStraightenDialRecordsBaseline() {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             EditorTheme {

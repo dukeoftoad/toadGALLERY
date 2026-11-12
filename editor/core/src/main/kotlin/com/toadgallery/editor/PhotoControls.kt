@@ -21,10 +21,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -257,75 +254,6 @@ internal fun LabeledSlider(
             // a range symmetric around zero puts the thumb's 0 at the
             // track's exact center (the M3 travel insets are symmetric).
             if (neutralTick && valueRange.start + valueRange.endInclusive == 0f) {
-                NeutralNotch(modifier = Modifier.matchParentSize())
-            }
-        }
-    }
-}
-
-/**
- * The HSL band's slider (the r32 control, r56-skinned): the drag value stays
- * LOCAL (the band commits once on release --- the r32 contract) while the
- * pill shows the live number during the drag. Signature unchanged, so the
- * Color screen's call sites are untouched.
- *
- * r66: the neutral notch rides the track (see [LabeledSlider]'s neutralTick
- * note) --- every band row is bipolar with a zero neutral (hue -180..180,
- * saturation/luminance -100..100), so the mark needs no opt-in here; the
- * symmetric-zero guard still keeps a hypothetical asymmetric band honest.
- */
-@Composable
-internal fun HslBandSlider(
-    name: String,
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    enabled: Boolean,
-    onCommit: (Int) -> Unit,
-) {
-    var dragValue by remember(label) { mutableStateOf<Float?>(null) }
-    val live = dragValue ?: value
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = label,
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(
-                    text = live.toInt().toString(),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                )
-            }
-        }
-        Box {
-            Slider(
-                value = live,
-                onValueChange = { dragValue = it },
-                onValueChangeFinished = {
-                    dragValue?.let { onCommit(it.toInt()) }
-                    dragValue = null
-                },
-                valueRange = range,
-                enabled = enabled,
-                // r32 a11y: the band control announces "BAND: CONTROL" as its name
-                // and the formatted label (with the value) as its state.
-                modifier = Modifier.semantics {
-                    contentDescription = name
-                    stateDescription = label
-                },
-            )
-            if (range.start + range.endInclusive == 0f) {
                 NeutralNotch(modifier = Modifier.matchParentSize())
             }
         }

@@ -1,6 +1,7 @@
 # Lilypad — the editor rebirth design language
 
-**Status:** Active (Phase 1 shipped as r67) · **Owner:** dukeoftoad ·
+**Status:** Active (Phase 1 shipped as r67 · Phase 2 shipped as r68) ·
+**Owner:** dukeoftoad ·
 **Source:** the founder's vision document ("Lilypad — the editor rebirth",
 November 2026) · **Implementation:** `editor/core/.../Lilypad*.kt`,
 `ProSlider.kt`, `LilypadCards.kt`
@@ -73,7 +74,7 @@ the ember marks selection, the live value, the CTA — nothing else.
   in `EditorPalette.Lilypad` (EditorTheme.kt). The r52 selection
   mechanism survives: a SELECTED FilterChip is the ember-filled pill.
 
-## 4. The Phase 1 kit (r67, this round)
+## 4. The Phase 1 kit (r67, shipped)
 
 - **ProSlider** (`ProSlider.kt` + `LilypadSliderMath.kt`): the flagship
   row — label left, mono value pill right (ember-when-live), the
@@ -99,16 +100,19 @@ the ember marks selection, the live value, the CTA — nothing else.
 
 ## 5. The phase roadmap
 
-- **Phase 1 — foundation (r67, this round)**: tokens, kit, Adjust +
+- **Phase 1 — foundation (r67, shipped)**: tokens, kit, Adjust +
   Looks decks, TuneRail retired, fonts, CI gates the Lilypad tests.
-- **Phase 2 — the photo pro round**: tone curve editor (Full deck), RGB
-  parade + clipping zebra, history scrubber, crop dial + perspective,
-  HSL rows on ProSlider.
+- **Phase 2 — the photo pro round (r68, shipped)**: tone curve editor
+  (Full deck), RGB parade + clipping zebra, history scrubber, crop dial
+  + perspective, HSL rows on ProSlider. The per-channel R/G/B curves
+  ride the recipe as forward state; the engine composes the master
+  curve (the channels' composition is the declared follow-up).
 - **Phase 3 — the video timeline**: pinch-zoom timeline, multi-clip
   Composition, shared Looks on GL effects, text overlays, speed, music,
   Transformer export with foreground-service progress.
 - **Phase 4 — craft polish**: the motion/haptics pass, 60fps scrubbing,
-  keyframes and speed ramps, export reliability hardening.
+  keyframes and speed ramps, export reliability hardening, the
+  perspective corner drag.
 
 ## 6. Budgets and risks
 
@@ -123,7 +127,12 @@ the ember marks selection, the live value, the CTA — nothing else.
 baselines by design; the mitigation is ONE deliberate re-record pass
 per phase merge (reviewed with a rendered diff), never scattered
 re-records. r67 ships the new fixtures (ProSliderScreenshotTest) and
-deletes the rail's; the record pass is a documented follow-up.
+deletes the rail's; the record pass is a documented follow-up. **r68
+suspension:** the Roborazzi PR gate itself is OFF (manual dispatch
+only, `screenshots.yml`) --- the per-round fixture churn taxed the
+build pace more than the drift gate paid, so lint debug, assemble, and
+the full unit suites carry the phases, and the deliberate record pass
+happens on demand per phase merge.
 
 **R2 — timeline performance** (Phase 3): thumbnail windows with LRU
 frame caching, reduced effect resolution during scrub.

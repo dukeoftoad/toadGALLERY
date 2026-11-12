@@ -1250,3 +1250,22 @@ the public remote each time.
   F-61, F-62, F-63, F-64, F-65, F-66, F-67, F-68, F-69, F-70, F-73
   (Regions to Draw merge --- its own UX pass), PAT revocation (advised
   again).
+
+## 2026-11-12 — the r68 suspension window (the Roborazzi PR gates rest; the unit lane widens)
+
+- **F-75 (2026-11-12, open) — the instrumented E2E lane.** With Roborazzi's
+  PR gate suspended (manual dispatch only, `screenshots.yml`) the editor's
+  gates are lint debug + assemble + the FULL `:editor:core` unit suite
+  (widened this round from the r67 Lilypad\* filter). The third leg the
+  founder named --- E2E --- has no lane yet: the repo's only instrumented
+  test is gallery's `PrivacyEgressTest` and NO workflow runs
+  `connectedDebugAndroidTest` anywhere. The follow-up: an emulator-job
+  workflow (reactive-android/emulator runner or an actions/setup-java +
+  avd-manager shape) running the editor app's instrumented suite on the
+  editor branch, sized to the 20-minute budget the other jobs keep. Do NOT
+  bolt it onto editor-ci.yml --- a separate `editor-e2e.yml` keeps the fast
+  lane fast.
+- **F-76 (2026-11-12, open) — re-arming decision.** The Roborazzi PR gate
+  suspension is reversible by design (re-add the `pull_request:` block to
+  `screenshots.yml`). Revisit when the Lilypad phases land and the UI
+  cadence slows: the harness, baselines, and plugin wiring all survive.

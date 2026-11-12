@@ -11,7 +11,9 @@ import kotlin.math.roundToInt
  *    single 256-entry LUT applied once per pixel (O(1) per channel at
  *    render time regardless of how many parameters are non-zero):
  *    exposure -> brightness -> contrast -> highlights -> shadows, in that
- *    fixed documented order.
+ *    fixed documented order. r68 appends the master tone CURVE after
+ *    shadows (the six-parameter overload below; the five-parameter form
+ *    is frozen bit-for-bit).
  *  - [PixelOps]: the FULL-PIXEL stage --- parameters that need the whole
  *    pixel (saturation needs the pixel's luma; temperature/tint cross
  *    channels). Applied per pixel; stages with a zero parameter are
@@ -23,7 +25,7 @@ import kotlin.math.roundToInt
 object LutBuilder {
 
     /** The stage's composition order, exported for tests and the recipe docs. */
-    const val ORDER: String = "exposure -> brightness -> contrast -> highlights -> shadows"
+    const val ORDER: String = "exposure -> brightness -> contrast -> highlights -> shadows -> curve"
 
     private const val SLIDER_MIN = -100
     private const val SLIDER_MAX = 100
@@ -80,6 +82,32 @@ object LutBuilder {
             out += shScale * (1.0 - smoothstep(0.0, PIVOT_D, out))
             out.roundToInt().coerceIn(0, BYTE_MAX)
         }
+    }
+
+    /**
+     * The r68 curve extension (Phase 2 of the editor rebirth): the SAME
+     * five frozen stages, then the recipe's MASTER tone curve composed
+     * AFTER them --- lut[v] = curve(base[v]), one table lookup per entry,
+     * exactly the two-pass apply a chain of LUT stages is. A null
+     * [toneCurves] (a pre-r68 recipe, a clean session) or the identity
+     * curve returns the five-stage table UNTOUCHED --- the byte-identical
+     * guarantee the regression test pins. The per-channel curves ride
+     * [ToneCurves] as forward state and are NOT composed here: applying
+     * them needs a three-LUT apply path, an engine change beyond this
+     * round's sanctioned curve extension (see LilypadCurveMath's header).
+     */
+    fun build(
+        brightness: Int,
+        contrast: Int,
+        exposure: Int,
+        highlights: Int,
+        shadows: Int,
+        toneCurves: ToneCurves?,
+    ): IntArray {
+        val base = build(brightness, contrast, exposure, highlights, shadows)
+        if (toneCurves == null || toneCurves.isIdentity) return base
+        val curve = LilypadCurveMath.bakeLut(toneCurves.master)
+        return IntArray(base.size) { v -> curve[base[v]] }
     }
 
     /** The smoothstep used by the masked shifts: 0 at edge0, 1 at edge1, smooth between. */

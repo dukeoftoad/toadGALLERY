@@ -23,6 +23,11 @@ import kotlinx.coroutines.CoroutineScope
 //
 // r66: `previewHistogram` rides the seam to the Adjust panel (the live
 // tonal chart's source, computed by the chassis's preview render).
+//
+// r68: the scope pair (`scopeMode`/`zebraActive`) and the curve deck's
+// entry pair (`curveDeckOpen`) ride the seam the same way --- the
+// chassis owns them because they steer chassis-level surfaces (the
+// zebra paints the canvas; the curve deck hosts the Full state).
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -96,10 +101,20 @@ internal fun PhotoPanelHost(
     selectSky: (String, Boolean) -> Unit,
     selectedBand: String,
     onSelectedBandChange: (String) -> Unit,
+    scopeMode: PhotoScopeMode,
+    onScopeModeChange: (PhotoScopeMode) -> Unit,
+    zebraActive: Boolean,
+    onZebraActiveChange: (Boolean) -> Unit,
+    curveDeckOpen: Boolean = false,
+    onCurveDeckOpenChange: (Boolean) -> Unit = {},
 ) {
     when (tool) {
         PhotoScreen.Crop -> CropPanel(committed, draft, onDraftChange, exporting, previewBase, commit)
-        PhotoScreen.Adjust -> AdjustPanel(committed, draft, onDraftChange, exporting, commit, previewHistogram)
+        PhotoScreen.Adjust -> AdjustPanel(
+            committed, draft, onDraftChange, exporting, commit, previewHistogram,
+            scopeMode, onScopeModeChange, zebraActive, onZebraActiveChange,
+            curveDeckOpen, onCurveDeckOpenChange,
+        )
         PhotoScreen.Looks -> LooksPanel(activity, uiScope, committed, draft, onDraftChange, exporting, commit, looks, onLooksVersionChange, importError, importLauncher, previewBase)
         PhotoScreen.Text -> TextPanel(activity, committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedLayer, commitTextDraftIfPending, textDraft, onTextDraftChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)
         PhotoScreen.Stickers -> StickersPanel(committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedStickerLayer, importedStickers, stickerImportError, stickerImportLauncher, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)
@@ -107,7 +122,7 @@ internal fun PhotoPanelHost(
         PhotoScreen.Regions -> RegionsPanel(committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, commitSelectedRegionLayer, drawMode, onDrawModeChange, regionMode, onRegionModeChange, eraseMode, onEraseModeChange, regionKind, onRegionKindChange, regionStrength, onRegionStrengthChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedDrawLayerId, onSelectDrawLayerChange, selectedRegionLayerId, onSelectRegionLayerChange)
         PhotoScreen.Frames -> FramesPanel(committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, importedFrames, frameImportError, frameImportLauncher)
         PhotoScreen.Ai -> AiPanel(activity, committed, draft, onDraftChange, exporting, commit, sweepPendingDrafts, drawMode, onDrawModeChange, regionMode, onRegionModeChange, eraseMode, onEraseModeChange, selectedTextLayerId, onSelectTextLayerChange, selectedStickerLayerId, onSelectStickerLayerChange, selectedDrawLayerId, onSelectDrawLayerChange, selectedRegionLayerId, onSelectRegionLayerChange, selectedEraseLayerId, onSelectEraseLayerChange, aiBusy, importedSkies, skyImportError, skyImportLauncher, retouchConsent, onRetouchConsentChange, retouchConsentDialog, onRetouchConsentDialogChange, runBokehEstimate, runRetouchDetect, selectSky)
-        PhotoScreen.Color -> ColorPanel(committed, exporting, commit, selectedBand, onSelectedBandChange)
+        PhotoScreen.Color -> ColorPanel(committed, draft, onDraftChange, exporting, commit, selectedBand, onSelectedBandChange)
         PhotoScreen.Main -> Unit
     }
 }

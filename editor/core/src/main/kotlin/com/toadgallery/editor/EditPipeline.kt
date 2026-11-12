@@ -114,9 +114,20 @@ object EditPipeline {
         // .buildChannels + PixelOps.applyChannelLuts --- the master-then-
         // channel composition Phase 2's forward state waited for); the
         // master-only path stays byte-frozen as the r68 contract.
+        // r74: whites/blacks join the gate and the seven-stage build (the
+        // far-end pair composes into the SAME LUT --- see LutBuilder's
+        // seven-stage overload); a 0 value is a zero term, so pre-r74
+        // recipes bake byte-identical tables.
         val curves = recipe.toneCurves
-        if (listOf(recipe.exposure, recipe.brightness, recipe.contrast, recipe.highlights, recipe.shadows)
-            .any { it != 0 } ||
+        if (listOf(
+                recipe.exposure,
+                recipe.brightness,
+                recipe.contrast,
+                recipe.highlights,
+                recipe.shadows,
+                recipe.whites,
+                recipe.blacks,
+            ).any { it != 0 } ||
             curves?.isIdentity == false
         ) {
             if (curves != null && curves.hasChannelCurves) {
@@ -128,6 +139,8 @@ object EditPipeline {
                         exposure = recipe.exposure,
                         highlights = recipe.highlights,
                         shadows = recipe.shadows,
+                        whites = recipe.whites,
+                        blacks = recipe.blacks,
                         toneCurves = curves,
                     ),
                 )
@@ -138,6 +151,8 @@ object EditPipeline {
                     exposure = recipe.exposure,
                     highlights = recipe.highlights,
                     shadows = recipe.shadows,
+                    whites = recipe.whites,
+                    blacks = recipe.blacks,
                     toneCurves = curves,
                 )
                 PixelAdjuster.applyTo(current, lut)
@@ -145,6 +160,10 @@ object EditPipeline {
         }
 
         // ---- Colour ----
+        // r74: vibrance leads saturation (the luma-weighted pull runs
+        // before the flat pull, so each stage sees the prior stage's
+        // output --- the documented single order both stages share).
+        PixelOps.applyVibrance(current, recipe.vibrance)
         PixelOps.applySaturation(current, recipe.saturation)
         PixelOps.applyTemperatureTint(current, recipe.temperature, recipe.tint)
         applyHslBands(current, recipe.hslBands)

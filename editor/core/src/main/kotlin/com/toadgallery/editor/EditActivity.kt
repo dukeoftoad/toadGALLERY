@@ -999,11 +999,17 @@ internal val ADJUST_SLIDERS: List<SliderSpec> = listOf(
     SliderSpec("exposure", R.string.editor_exposure, R.string.editor_a11y_exposure, { it.exposure }, { r, v -> r.copy(exposure = v) }),
     SliderSpec("brightness", R.string.editor_brightness, R.string.editor_a11y_brightness, { it.brightness }, { r, v -> r.copy(brightness = v) }),
     SliderSpec("contrast", R.string.editor_contrast, R.string.editor_a11y_contrast, { it.contrast }, { r, v -> r.copy(contrast = v) }),
-    SliderSpec("saturation", R.string.editor_saturation, R.string.editor_a11y_saturation, { it.saturation }, { r, v -> r.copy(saturation = v) }),
-    SliderSpec("temperature", R.string.editor_temperature, R.string.editor_a11y_temperature, { it.temperature }, { r, v -> r.copy(temperature = v) }),
-    SliderSpec("tint", R.string.editor_tint, R.string.editor_a11y_tint, { it.tint }, { r, v -> r.copy(tint = v) }),
+    // r74: the far-end tone pair (the plan doc's board list) rides right
+    // after shadows --- the Lightroom order the doc's mock shows.
     SliderSpec("highlights", R.string.editor_highlights, R.string.editor_a11y_highlights, { it.highlights }, { r, v -> r.copy(highlights = v) }),
     SliderSpec("shadows", R.string.editor_shadows, R.string.editor_a11y_shadows, { it.shadows }, { r, v -> r.copy(shadows = v) }),
+    SliderSpec("whites", R.string.editor_whites, R.string.editor_a11y_whites, { it.whites }, { r, v -> r.copy(whites = v) }),
+    SliderSpec("blacks", R.string.editor_blacks, R.string.editor_a11y_blacks, { it.blacks }, { r, v -> r.copy(blacks = v) }),
+    SliderSpec("saturation", R.string.editor_saturation, R.string.editor_a11y_saturation, { it.saturation }, { r, v -> r.copy(saturation = v) }),
+    // r74: the luma-weighted saturation, right after its flat sibling.
+    SliderSpec("vibrance", R.string.editor_vibrance, R.string.editor_a11y_vibrance, { it.vibrance }, { r, v -> r.copy(vibrance = v) }),
+    SliderSpec("temperature", R.string.editor_temperature, R.string.editor_a11y_temperature, { it.temperature }, { r, v -> r.copy(temperature = v) }),
+    SliderSpec("tint", R.string.editor_tint, R.string.editor_a11y_tint, { it.tint }, { r, v -> r.copy(tint = v) }),
     SliderSpec("vignette", R.string.editor_vignette, R.string.editor_a11y_vignette, { it.vignette }, { r, v -> r.copy(vignette = v) }),
     SliderSpec("sharpness", R.string.editor_sharpness, R.string.editor_a11y_sharpness, { it.sharpness }, { r, v -> r.copy(sharpness = v) }),
 )
@@ -1047,6 +1053,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var uiState by remember { mutableStateOf(engine.initial) }
     var selectedBand by remember { mutableStateOf(HSL_BANDS.first().first) }
     var exportChoice by remember { mutableStateOf<ExportChoice?>(null) }
+    // r74: the copy-paste edits clipboard --- ONE recipe slot, remembered
+    // at the chassis (so it survives tool switches and photo handoffs
+    // within the editor's lifetime, and dies with the session: no
+    // cross-process storage for a grade, the honest boundary).
+    var copiedGrade by remember { mutableStateOf<EditRecipe?>(null) }
     var previewBase by remember { mutableStateOf<Bitmap?>(null) }
     var previewImage by remember { mutableStateOf<ImageBitmap?>(null) }
     // r66: the Adjust panel's live tonal histogram --- recomputed by the
@@ -2573,6 +2584,34 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 resetA11y = stringResource(R.string.editor_v2_reset),
                 onReset = { entryRecipe?.let { commit(it) } },
                 resetEnabled = !exporting && entryRecipe != null && committed != entryRecipe,
+                // r74: the copy-paste edits pair, riding the Adjust tool
+                // (the grade's home). Copy lifts the committed grade into
+                // the chassis clipboard --- a plain remembered value, so it
+                // lives exactly as long as the session does (the honest
+                // boundary: the editor holds no cross-session storage for
+                // it; the feature is "between photos" within the editor's
+                // own lifetime). Paste lands it as ONE undoable commit;
+                // disabled when the clipboard is empty (nothing to paste,
+                // the honest-note rule) or during the export freeze.
+                copyA11y = if (screen == PhotoScreen.Adjust) {
+                    stringResource(R.string.editor_copy_edits)
+                } else {
+                    null
+                },
+                onCopy = { copiedGrade = committed },
+                copyEnabled = !exporting && screen == PhotoScreen.Adjust &&
+                    EditTransfer.hasGrade(committed),
+                pasteA11y = if (screen == PhotoScreen.Adjust) {
+                    stringResource(R.string.editor_paste_edits)
+                } else {
+                    null
+                },
+                onPaste = {
+                    copiedGrade?.let { source ->
+                        commit(EditTransfer.pasteGrade(source, committed))
+                    }
+                },
+                pasteEnabled = !exporting && screen == PhotoScreen.Adjust && copiedGrade != null,
             )
         }
 

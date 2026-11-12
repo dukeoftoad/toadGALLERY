@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r74 copy-edits header icon: two stacked sheets (the copy gesture).
+     House style = the ic_vt_* vectors: 24dp viewport, white fill,
+     tinted in Compose. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- The back sheet -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M9,2h9c0.55,0 1,0.45 1,1v12c0,0.55 -0.45,1 -1,1h-2v-2h1V4h-8v1h-2V3c0,-0.55 0.45,-1 1,-1z" />
+    <!-- The front sheet -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6,6h9c0.55,0 1,0.45 1,1v14c0,0.55 -0.45,1 -1,1H6c-0.55,0 -1,-0.45 -1,-1V7c0,-0.55 0.45,-1 1,-1zM7,8v12h7V8H7z" />
+</vector>

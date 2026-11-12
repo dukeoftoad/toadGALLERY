@@ -107,7 +107,10 @@ the ember marks selection, the live value, the CTA — nothing else.
   + perspective, HSL rows on ProSlider. The per-channel R/G/B curves
   ride the recipe as forward state; the engine composes the master
   curve (the channels' composition is the declared follow-up).
-- **Phase 3 — the video timeline**: pinch-zoom timeline, multi-clip
+- **Phase 3 — the video timeline (r69 started)**: pinch-zoom timeline
+  (**r69**: the `ClipTimeline` model + `LilypadTimelineMath` viewport
+  geometry + the zoomable `TimelineStrip` on the video Main screen,
+  behind the `timelineZoomEnabled` seam), multi-clip
   Composition, shared Looks on GL effects, text overlays, speed, music,
   Transformer export with foreground-service progress.
 - **Phase 4 — craft polish**: the motion/haptics pass, 60fps scrubbing,
@@ -135,7 +138,9 @@ the full unit suites carry the phases, and the deliberate record pass
 happens on demand per phase merge.
 
 **R2 — timeline performance** (Phase 3): thumbnail windows with LRU
-frame caching, reduced effect resolution during scrub.
+frame caching, reduced effect resolution during scrub. The r69 strip
+keeps whole-clip even decode with truthfully-positioned frames (the
+honest-sparse rule); the window-aware decode with caching is F-78.
 
 **R3 — the rebuild trap**: the engine is frozen and CI-gated (recipe,
 pipeline, JVM pins); the chassis ships through the proven editor →

@@ -33,6 +33,13 @@ package com.toadgallery.editor
  *    History entry and the chassis the bottom-anchored scrubber strip;
  *    false removes both. The flag covers the STRIP only --- the
  *    undo/redo ring, its icons and its semantics are untouched.
+ *  - `timelineZoomEnabled` (r69) = true gives the video editor's Main
+ *    screen the zoomable timeline strip (pinch-zoom with detents, pan
+ *    while zoomed, the TrimStrip's trim/scrub/tap contract otherwise);
+ *    false restores the r63d fixed-view TrimStrip. The flag covers the
+ *    STRIP SURFACE only --- the trim drafts, the thumbnails contract and
+ *    the seek callbacks are the video chassis's own contracts, never
+ *    gated.
  */
 internal object LilypadFlags {
     val decksEnabled: Boolean = true
@@ -42,4 +49,7 @@ internal object LilypadFlags {
 
     /** r68: the history strip's revert seam (the header entry + the strip). */
     val historyStripEnabled: Boolean = true
+
+    /** r69: the zoomable timeline strip's revert seam (the video Main screen). */
+    val timelineZoomEnabled: Boolean = true
 }

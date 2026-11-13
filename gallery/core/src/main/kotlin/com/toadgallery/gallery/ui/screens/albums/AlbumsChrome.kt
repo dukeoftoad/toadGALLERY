@@ -9,22 +9,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -32,10 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.toadgallery.gallery.ui.components.ToadBodyFont
 import com.toadgallery.gallery.ui.components.ToadDisplayFont
-import com.toadgallery.gallery.ui.components.ToadSectionCard
-import com.toadgallery.gallery.ui.components.ToadSectionRow
 import com.toadgallery.gallery.ui.theme.ToadTheme
 
 /**
@@ -103,15 +105,19 @@ fun ToadAlbumsHeader(
 }
 
 /**
- * A section eyebrow: the `11sp` ExtraBold uppercase `primary` label with
- * the optional trailing `10sp` `textDim` note (the prototype's section
- * headers: "On-Device Smart Collections • Private AI").
+ * A section eyebrow: the `11sp` ExtraBold uppercase label with the
+ * optional trailing note (the prototype's section headers: "ON-DEVICE
+ * SMART COLLECTIONS • Private AI", "DEVICE FOLDERS", "UTILITIES &
+ * PRIVACY"). The trailing note renders `10sp` in [trailingColor] ---
+ * the prototype paints "Private AI" in the primary and the plain notes
+ * in `textDim`.
  */
 @Composable
 fun ToadSectionEyebrow(
     label: String,
     modifier: Modifier = Modifier,
     trailing: String? = null,
+    trailingColor: androidx.compose.ui.graphics.Color? = null,
 ) {
     val palette = ToadTheme.palette
     Row(
@@ -122,7 +128,7 @@ fun ToadSectionEyebrow(
     ) {
         Text(
             text = label.uppercase(),
-            color = palette.primary,
+            color = palette.textMuted,
             style = TextStyle(
                 fontFamily = ToadBodyFont,
                 fontWeight = FontWeight.ExtraBold,
@@ -136,7 +142,7 @@ fun ToadSectionEyebrow(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = it,
-                color = palette.textDim,
+                color = trailingColor ?: palette.textDim,
                 style = TextStyle(
                     fontFamily = ToadBodyFont,
                     fontWeight = FontWeight.Normal,
@@ -150,10 +156,14 @@ fun ToadSectionEyebrow(
 }
 
 /**
- * The prototype's "Utilities & Privacy" card: the two surfaced daily-access
- * rows --- **Hidden Vault** (PIN & biometric locked storage; opens the
- * vault dialog/screen) and **Recycle Bin** (deleted items; opens the
- * trash screen) --- inside the standard [ToadSectionCard] idiom.
+ * The prototype's "Utilities & Privacy" card, r76.4 restyled EXACTLY as
+ * the HTML composes it: a `rounded-3xl` bordered **bgSurface** card (NOT
+ * the section-card row stack --- the prototype's rows are inset
+ * `rounded-2xl` **bgSurfaceHigh** buttons), each row a 40dp
+ * `rounded-xl` icon well (primaryContainer for the vault,
+ * secondaryContainer for the bin) + bold title + muted summary +
+ * trailing chevron. The card is an IN-FLOW item at the end of the
+ * Albums grid --- never a pinned bottom bar.
  */
 @Composable
 fun ToadUtilitiesCard(
@@ -166,32 +176,37 @@ fun ToadUtilitiesCard(
     val palette = ToadTheme.palette
     Column(modifier = modifier.fillMaxWidth()) {
         ToadSectionEyebrow(label = "Utilities & Privacy")
-        ToadSectionCard {
-            ToadSectionRow(topDivider = false) {
-                UtilityRow(
-                    icon = Icons.Filled.Lock,
-                    iconBackground = palette.primaryContainer,
-                    iconTint = palette.onPrimaryContainer,
-                    title = "Hidden Vault",
-                    summary = vaultSummary,
-                    onClick = onOpenVault,
-                )
-            }
-            ToadSectionRow(topDivider = true) {
-                UtilityRow(
-                    icon = Icons.Filled.Delete,
-                    iconBackground = palette.secondaryContainer,
-                    iconTint = palette.textMain,
-                    title = "Recycle Bin",
-                    summary = recycleSummary,
-                    onClick = onOpenRecycleBin,
-                )
-            }
+        Spacer(Modifier.height(2.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(palette.bgSurface)
+                .border(1.dp, palette.borderSubtle, RoundedCornerShape(24.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            UtilityRow(
+                icon = Icons.Filled.Lock,
+                iconBackground = palette.primaryContainer,
+                iconTint = palette.onPrimaryContainer,
+                title = "Hidden Vault",
+                summary = vaultSummary,
+                onClick = onOpenVault,
+            )
+            UtilityRow(
+                icon = Icons.Filled.Delete,
+                iconBackground = palette.secondaryContainer,
+                iconTint = palette.textMain,
+                title = "Recycle Bin",
+                summary = recycleSummary,
+                onClick = onOpenRecycleBin,
+            )
         }
     }
 }
 
-/** One utilities row: 40dp rounded icon well, title, summary, chevron. */
+/** One utilities row: the prototype's inset bgSurfaceHigh rounded-2xl button. */
 @Composable
 private fun UtilityRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -206,13 +221,15 @@ private fun UtilityRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .background(palette.bgSurfaceHigh)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(iconBackground),
             contentAlignment = Alignment.Center,
         ) {
@@ -220,7 +237,7 @@ private fun UtilityRow(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(16.dp),
             )
         }
         Spacer(Modifier.width(12.dp))
@@ -250,8 +267,88 @@ private fun UtilityRow(
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
-            tint = palette.textDim,
+            tint = palette.textMuted,
             modifier = Modifier.size(16.dp),
         )
+    }
+}
+
+/**
+ * r76.4: the prototype's smart-collection card --- the compact 2-column
+ * cell under "On-Device Smart Collections": a 48dp `rounded-2xl` (16dp)
+ * cover, the bold `12sp` name, the `11sp` muted count line, all inside a
+ * `rounded-3xl` (24dp) bordered bgSurface card. [onClick] null renders
+ * the disabled shape (the prototype's "Disabled in AI" cards stay
+ * visible but inert).
+ */
+@Composable
+fun ToadSmartCollectionCard(
+    name: String,
+    summary: String,
+    cover: Any?,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    coverContentDescription: String? = null,
+) {
+    val palette = ToadTheme.palette
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(palette.bgSurface)
+            .border(1.dp, palette.borderSubtle, RoundedCornerShape(24.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(palette.bgSurfaceHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (cover != null) {
+                AsyncImage(
+                    model = cover,
+                    contentDescription = coverContentDescription,
+                    contentScale = ContentScale.Crop,
+                    error = ColorPainter(palette.bgSurfaceHigh),
+                    modifier = Modifier.matchParentSize(),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Collections,
+                    contentDescription = null,
+                    tint = palette.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(
+                text = name,
+                color = palette.textMain,
+                style = TextStyle(
+                    fontFamily = ToadBodyFont,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = summary,
+                color = palette.textMuted,
+                style = TextStyle(
+                    fontFamily = ToadBodyFont,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 11.sp,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }

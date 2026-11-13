@@ -35,11 +35,14 @@ android {
         applicationId = "com.toadgallery"
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        // versionCode 46 (r65 round): F-72 lands --- the photo editor canvas
-        // zooms; the r63 proposal cross-verified. Version history lives in
-        // the git history of the old apps/gallery/build.gradle.kts.
+        // versionCode 46 stays intra-PR (the CI-merge discipline); the
+        // r77 round moves the PRODUCT line: versionName 0.4.5-alpha ->
+        // 0.4.5-beta --- the beta release the field round asked for (the
+        // dev-tools card + the About diagnostics dump are gone; the app is
+        // a user app now). Version history lives in the git history of the
+        // old apps/gallery/build.gradle.kts.
         versionCode = 46
-        versionName = "0.4.5-alpha"
+        versionName = "0.4.5-beta"
         // r55 (the one-launcher unification round): the MAIN/LAUNCHER entry
         // is an activity-alias whose enabled state is this placeholder
         // (default true = basic is the family's ONE launcher icon).

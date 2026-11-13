@@ -757,16 +757,15 @@ fun ToadGalleryApp() {
                     )
                 }
                 composable(Destinations.ABOUT) {
-                    // About sub-screen: identity, privacy, credits and the
-                    // vault diagnostics probed through the SAME shell-scoped
-                    // vault session (the vault screen's hand-off pattern).
+                    // About sub-screen: identity, privacy, credits.
                     // r64: the Development progress sub-screen (F-1, the
                     // build-time progress.json mirror) is REMOVED per the
                     // maintainer's directive --- the product UI no longer
                     // carries the project's dev dashboard; progress.json
                     // stays the repo's own tracking file.
+                    // r77 beta: the vault-diagnostics probe left with the
+                    // dev tools; the screen is identity + privacy + credits.
                     AboutScreen(
-                        vaultViewModel = vaultViewModel,
                         onBack = { navController.popBackStack() },
                     )
                 }
@@ -964,7 +963,12 @@ fun ToadExpressiveNavBar(
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { onTabSelected(destination.route) }
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                        // r76.1: 12dp horizontal padding squeezed the five
+                        // items past the row's budget --- the widest pill
+                        // (~52dp) + padding (~24dp) per item overflowed on
+                        // 360dp screens and the flexible label clipped to
+                        // "Setting". 6dp restores the full word.
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
@@ -973,7 +977,7 @@ fun ToadExpressiveNavBar(
                             .background(
                                 if (selected) palette.primaryContainer else Color.Transparent,
                             )
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                     ) {
                         Icon(
                             imageVector = destination.materialIcon,

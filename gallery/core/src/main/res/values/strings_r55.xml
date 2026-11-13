@@ -10,8 +10,6 @@
      release build). -->
 <resources>
     <!-- r59 developer diagnostics (debug builds only; see SettingsScreen) -->
-    <string name="settings_devtools_title">Developer diagnostics</string>
-    <string name="settings_devtools_body">Debug-build-only tools for fixing bugs and flaws: the in-process diagnostics ring, the build shape, and the on-device ML index state. Nothing here ships in a signed release build.</string>
-    <string name="settings_devtools_copy">Copy diagnostics</string>
-    <string name="settings_devtools_clear">Clear ring</string>
+    <!-- r77 beta: the settings_devtools_* strings left with the removed
+         developer-diagnostics card (a user app, not a maintainer console). -->
 </resources>

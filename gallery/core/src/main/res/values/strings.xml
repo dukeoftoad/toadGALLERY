@@ -380,22 +380,9 @@
     <string name="about_credits_title">Credits</string>
     <string name="about_credits_body">Inspired by Aves (metadata reference) and Ente (the vendored on-device AI engine). Built with Jetpack Compose, Coil and Media3.</string>
     <string name="about_view_source">View source on GitHub</string>
-    <string name="about_diagnostics_title">Diagnostics</string>
-    <string name="about_diagnostics_copy">Copy diagnostics</string>
-    <string name="about_diagnostics_clear">Clear log</string>
-    <string name="about_diagnostics_empty">Nothing recorded yet.</string>
-    <string name="about_vault_configured">Vault configured — PIN and index present.</string>
-    <string name="about_vault_not_configured">Vault not configured yet.</string>
-    <string name="about_vault_binding_on">Biometric unlock bound.</string>
-    <string name="about_vault_binding_off">Biometric unlock not bound.</string>
-    <string name="about_vault_keystore_key_present">Keystore key present.</string>
-    <string name="about_vault_keystore_key_absent">Keystore key absent.</string>
-    <string name="about_vault_store_writable_yes">Vault storage writable.</string>
-    <string name="about_vault_store_writable_no">Vault storage not writable.</string>
-    <plurals name="about_vault_blobs">
-        <item quantity="one">%1$d sealed item — %2$s</item>
-        <item quantity="other">%1$d sealed items — %2$s</item>
-    </plurals>
+    <!-- r77 beta: the about_diagnostics_* and about_vault_* strings left with
+         the dev tools (the About screen is identity + privacy + credits
+         now; the diagnostics dump was maintainer tooling). -->
     <!-- Metadata Details view (roadmap Phase 4: "Metadata Details view with
          read"). Every unavailable state gets its OWN string — the Phase 4
          audit forbids one ambiguous "unknown" standing for absent,

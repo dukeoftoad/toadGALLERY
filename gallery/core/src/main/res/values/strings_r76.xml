@@ -21,15 +21,33 @@
     <string name="settings_ai_engine_entry">AI Models &amp; Indexing Engine</string>
     <string name="settings_ai_engine_ready">Engine present • model packs managed on-device</string>
     <string name="settings_ai_engine_absent">Not in this build</string>
+    <!-- r76.1: the Basic-flavor AI Engine sub-page (the first cut composed nothing). -->
+    <string name="settings_ai_engine_absent_body">This build ships without the on-device AI engine. The timeline, vault and editor all work fully offline without it.</string>
 
     <!-- The Storage drill-down row + the vault sub-page's actions. -->
     <string name="settings_storage_entry">Storage &amp; Cache Manager</string>
     <string name="settings_vault_open">Open Vault</string>
     <string name="settings_vault_change_pin">Change PIN</string>
 
+    <!-- r76.1: the Albums tab's device-folder section label (the prototype's "DEVICE FOLDERS"). -->
+    <string name="albums_device_folders">Device Folders</string>
+
     <!-- The vault sub-page (biometric row reuses vault_biometric_section_*). -->
     <string name="vault_autolock_title">Auto-lock timer</string>
     <string name="vault_autolock_body">The vault locks itself when the app goes to the background (ADR-0017) — a fixed posture, not a preference.</string>
     <string name="vault_autolock_value">On background</string>
     <string name="vault_biometric_body">Fingerprint or face unlock, keyed in this phone\'s secure hardware. The PIN always keeps working.</string>
+
+    <!-- r76.3: the Media Access drill-down (the enriched issue #27 page). -->
+    <string name="settings_media_access_entry">Media access</string>
+    <string name="settings_media_access_picker_on">Photo Picker • scoped selection</string>
+    <string name="settings_media_access_picker_off">Full library access</string>
+    <string name="settings_media_posture_title">Library permission posture</string>
+    <string name="settings_media_posture_granted">Full library: granted</string>
+    <string name="settings_media_posture_denied">Full library: not granted</string>
+    <string name="settings_media_posture_body">The timeline reads the system Media Store. With the Photo Picker on, only your picked selection loads; off, the whole library needs this grant. Nothing ever leaves the device.</string>
+    <!-- r76.4: the Albums tab's smart collections section (the prototype's
+         "On-Device Smart Collections" eyebrow + its Private AI note). -->
+    <string name="albums_smart_collections">On-Device Smart Collections</string>
+    <string name="albums_smart_collections_private_ai">Private AI</string>
 </resources>

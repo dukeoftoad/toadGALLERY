@@ -305,23 +305,36 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
      * a consent round trip, not a batch run. On RESULT_OK the rows are
      * already trashed; the snackbar narrates the count and the MediaStore
      * observer refreshes the timeline.
+     *
+     * r76.1 crash fix: the consent build is a PROVIDER call that can throw
+     * (an unrecognized/stale row, a volume that refuses trash). It runs
+     * inside the scope on IO and a refusal folds into the honest "N
+     * failed" narration --- the first cut built the request bare on the
+     * main thread, and one rejection killed the process on the Delete tap
+     * before the system dialog could appear.
      */
     fun requestDelete() {
         @Suppress("NewApi")
         val ops = fileOps ?: return
         val selection = _state.value as? FileOpsUiState.Selection ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            pendingConsent = PendingConsent(
-                kind = FileOpKind.DELETE,
-                trash = true,
-                deleteRetry = selection.items,
-            )
-            @Suppress("NewApi")
-            _events.tryEmit(
-                FileOpsEvent.RequestConsent(
-                    ops.createTrashConsentRequest(selection.items.map { it.uri }),
-                ),
-            )
+            viewModelScope.launch {
+                @Suppress("NewApi")
+                val sender = ops.createTrashConsentRequest(selection.items.map { it.uri })
+                if (sender == null) {
+                    emitFailed(selection.items.size)
+                    return@launch
+                }
+                // The state snapshot is re-checked so a delete fired twice
+                // in the await window cannot stage two consent rounds.
+                if (_state.value !is FileOpsUiState.Selection) return@launch
+                pendingConsent = PendingConsent(
+                    kind = FileOpKind.DELETE,
+                    trash = true,
+                    deleteRetry = selection.items,
+                )
+                _events.tryEmit(FileOpsEvent.RequestConsent(sender))
+            }
         } else {
             @Suppress("NewApi")
             startBatch(FileOpKind.DELETE, selection.items) { ops.delete(it) }
@@ -381,13 +394,17 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 is FileOpOutcome.NeedsConsent -> {
                     if (!retry && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        pendingFavorite = FavoriteRequest(item = item, favorite = favorite)
+                        // r76.1: the build runs on IO inside this coroutine
+                        // and a provider refusal folds into the honest
+                        // failure narration (never a main-thread throw).
                         @Suppress("NewApi")
-                        _events.tryEmit(
-                            FileOpsEvent.RequestConsent(
-                                ops.createWriteConsentRequest(listOf(item.uri)),
-                            ),
-                        )
+                        val sender = ops.createWriteConsentRequest(listOf(item.uri))
+                        if (sender == null) {
+                            emitFailed(1)
+                        } else {
+                            pendingFavorite = FavoriteRequest(item = item, favorite = favorite)
+                            _events.tryEmit(FileOpsEvent.RequestConsent(sender))
+                        }
                     } else {
                         // Q (no recovery protocol) or a still-blocked retry:
                         // bounded, honest failure --- never a dialog loop.
@@ -649,13 +666,22 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                     is FileOpOutcome.NeedsConsent -> {
                         val req = request
                         if (!run.retry && req != null) {
-                            pendingConsent = PendingConsent(kind = FileOpKind.RENAME, rename = req)
-                            _events.tryEmit(
-                                FileOpsEvent.RequestConsent(
-                                    @Suppress("NewApi")
-                                    ops.createWriteConsentRequest(listOf(req.item.uri)),
-                                ),
-                            )
+                            // r76.1: the consent build is a provider call;
+                            // it runs on IO inside its own scope child (the
+                            // reducer stays non-suspending) and a refusal
+                            // narrates the bounded failure --- the first
+                            // cut threw out of the main-thread reducer and
+                            // killed the process.
+                            viewModelScope.launch {
+                                @Suppress("NewApi")
+                                val sender = ops.createWriteConsentRequest(listOf(req.item.uri))
+                                if (sender == null) {
+                                    emitFailed(1)
+                                } else {
+                                    pendingConsent = PendingConsent(kind = FileOpKind.RENAME, rename = req)
+                                    _events.tryEmit(FileOpsEvent.RequestConsent(sender))
+                                }
+                            }
                         } else {
                             emitFailed(1) // retry round still blocked: bounded, honest
                         }
@@ -706,31 +732,39 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (consentAnchors.isNotEmpty()) {
-                    pendingConsent = PendingConsent(
-                        kind = FileOpKind.MOVE,
-                        moveRetry = consentAnchors,
-                        moveAlreadyDone = undoEntries,
-                        moveAlreadyCount = run.alreadySucceeded + summary.succeeded,
-                    )
-                    _events.tryEmit(
-                        FileOpsEvent.RequestConsent(
-                            @Suppress("NewApi")
-                            ops.createDeleteConsentRequest(consentAnchors.map { it.original.uri }),
-                        ),
-                    )
-                } else {
-                    val movedTotal = run.alreadySucceeded + summary.succeeded
-                    if (movedTotal > 0) {
-                        emitDone(
-                            FileOpKind.MOVE,
-                            movedTotal,
-                            undo = undoEntries.takeIf { it.isNotEmpty() }?.let { UndoPayload.Moves(it) },
+                    // r76.1: provider call on IO inside a scope child; a
+                    // refusal lands on the moved/failed narration below
+                    // (the consent-anchored originals count as failed ---
+                    // their copies stay behind, honest partial state).
+                    viewModelScope.launch {
+                        @Suppress("NewApi")
+                        val sender = ops.createDeleteConsentRequest(
+                            consentAnchors.map { it.original.uri },
                         )
+                        if (sender == null) {
+                            narrateMoveOutcome(
+                                movedTotal = run.alreadySucceeded + summary.succeeded,
+                                undoEntries = undoEntries,
+                                partialOther = partialOther,
+                                failedCount = failedCount + consentAnchors.size,
+                            )
+                        } else {
+                            pendingConsent = PendingConsent(
+                                kind = FileOpKind.MOVE,
+                                moveRetry = consentAnchors,
+                                moveAlreadyDone = undoEntries,
+                                moveAlreadyCount = run.alreadySucceeded + summary.succeeded,
+                            )
+                            _events.tryEmit(FileOpsEvent.RequestConsent(sender))
+                        }
                     }
-                    if (partialOther > 0) {
-                        _events.tryEmit(FileOpsEvent.ShowSnackbar(R.string.file_ops_move_partial))
-                    }
-                    if (failedCount > 0) emitFailed(failedCount)
+                } else {
+                    narrateMoveOutcome(
+                        movedTotal = run.alreadySucceeded + summary.succeeded,
+                        undoEntries = undoEntries,
+                        partialOther = partialOther,
+                        failedCount = failedCount,
+                    )
                 }
             }
 
@@ -743,23 +777,56 @@ class FileOpsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (consentItems.isNotEmpty()) {
-                    pendingConsent = PendingConsent(
-                        kind = FileOpKind.DELETE,
-                        deleteRetry = consentItems,
-                        deleteAlreadyDone = succeededTotal,
-                    )
-                    _events.tryEmit(
-                        FileOpsEvent.RequestConsent(
-                            @Suppress("NewApi")
-                            ops.createDeleteConsentRequest(consentItems.map { it.uri }),
-                        ),
-                    )
+                    // r76.1: provider call on IO inside a scope child; a
+                    // refusal narrates the honest totals instead of the
+                    // process dying on the Delete tap (the field-report
+                    // crash this round fixes).
+                    viewModelScope.launch {
+                        @Suppress("NewApi")
+                        val sender = ops.createDeleteConsentRequest(consentItems.map { it.uri })
+                        if (sender == null) {
+                            if (succeededTotal > 0) emitDone(FileOpKind.DELETE, succeededTotal)
+                            emitFailed(failedCount + consentItems.size)
+                        } else {
+                            pendingConsent = PendingConsent(
+                                kind = FileOpKind.DELETE,
+                                deleteRetry = consentItems,
+                                deleteAlreadyDone = succeededTotal,
+                            )
+                            _events.tryEmit(FileOpsEvent.RequestConsent(sender))
+                        }
+                    }
                 } else {
                     if (succeededTotal > 0) emitDone(FileOpKind.DELETE, succeededTotal)
                     if (failedCount > 0) emitFailed(failedCount)
                 }
             }
         }
+    }
+
+    /**
+     * The move run's success narration, shared by the plain finish and the
+     * r76.1 consent-refusal path (whose consent-anchored originals join the
+     * failed count --- their copies stay behind, honest partial state).
+     * Non-suspending: plain StateFlow/SharedFlow writes only.
+     */
+    private fun narrateMoveOutcome(
+        movedTotal: Int,
+        undoEntries: List<MoveBack>,
+        partialOther: Int,
+        failedCount: Int,
+    ) {
+        if (movedTotal > 0) {
+            emitDone(
+                FileOpKind.MOVE,
+                movedTotal,
+                undo = undoEntries.takeIf { it.isNotEmpty() }?.let { UndoPayload.Moves(it) },
+            )
+        }
+        if (partialOther > 0) {
+            _events.tryEmit(FileOpsEvent.ShowSnackbar(R.string.file_ops_move_partial))
+        }
+        if (failedCount > 0) emitFailed(failedCount)
     }
 
     /**

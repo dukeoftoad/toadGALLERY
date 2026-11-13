@@ -852,20 +852,24 @@ fun SettingsScreen(
                 )
             }
             Spacer(Modifier.height(10.dp))
+            // r77.4: the field-report Storage Manager renders the breakdown
+            // as a single continuous rounded bar (an outlined track, the
+            // segments flush against each other, no inter-segment gaps),
+            // matching the screenshot. The outer 50% clip gives the pill
+            // ends; each segment is a plain fillMaxHeight Box so the colors
+            // butt up against each other and read as one stack, not five.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(12.dp)
+                    .height(14.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(2.dp),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
+                        .fillMaxSize()
+                        .padding(2.dp)
                         .clip(RoundedCornerShape(50)),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     if (totalBytes > 0L) {
                         listOf(
@@ -880,7 +884,6 @@ fun SettingsScreen(
                                     modifier = Modifier
                                         .weight(bytes.toFloat() / totalBytes)
                                         .fillMaxHeight()
-                                        .clip(RoundedCornerShape(50))
                                         .background(color),
                                 )
                             }
@@ -888,8 +891,7 @@ fun SettingsScreen(
                     } else if (storageState.measuring) {
                         Box(
                             modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
+                                .fillMaxSize()
                                 .clip(RoundedCornerShape(50))
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                         )
@@ -956,16 +958,44 @@ fun SettingsScreen(
                 Color(0xFFFBBF24),
             )
             Spacer(Modifier.height(4.dp))
-            Button(
-                onClick = storageViewModel::clearCache,
-                enabled = !storageState.measuring,
-                shape = RoundedCornerShape(50),
+            // r77.4: the field-report Storage Manager shows the two
+            // disposable actions side-by-side (screenshot 2): Clear cache
+            // (primary pill) and Reset ML index (outlined secondary, only on
+            // the face-index flavors where there IS an index to reset). Both
+            // disable while a measurement or the index reset is in flight so
+            // the totals cannot shift under a running action.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .testTag("settings_storage_clear_cache"),
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(stringResource(R.string.settings_storage_action_clear_cache))
+                Button(
+                    onClick = storageViewModel::clearCache,
+                    enabled = !storageState.measuring,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("settings_storage_clear_cache"),
+                ) {
+                    Text(stringResource(R.string.settings_storage_action_clear_cache))
+                }
+                if (BuildShape.faceIndex) {
+                    OutlinedButton(
+                        onClick = storageViewModel::resetMlIndex,
+                        enabled = !storageState.measuring &&
+                            !storageState.resettingIndex,
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("settings_storage_reset_ml_index"),
+                    ) {
+                        Text(stringResource(R.string.settings_storage_action_reset_ml_index))
+                    }
+                }
             }
         }
         SettingsGroupCard {

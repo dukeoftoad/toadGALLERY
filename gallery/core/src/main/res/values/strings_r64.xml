@@ -11,6 +11,9 @@
          (persisted under "theme_mode", resolved at the shell theme call),
          not a system-app shortcut. -->
     <string name="settings_theme_section">Theme</string>
+    <!-- r77: the Theme & Colors sub-page's palette card header (the
+         prototype's "Color Palettes" card). -->
+    <string name="settings_theme_palettes_title">Color palettes</string>
     <string name="settings_theme_mode">Appearance mode</string>
     <string name="settings_theme_mode_body">Light or dark on its own, or follow the system setting.</string>
     <string name="settings_theme_system">System default</string>

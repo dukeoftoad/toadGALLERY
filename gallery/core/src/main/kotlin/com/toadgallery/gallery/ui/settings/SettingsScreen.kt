@@ -42,6 +42,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
@@ -186,10 +187,13 @@ import com.toadgallery.gallery.ui.vault.VaultViewModel
  * provisioning cards + the two index queues --- unchanged this round.
  *
  * ## SYSTEM: storage, privacy, dev tools
- *  - Storage: the r62 dashboard, with the recycle-bin and hidden-vault
- *    ENTRIES folded in as the card's first rows (their old standalone
+ *  - Storage: the r77 Storage Manager card (the prototype's App-Private
+ *    Storage shape: eyebrow + live total, the padded segmented bar, the
+ *    bold-size legend, the filled Clear Cache pill), with the recycle-bin
+ *    and hidden-vault ENTRIES as the card after it (their old standalone
  *    sections + their duplicate measurement rows merge away; a locked
- *    vault still leaks no count or size, by design).
+ *    vault still leaks no count or size, by design). The ML-index resets
+ *    stay on the AI Engine page --- one destructive wipe surface, not two.
  *  - Privacy center: the r62 audit-style status page (read-only).
  *  r77 beta: the r59 developer-diagnostics card is REMOVED --- the beta
  *  release is a user app; the diagnostics dump was maintainer tooling
@@ -333,7 +337,7 @@ fun SettingsScreen(
                     SettingsSubPage.LAYOUT -> "Timeline Layout"
                     SettingsSubPage.AI_ENGINE -> "AI Engine"
                     SettingsSubPage.VAULT -> "Hidden Vault"
-                    SettingsSubPage.STORAGE -> "Storage & Cache"
+                    SettingsSubPage.STORAGE -> "Storage Manager"
                     SettingsSubPage.MEDIA_ACCESS -> "Media Access"
                     SettingsSubPage.HUB -> ""
                 },
@@ -468,9 +472,10 @@ fun SettingsScreen(
         }
 
         // ---- r76 SECTION 1: Appearance & Timeline (two drill-downs) ----
-        // r76.2: the five palettes moved out of the Theme & Colors
-        // drill-down onto the hub (field request: "Move palettes into
-        // appearance tab") --- they now render right under the nav rows.
+        // r77: the five palettes returned to the Theme & Colors drill-down
+        // (the prototype's own Color Palettes card) --- the hub's separate
+        // "Palettes" section was the r76.2 experiment; the drill-down is
+        // the palette's one home and the hub reads tighter.
         if (match(stringResource(R.string.settings_section_appearance)) ||
             match("theme") || match("timeline") || match("layout") ||
             match("grid") || match("palette") || match("color")
@@ -500,55 +505,12 @@ fun SettingsScreen(
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-            // r76.2: the five selectable palettes, formerly the bottom
-            // block of the Theme & Colors sub-page. Same rows, same
-            // checkmark = active behavior; one less drill-down tap.
-            Spacer(Modifier.height(12.dp))
-            SettingsSectionHeader("Palettes")
-            SettingsGroupCard {
-                AllToadPalettes.forEach { palette ->
-                    val selected = palette.id == toadPaletteId
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { settingsViewModel.setToadPaletteId(palette.id) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // The dual-tone circular swatch: primary core +
-                        // primaryContainer ring.
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(palette.primaryContainer)
-                                .border(2.dp, palette.primary, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(12.dp)
-                                    .clip(CircleShape)
-                                    .background(palette.primary),
-                            )
-                        }
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            text = toadPaletteLabelFor(palette.id),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                }
-            }
+            // r77: the five palettes returned to the Theme & Colors
+            // sub-page (the prototype's own Color Palettes card) --- the
+            // hub's separate "Palettes" section was the r76.2 experiment;
+            // the drill-down is the palette's one home and the hub reads
+            // tighter. The Theme nav row's supporting line still names the
+            // active palette.
         }
 
         // ---- r76 SECTION 2: On-Device AI & Smart Features ----
@@ -938,10 +900,89 @@ fun SettingsScreen(
                 testTag = "settings_toggle_dynamic_color",
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
             )
-            // r76.2: the five palettes moved up onto the Appearance hub
-            // section (field request); this sub-page keeps theme mode +
-            // dynamic color only. (r76.3: the orphaned extra close that
-            // unbalanced the file since the r76 merge is gone.)
+            // r77: the five palettes live HERE again --- the prototype's
+            // renderSettingsSubTheme shape (the mode card, the Material
+            // You toggle, then the Color Palettes card). See the hub
+            // section comment for why the r76.2 hub placement reverted.
+            Spacer(Modifier.height(12.dp))
+            SettingsSectionHeader(stringResource(R.string.settings_theme_palettes_title))
+            SettingsGroupCard {
+                Column(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AllToadPalettes.forEach { palette ->
+                        val selected = palette.id == toadPaletteId
+                        // The prototype's swatch row: the rounded-2xl
+                        // selectable container (selected = primaryContainer
+                        // fill + primary border), the dual-tone circle over
+                        // the palette's own bgApp fill, the name +
+                        // description, and the check when active.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                )
+                                .border(
+                                    width = 1.5.dp,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    shape = RoundedCornerShape(16.dp),
+                                )
+                                .clickable { settingsViewModel.setToadPaletteId(palette.id) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(palette.bgApp)
+                                    .border(2.dp, palette.primary, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(14.dp)
+                                        .clip(CircleShape)
+                                        .background(palette.primary),
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = toadPaletteLabelFor(palette.id),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = toadPaletteDescriptionFor(palette.id),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 1.dp),
+                                )
+                            }
+                            if (selected) {
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         } // SettingsSubPage.THEME
 
         // ---- r76 SUB-PAGE 4: Hidden Vault & Security ----
@@ -1048,11 +1089,13 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
-        // ---- r76.3: the segmented usage bar (the prototype's Storage
-        //      graph): each measured location gets its proportional
-        //      segment over the surface-highest track, legend below. All
-        //      from the SAME StorageInsightsViewModel entries the rows
-        //      below render --- nothing invented, nothing duplicated.
+        // ---- r77: the prototype's Storage Manager card --- the eyebrow
+        // header row ("App-Private Storage" + the live total), the
+        // padded-track segmented bar, the bold-size legend, and the one
+        // real action (Clear Cache). The r62 duplicate measured rows are
+        // gone (the legend IS the size list); the ML-index resets stay on
+        // the AI Engine page where index management lives --- a second
+        // destructive wipe here would be mess, not parity.
         val entriesByKey = storageState.entries.associateBy { it.key }
         val catalogueBytes = entriesByKey[STORAGE_KEY_CATALOGUE]?.bytes ?: 0L
         val mlIndexBytes = entriesByKey[STORAGE_KEY_ML_INDEX]?.bytes ?: 0L
@@ -1062,56 +1105,85 @@ fun SettingsScreen(
         val totalBytes = catalogueBytes + mlIndexBytes + modelsBytes +
             vaultBytes + cacheBytes
         SettingsGroupCard {
+            // The prototype's card header: the eyebrow + the total.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp)
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_storage_private_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = if (storageState.measuring) {
+                        stringResource(R.string.settings_storage_measuring)
+                    } else {
+                        DataSizeFormats.formatBytes(totalBytes) + " total"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            // The padded segmented track (the prototype's p-0.5 bar): the
+            // surface track, 2dp in, and the proportional segments over
+            // it. All from the SAME StorageInsightsViewModel entries the
+            // legend renders --- nothing invented, nothing duplicated.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
                     .height(12.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(2.dp),
             ) {
-                if (totalBytes > 0L) {
-                    listOf(
-                        catalogueBytes to Color(0xFF38BDF8),
-                        modelsBytes to MaterialTheme.colorScheme.primary,
-                        mlIndexBytes to Color(0xFFA78BFA),
-                        vaultBytes to Color(0xFF34D399),
-                        cacheBytes to Color(0xFFFBBF24),
-                    ).forEach { (bytes, color) ->
-                        if (bytes > 0L) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(bytes.toFloat() / totalBytes)
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(50))
-                                    .background(color),
-                            )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(50)),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    if (totalBytes > 0L) {
+                        listOf(
+                            catalogueBytes to Color(0xFF38BDF8),
+                            modelsBytes to MaterialTheme.colorScheme.primary,
+                            mlIndexBytes to Color(0xFFA78BFA),
+                            vaultBytes to Color(0xFF34D399),
+                            cacheBytes to Color(0xFFFBBF24),
+                        ).forEach { (bytes, color) ->
+                            if (bytes > 0L) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(bytes.toFloat() / totalBytes)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(50))
+                                        .background(color),
+                                )
+                            }
                         }
+                    } else if (storageState.measuring) {
+                        // The measuring skeleton: a neutral half-track so the
+                        // bar's presence stays honest without numbers.
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(50))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        )
                     }
-                } else if (storageState.measuring) {
-                    // The measuring skeleton: a neutral half-track so the
-                    // bar's presence stays honest without numbers.
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    )
                 }
             }
-            Text(
-                text = if (storageState.measuring) {
-                    stringResource(R.string.settings_storage_measuring)
-                } else {
-                    DataSizeFormats.formatBytes(totalBytes) + " total"
-                },
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            // The legend: swatch + label + size, one row per location ---
+            Spacer(Modifier.height(10.dp))
+            // The legend: swatch + label + bold size, one row per location ---
             // the rows below (recycle bin, vault entry) carry the live
             // counts; this legend carries the measured sizes.
             @Composable
@@ -1142,6 +1214,7 @@ fun SettingsScreen(
                             DataSizeFormats.formatBytes(bytes)
                         },
                         style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
@@ -1171,6 +1244,19 @@ fun SettingsScreen(
                 cacheBytes,
                 Color(0xFFFBBF24),
             )
+            // The card's one real action, the prototype's filled pill.
+            Spacer(Modifier.height(4.dp))
+            Button(
+                onClick = storageViewModel::clearCache,
+                enabled = !storageState.measuring,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .testTag("settings_storage_clear_cache"),
+            ) {
+                Text(stringResource(R.string.settings_storage_action_clear_cache))
+            }
         }
         SettingsGroupCard {
             // Recycle bin entry (issue #31). Count + size from the
@@ -1230,60 +1316,20 @@ fun SettingsScreen(
                     onClick = onOpenVault,
                     iconRes = R.drawable.ic_vault,
                     testTag = "settings_vault_entry",
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
                 )
             } else {
                 Text(
                     text = stringResource(R.string.settings_vault_pre_q_body),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
                 )
             }
-            // The measured rows (r62). The vault and trash keys fold away
-            // --- their entries above now carry the live status.
-            storageState.entries.forEach { entry ->
-                val labelRes = when (entry.key) {
-                    STORAGE_KEY_CATALOGUE -> R.string.settings_storage_catalogue
-                    STORAGE_KEY_ML_INDEX -> R.string.settings_storage_ml_index
-                    STORAGE_KEY_MODELS -> R.string.settings_storage_models
-                    STORAGE_KEY_CACHE -> R.string.settings_storage_cache
-                    else -> null
-                }
-                if (labelRes != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(labelRes),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = if (storageState.measuring) {
-                                stringResource(R.string.settings_storage_measuring)
-                            } else {
-                                DataSizeFormats.formatBytes(entry.bytes)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            OutlinedButton(
-                onClick = storageViewModel::clearCache,
-                enabled = !storageState.measuring,
-                modifier = Modifier
-                    .padding(top = 8.dp, bottom = 12.dp)
-                    .testTag("settings_storage_clear_cache"),
-            ) {
-                Text(stringResource(R.string.settings_storage_action_clear_cache))
-            }
+            // r77: the r62 duplicate measured rows are gone --- the
+            // manager card's legend IS the size list (the prototype's one
+            // Storage Manager card), and the clear-cache action moved
+            // there with it.
         }
             // ---- Privacy center (r62) ----
             // The maintainer's feature pick: one audit-style page where every
@@ -3019,6 +3065,15 @@ fun toadPaletteLabelFor(id: ToadThemeId): String = when (id) {
     ToadThemeId.OCEAN -> "Ocean Slate"
     ToadThemeId.OLED -> "OLED Pure Black"
     ToadThemeId.LIGHT -> "Botanical Light"
+}
+
+/** The palette swatch's one-line description (the prototype's swatch copy). */
+private fun toadPaletteDescriptionFor(id: ToadThemeId): String = when (id) {
+    ToadThemeId.TOAD -> "Signature botanical dark"
+    ToadThemeId.AMBER -> "Warm Material You gold"
+    ToadThemeId.OCEAN -> "Deep twilight blue"
+    ToadThemeId.OLED -> "Zero-nit battery saver"
+    ToadThemeId.LIGHT -> "High-clarity daylight"
 }
 
 /** The Theme drill-down row's live supporting line. */

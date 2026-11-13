@@ -46,4 +46,8 @@
     <string name="settings_media_posture_granted">Full library: granted</string>
     <string name="settings_media_posture_denied">Full library: not granted</string>
     <string name="settings_media_posture_body">The timeline reads the system Media Store. With the Photo Picker on, only your picked selection loads; off, the whole library needs this grant. Nothing ever leaves the device.</string>
+    <!-- r76.4: the Albums tab's smart collections section (the prototype's
+         "On-Device Smart Collections" eyebrow + its Private AI note). -->
+    <string name="albums_smart_collections">On-Device Smart Collections</string>
+    <string name="albums_smart_collections_private_ai">Private AI</string>
 </resources>

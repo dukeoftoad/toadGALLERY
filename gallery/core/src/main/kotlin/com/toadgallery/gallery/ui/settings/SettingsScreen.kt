@@ -1,9 +1,6 @@
 package com.toadgallery.gallery.ui.settings
 
 import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -124,7 +121,6 @@ import com.toadgallery.gallery.ui.theme.ToadShapes
 import com.toadgallery.gallery.ui.theme.ToadTheme
 import com.toadgallery.gallery.ui.theme.ToadThemeId
 import com.toadgallery.gallery.data.vault.VaultBiometricReadiness
-import com.toadgallery.gallery.data.diag.DiagLog
 import com.toadgallery.gallery.data.DataSizeFormats
 import com.toadgallery.gallery.data.media.location.MediaLocationState
 import com.toadgallery.gallery.ml.engine.ModelProvisioner
@@ -195,8 +191,9 @@ import com.toadgallery.gallery.ui.vault.VaultViewModel
  *    sections + their duplicate measurement rows merge away; a locked
  *    vault still leaks no count or size, by design).
  *  - Privacy center: the r62 audit-style status page (read-only).
- *  - Developer diagnostics: DEBUG-BUILDS ONLY ([BuildConfig.DEBUG]) ---
- *    the signed release surface never composes it.
+ *  r77 beta: the r59 developer-diagnostics card is REMOVED --- the beta
+ *  release is a user app; the diagnostics dump was maintainer tooling
+ *  (the DiagLog ring stays in the data layer for the engine internals).
  */
 @OptIn(ExperimentalLayoutApi::class) // r27: FlowRow for the four group-by chips
 @Composable
@@ -661,7 +658,6 @@ fun SettingsScreen(
         } // the r76 search-filter wrapper (privacy + about sections)
 
         // ---- r76 SECTION 4: Storage & Data Management ----
-        // ---- r76 SECTION 4: Storage & Data Management ----
         // r76.3: the query gate was `isEmpty()` (searching "storage" hid
         // the section --- a field-reported flaw); it now matches its own
         // keywords like every other section.
@@ -685,8 +681,10 @@ fun SettingsScreen(
         // the honest replacement for the removed r55 "Installed
         // components" family probe, which read "Not installed" for
         // capabilities the unified build embeds all along. The row opens
-        // the About sub-screen (identity, privacy posture, credits, the
-        // vault diagnostics + ring log live THERE).
+        // the About sub-screen (identity, privacy posture, credits).
+        // r77 beta: the About screen's vault-diagnostics + ring-log dump
+        // moved out with the dev tools (a user app, not a maintainer
+        // console).
         // r76.3: moved to the LAST hub section (the prototype's order ---
         // Appearance, AI, Privacy, Storage, About & Diagnostics last) and
         // given its own search gate.
@@ -1362,73 +1360,12 @@ fun SettingsScreen(
                     ok = aiEnabledCount == 0,
                 )
             }
-            // ---- Developer diagnostics (r59, the debug-tools round) ----
-            // The maintainer's "add option to add debug tool ... for fixing
-            // bugs and flaws" directive. DEBUG-BUILDS ONLY (BuildConfig.DEBUG):
-            // the signed release surface stays exactly as before --- the gate
-            // is the standard Android debug flag, zero flavor plumbing, and
-            // the section simply does not compose in a release build. Zero new
-            // dependencies: the diagnostics ring (DiagLog.snapshot()), the
-            // build-shape flags, the face-index directory state and a
-            // clipboard export of the whole bundle --- the same data the F5
-            // dogfood rounds wished for in the "indexing failed, no logs" reports.
-            if (BuildConfig.DEBUG) {
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    text = stringResource(R.string.settings_devtools_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.semantics { heading() },
-                )
-                Text(
-                    text = stringResource(R.string.settings_devtools_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                val context = LocalContext.current
-                val diagText = remember {
-                    buildString {
-                        appendLine("toadGALLERY dev diagnostics")
-                        appendLine("version: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ") debug")
-                        appendLine("buildShape: withEngine=" + BuildShape.withEngine +
-                            " faceIndex=" + BuildShape.faceIndex +
-                            " semanticIndex=" + BuildShape.semanticIndex)
-                        appendLine("applicationId: " + context.packageName)
-                        appendLine()
-                        appendLine("[diagnostics ring] (newest last)")
-                        DiagLog.snapshot().takeLast(40).forEach { appendLine(it) }
-                        appendLine()
-                        val faceIndexDir = java.io.File(context.filesDir, "face-index")
-                        appendLine("[face-index dir] " + faceIndexDir.absolutePath)
-                        if (faceIndexDir.isDirectory) {
-                            faceIndexDir.listFiles()?.sortedBy { it.name }?.forEach {
-                                appendLine("  " + it.name + "  " + it.length() + " B")
-                            }
-                        } else {
-                            appendLine("  (absent)")
-                        }
-                    }
-                }
-                Text(
-                    text = diagText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Row(modifier = Modifier.padding(top = 8.dp)) {
-                    TextButton(onClick = {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("toadGALLERY diagnostics", diagText))
-                        DiagLog.i("SettingsScreen", "dev diagnostics copied to clipboard")
-                    }) {
-                        Text(stringResource(R.string.settings_devtools_copy))
-                    }
-                    TextButton(onClick = { DiagLog.clear() }) {
-                        Text(stringResource(R.string.settings_devtools_clear))
-                    }
-                }
-            } // BuildConfig.DEBUG
+            // r77 beta: the r59 developer-diagnostics card is GONE --- the
+            // beta release is a user app, and the clipboard diagnostics dump
+            // (the ring, the build shape, the face-index directory listing)
+            // was maintainer tooling, not a user surface. The DiagLog ring
+            // itself stays in the data layer (the engine internals still
+            // write it); only this UI window closed.
 
         } // SettingsSubPage.STORAGE
 

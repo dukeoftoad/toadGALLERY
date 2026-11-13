@@ -757,16 +757,15 @@ fun ToadGalleryApp() {
                     )
                 }
                 composable(Destinations.ABOUT) {
-                    // About sub-screen: identity, privacy, credits and the
-                    // vault diagnostics probed through the SAME shell-scoped
-                    // vault session (the vault screen's hand-off pattern).
+                    // About sub-screen: identity, privacy, credits.
                     // r64: the Development progress sub-screen (F-1, the
                     // build-time progress.json mirror) is REMOVED per the
                     // maintainer's directive --- the product UI no longer
                     // carries the project's dev dashboard; progress.json
                     // stays the repo's own tracking file.
+                    // r77 beta: the vault-diagnostics probe left with the
+                    // dev tools; the screen is identity + privacy + credits.
                     AboutScreen(
-                        vaultViewModel = vaultViewModel,
                         onBack = { navController.popBackStack() },
                     )
                 }

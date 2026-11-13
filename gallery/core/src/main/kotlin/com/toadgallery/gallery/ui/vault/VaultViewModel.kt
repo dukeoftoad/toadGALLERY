@@ -217,7 +217,8 @@ sealed interface VaultBiometricRequest {
  * logs the phase leg of the same story, and the two lines read together),
  * and the state transitions that make up the device story --- session
  * unlocked, auto-locked, biometric enroll/unenroll --- one INFO line each.
- * [probeDiagnostics] is the structured leg the About screen reads. The
+ * [probeDiagnostics] is the structured diagnostics leg (r77 beta: the
+ * About screen no longer renders it; the W1 API stays for the tests). The
  * privacy contract is `DiagLog`'s (ADR-0014): op names, counts and
  * exception class+message ONLY --- never PIN data or display names.
  *

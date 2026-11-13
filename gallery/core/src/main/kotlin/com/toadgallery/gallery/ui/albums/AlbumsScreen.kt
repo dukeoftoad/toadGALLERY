@@ -344,7 +344,19 @@ fun AlbumsScreen(
                         onOpenVault()
                         true
                     },
-                    onBiometric = onVaultBiometric,
+                    // r77.5 (the field report's dead fingerprint trigger):
+                    // mirror the PIN flow --- close the dialog, land on the
+                    // vault screen, THEN raise the request. The shell's
+                    // collector launches the device prompt over the vault
+                    // screen, so a successful fingerprint lands INSIDE the
+                    // unlocked vault (and a cancel leaves the locked screen's
+                    // PIN pad right there) instead of unlocking invisibly
+                    // behind the albums grid.
+                    onBiometric = {
+                        showVaultPin = false
+                        onOpenVault()
+                        onVaultBiometric?.invoke()
+                    },
                     biometricAvailable = vaultBiometricAvailable,
                 )
             }

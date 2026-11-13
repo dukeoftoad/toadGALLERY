@@ -65,7 +65,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.fragment.app.FragmentActivity
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.data.DataSizeFormats
 import com.toadgallery.gallery.data.vault.VaultBiometricReadiness
@@ -151,25 +150,14 @@ fun VaultScreen(
         }
     }
 
-    // Issue #57: the BiometricPrompt requests arrive on their own flow (the
-    // prompt needs this screen's FragmentActivity front-and-center; see
-    // VaultBiometricRequest's KDoc). The ViewModel owns the session the
-    // authorized decrypt opens; this screen only drives the device round.
-    LaunchedEffect(Unit) {
-        viewModel.biometricRequests.collect { request ->
-            val activity = context as? FragmentActivity ?: return@collect
-            when (request) {
-                is VaultBiometricRequest.Unlock -> VaultBiometrics.unlock(
-                    activity,
-                    request.sealedSecret,
-                ) { result -> viewModel.onBiometricUnlockResult(result) }
-
-                VaultBiometricRequest.Enroll -> VaultBiometrics.enroll(activity) { result ->
-                    viewModel.onBiometricEnrollResult(result)
-                }
-            }
-        }
-    }
+    // Issue #57, r77.5: the BiometricPrompt requests are served at the
+    // SHELL now (ToadGalleryApp's single collector --- this screen used to
+    // collect them here, which worked for the auto-prompt below but left
+    // every OTHER surface's request with no receiver: the Albums PIN
+    // dialog's fingerprint trigger emitted into an uncollected SharedFlow
+    // and the prompt never appeared). One collector, shared by all
+    // surfaces; this screen's auto-prompt and buttons just raise the
+    // requests as before.
 
     // Issue #57: one automatic biometric prompt on entering the Locked
     // screen with an enrolled binding --- predictable (exactly once per

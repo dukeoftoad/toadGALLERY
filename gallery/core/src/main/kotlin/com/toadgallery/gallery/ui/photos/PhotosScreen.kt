@@ -47,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -728,26 +729,44 @@ private fun PhotosTimeline(
                     // The floating date scrubber: visible while the grid
                     // scrolls or the thumb drags; fades 900ms after idle.
                     val scrubberVisible = remember { mutableStateOf(false) }
-                    val firstVisible = gridState.layoutInfo.visibleItemsInfo
-                        .firstOrNull { it.key is String && (it.key as String).startsWith("row_") }
-                        ?.key?.let { key ->
-                            (key as String).removePrefix("row_").toIntOrNull()
+                    // The month label derives from the FIRST VISIBLE MEDIA
+                    // CELL, not the raw first-visible index: the staggered
+                    // grid interleaves full-line date headers (and the
+                    // Stories shelf header) with cells, and the stale
+                    // `row_<n>` positional keys only exist beyond the
+                    // layout interval --- keying on them made the label
+                    // land on wrong months. The snapshot lookup is
+                    // defensive (a paging refresh can shrink the store one
+                    // frame ahead of the layout info).
+                    val monthLabel by remember {
+                        derivedStateOf {
+                            val mediaIndex = gridState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { info ->
+                                    val key = info.key
+                                    key is String && !key.startsWith("header_") &&
+                                        !key.startsWith("row_") && key != "paging_header"
+                                }
+                                ?: gridState.layoutInfo.visibleItemsInfo.firstOrNull()
+                            val item = mediaIndex
+                                ?.let { lazyItems.itemSnapshotList.getOrNull(it.index) }
+                            val millis = item?.captureDateMillis
+                                ?: item?.dateAddedSec?.times(1000L)
+                                ?: System.currentTimeMillis()
+                            val cal = java.util.Calendar.getInstance()
+                            cal.timeInMillis = millis
+                            val monthName = cal.getDisplayName(
+                                java.util.Calendar.MONTH,
+                                java.util.Calendar.SHORT,
+                                java.util.Locale.getDefault(),
+                            ) ?: ""
+                            monthName + " " + cal.get(java.util.Calendar.YEAR)
                         }
-                        ?: gridState.firstVisibleItemIndex
-                    val monthLabel = remember(firstVisible) {
-                        val item = lazyItems.itemSnapshotList.getOrNull(firstVisible)
-                        val millis = item?.captureDateMillis
-                            ?: item?.dateAddedSec?.times(1000L)
-                            ?: System.currentTimeMillis()
-                        val cal = java.util.Calendar.getInstance()
-                        cal.timeInMillis = millis
-                        val monthName = cal.getDisplayName(
-                            java.util.Calendar.MONTH,
-                            java.util.Calendar.SHORT,
-                            java.util.Locale.getDefault(),
-                        ) ?: ""
-                        monthName + " " + cal.get(java.util.Calendar.YEAR)
                     }
+                    // The scrub fraction maps onto the GRID's own item
+                    // count (headers included --- a fraction of the scroll
+                    // extent is a fraction of the layout), not the paging
+                    // store's: the two diverge by exactly the interleaved
+                    // headers, which was the old off-by-headers drift.
                     LaunchedEffect(gridState.isScrollInProgress) {
                         if (gridState.isScrollInProgress) {
                             scrubberVisible.value = true
@@ -761,9 +780,12 @@ private fun PhotosTimeline(
                         visible = scrubberVisible.value,
                         onScrub = { fraction ->
                             scrubberVisible.value = true
-                            gridState.requestScrollToItem(
-                                index = ((lazyItems.itemCount - 1) * fraction).toInt(),
-                            )
+                            val target = (gridState.layoutInfo.totalItemsCount * fraction)
+                                .toInt()
+                                .coerceIn(0, (gridState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+                            if (gridState.layoutInfo.totalItemsCount > 0) {
+                                gridState.requestScrollToItem(index = target)
+                            }
                         },
                         modifier = Modifier.align(Alignment.CenterEnd),
                     )

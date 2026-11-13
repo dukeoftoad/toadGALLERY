@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,7 +35,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -245,8 +245,22 @@ fun SettingsScreen(
     // tag intact.
     var subPage by rememberSaveable { mutableStateOf(SettingsSubPage.HUB) }
     var settingsSearch by rememberSaveable { mutableStateOf("") }
-    val settingsScroll = rememberScrollState()
-    LaunchedEffect(subPage) { settingsScroll.scrollTo(0) }
+    // r76 polish: PER-PAGE scroll states. The r76 first cut shared ONE
+    // scroll state across the hub and every sub-page: opening a sub-page
+    // from a scrolled-down hub fired scrollTo(0) DURING the slide
+    // transition, so the outgoing hub visibly jumped to top mid-slide
+    // (both AnimatedContent pages were composing the same state). Each
+    // page now owns its own state; the initial position of every page
+    // is naturally top.
+    val hubScroll = rememberScrollState()
+    val subPageScroll = rememberScrollState()
+
+    // r76 polish: system back on an open sub-page returns to the hub (the
+    // top bar's back action's twin) instead of leaving the app with the
+    // drill-down still composed.
+    BackHandler(enabled = subPage != SettingsSubPage.HUB) {
+        subPage = SettingsSubPage.HUB
+    }
 
     // The hub-return signal (the nav bar's Settings-pop rule): while ANY
     // sub-page is composed the signal is armed, so tapping the Settings
@@ -350,10 +364,13 @@ fun SettingsScreen(
             },
             label = "settingsSubPage",
         ) { page ->
+            // The page's OWN scroll state (see the per-page note above):
+            // the hub scrolls hubScroll, every sub-page scrolls subPageScroll.
+            val pageScroll = if (page == SettingsSubPage.HUB) hubScroll else subPageScroll
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(settingsScroll)
+                    .verticalScroll(pageScroll)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
 

@@ -1,6 +1,7 @@
 package com.toadgallery.gallery.ui.albums
 
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -218,6 +220,17 @@ fun AlbumsScreen(
         viewModel.refreshThings()
     }
 
+    // r76: the vault PIN dialog's open flag --- hoisted to the screen's
+    // root Box scope so the scrim covers the WHOLE screen. The r76 first
+    // cut nested the scrim Box inside the Ready branch's Column, where
+    // fillMaxSize measured the column's remaining height (a scrim that
+    // only dimmed the content below the header and a dialog pushed off
+    // the bottom on small screens).
+    var showVaultPin by rememberSaveable { mutableStateOf(false) }
+    // r76 polish: system back dismisses the PIN dialog (the scrim's own
+    // escape hatch) instead of leaving the app with the modal still up.
+    BackHandler(enabled = showVaultPin) { showVaultPin = false }
+
     Box(modifier = Modifier.fillMaxSize()) {
         when (val s = state) {
             is AlbumsState.Loading -> LoadingState(tag = "albums_state_loading")
@@ -281,12 +294,9 @@ fun AlbumsScreen(
                         // r76: the surfaced Utilities & Privacy card ---
                         // daily-access rows for the Hidden Vault and the
                         // Recycle Bin (moved out of deep Settings, the
-                        // prototype's own instruction).
-                        // r76: the vault row opens the PIN dialog first
-                        // (the prototype's HiddenVaultPinDialog); the
-                        // unlock validator + the biometric trigger come
-                        // from the shell (the shell-scoped vault session).
-                        var showVaultPin by remember { mutableStateOf(false) }
+                        // prototype's own instruction). The vault row opens
+                        // the PIN dialog (the dialog itself lives at the
+                        // screen's ROOT Box scope below).
                         ToadUtilitiesCard(
                             vaultSummary = vaultSummary,
                             onOpenVault = { showVaultPin = true },
@@ -296,36 +306,35 @@ fun AlbumsScreen(
                                 start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp,
                             ),
                         )
-                        if (showVaultPin) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color(0xBF000000)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                HiddenVaultPinDialog(
-                                    onDismiss = { showVaultPin = false },
-                                    // The ASYNC unlock contract: the dialog
-                                    // hands the PIN to the real vault
-                                    // session (the shell wires
-                                    // vaultViewModel::attemptUnlock), then
-                                    // routes to the vault screen --- whose
-                                    // own surface narrates a wrong PIN (the
-                                    // vault's throttle + messaging live
-                                    // there; a synchronous guess here would
-                                    // lie).
-                                    onPinEntered = { pin ->
-                                        onAttemptVaultUnlock(pin)
-                                        onOpenVault()
-                                        true
-                                    },
-                                    onBiometric = onVaultBiometric,
-                                    biometricAvailable = vaultBiometricAvailable,
-                                )
-                            }
-                        }
                     }
                 }
+            }
+        }
+        // r76 polish: the PIN dialog + scrim moved from the Ready branch's
+        // COLUMN to the root Box --- the old placement made the scrim's
+        // fillMaxSize measure the column's remaining height (a partial
+        // dim + a dialog clipped off small screens). The unlock contract
+        // stays the ASYNC vault session's: the dialog hands the PIN to
+        // [onAttemptVaultUnlock] (the shell's PBKDF2-backed verify ---
+        // never synchronous) and closes; the VaultScreen the navigation
+        // lands on narrates a wrong PIN through its own messaging.
+        if (showVaultPin) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xBF000000)),
+                contentAlignment = Alignment.Center,
+            ) {
+                HiddenVaultPinDialog(
+                    onDismiss = { showVaultPin = false },
+                    onPinEntered = { pin ->
+                        onAttemptVaultUnlock(pin)
+                        onOpenVault()
+                        true
+                    },
+                    onBiometric = onVaultBiometric,
+                    biometricAvailable = vaultBiometricAvailable,
+                )
             }
         }
         SnackbarHost(

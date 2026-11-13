@@ -309,6 +309,18 @@
     <string name="vault_biometric_unlock_action">Unlock with biometrics</string>
     <string name="vault_biometric_section_title">Biometric unlock</string>
     <string name="vault_biometric_section_body">Optional. Unlock the vault with your fingerprint or face instead of the PIN. Your biometric data stays in this phone\'s secure hardware and never leaves the device. The PIN always keeps working.</string>
+    <!-- r76 polish: the PIN dialog's own copy (was hardcoded English in
+         the composable --- the app ships localized resources everywhere
+         else). -->
+    <string name="vault_pin_dialog_title">Hidden Vault</string>
+    <string name="vault_pin_dialog_hint">Enter 4-digit PIN</string>
+    <string name="vault_pin_dialog_wrong">Wrong PIN • try again</string>
+    <string name="vault_pin_keypad_clear">Clear</string>
+    <string name="vault_pin_keypad_unlock">Unlock</string>
+    <string name="cd_vault_pin_dialog_close">Close</string>
+    <string name="cd_lightbox_back">Back</string>
+    <string name="cd_lightbox_unfavorite">Unfavorite</string>
+    <string name="cd_lightbox_favorite">Favorite</string>
     <string name="vault_biometric_prompt_title">Unlock the hidden vault</string>
     <string name="vault_biometric_prompt_subtitle">Confirm it\'s you to open the vault</string>
     <!-- The prompt's negative button (r10 device fix): androidx.biometric

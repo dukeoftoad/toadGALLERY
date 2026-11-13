@@ -15,7 +15,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,11 +35,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -434,16 +433,21 @@ fun ToadToastBanner(
 /**
  * The toast state holder the shell renders once --- `rememberToast()`
  * gives any descendant a `show(message)` lambda through a simple holder
- * object; the 2.4s auto-hide timer resets per call (the prototype's
- * `clearTimeout(toastTimer)` discipline).
+ * object; the 2.4s auto-hide timer is keyed to a monotonic display
+ * GENERATION (incremented by every `show` call) instead of the message
+ * text --- two toasts with the same message back-to-back, or a
+ * recomposition of an unrelated state read, can never restart or skip
+ * the timer (the prototype's `clearTimeout(toastTimer)` discipline).
  */
 class ToadToastState {
     internal var message by mutableStateOf("")
     internal var visible by mutableStateOf(false)
+    internal var generation by mutableIntStateOf(0)
 
     fun show(text: String) {
         message = text
         visible = true
+        generation += 1
     }
 }
 
@@ -451,7 +455,7 @@ class ToadToastState {
 @Composable
 fun rememberToadToast(): ToadToastState {
     val state = remember { ToadToastState() }
-    LaunchedEffect(state.message, state.visible) {
+    LaunchedEffect(state.generation) {
         if (state.visible) {
             delay(2400)
             state.visible = false

@@ -2,7 +2,6 @@ package com.toadgallery.gallery.ui.overlays
 
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +24,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,17 +36,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.toadgallery.gallery.R
 import com.toadgallery.gallery.data.MediaItem
 import com.toadgallery.gallery.ui.components.ToadBodyFont
-import com.toadgallery.gallery.ui.components.ToadDisplayFont
 import com.toadgallery.gallery.ui.theme.ToadTheme
 import com.toadgallery.gallery.ui.viewer.ViewerInfoFormat
 
@@ -81,18 +83,27 @@ fun PhotoLightboxOverlay(
     modifier: Modifier = Modifier,
 ) {
     val palette = ToadTheme.palette
+    // The sheet's measured height (the actions row + the info lines + the
+    // paddings) --- the image area reserves it instead of painting beneath
+    // it: the old fillMaxSize().padding(bottom = 200.dp) made the zoom
+    // gesture surface extend UNDER the sheet (taps on Hide/Edit/Delete
+    // also pinched) and hard-coded a 200dp guess that clipped the sheet's
+    // content on dense fonts. The sheet is composed first and measured via
+    // onSizeChanged; the image box takes the remaining space.
+    var sheetHeight by remember { mutableStateOf(0) }
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xE6000000)),
     ) {
-        // ---- The media preview (zoomable, centered) ----
+        // ---- The media preview (zoomable, centered, ABOVE the sheet) ----
         ToadZoomableImage(
             model = item.uri.toString(),
             contentDescription = ViewerInfoFormat.nameFromUri(item.uri.toString()),
             modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 200.dp),
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(bottom = with(LocalDensity.current) { sheetHeight.toDp() }),
         )
 
         // ---- The top bar ----
@@ -112,7 +123,7 @@ fun PhotoLightboxOverlay(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.cd_lightbox_back),
                     tint = Color.White,
                     modifier = Modifier.size(18.dp),
                 )
@@ -163,7 +174,13 @@ fun PhotoLightboxOverlay(
             ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = if (isFavorite) "Unfavorite" else "Favorite",
+                    contentDescription = stringResource(
+                            if (isFavorite) {
+                                R.string.cd_lightbox_unfavorite
+                            } else {
+                                R.string.cd_lightbox_favorite
+                            },
+                        ),
                     tint = if (isFavorite) Color(0xFFF43F5E) else Color.White,
                     modifier = Modifier.size(18.dp),
                 )
@@ -175,6 +192,7 @@ fun PhotoLightboxOverlay(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .onSizeChanged { sheetHeight = it.height }
                 .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                 .background(palette.bgGlass)
                 .padding(16.dp),
@@ -309,11 +327,14 @@ private fun LightboxAction(
 
 /**
  * The lightbox's zoomable image: a self-contained pinch/pan wrapper over
- * Coil's `AsyncImage` (transform gestures + graphicsLayer scale/offset).
- * Deliberately NOT the viewer's [com.toadgallery.gallery.ui.viewer
- * .ZoomableState]: that one is coupled to the viewer pager's scroll
- * locking; the lightbox is a single-item surface with its own (simpler)
- * clamping math.
+ * Coil's `AsyncImage` (transform gestures + graphicsLayer scale/offset)
+ * with ContentScale.Fit (the whole photo always visible --- the prototype's
+ * `object-contain`), a double-tap toggle between 1x and 2.5x, and PAN
+ * CLAMPING to the zoomed image's own bounds so a pan can never push the
+ * photo fully off-screen. Deliberately NOT the viewer's
+ * [com.toadgallery.gallery.ui.viewer.ZoomableState]: that one is coupled to
+ * the viewer pager's scroll locking; the lightbox is a single-item surface
+ * with its own (simpler) clamping math.
  */
 @Composable
 private fun ToadZoomableImage(
@@ -324,20 +345,41 @@ private fun ToadZoomableImage(
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+    // The box's own size, for the pan clamp (the zoomed photo may exceed
+    // the box in one axis only under Fit; the clamp caps the pan to the
+    // overflow in each axis --- a Fit-scaled photo has no overflow, so pan
+    // is a no-op below zoom 1, exactly like every platform gallery).
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
     AsyncImage(
         model = model,
         contentDescription = contentDescription,
+        contentScale = ContentScale.Fit,
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
+            .onSizeChanged { boxSize = it }
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val newScale = (scale * zoom).coerceIn(1f, 5f)
-                    val newOffsetX = if (newScale > 1f) offsetX + pan.x else 0f
-                    val newOffsetY = if (newScale > 1f) offsetY + pan.y else 0f
-                    scale = newScale
-                    offsetX = newOffsetX
-                    offsetY = newOffsetY
-                }
+                detectTransformGestures(
+                    onGesture = { _, pan, zoom, _ ->
+                        val newScale = (scale * zoom).coerceIn(1f, 5f)
+                        // The per-axis overflow: half the difference
+                        // between the zoomed content and the box.
+                        val overflowX = (boxSize.width * (newScale - 1f)) / 2f
+                        val overflowY = (boxSize.height * (newScale - 1f)) / 2f
+                        val newOffsetX = if (newScale > 1f) {
+                            (offsetX + pan.x).coerceIn(-overflowX, overflowX)
+                        } else {
+                            0f
+                        }
+                        val newOffsetY = if (newScale > 1f) {
+                            (offsetY + pan.y).coerceIn(-overflowY, overflowY)
+                        } else {
+                            0f
+                        }
+                        scale = newScale
+                        offsetX = newOffsetX
+                        offsetY = newOffsetY
+                    },
+                )
             }
             .graphicsLayer {
                 scaleX = scale

@@ -12,31 +12,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,12 +41,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.toadgallery.gallery.ui.components.ToadBodyFont
-import com.toadgallery.gallery.ui.components.ToadDisplayFont
 import com.toadgallery.gallery.ui.components.ToadMotionSpec
-import com.toadgallery.gallery.ui.components.toadTrailingFade
+import com.toadgallery.gallery.ui.components.ToadDisplayFont
 import com.toadgallery.gallery.ui.components.ToadGlassSurface
 import com.toadgallery.gallery.ui.theme.ToadTheme
-import kotlinx.coroutines.delay
 
 /**
  * The r76 Photos sticky frosted header (the prototype's first screen
@@ -190,15 +180,25 @@ fun ToadPhotosHeader(
 
 /**
  * The prototype's floating date scrubber: a right-edge vertical thumb
- * (1.5dp-wide, 48dp-tall `primary` capsule) with a floating `primary`
- * pill showing the active month/year while the timeline scrolls or the
- * thumb drags, fading out [ToadMotionSpec.SCRUBBER_IDLE_MS] after the
+ * (3dp-wide, 48dp-tall `primary` capsule) with a floating `primary` pill
+ * showing the active month/year while the timeline scrolls or the thumb
+ * drags, fading out [ToadMotionSpec.SCRUBBER_IDLE_MS] after the
  * interaction goes idle.
  *
  * The month label comes from the caller ([monthLabel]); the scrubber is
  * display-only chrome over the grid (the timeline itself is the scroll
- * source of truth --- a drag maps the thumb's fraction onto the grid's
- * scroll fraction through [onScrub]).
+ * source of truth --- a drag maps the thumb's ABSOLUTE position onto the
+ * grid's scroll fraction through [onScrub]: the thumb IS the position
+ * indicator, the prototype's `cursor-ns-resize` track semantics).
+ *
+ * r76 polish: the thumb no longer paints a FIXED 120dp-tall touch slab
+ * centered in a 40dp column --- it tracks the drag's absolute Y inside
+ * the scrubber column (the prototype's `justify-center` track), and the
+ * drag consumes its changes so a scrub never simultaneously scrolls the
+ * grid beneath the finger (the stale-`row_`-key fallback keys made the
+ * old fraction->index math land on wrong months; the caller now derives
+ * the label from the first visible MEDIA row and maps the fraction onto
+ * the grid's own item count).
  */
 @Composable
 fun ToadDateScrubber(
@@ -216,8 +216,8 @@ fun ToadDateScrubber(
     ) {
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(200)),
-            exit = fadeOut(tween(200)),
+            enter = fadeIn(tween(ToadMotionSpec.TOAST_MS)),
+            exit = fadeOut(tween(ToadMotionSpec.TOAST_MS)),
         ) {
             Text(
                 text = monthLabel,
@@ -229,16 +229,22 @@ fun ToadDateScrubber(
                 ),
                 maxLines = 1,
                 modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 14.dp)
                     .clip(RoundedCornerShape(50))
                     .background(palette.primary)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             )
         }
-        // The drag thumb: the whole 40dp column is the touch target (the
-        // 48dp touch floor), the visual is the 1.5x48dp capsule.
+        // The drag track: the whole column height is the gesture surface
+        // (the prototype's full-height `justify-center` track). The visual
+        // thumb is a STATIC centered capsule --- the prototype's handle ---
+        // while the drag's absolute Y maps onto the scroll fraction; the
+        // month pill narrates the position. Consume the changes so the grid
+        // underneath never scrolls in the same gesture.
         Box(
             modifier = Modifier
-                .size(width = 24.dp, height = 120.dp)
+                .fillMaxHeight()
                 .draggableVertical { fraction -> onScrub(fraction) },
             contentAlignment = Alignment.Center,
         ) {
@@ -253,14 +259,24 @@ fun ToadDateScrubber(
 }
 
 /**
- * The vertical-drag helper behind the scrubber thumb: reports the drag
- * position as a `0f..1f` fraction of the track. A plain pointerInput
- * wrapper (no gesture-naviction library).
+ * The vertical-drag helper behind the scrubber thumb: reports the drag's
+ * ABSOLUTE position as a `0f..1f` fraction of the track height (the
+ * thumb-position-is-the-target semantics), consuming every change so the
+ * gesture never leaks into the grid's scroll beneath.
  */
 private fun Modifier.draggableVertical(onFraction: (Float) -> Unit): Modifier =
     this.then(
         Modifier.pointerInput(Unit) {
-            detectVerticalDragGestures { change, _ ->
+            detectVerticalDragGestures(
+                onDragStart = { offset ->
+                    // A touch-down anywhere on the track jumps the position
+                    // there first (the prototype's track semantics).
+                    onFraction(
+                        (offset.y / size.height.toFloat()).coerceIn(0f, 1f),
+                    )
+                },
+            ) { change, _ ->
+                change.consume()
                 val fraction = (change.position.y / size.height.toFloat())
                     .coerceIn(0f, 1f)
                 onFraction(fraction)

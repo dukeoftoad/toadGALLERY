@@ -31,11 +31,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.toadgallery.gallery.R
 import androidx.compose.ui.unit.sp
 import com.toadgallery.gallery.ui.components.ToadBodyFont
 import com.toadgallery.gallery.ui.components.ToadDisplayFont
@@ -96,7 +97,7 @@ fun HiddenVaultPinDialog(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = "Hidden Vault",
+                    text = stringResource(R.string.vault_pin_dialog_title),
                     color = palette.textMain,
                     style = TextStyle(
                         fontFamily = ToadDisplayFont,
@@ -105,7 +106,11 @@ fun HiddenVaultPinDialog(
                     ),
                 )
                 Text(
-                    text = if (failed) "Wrong PIN • try again" else "Enter 4-digit PIN",
+                    text = if (failed) {
+                        stringResource(R.string.vault_pin_dialog_wrong)
+                    } else {
+                        stringResource(R.string.vault_pin_dialog_hint)
+                    },
                     color = if (failed) palette.dangerText else palette.textMuted,
                     style = TextStyle(
                         fontFamily = ToadBodyFont,
@@ -124,7 +129,7 @@ fun HiddenVaultPinDialog(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.cd_vault_pin_dialog_close),
                     tint = palette.textMain,
                     modifier = Modifier.size(14.dp),
                 )
@@ -210,7 +215,7 @@ fun HiddenVaultPinDialog(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Unlock with biometrics",
+                    text = stringResource(R.string.vault_biometric_unlock_action),
                     color = palette.textMain,
                     style = TextStyle(
                         fontFamily = ToadBodyFont,
@@ -242,14 +247,14 @@ private fun VaultKeyButton(
         if (key == "C") {
             Icon(
                 imageVector = Icons.Filled.Delete,
-                contentDescription = "Clear",
+                contentDescription = stringResource(R.string.vault_pin_keypad_clear),
                 tint = palette.textMuted,
                 modifier = Modifier.size(18.dp),
             )
         } else if (key == "→") {
             Icon(
                 imageVector = Icons.Filled.Lock,
-                contentDescription = "Unlock",
+                contentDescription = stringResource(R.string.vault_pin_keypad_unlock),
                 tint = palette.primary,
                 modifier = Modifier.size(18.dp),
             )

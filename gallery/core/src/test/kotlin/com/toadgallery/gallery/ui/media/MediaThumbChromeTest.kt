@@ -78,8 +78,19 @@ class MediaThumbChromeTest {
     fun `gif badge sits at the bottom-end corner`() {
         // The GIF badge's align must be BottomEnd: the only ThumbBadge
         // blocks are the duration chip and the GIF badge, both bottom-end.
+        // r77.8 fix: the pre-r77.8 pattern `ThumbBadge\(\s*text = [\s\S]*?\)`
+        // stopped at the FIRST closing paren --- which is the nested
+        // formatDurationMs(...) call's own --- so the captured "block" was
+        // the text line alone, never carried the modifier row, and the
+        // BottomEnd assertion failed on a source that is actually correct
+        // (the test never ran: CI compiles only the app module's tests).
+        // The balanced-one-level pattern below captures the WHOLE call
+        // (the `text = ` anchor keeps the private fun's DEFINITION out).
         val source = source()
-        val badgeBlocks = Regex("ThumbBadge\\(\\s*text = [\\s\\S]*?\\)").findAll(source).toList()
+        val badgeBlocks = Regex("ThumbBadge\\(\\s*text = (?:[^()]|\\([^()]*\\))*\\)")
+            .findAll(source)
+            .map { it.value }
+            .toList()
         assertTrue(
             "the suite expects both ThumbBadge call sites (duration + GIF)",
             badgeBlocks.size == 2,

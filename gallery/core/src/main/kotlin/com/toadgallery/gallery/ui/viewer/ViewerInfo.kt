@@ -6,6 +6,9 @@ import android.provider.MediaStore
 import com.toadgallery.gallery.data.DataSizeFormats
 import com.toadgallery.gallery.ui.media.formatDurationMs
 import java.text.DateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -93,6 +96,38 @@ object ViewerInfoFormat {
         if (dateAddedSec <= 0) return null
         val format = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale)
         return format.format(dateAddedSec * 1000L)
+    }
+
+    /**
+     * The viewer top bar's center date line (r77.8 --- the prototype's
+     * `lb-date`): the item's EFFECTIVE instant formatted as the prototype's
+     * short date ("12 Nov 2026", the `d MMM uuuu` pattern).
+     *
+     * The effective instant is [captureDateMillis] when the scan pipeline
+     * resolved one (which MAY be `0L` --- a resolved epoch capture is
+     * legitimate, see `MediaItem.captureDateMillis`), else the MediaStore
+     * `date_added` instant ([dateAddedSec] seconds, `<= 0` unknown) ---
+     * exactly the ordering rule the timeline uses, so the chrome and the
+     * grid can never disagree about when a photo happened. `null` when
+     * neither timestamp is usable: the top bar falls back to its
+     * counter-only layout (the pre-r77.8 look), never an "unknown"
+     * placeholder in the chrome.
+     *
+     * [zone] and [locale] are parameters so the JVM test pins the exact
+     * output; the composable passes the system defaults.
+     */
+    fun centerDate(
+        captureDateMillis: Long?,
+        dateAddedSec: Long,
+        locale: Locale,
+        zone: ZoneId,
+    ): String? {
+        val millis = captureDateMillis
+            ?: dateAddedSec.takeIf { it > 0 }?.times(1000L)
+            ?: return null
+        return Instant.ofEpochMilli(millis)
+            .atZone(zone)
+            .format(DateTimeFormatter.ofPattern("d MMM uuuu", locale))
     }
 }
 

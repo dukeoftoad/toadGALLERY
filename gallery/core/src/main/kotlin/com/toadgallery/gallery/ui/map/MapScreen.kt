@@ -209,20 +209,26 @@ fun MapScreen(
                         // pending-reindex backlog exists) a tap that
                         // narrates it through the shell's ONE toast
                         // banner, the prototype's showToast() spot.
+                        // r77.8 fix: the localized narration is resolved in
+                        // COMPOSABLE scope (pluralStringResource IS a
+                        // @Composable read) and the click lambda only
+                        // captures the finished string --- the pre-r77.8
+                        // shape called it inside the lambda, which does not
+                        // compile (and, had it compiled, would re-read
+                        // resources on every click).
+                        val pendingNarration = if (s.pendingUngrantedRows > 0) {
+                            pluralStringResource(
+                                R.plurals.map_note_pending_locations,
+                                s.pendingUngrantedRows,
+                                s.pendingUngrantedRows,
+                            )
+                        } else {
+                            null
+                        }
                         ToadMapPill(
                             text = coordinateLine(representative),
-                            onClick = if (s.pendingUngrantedRows > 0) {
-                                {
-                                    toast.show(
-                                        pluralStringResource(
-                                            R.plurals.map_note_pending_locations,
-                                            s.pendingUngrantedRows,
-                                            s.pendingUngrantedRows,
-                                        ),
-                                    )
-                                }
-                            } else {
-                                null
+                            onClick = pendingNarration?.let { narration ->
+                                { toast.show(narration) }
                             },
                             modifier = Modifier
                                 .align(Alignment.TopEnd)

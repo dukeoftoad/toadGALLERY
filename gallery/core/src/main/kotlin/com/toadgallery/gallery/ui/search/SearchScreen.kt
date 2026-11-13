@@ -1,5 +1,6 @@
 package com.toadgallery.gallery.ui.search
 
+import androidx.annotation.PluralsRes
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -402,17 +403,9 @@ fun SearchScreen(
                 is SearchUiState.Results -> Column(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.search_results_count,
-                            s.items.size,
-                            s.items.size,
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = ToadSpacing.sm),
+                    SearchResultsCountText(
+                        pluralRes = R.plurals.search_results_count,
+                        count = s.items.size,
                     )
                     // The shared staggered grid: same cells, keys, spacing
                     // and tap contract as the album detail view; the tap
@@ -430,6 +423,39 @@ fun SearchScreen(
             }
         }
     }
+}
+
+/**
+ * The results-count header line (r77.8 --- the prototype's results header,
+ * "9 matches found"): the LIVE count in the prototype's exact chrome ---
+ * `text-xs font-bold` over `var(--text-muted)` --- as [ToadBodyFont] bold
+ * at 12sp in the palette's [ToadThemePalette.textMuted] tone.
+ *
+ * ONE composable for BOTH pipelines: the Name results and the Content
+ * results previously rendered the count as stock `bodyMedium`/
+ * `onSurfaceVariant` with two different wordings ("%1$d result(s)" vs
+ * "%1$d photos match") --- a chrome AND vocabulary drift from the
+ * prototype's single header. The plurals themselves now share the
+ * prototype's "N matches found" wording, so the two pipelines read as one
+ * surface; the shared function keeps them from drifting apart again.
+ */
+@Composable
+private fun SearchResultsCountText(
+    @PluralsRes pluralRes: Int,
+    count: Int,
+) {
+    Text(
+        text = pluralStringResource(pluralRes, count, count),
+        style = TextStyle(
+            fontFamily = ToadBodyFont,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+        ),
+        color = ToadTheme.palette.textMuted,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = ToadSpacing.sm),
+    )
 }
 
 /**
@@ -539,17 +565,9 @@ private fun MagicSearchStates(
         is MagicSearchUiState.Results -> Column(
             modifier = Modifier.fillMaxSize(),
         ) {
-            Text(
-                text = pluralStringResource(
-                    R.plurals.magic_results_count,
-                    state.items.size,
-                    state.items.size,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = ToadSpacing.sm),
+            SearchResultsCountText(
+                pluralRes = R.plurals.magic_results_count,
+                count = state.items.size,
             )
             // The shared staggered grid, RELEVANCE order (the vecdb's own
             // ranking): same cells, keys, spacing and tap contract as the

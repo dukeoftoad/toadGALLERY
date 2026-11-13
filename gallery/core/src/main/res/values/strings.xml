@@ -43,8 +43,8 @@
     <string name="search_error_title">Couldn\'t search your library</string>
     <string name="search_error_body">Something went wrong while searching. Nothing was changed — your media is safe.</string>
     <plurals name="search_results_count">
-        <item quantity="one">%1$d result</item>
-        <item quantity="other">%1$d results</item>
+        <item quantity="one">%1$d match found</item>
+        <item quantity="other">%1$d matches found</item>
     </plurals>
 
     <!-- Albums (issue #29) -->

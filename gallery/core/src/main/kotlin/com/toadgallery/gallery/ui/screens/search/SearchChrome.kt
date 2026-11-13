@@ -27,7 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -127,6 +130,11 @@ fun ToadSearchPillField(
                         .size(24.dp)
                         .clip(CircleShape)
                         .background(palette.bgSurfaceHigh)
+                        // r77.8 a11y: the clear control is a BUTTON to
+                        // TalkBack (the prototype's markup is a real
+                        // <button>); a bare clickable Box announces as
+                        // plain text with no affordance.
+                        .semantics { role = Role.Button }
                         .clickable(onClick = onClear),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -169,6 +177,13 @@ fun ToadSearchPillField(
  * prompts markup) --- the first cut dropped it, so the unselected pills
  * floated borderless against the canvas while every other chip in the
  * app carried the hairline.
+ *
+ * r77.8 a11y: the prototype renders these as real `<button>` elements
+ * with an active state; the Compose side was bare clickable `Text`, so
+ * TalkBack announced them as plain text with no role and no selected
+ * state. Each chip now carries `Role.Button` + `selected` --- the same
+ * semantics M3's `FilterChip` gives the mode/type chips below, so the
+ * whole strip announces consistently.
  */
 @Composable
 fun ToadPromptChips(
@@ -199,6 +214,13 @@ fun ToadPromptChips(
                     .clip(RoundedCornerShape(50))
                     .background(if (active) palette.primary else palette.bgSurface)
                     .border(1.dp, palette.borderSubtle, RoundedCornerShape(50))
+                    // r77.8 a11y: button role + the selected state (the
+                    // prototype's <button> + its active fill), so TalkBack
+                    // announces "sunset, button, selected" --- not bare text.
+                    .semantics {
+                        role = Role.Button
+                        selected = active
+                    }
                     .clickable { onPromptTap(prompt) }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             )

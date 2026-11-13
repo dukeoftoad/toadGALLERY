@@ -37,4 +37,13 @@
     <string name="vault_autolock_body">The vault locks itself when the app goes to the background (ADR-0017) — a fixed posture, not a preference.</string>
     <string name="vault_autolock_value">On background</string>
     <string name="vault_biometric_body">Fingerprint or face unlock, keyed in this phone\'s secure hardware. The PIN always keeps working.</string>
+
+    <!-- r76.3: the Media Access drill-down (the enriched issue #27 page). -->
+    <string name="settings_media_access_entry">Media access</string>
+    <string name="settings_media_access_picker_on">Photo Picker • scoped selection</string>
+    <string name="settings_media_access_picker_off">Full library access</string>
+    <string name="settings_media_posture_title">Library permission posture</string>
+    <string name="settings_media_posture_granted">Full library: granted</string>
+    <string name="settings_media_posture_denied">Full library: not granted</string>
+    <string name="settings_media_posture_body">The timeline reads the system Media Store. With the Photo Picker on, only your picked selection loads; off, the whole library needs this grant. Nothing ever leaves the device.</string>
 </resources>

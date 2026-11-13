@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,10 +46,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
@@ -64,13 +66,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -334,9 +337,14 @@ fun SettingsScreen(
                     SettingsSubPage.AI_ENGINE -> "AI Engine"
                     SettingsSubPage.VAULT -> "Hidden Vault"
                     SettingsSubPage.STORAGE -> "Storage & Cache"
+                    SettingsSubPage.MEDIA_ACCESS -> "Media Access"
                     SettingsSubPage.HUB -> ""
                 },
                 statusPill = when (subPage) {
+                    SettingsSubPage.MEDIA_ACCESS ->
+                        // r76.3: the honest posture pill --- which source
+                        // feeds the timeline right now.
+                        if (usePhotoPicker) "Photo Picker" else "Full library"
                     SettingsSubPage.LAYOUT -> appearance.columns.toString() + " cols"
                     SettingsSubPage.AI_ENGINE ->
                         // r76.1: the pill is honest per build shape (the
@@ -401,7 +409,11 @@ fun SettingsScreen(
 
         // ---- r76: the live settings search (the sticky header's field;
         //      hidden while a sub-page is open) ----
-        OutlinedTextField(
+        // r76.3: restyled to the prototype's filled pill --- a filled
+        // TextField over surfaceVariant, 50% rounded, inset icons, the
+        // clear chip a small circle (the outlined field read as a form
+        // input, not a filter bar).
+        TextField(
             value = settingsSearch,
             onValueChange = { settingsSearch = it },
             modifier = Modifier
@@ -422,16 +434,30 @@ fun SettingsScreen(
                 if (settingsSearch.isNotEmpty()) {
                     IconButton(
                         onClick = { settingsSearch = "" },
-                        modifier = Modifier.testTag("settings_search_clear"),
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            )
+                            .testTag("settings_search_clear"),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Clear,
                             contentDescription = stringResource(R.string.cd_search_clear),
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+            shape = RoundedCornerShape(50),
         )
 
         // ---- r76: the HERO status card (hidden while searching) ----
@@ -580,140 +606,80 @@ fun SettingsScreen(
         }
 
         // ---- r76 SECTION 3: Privacy, Permissions & Vault ----
+        // r76.3: the doubled `if (match("privacy")...)` below was a
+        // merge artifact (two opens, one close at the wrapper's end) that
+        // left the HUB page-if open --- the LAYOUT and THEME page-ifs
+        // nested inside it and composed nothing on their own pages (the
+        // field-reported blank Timeline Layout screen, present since r76).
         if (match("privacy") || match("permissions") || match("picker") ||
-            match("location") || match("gps") || match("vault") || match("exif")
+            match("location") || match("gps") || match("vault") || match("exif") ||
+            match("media")
         ) {
-        // ---- Media access (issue #27) ----
-        // The prototype keeps "Use system Photo Picker" and "Location &
-        // EXIF GPS data" as INLINE switches (daily-gratification rows),
-        // plus the vault drill-down. The search-filter wrapper hides the
-        // whole section unless anything matches.
-        if (match("privacy") || match("permissions") || match("picker") ||
-            match("location") || match("gps") || match("vault") || match("exif")
-        ) {
-        // ---- Media access (issue #27) ----
+        // ---- Media access nav (issue #27 → the r76.3 sub-page) ----
+        // The prototype's drill-down shape: one nav row on the hub, the
+        // picker + location + permission posture inside. The inline rows
+        // moved into the MEDIA_ACCESS sub-page (the field request: "media
+        // access feature should move to under new sub page with more
+        // enrich, more features").
         SettingsSectionHeader(stringResource(R.string.settings_section_access))
         SettingsGroupCard {
-            SettingsToggleRow(
-                title = stringResource(R.string.settings_use_photo_picker),
-                supporting = stringResource(R.string.settings_use_photo_picker_body),
-                checked = usePhotoPicker,
-                onCheckedChange = { settingsViewModel.setUsePhotoPicker(it) },
-                iconRes = R.drawable.ic_setting_picker,
-                testTag = "settings_toggle_photo_picker",
-                modifier = Modifier.padding(top = 12.dp),
+            SettingsNavRow(
+                title = stringResource(R.string.settings_media_access_entry),
+                supporting = mediaAccessSupporting(usePhotoPicker),
+                onClick = { subPage = SettingsSubPage.MEDIA_ACCESS },
+                iconVector = Icons.Filled.FolderOpen,
+                testTag = "settings_media_access_entry",
+                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
             )
-            if (usePhotoPicker) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    Button(
-                        onClick = {
-                            pickerLauncher.launch(
-                                PickVisualMediaRequest(
-                                    ActivityResultContracts.PickVisualMedia.ImageAndVideo,
-                                )
-                            )
-                        },
-                        modifier = Modifier
-                            .padding(top = 12.dp, start = 56.dp)
-                            .testTag("settings_pick_entry"),
-                    ) {
-                        Text(stringResource(R.string.settings_pick_photos))
-                    }
-                    if (pickedItems.isNotEmpty()) {
-                        Text(
-                            text = pluralStringResource(
-                                R.plurals.settings_picked_count,
-                                pickedItems.size,
-                                pickedItems.size,
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 12.dp, start = 56.dp),
-                        )
-                        TextButton(
-                            onClick = onBrowsePicked,
-                            modifier = Modifier.padding(start = 40.dp),
-                        ) {
-                            Text(stringResource(R.string.settings_browse_picked))
-                        }
-                    }
-                } else {
-                    // Graceful fallback (issue #27): no picker on pre-33, the
-                    // current permission-based flow keeps carrying the app.
-                    Text(
-                        text = stringResource(R.string.settings_photo_picker_pre33_body),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, start = 56.dp, bottom = 8.dp),
-                    )
-                }
-            }
         }
 
-        // ---- Location data (Phase 4: ACCESS_MEDIA_LOCATION consent) ----
-        // Renders the shell-scoped state holder; on API 29+ the row asks
-        // the OS (the grant is a DISPLAY gate for GPS coordinates only ---
-        // ADR-0014: coordinates never leave the device). Below 29 the
-        // permission does not exist and nothing was ever redactable, so
-        // the copy says so (the same shape as the pre-R recycle bin).
-        SettingsSectionHeader(stringResource(R.string.settings_location_title))
-        SettingsGroupCard {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SettingsIconBadge(
-                    iconVector = Icons.Filled.LocationOn,
-                    modifier = Modifier.padding(end = 16.dp),
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.settings_location_body),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        Text(
-                            text = when (locationState) {
-                                MediaLocationState.GRANTED ->
-                                    stringResource(R.string.settings_location_state_granted)
-                                MediaLocationState.DENIED ->
-                                    stringResource(R.string.settings_location_state_denied)
-                                else -> stringResource(R.string.settings_location_state_unknown)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        // ---- The hidden-vault drill-down (r76: hub section 3's own row,
+        //      beside the permission switches) ----
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            SettingsGroupCard {
+                SettingsNavRow(
+                    title = stringResource(R.string.settings_vault_title),
+                    supporting = when (val vault = vaultState) {
+                        VaultUiState.NotConfigured ->
+                            stringResource(R.string.vault_settings_not_configured)
+                        VaultUiState.Locked ->
+                            stringResource(R.string.vault_settings_locked)
+                        is VaultUiState.Unlocked -> pluralStringResource(
+                            R.plurals.vault_header_items,
+                            vault.entries.size,
+                            vault.entries.size,
                         )
-                    } else {
-                        Text(
-                            text = stringResource(R.string.settings_location_pre_q_body),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                (locationState == MediaLocationState.UNKNOWN ||
-                    locationState == MediaLocationState.DENIED)
-            ) {
-                Button(
-                    onClick = {
-                        locationPermissionLauncher.launch(
-                            Manifest.permission.ACCESS_MEDIA_LOCATION,
-                        )
+                        else -> null
                     },
-                    modifier = Modifier
-                        .padding(bottom = 12.dp, start = 56.dp)
-                        .testTag("settings_location_request"),
-                ) {
-                    Text(stringResource(R.string.settings_location_request))
-                }
+                    onClick = { subPage = SettingsSubPage.VAULT },
+                    iconRes = R.drawable.ic_vault,
+                    testTag = "settings_vault_entry",
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                )
             }
         }
+        } // the r76 search-filter wrapper (privacy + about sections)
 
+        // ---- r76 SECTION 4: Storage & Data Management ----
+        // ---- r76 SECTION 4: Storage & Data Management ----
+        // r76.3: the query gate was `isEmpty()` (searching "storage" hid
+        // the section --- a field-reported flaw); it now matches its own
+        // keywords like every other section.
+        if (match("storage") || match("cache") || match("data") ||
+            match("space") || match("database")
+        ) {
+            SettingsSectionHeader(stringResource(R.string.settings_storage_section))
+            SettingsGroupCard {
+                SettingsNavRow(
+                    title = stringResource(R.string.settings_storage_entry),
+                    supporting = stringResource(R.string.settings_storage_section_body),
+                    onClick = { subPage = SettingsSubPage.STORAGE },
+                    iconVector = Icons.Filled.Storage,
+                    testTag = "settings_storage_entry",
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                )
+            }
+        }
         // ---- About (r64: the one honest build row) ----
         // What THIS APK carries, derived from the build shape itself ---
         // the honest replacement for the removed r55 "Installed
@@ -721,7 +687,12 @@ fun SettingsScreen(
         // capabilities the unified build embeds all along. The row opens
         // the About sub-screen (identity, privacy posture, credits, the
         // vault diagnostics + ring log live THERE).
-        SettingsSectionHeader(stringResource(R.string.settings_about_title))
+        // r76.3: moved to the LAST hub section (the prototype's order ---
+        // Appearance, AI, Privacy, Storage, About & Diagnostics last) and
+        // given its own search gate.
+        if (match("about") || match("version") || match("changelog") ||
+            match("diagnostics")
+        ) {
         val buildFeatureRes = remember {
             buildList {
                 if (BuildShape.faceIndex) add(R.string.settings_feature_people)
@@ -751,56 +722,18 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
             )
         }
-        // ---- The hidden-vault drill-down (r76: hub section 3's own row,
-        //      beside the permission switches) ----
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            SettingsGroupCard {
-                SettingsNavRow(
-                    title = stringResource(R.string.settings_vault_title),
-                    supporting = when (val vault = vaultState) {
-                        VaultUiState.NotConfigured ->
-                            stringResource(R.string.vault_settings_not_configured)
-                        VaultUiState.Locked ->
-                            stringResource(R.string.vault_settings_locked)
-                        is VaultUiState.Unlocked -> pluralStringResource(
-                            R.plurals.vault_header_items,
-                            vault.entries.size,
-                            vault.entries.size,
-                        )
-                        else -> null
-                    },
-                    onClick = { subPage = SettingsSubPage.VAULT },
-                    iconRes = R.drawable.ic_vault,
-                    testTag = "settings_vault_entry",
-                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
-                )
-            }
-        }
-        } // the r76 search-filter wrapper (privacy + about sections)
-
-        // ---- r76 SECTION 4: Storage & Data Management ----
-        if (query.isEmpty()) {
-            SettingsSectionHeader(stringResource(R.string.settings_storage_section))
-            SettingsGroupCard {
-                SettingsNavRow(
-                    title = stringResource(R.string.settings_storage_entry),
-                    supporting = stringResource(R.string.settings_storage_section_body),
-                    onClick = { subPage = SettingsSubPage.STORAGE },
-                    iconVector = Icons.Filled.Storage,
-                    testTag = "settings_storage_entry",
-                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
-                )
-            }
-        }
+        } // the About search gate
         // ---- r76: the search empty state (nothing matched) ----
         if (query.isNotEmpty() &&
             !match(stringResource(R.string.settings_section_appearance)) &&
             !match("theme") && !match("timeline") && !match("layout") &&
-            !match("grid") && !match("ai") && !match("people") &&
+            !match("grid") && !match("palette") && !match("color") &&
+            !match("ai") && !match("people") &&
             !match("magic") && !match("search") && !match("things") &&
             !match("privacy") && !match("permissions") && !match("picker") &&
-            !match("location") && !match("gps") && !match("vault") &&
-            !match("exif") && !match("storage") && !match("about")
+            !match("media") && !match("location") && !match("gps") &&
+            !match("vault") && !match("exif") && !match("storage") &&
+            !match("about")
         ) {
             Column(
                 modifier = Modifier
@@ -1007,10 +940,10 @@ fun SettingsScreen(
                 testTag = "settings_toggle_dynamic_color",
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
             )
-            }
             // r76.2: the five palettes moved up onto the Appearance hub
             // section (field request); this sub-page keeps theme mode +
-            // dynamic color only.
+            // dynamic color only. (r76.3: the orphaned extra close that
+            // unbalanced the file since the r76 merge is gone.)
         } // SettingsSubPage.THEME
 
         // ---- r76 SUB-PAGE 4: Hidden Vault & Security ----
@@ -1117,6 +1050,130 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
+        // ---- r76.3: the segmented usage bar (the prototype's Storage
+        //      graph): each measured location gets its proportional
+        //      segment over the surface-highest track, legend below. All
+        //      from the SAME StorageInsightsViewModel entries the rows
+        //      below render --- nothing invented, nothing duplicated.
+        val entriesByKey = storageState.entries.associateBy { it.key }
+        val catalogueBytes = entriesByKey[STORAGE_KEY_CATALOGUE]?.bytes ?: 0L
+        val mlIndexBytes = entriesByKey[STORAGE_KEY_ML_INDEX]?.bytes ?: 0L
+        val modelsBytes = entriesByKey[STORAGE_KEY_MODELS]?.bytes ?: 0L
+        val vaultBytes = entriesByKey[STORAGE_KEY_VAULT]?.bytes ?: 0L
+        val cacheBytes = entriesByKey[STORAGE_KEY_CACHE]?.bytes ?: 0L
+        val totalBytes = catalogueBytes + mlIndexBytes + modelsBytes +
+            vaultBytes + cacheBytes
+        SettingsGroupCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                if (totalBytes > 0L) {
+                    listOf(
+                        catalogueBytes to Color(0xFF38BDF8),
+                        modelsBytes to MaterialTheme.colorScheme.primary,
+                        mlIndexBytes to Color(0xFFA78BFA),
+                        vaultBytes to Color(0xFF34D399),
+                        cacheBytes to Color(0xFFFBBF24),
+                    ).forEach { (bytes, color) ->
+                        if (bytes > 0L) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(bytes.toFloat() / totalBytes)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(50))
+                                    .background(color),
+                            )
+                        }
+                    }
+                } else if (storageState.measuring) {
+                    // The measuring skeleton: a neutral half-track so the
+                    // bar's presence stays honest without numbers.
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    )
+                }
+            }
+            Text(
+                text = if (storageState.measuring) {
+                    stringResource(R.string.settings_storage_measuring)
+                } else {
+                    DataSizeFormats.formatBytes(totalBytes) + " total"
+                },
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            // The legend: swatch + label + size, one row per location ---
+            // the rows below (recycle bin, vault entry) carry the live
+            // counts; this legend carries the measured sizes.
+            @Composable
+            fun LegendRow(label: String, bytes: Long, color: Color) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(color),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (storageState.measuring) {
+                            stringResource(R.string.settings_storage_measuring)
+                        } else {
+                            DataSizeFormats.formatBytes(bytes)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            LegendRow(
+                stringResource(R.string.settings_storage_catalogue),
+                catalogueBytes,
+                Color(0xFF38BDF8),
+            )
+            LegendRow(
+                stringResource(R.string.settings_storage_models),
+                modelsBytes,
+                MaterialTheme.colorScheme.primary,
+            )
+            LegendRow(
+                stringResource(R.string.settings_storage_ml_index),
+                mlIndexBytes,
+                Color(0xFFA78BFA),
+            )
+            LegendRow(
+                stringResource(R.string.settings_storage_vault),
+                vaultBytes,
+                Color(0xFF34D399),
+            )
+            LegendRow(
+                stringResource(R.string.settings_storage_cache),
+                cacheBytes,
+                Color(0xFFFBBF24),
+            )
+        }
         SettingsGroupCard {
             // Recycle bin entry (issue #31). Count + size from the
             // entry-time snapshot; the Trash screen reloads on entry, so
@@ -1374,6 +1431,184 @@ fun SettingsScreen(
             } // BuildConfig.DEBUG
 
         } // SettingsSubPage.STORAGE
+
+        // ---- r76.3 SUB-PAGE: Media Access (issue #27, enriched) ----
+        // The hub's inline rows moved here and grew: the picker switch +
+        // its pick flow, the location consent card, and the full-library
+        // posture row (the read permission the timeline actually rides
+        // on). All real state: the shell's location holder, the settings
+        // flows, and the OS grant check.
+        if (page == SettingsSubPage.MEDIA_ACCESS) {
+            SettingsSectionHeader(stringResource(R.string.settings_section_access))
+            SettingsGroupCard {
+                SettingsToggleRow(
+                    title = stringResource(R.string.settings_use_photo_picker),
+                    supporting = stringResource(R.string.settings_use_photo_picker_body),
+                    checked = usePhotoPicker,
+                    onCheckedChange = { settingsViewModel.setUsePhotoPicker(it) },
+                    iconRes = R.drawable.ic_setting_picker,
+                    testTag = "settings_toggle_photo_picker",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                if (usePhotoPicker) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        Button(
+                            onClick = {
+                                pickerLauncher.launch(
+                                    PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageAndVideo,
+                                    )
+                                )
+                            },
+                            modifier = Modifier
+                                .padding(top = 12.dp, start = 56.dp)
+                                .testTag("settings_pick_entry"),
+                        ) {
+                            Text(stringResource(R.string.settings_pick_photos))
+                        }
+                        if (pickedItems.isNotEmpty()) {
+                            Text(
+                                text = pluralStringResource(
+                                    R.plurals.settings_picked_count,
+                                    pickedItems.size,
+                                    pickedItems.size,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 12.dp, start = 56.dp),
+                            )
+                            TextButton(
+                                onClick = onBrowsePicked,
+                                modifier = Modifier.padding(start = 40.dp),
+                            ) {
+                                Text(stringResource(R.string.settings_browse_picked))
+                            }
+                        }
+                    } else {
+                        // Graceful fallback (issue #27): no picker on pre-13.
+                        Text(
+                            text = stringResource(R.string.settings_photo_picker_pre33_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, start = 56.dp, bottom = 8.dp),
+                        )
+                    }
+                }
+            }
+
+            // ---- Location data (Phase 4: ACCESS_MEDIA_LOCATION consent) ----
+            // The grant is a DISPLAY gate for GPS coordinates only
+            // (ADR-0014: coordinates never leave the device). Below 29
+            // the permission does not exist and nothing was ever
+            // redactable, so the copy says so.
+            SettingsSectionHeader(stringResource(R.string.settings_location_title))
+            SettingsGroupCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SettingsIconBadge(
+                        iconVector = Icons.Filled.LocationOn,
+                        modifier = Modifier.padding(end = 16.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.settings_location_body),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            Text(
+                                text = when (locationState) {
+                                    MediaLocationState.GRANTED ->
+                                        stringResource(R.string.settings_location_state_granted)
+                                    MediaLocationState.DENIED ->
+                                        stringResource(R.string.settings_location_state_denied)
+                                    else -> stringResource(R.string.settings_location_state_unknown)
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Text(
+                                text = stringResource(R.string.settings_location_pre_q_body),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    (locationState == MediaLocationState.UNKNOWN ||
+                        locationState == MediaLocationState.DENIED)
+                ) {
+                    Button(
+                        onClick = {
+                            locationPermissionLauncher.launch(
+                                Manifest.permission.ACCESS_MEDIA_LOCATION,
+                            )
+                        },
+                        modifier = Modifier
+                            .padding(bottom = 12.dp, start = 56.dp)
+                            .testTag("settings_location_request"),
+                    ) {
+                        Text(stringResource(R.string.settings_location_request))
+                    }
+                }
+            }
+
+            // ---- r76.3: the full-library posture row (the enrichment) ----
+            // Which read permission actually feeds the timeline right now
+            // (READ_MEDIA_IMAGES/VIDEO on 13+, READ_EXTERNAL_STORAGE below)
+            // --- the honest answer to "what does this app see?", the
+            // posture the picker toggle narrates the alternative to.
+            val postureContext = LocalContext.current
+            val mediaReadGranted = remember(postureContext) {
+                fun granted(perm: String) =
+                    ContextCompat.checkSelfPermission(postureContext, perm) ==
+                        PackageManager.PERMISSION_GRANTED
+                if (Build.VERSION.SDK_INT >= 33) {
+                    granted(Manifest.permission.READ_MEDIA_IMAGES) &&
+                        granted(Manifest.permission.READ_MEDIA_VIDEO)
+                } else {
+                    granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+                }
+            }
+            SettingsSectionHeader(stringResource(R.string.settings_media_posture_title))
+            SettingsGroupCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SettingsIconBadge(
+                        iconVector = Icons.Filled.FolderOpen,
+                        modifier = Modifier.padding(end = 16.dp),
+                    )
+                    Column {
+                        Text(
+                            text = stringResource(
+                                if (mediaReadGranted) {
+                                    R.string.settings_media_posture_granted
+                                } else {
+                                    R.string.settings_media_posture_denied
+                                }
+                            ),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_media_posture_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        } // SettingsSubPage.MEDIA_ACCESS
 
         // ---- r76 SUB-PAGE 3: AI Models & Indexing Engine ----
         if (page == SettingsSubPage.AI_ENGINE && BuildShape.withEngine) {
@@ -2475,6 +2710,9 @@ enum class SettingsSubPage {
 
     /** Storage & Cache Manager. */
     STORAGE,
+
+    /** r76.3: Media access --- the picker, location & posture sub-page. */
+    MEDIA_ACCESS,
 }
 
 /**
@@ -2825,6 +3063,17 @@ private fun toadPaletteLabel(viewModel: SettingsViewModel): String {
     val id by viewModel.toadPaletteId.collectAsState()
     return toadPaletteLabelFor(id)
 }
+
+/** The Media Access drill-down row's live supporting line (r76.3). */
+@Composable
+private fun mediaAccessSupporting(usePhotoPicker: Boolean): String =
+    stringResource(
+        if (usePhotoPicker) {
+            R.string.settings_media_access_picker_on
+        } else {
+            R.string.settings_media_access_picker_off
+        }
+    )
 
 /** The palette display label for [id] (non-composable overload). */
 fun toadPaletteLabelFor(id: ToadThemeId): String = when (id) {

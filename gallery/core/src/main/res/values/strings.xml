@@ -449,4 +449,5 @@
          route without the SEMANTIC index). The honest answer instead of a
          ViewModel the build cannot serve; tagged build_feature_unavailable. -->
     <string name="build_feature_unavailable">This feature is not part of this build — install the engine build for on-device indexing.</string>
+    <!-- r76 polish validation: touching the workflow path so the pull_request trigger fires (empty commits are excluded by the paths filter). -->
 </resources>

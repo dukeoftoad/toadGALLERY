@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
@@ -470,8 +471,15 @@ fun rememberToadToast(): ToadToastState {
  * 100%)`): drawn as a DST-OUT gradient so the trailing 12% of the strip
  * DISSOLVES the content underneath --- chips scrolling out fade instead
  * of clipping sharply.
+ *
+ * r76.1: the DstOut blend runs under [CompositingStrategy.Offscreen] ---
+ * without an offscreen layer some GPU paths render the destination-erase
+ * as a solid black slab over the strip's trailing edge (the field report's
+ * black box riding the Photos filter row).
  */
-fun Modifier.toadTrailingFade(): Modifier = drawWithContent {
+fun Modifier.toadTrailingFade(): Modifier = this.graphicsLayer(
+    compositingStrategy = CompositingStrategy.Offscreen,
+).drawWithContent {
     drawContent()
     val fadeStart = size.width * 0.88f
     drawRect(

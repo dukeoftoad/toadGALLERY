@@ -781,14 +781,28 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (consentBlocked.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val blockedUris = consentBlocked.map { it.uri }
-            pendingConsent = PendingVaultConsent(
-                uris = blockedUris,
-                alreadyMoved = moved,
-                stuckBeforeConsent = notRemoved,
-            )
-            @Suppress("NewApi") // R+ per the check above (createDeleteRequest is API 30)
-            val sender = repository.createDeleteConsentRequest(blockedUris)
-            _events.tryEmit(VaultEvent.RequestConsent(sender))
+            // r76.1: the consent build is a provider call on IO inside a
+            // scope child (the reducer stays non-suspending); a refusal
+            // narrates the batch as moved-plus-stuck --- the first cut
+            // threw on the main thread and killed the process mid-move.
+            viewModelScope.launch {
+                @Suppress("NewApi") // R+ per the check above (createDeleteRequest is API 30)
+                val sender = repository.createDeleteConsentRequest(blockedUris)
+                if (sender == null) {
+                    narrateMove(
+                        moved = moved,
+                        stuck = notRemoved + consentBlocked.size,
+                        failed = failed,
+                    )
+                } else {
+                    pendingConsent = PendingVaultConsent(
+                        uris = blockedUris,
+                        alreadyMoved = moved,
+                        stuckBeforeConsent = notRemoved,
+                    )
+                    _events.tryEmit(VaultEvent.RequestConsent(sender))
+                }
+            }
             return // narration continues after the consent result
         }
         narrateMove(

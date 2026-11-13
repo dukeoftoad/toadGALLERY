@@ -56,8 +56,10 @@
 
     <!-- ======================== Stories ======================== -->
 
-    <!-- The Stories shelf on the Photos tab. -->
-    <string name="stories_header">Stories</string>
+    <!-- The Stories shelf on the Photos tab (r76.1: the prototype's
+         "Memories & Stories" + the "Auto-curated" tag). -->
+    <string name="stories_header">Memories &amp; Stories</string>
+    <string name="stories_auto_curated">Auto-curated</string>
     <string name="cd_story_cover">Cover photo of a story</string>
     <plurals name="stories_card_count">
         <item quantity="one">%1$d photo</item>

@@ -21,11 +21,16 @@
     <string name="settings_ai_engine_entry">AI Models &amp; Indexing Engine</string>
     <string name="settings_ai_engine_ready">Engine present • model packs managed on-device</string>
     <string name="settings_ai_engine_absent">Not in this build</string>
+    <!-- r76.1: the Basic-flavor AI Engine sub-page (the first cut composed nothing). -->
+    <string name="settings_ai_engine_absent_body">This build ships without the on-device AI engine. The timeline, vault and editor all work fully offline without it.</string>
 
     <!-- The Storage drill-down row + the vault sub-page's actions. -->
     <string name="settings_storage_entry">Storage &amp; Cache Manager</string>
     <string name="settings_vault_open">Open Vault</string>
     <string name="settings_vault_change_pin">Change PIN</string>
+
+    <!-- r76.1: the Albums tab's device-folder section label (the prototype's "DEVICE FOLDERS"). -->
+    <string name="albums_device_folders">Device Folders</string>
 
     <!-- The vault sub-page (biometric row reuses vault_biometric_section_*). -->
     <string name="vault_autolock_title">Auto-lock timer</string>

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -252,8 +253,16 @@ fun SettingsScreen(
     // (both AnimatedContent pages were composing the same state). Each
     // page now owns its own state; the initial position of every page
     // is naturally top.
+    // r76.1: the split goes one level deeper --- the SUB-PAGES also no
+    // longer share one state. The single shared subPageScroll meant a
+    // short page (Theme & Colors, AI Engine) opened at the previous long
+    // page's offset, scrolled past its own content: an honest top bar
+    // over a blank body (the field report's "blank sub-pages"). Per-page
+    // states also restore each page's own position on re-entry.
     val hubScroll = rememberScrollState()
-    val subPageScroll = rememberScrollState()
+    val subPageScrolls = remember {
+        SettingsSubPage.entries.associateWith { ScrollState(initial = 0) }
+    }
 
     // r76 polish: system back on an open sub-page returns to the hub (the
     // top bar's back action's twin) instead of leaving the app with the
@@ -286,25 +295,31 @@ fun SettingsScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // ---- The sticky frosted header (r76): title + version pill ----
-        ToadGlassSurface(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, top = 20.dp, end = 16.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.settings_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    // r40 a11y: the screen title is the heading anchor for
-                    // the whole settings page.
+        // ---- The sticky frosted hub header (r76): title + version pill.
+        //      r76.1: rendered ONLY on the hub --- the first cut kept it
+        //      composed under every sub-page top bar, stacking two headers
+        //      on one screen (the field report's double-header frame). The
+        //      prototype's drill-downs show exactly one bar. ----
+        if (subPage == SettingsSubPage.HUB) {
+            ToadGlassSurface(modifier = Modifier.fillMaxWidth()) {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .semantics { heading() },
-                )
-                ToadStatusPill(text = "v" + BuildConfig.VERSION_NAME)
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, top = 20.dp, end = 16.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_title),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        // r40 a11y: the screen title is the heading anchor for
+                        // the whole settings page.
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { heading() },
+                    )
+                    ToadStatusPill(text = "v" + BuildConfig.VERSION_NAME)
+                }
             }
         }
 
@@ -323,7 +338,10 @@ fun SettingsScreen(
                 },
                 statusPill = when (subPage) {
                     SettingsSubPage.LAYOUT -> appearance.columns.toString() + " cols"
-                    SettingsSubPage.AI_ENGINE -> "On-device"
+                    SettingsSubPage.AI_ENGINE ->
+                        // r76.1: the pill is honest per build shape (the
+                        // Basic flavor ships no engine library).
+                        if (BuildShape.withEngine) "On-device" else "Not in this build"
                     SettingsSubPage.VAULT -> when (vaultState) {
                         is VaultUiState.Unlocked -> "Unlocked"
                         VaultUiState.Locked -> "Locked"
@@ -365,8 +383,13 @@ fun SettingsScreen(
             label = "settingsSubPage",
         ) { page ->
             // The page's OWN scroll state (see the per-page note above):
-            // the hub scrolls hubScroll, every sub-page scrolls subPageScroll.
-            val pageScroll = if (page == SettingsSubPage.HUB) hubScroll else subPageScroll
+            // the hub scrolls hubScroll, every sub-page its own entry in
+            // subPageScrolls.
+            val pageScroll = if (page == SettingsSubPage.HUB) {
+                hubScroll
+            } else {
+                subPageScrolls.getValue(page)
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2248,6 +2271,35 @@ fun SettingsScreen(
                 } // BuildShape.semanticIndex
             } // BuildShape.withEngine
         } // SettingsSubPage.AI_ENGINE
+
+        // r76.1: the Basic flavor's AI Engine page. The gate above composes
+        // NOTHING when the build ships no engine library --- the field
+        // report's blank page (a top bar over a black body). The build-shape
+        // honesty the rest of the app answers with: say exactly what this
+        // page is, and that the engine is not part of this build, without
+        // pretending controls exist.
+        if (page == SettingsSubPage.AI_ENGINE && !BuildShape.withEngine) {
+            SettingsSectionHeader(stringResource(R.string.settings_ai_engine_entry))
+            SettingsGroupCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_ai_engine_absent),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_ai_engine_absent_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        } // SettingsSubPage.AI_ENGINE (build without engine)
 
             } // the per-page scrollable column
         } // the AnimatedContent content lambda

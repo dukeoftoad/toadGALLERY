@@ -2,6 +2,7 @@ package com.toadgallery.gallery.ui.albums
 
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,9 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
@@ -50,15 +52,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.toadgallery.gallery.R
@@ -376,17 +379,35 @@ private fun AlbumGrid(
         // r50 ux fix: the tab had NO title --- Photos opens under a titled
         // top bar and Settings under a headline, but Albums jumped straight
         // into the People/Places cards and thumbnails, unidentified on a
-        // fresh install. A full-span heading as the first item (the reuse
-        // of the nav label keeps one word for the tab everywhere).
+        // fresh install. r76.1: the redesign header (ToadAlbumsHeader) now
+        // carries the visible "Albums" wordmark, so the grid's first item
+        // reverts to the PhotosScreen anchor idiom --- a zero-height
+        // transparent Text keeping the heading semantics + the test surface
+        // without painting the title TWICE on one screen (the field
+        // report's duplicate heading).
         item(span = { GridItemSpan(maxLineSpan) }) {
             Text(
                 text = stringResource(R.string.nav_albums),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.Transparent,
+                fontSize = 1.sp,
                 modifier = Modifier
-                    .padding(top = 8.dp)
+                    .height(0.dp)
                     .semantics { heading() }
                     .testTag("albums_title"),
+            )
+        }
+        // r76.1: the prototype's "DEVICE FOLDERS" section label --- the
+        // folder cards read as a named section, not a tail of thumbnails.
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Text(
+                text = stringResource(R.string.albums_device_folders),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(top = 4.dp, start = 4.dp)
+                    .semantics { heading() },
             )
         }
         // The People section (r25) spans the grid's full width as its FIRST
@@ -778,60 +799,100 @@ private fun CollectionCard(
     }
 }
 
+/**
+ * One device-folder card, r76.1 restyled to the prototype's exact chrome:
+ * a bordered `rounded-3xl` surface card; the cover fills a FIXED 112dp
+ * box (`ContentScale.Crop` --- the first cut painted the image at intrinsic
+ * size inside an aspect-ratio box, so tall screenshots floated small in a
+ * mostly-empty card and decode failures left a giant blank tile); the item
+ * count rides the cover's bottom-end as the prototype's black/65 pill; the
+ * name + trailing chevron row sits under the cover. The r47 error plate
+ * stays (a corrupt cover still renders the tonal plate, now inside the
+ * fixed box instead of an empty aspect slab).
+ */
 @Composable
 private fun AlbumCard(
     album: Album,
     onClick: () -> Unit,
 ) {
-    Column(
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick),
     ) {
-        AsyncImage(
-            model = album.coverUri,
-            contentDescription = null, // decorative; the label below carries meaning
-            // r47 ux fix: the decode-failure plate (MediaThumb's r19a idiom):
-            // a corrupt cover used to render as fully blank pixels ---
-            // indistinguishable from loading --- under the folder's name.
-            error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(16.dp)),
-        )
-        Text(
-            text = album.bucketName,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
-        )
-        Text(
-            text = album.itemCount.let { count ->
-                androidx.compose.ui.res.pluralStringResource(
-                    R.plurals.album_item_count, count, count
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(112.dp),
+            ) {
+                AsyncImage(
+                    model = album.coverUri,
+                    contentDescription = null, // decorative; the label below carries meaning
+                    contentScale = ContentScale.Crop,
+                    // r47 ux fix: the decode-failure plate (MediaThumb's r19a idiom):
+                    // a corrupt cover used to render as fully blank pixels ---
+                    // indistinguishable from loading --- under the folder's name.
+                    error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.matchParentSize(),
                 )
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
-        )
+                Text(
+                    text = album.itemCount.let { count ->
+                        androidx.compose.ui.res.pluralStringResource(
+                            R.plurals.album_item_count, count, count
+                        )
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = album.bucketName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null, // decorative; the whole card is the target
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
     }
 }
 
 /**
- * The favorites pseudo-album card (issue #66): the SAME column geometry as
- * [AlbumCard] (square clipped cover, name, live count plurals) so the grid
- * stays uniform, but DISTINCTLY marked --- a solid primary circle with a
- * white heart pinned over the cover's bottom-end corner. The cover is the
- * newest favorite; the card only exists while at least one favorite does
- * (see [AlbumsViewModel]), so the cover is guaranteed non-null.
+ * The favorites pseudo-album card (issue #66): the SAME chrome as
+ * [AlbumCard] (r76.1: bordered rounded card, 112dp cropped cover, count
+ * pill on the cover, name + chevron row) so the grid stays uniform, but
+ * DISTINCTLY marked --- a solid primary circle with a white heart pinned
+ * over the cover's top-end corner (the count pill owns the bottom-end).
+ * The cover is the newest favorite; the card only exists while at least
+ * one favorite does (see [AlbumsViewModel]), so the cover is guaranteed
+ * non-null.
  *
  * Tapping routes the album-detail navigation with the sentinel bucket id
  * [Favorites.FAVORITES_BUCKET_ID], which the detail ViewModel resolves to
@@ -844,64 +905,87 @@ private fun FavoritesAlbumCard(
     album: Album,
     onClick: () -> Unit,
 ) {
-    Column(
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
             .testTag("albums_favorites_card"),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(16.dp)),
-        ) {
-            AsyncImage(
-                model = album.coverUri,
-                contentDescription = null, // decorative; the label below carries meaning
-                // r47 ux fix: the decode-failure plate, same as [AlbumCard].
-                error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
-                modifier = Modifier.matchParentSize(),
-            )
+        Column {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(8.dp)
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .height(112.dp),
             ) {
+                AsyncImage(
+                    model = album.coverUri,
+                    contentDescription = null, // decorative; the label below carries meaning
+                    contentScale = ContentScale.Crop,
+                    // r47 ux fix: the decode-failure plate, same as [AlbumCard].
+                    error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.matchParentSize(),
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = null, // decorative; the card label carries meaning
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Text(
+                    text = album.itemCount.let { count ->
+                        androidx.compose.ui.res.pluralStringResource(
+                            R.plurals.album_item_count, count, count
+                        )
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = album.bucketName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = null, // decorative; the card label carries meaning
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(18.dp),
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null, // decorative; the whole card is the target
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
-        Text(
-            text = album.bucketName,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
-        )
-        Text(
-            text = album.itemCount.let { count ->
-                androidx.compose.ui.res.pluralStringResource(
-                    R.plurals.album_item_count, count, count
-                )
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
-        )
     }
 }
 

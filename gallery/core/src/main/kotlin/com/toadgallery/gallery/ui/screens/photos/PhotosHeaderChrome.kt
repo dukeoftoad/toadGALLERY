@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material3.Icon
@@ -33,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.toadgallery.gallery.R
 import com.toadgallery.gallery.ui.components.ToadBodyFont
 import com.toadgallery.gallery.ui.components.ToadMotionSpec
 import com.toadgallery.gallery.ui.components.ToadDisplayFont
@@ -50,16 +54,20 @@ import com.toadgallery.gallery.ui.theme.ToadTheme
  * The r76 Photos sticky frosted header (the prototype's first screen
  * block): the `28dp` rounded `primary` brand badge with a bold "t" +
  * "toadGALLERY" in `20sp` ExtraBold Plus Jakarta Sans on the left, and on
- * the right the quick layout toggle (`bgSurfaceHigh` circular button:
+ * the right the small circular affordances --- the slideshow launch and
+ * the sort menu (r76.1: they used to float as a stray bare row between
+ * the header and the chips, the field report's orphaned play/kebab bar),
+ * then the quick layout toggle (`bgSurfaceHigh` circular button:
  * `GridView` when Collage is active, `Apps` when Grid is active --- tapping
  * flips the Appearance preference live) plus the "Clean Feed" / "No
  * Screenshots" pill toggle (`primaryContainer` when active) that hides
  * screenshots from the timeline.
  *
- * Below the title row sits the filter-chip strip inside a `LazyRow` with
- * the trailing-edge alpha fade mask (`88% -> 100%`), so scrolled chips
- * dissolve instead of clipping sharply. The chips themselves are the
- * EXISTING `PhotosFilterChipsRow`'s ViewModel semantics (one tap = one
+ * r76.1: the filter-chip strip moved INSIDE the header's glass block (the
+ * prototype renders the scrollable chips under the brand row, one glass
+ * surface), carried as the [chipsRow] slot; the strip keeps its
+ * trailing-edge fade mask on the caller's side. The chips themselves are
+ * the EXISTING `PhotosFilterChipsRow`'s ViewModel semantics (one tap = one
  * `TimelineFilter` change = one fresh paging generation), restyled as the
  * prototype's pill chips; the folder chip and its picker sheet ride the
  * same row (the r19b plumbing, unchanged).
@@ -70,6 +78,12 @@ fun ToadPhotosHeader(
     onToggleLayout: () -> Unit,
     hideScreenshots: Boolean,
     onToggleHideScreenshots: () -> Unit,
+    /** The slideshow launch (the timeline's loaded window); header-local state. */
+    onSlideshow: () -> Unit,
+    /** The sort menu anchor slot ([TimelineSortMenu] compact mode). */
+    sortMenu: @Composable () -> Unit,
+    /** The filter-chip strip slot, rendered under the brand row (nullable). */
+    chipsRow: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = ToadTheme.palette
@@ -118,6 +132,33 @@ fun ToadPhotosHeader(
                         .weight(1f)
                         .semantics { heading() },
                 )
+                // r76.1: the slideshow launch --- the same 32dp circular
+                // affordance the layout toggle uses (the stray bare row's
+                // play button, rehoused). The r27 round's test tag rides
+                // along (the action moved, the surface keeps its name).
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(palette.bgSurfaceHigh)
+                        .clickable(onClick = onSlideshow)
+                        .testTag("photos_action_slideshow"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(
+                            R.string.cd_viewer_action_slideshow_start,
+                        ),
+                        tint = palette.textMain,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                // r76.1: the sort menu rides the header row as a compact
+                // circular anchor (the shared menu, anchor-only restyle).
+                sortMenu()
+                Spacer(Modifier.width(6.dp))
                 // The quick layout toggle (Grid <-> Collage).
                 Box(
                     modifier = Modifier
@@ -174,6 +215,9 @@ fun ToadPhotosHeader(
                     )
                 }
             }
+            // r76.1: the chip strip INSIDE the glass header (the prototype's
+            // structure --- one surface, brand row on top, chips below).
+            chipsRow?.invoke()
         }
     }
 }

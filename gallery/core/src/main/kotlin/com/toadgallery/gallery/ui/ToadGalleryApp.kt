@@ -964,7 +964,12 @@ fun ToadExpressiveNavBar(
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { onTabSelected(destination.route) }
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                        // r76.1: 12dp horizontal padding squeezed the five
+                        // items past the row's budget --- the widest pill
+                        // (~52dp) + padding (~24dp) per item overflowed on
+                        // 360dp screens and the flexible label clipped to
+                        // "Setting". 6dp restores the full word.
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
@@ -973,7 +978,7 @@ fun ToadExpressiveNavBar(
                             .background(
                                 if (selected) palette.primaryContainer else Color.Transparent,
                             )
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                     ) {
                         Icon(
                             imageVector = destination.materialIcon,

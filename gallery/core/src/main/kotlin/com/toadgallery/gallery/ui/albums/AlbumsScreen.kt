@@ -67,6 +67,7 @@ import com.toadgallery.gallery.data.Album
 import com.toadgallery.gallery.data.Favorites
 import com.toadgallery.gallery.data.filters.DerivedCollections
 import com.toadgallery.gallery.data.filters.PhotosFilterHandoff
+import com.toadgallery.gallery.data.places.PlaceRegion
 import com.toadgallery.gallery.data.places.PlaceMediaHandoff
 import com.toadgallery.gallery.data.places.PlacesContentState
 import com.toadgallery.gallery.data.places.PlacesRegionGrid
@@ -384,6 +385,18 @@ private fun AlbumGrid(
     // (scrolling away dismissed it). The empty-things card requests the
     // dialog through [SmartCollectionsSection]'s onRequestCreateThing.
     var showCreateThing by remember { mutableStateOf(false) }
+    // r76.4 fix (CI #14): [SmartCollectionsSection] is a PLAIN
+    // LazyGridScope extension --- its body is NOT a composable context,
+    // so the regions derivation's `remember` moved HERE into composition
+    // (the old PlacesSection's own discipline; bucket() is pure math over
+    // the Ready rows).
+    val placesRegions = remember(placesState) {
+        if (placesState is PlacesContentState.Ready) {
+            PlacesRegionGrid.bucket(placesState.rows)
+        } else {
+            emptyList()
+        }
+    }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = modifier,
@@ -423,6 +436,7 @@ private fun AlbumGrid(
         SmartCollectionsSection(
             peopleState = peopleState,
             placesState = placesState,
+            placesRegions = placesRegions,
             thingsState = thingsState,
             thingsCollections = thingsCollections,
             onOpenPeople = onOpenPeople,
@@ -703,6 +717,8 @@ private fun FavoritesAlbumCard(
 private fun LazyGridScope.SmartCollectionsSection(
     peopleState: PeopleContentState,
     placesState: PlacesContentState,
+    /** r76.4 fix (CI #14): pre-derived in [AlbumGrid] (a composable context). */
+    placesRegions: List<PlaceRegion>,
     thingsState: SemanticContentState,
     thingsCollections: List<ThingsCollection>,
     onOpenPeople: () -> Unit,
@@ -787,9 +803,9 @@ private fun LazyGridScope.SmartCollectionsSection(
     when (placesState) {
         PlacesContentState.Loading -> Unit
         is PlacesContentState.Ready -> {
-            val regions = remember(placesState.rows) {
-                PlacesRegionGrid.bucket(placesState.rows)
-            }
+            // r76.4 fix (CI #14): regions pre-derived in [AlbumGrid]
+            // (this extension's body is not a composable context).
+            val regions = placesRegions
             if (regions.isNotEmpty()) {
                 items(
                     count = minOf(regions.size, SMART_COLLECTIONS_MAX_REGIONS),

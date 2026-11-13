@@ -445,8 +445,12 @@ fun SettingsScreen(
         }
 
         // ---- r76 SECTION 1: Appearance & Timeline (two drill-downs) ----
+        // r76.2: the five palettes moved out of the Theme & Colors
+        // drill-down onto the hub (field request: "Move palettes into
+        // appearance tab") --- they now render right under the nav rows.
         if (match(stringResource(R.string.settings_section_appearance)) ||
-            match("theme") || match("timeline") || match("layout") || match("grid")
+            match("theme") || match("timeline") || match("layout") ||
+            match("grid") || match("palette") || match("color")
         ) {
             SettingsSectionHeader(stringResource(R.string.settings_section_appearance))
             SettingsGroupCard {
@@ -472,6 +476,55 @@ fun SettingsScreen(
                     testTag = "settings_layout_grid",
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
+            }
+            // r76.2: the five selectable palettes, formerly the bottom
+            // block of the Theme & Colors sub-page. Same rows, same
+            // checkmark = active behavior; one less drill-down tap.
+            Spacer(Modifier.height(12.dp))
+            SettingsSectionHeader("Palettes")
+            SettingsGroupCard {
+                AllToadPalettes.forEach { palette ->
+                    val selected = palette.id == toadPaletteId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { settingsViewModel.setToadPaletteId(palette.id) }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // The dual-tone circular swatch: primary core +
+                        // primaryContainer ring.
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(palette.primaryContainer)
+                                .border(2.dp, palette.primary, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(palette.primary),
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = toadPaletteLabelFor(palette.id),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -955,54 +1008,9 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
             )
             }
-            // r76: the five selectable palettes (the prototype's Theme &
-            // Colors cards). Checkmark = active.
-            Spacer(Modifier.height(12.dp))
-            SettingsSectionHeader("Palettes")
-            SettingsGroupCard {
-                AllToadPalettes.forEach { palette ->
-                    val selected = palette.id == toadPaletteId
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { settingsViewModel.setToadPaletteId(palette.id) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // The dual-tone circular swatch: primary core +
-                        // primaryContainer ring.
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(palette.primaryContainer)
-                                .border(2.dp, palette.primary, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(12.dp)
-                                    .clip(CircleShape)
-                                    .background(palette.primary),
-                            )
-                        }
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            text = toadPaletteLabelFor(palette.id),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                }
-            }
+            // r76.2: the five palettes moved up onto the Appearance hub
+            // section (field request); this sub-page keeps theme mode +
+            // dynamic color only.
         } // SettingsSubPage.THEME
 
         // ---- r76 SUB-PAGE 4: Hidden Vault & Security ----

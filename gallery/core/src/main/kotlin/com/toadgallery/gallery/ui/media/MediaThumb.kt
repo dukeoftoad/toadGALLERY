@@ -1,6 +1,7 @@
 package com.toadgallery.gallery.ui.media
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
@@ -14,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
@@ -24,6 +26,7 @@ import coil.compose.AsyncImage
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.data.MediaItem
 import com.toadgallery.gallery.data.displayAspectRatio
+import com.toadgallery.gallery.ui.theme.ToadTheme
 
 /**
  * One aspect-ratio-aware cell of the staggered media grid (issues #33/#34).
@@ -38,21 +41,34 @@ import com.toadgallery.gallery.data.displayAspectRatio
  * Two subtle, Mi-Gallery-style indicators (issue #33):
  *  - a video duration chip (bottom-end) when `isVideo && durationMs > 0`,
  *    text from [formatDurationMs];
- *  - a "GIF" badge (top-end) for animated images, text from
+ *  - a "GIF" badge for animated images, text from
  *    `R.string.media_badge_gif`.
  * Both share the same scrim style: white `labelSmall` text over
  * `Color.Black.copy(alpha = 0.6f)`, `RoundedCornerShape(6.dp)`, tiny padding
  * and a 4.dp margin from the cell edge.
  *
  * Issue #66 adds a third indicator in the same scrim idiom: a small heart
- * chip (bottom-start) on favorited cells, read purely from
+ * chip on favorited cells, read purely from
  * [MediaItem.isFavorite] --- additive and data-driven, so every grid that
  * already renders this cell (Photos timeline, album detail, favorites
  * pseudo-album, search results) gains the overlay with zero call-site
- * changes. Bottom-start deliberately avoids the other three corners:
- * bottom-end is the duration chip, top-end the GIF badge, and top-start is
- * where the selection overlay's check badge sits (the grids' chrome, not
- * this composable's).
+ * changes.
+ *
+ * r77.7 CORNER MAP (the prototype's `renderPhotoCard` overlays, applied to
+ * every grid the cell backs): the video duration chip keeps bottom-end,
+ * the GIF badge MOVES to bottom-end too (GIFs never carry a duration chip
+ * --- the two can never collide, and the prototype puts both bottom-right),
+ * and the favorites heart MOVES to top-end (the prototype's `top-1.5
+ * right-1.5` heart), which frees top-start for the selection overlay's
+ * check badge (the grids' chrome, not this composable's).
+ *
+ * r77.7 CARD CHROME (the prototype's photo-card wrapper): the cell clips to
+ * a `rounded-2xl` (16dp) shape over a `bgSurface` backing, with a `1dp
+ * borderSubtle` stroke --- the prototype's `rounded-2xl overflow-hidden
+ * border background: var(--bg-surface)` card, so loading cells and the
+ * dead-cell plate read as the same bordered tile the prototype renders.
+ * The rounding applies in BOTH layout modes (GRID and COLLAGE --- the
+ * prototype styles its card wrapper identically in both).
  *
  * Accessibility: the thumbnail carries a semantic content description
  * ("Video"/"GIF"/"Photo" via `cd_media_thumb_*`) instead of staying
@@ -96,15 +112,25 @@ import com.toadgallery.gallery.data.displayAspectRatio
  * GRID layout (Ente-style): when set, the cell ignores the item's aspect
  * ratio and renders a uniform `1f` square, the classic dense-gallery look.
  * The default `false` keeps every pre-slice call site (Photos timeline,
- * album detail, trash, favorites, search) rendering exactly as before ---
- * the COLLAGE default must stay byte-identical.
+ * album detail, trash, favorites, search) aspect-aware --- and since r77.7
+ * BOTH modes share the prototype's rounded bordered card chrome above.
  */
 @Composable
 fun MediaThumb(item: MediaItem, modifier: Modifier = Modifier, forceSquare: Boolean = false) {
+    // The r77.7 card chrome: bgSurface backing + borderSubtle hairline, both
+    // clipped to the prototype's rounded-2xl shape (the order matters: the
+    // clip FIRST so the image and badges round with the tile, then the
+    // backing, then the stroke over the clipped edge).
+    val palette = ToadTheme.palette
+    val cellShape = RoundedCornerShape(16.dp)
     Box(
-        modifier = modifier.aspectRatio(
-            if (forceSquare) 1f else item.displayAspectRatio
-        )
+        modifier = modifier
+            .clip(cellShape)
+            .background(palette.bgSurface)
+            .border(1.dp, palette.borderSubtle, cellShape)
+            .aspectRatio(
+                if (forceSquare) 1f else item.displayAspectRatio
+            )
     ) {
         AsyncImage(
             model = item.uri,
@@ -138,14 +164,14 @@ fun MediaThumb(item: MediaItem, modifier: Modifier = Modifier, forceSquare: Bool
             ThumbBadge(
                 text = stringResource(R.string.media_badge_gif),
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.BottomEnd)
                     .padding(4.dp),
             )
         }
         if (item.isFavorite) {
             FavoriteBadge(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.TopEnd)
                     .padding(4.dp),
             )
         }

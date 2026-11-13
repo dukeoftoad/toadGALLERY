@@ -49,6 +49,7 @@ import com.toadgallery.gallery.data.SearchQuery
 import com.toadgallery.gallery.ml.search.MagicSearchQuery
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.components.ToadChipDefaults
 import com.toadgallery.gallery.ui.media.LoadingState
 import com.toadgallery.gallery.ui.media.MediaGrid
 import com.toadgallery.gallery.ui.media.MediaPermissionState
@@ -280,6 +281,8 @@ fun SearchScreen(
                     },
                     label = { Text(stringResource(R.string.search_mode_name)) },
                     modifier = Modifier.testTag("search_mode_name"),
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = searchMode == SearchMode.CONTENT,
@@ -289,6 +292,8 @@ fun SearchScreen(
                     },
                     label = { Text(stringResource(R.string.search_mode_content)) },
                     modifier = Modifier.testTag("search_mode_content"),
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
             }
         }
@@ -306,16 +311,22 @@ fun SearchScreen(
                     selected = mediaType == SearchMediaType.ALL,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.ALL) },
                     label = { Text(stringResource(R.string.search_filter_all)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = mediaType == SearchMediaType.IMAGES,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.IMAGES) },
                     label = { Text(stringResource(R.string.search_filter_photos)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = mediaType == SearchMediaType.VIDEOS,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.VIDEOS) },
                     label = { Text(stringResource(R.string.search_filter_videos)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
             }
         }

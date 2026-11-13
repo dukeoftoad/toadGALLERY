@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,11 +31,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.paging.compose.LazyPagingItems
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.data.MediaItem
+import com.toadgallery.gallery.ui.components.ToadBodyFont
 import com.toadgallery.gallery.ui.settings.GroupBy
+import com.toadgallery.gallery.ui.theme.ToadTheme
 import java.util.Locale
 
 /**
@@ -72,8 +79,16 @@ import java.util.Locale
  * ITEM COUNT (`headerCellCounts` over the same derived rows --- a trailing
  * section's count honestly grows as Paging appends windows), and WEEK
  * headers (the new [GroupBy.WEEK] grain) wrap their Monday-anchored date
- * label in the localized "Week starting …" prefix. The pre-r27 day/month
- * labels render exactly as before, plus the count suffix.
+ * label in the localized "Week starting …" prefix.
+ *
+ * r77.7 HEADER CHROME (the prototype's timeline group header): the title
+ * and the count now render at OPPOSITE EDGES of the full-line header row
+ * (the title's `weight(1f)` pushes the count to the trailing edge) instead
+ * of one inline "Month · N items" string --- the prototype's
+ * `justify-between` header (`text-xs font-bold` `text-main` title left,
+ * `text-[11px]` `text-dim` count right). The `timeline_header` test tag
+ * and the count's honesty contract (a trailing section's count grows as
+ * Paging appends) are unchanged.
  *
  * ## Uniform grid mode (appearance settings slice, roadmap Phase 3)
  * [uniformCells] (default `false`) switches every cell to the Ente-style
@@ -224,8 +239,11 @@ fun MediaPagingGrid(
                 is TimelineRow.Header -> {
                     // r27: the base date label, the WEEK grain's localized
                     // prefix, and the section's item count (the Moments
-                    // round's "… · 42 items" suffix; the count is absent
-                    // only in the impossible zero-cell degenerate).
+                    // round's trailing count; the count is absent only in
+                    // the impossible zero-cell degenerate).
+                    // r77.7: the prototype's two-edge header row --- the
+                    // bold `text-main` title left, the `text-dim` count
+                    // right (was one inline "Month · N items" string).
                     val dateLabel = formatGroupLabel(row, Locale.getDefault())
                     val baseLabel = if (row.isWeek) {
                         stringResource(R.string.moments_week_of, dateLabel)
@@ -233,24 +251,44 @@ fun MediaPagingGrid(
                         dateLabel
                     }
                     val count = headerCounts[row.groupKey] ?: 0
-                    val label = if (count > 0) {
-                        stringResource(
-                            R.string.moments_header_with_count,
-                            baseLabel,
-                            pluralStringResource(R.plurals.moments_header_count, count, count),
-                        )
-                    } else {
-                        baseLabel
-                    }
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 4.dp, top = 12.dp, bottom = 4.dp)
+                            .padding(start = 4.dp, top = 12.dp, bottom = 4.dp, end = 4.dp)
                             .testTag("timeline_header"),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // The full-weight title pushes the count to the row's
+                        // trailing edge (the prototype's justify-between).
+                        Text(
+                            text = baseLabel,
+                            style = TextStyle(
+                                fontFamily = ToadBodyFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                            ),
+                            color = ToadTheme.palette.textMain,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (count > 0) {
+                            Text(
+                                text = pluralStringResource(
+                                    R.plurals.moments_header_count,
+                                    count,
+                                    count,
+                                ),
+                                style = TextStyle(
+                                    fontFamily = ToadBodyFont,
+                                    fontWeight = FontWeight.Normal,
+                                    fontSize = 11.sp,
+                                ),
+                                color = ToadTheme.palette.textDim,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
                 is TimelineRow.Cell -> cellItem(items, row.index)?.let { item ->
                     if (onItemTap != null && onItemLongPress != null) {

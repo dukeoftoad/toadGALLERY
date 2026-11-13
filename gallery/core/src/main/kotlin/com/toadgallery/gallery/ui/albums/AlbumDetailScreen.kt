@@ -81,6 +81,7 @@ import com.toadgallery.gallery.data.checkRenameInput
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.media.ErrorState
 import com.toadgallery.gallery.ui.media.LoadingState
+import com.toadgallery.gallery.ui.media.MEDIA_GRID_GAP_DP
 import com.toadgallery.gallery.ui.media.MediaThumb
 import com.toadgallery.gallery.ui.media.SelectionCheck
 import com.toadgallery.gallery.ui.photos.FileOpsEvent
@@ -537,8 +538,8 @@ private fun AlbumDetailGrid(
         modifier = Modifier
             .fillMaxSize()
             .testTag("album_detail_state_grid"),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalItemSpacing = 2.dp,
+        horizontalArrangement = Arrangement.spacedBy(MEDIA_GRID_GAP_DP.dp),
+        verticalItemSpacing = MEDIA_GRID_GAP_DP.dp,
     ) {
         itemsIndexed(
             items = items,

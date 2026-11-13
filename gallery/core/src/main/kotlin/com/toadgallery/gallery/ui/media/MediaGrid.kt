@@ -13,6 +13,16 @@ import androidx.compose.ui.unit.dp
 import com.toadgallery.gallery.data.MediaItem
 
 /**
+ * The uniform inter-cell gap shared by every media grid (the shared
+ * [MediaGrid], the paged [MediaPagingGrid] timeline, and the album-detail
+ * grid). r77.3: the field report asked for a visible gap between photos;
+ * this single constant keeps the three grids in lockstep, so the timeline,
+ * the search/picked staggered grid, and an album's detail all read with
+ * the same breathing room between tiles.
+ */
+const val MEDIA_GRID_GAP_DP = 4
+
+/**
  * The staggered media grid shared by the picked-photos and search
  * surfaces (Phase 3, issue #29; the paged Photos timeline uses
  * [MediaPagingGrid] with the same cell, and album detail has rendered its
@@ -56,8 +66,8 @@ fun MediaGrid(
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(columns),
         modifier = modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalItemSpacing = 2.dp,
+        horizontalArrangement = Arrangement.spacedBy(MEDIA_GRID_GAP_DP.dp),
+        verticalItemSpacing = MEDIA_GRID_GAP_DP.dp,
     ) {
         itemsIndexed(
             items = items,

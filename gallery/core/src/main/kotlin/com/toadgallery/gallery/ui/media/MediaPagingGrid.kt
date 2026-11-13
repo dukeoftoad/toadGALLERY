@@ -171,8 +171,8 @@ fun MediaPagingGrid(
         state = gridState,
         columns = StaggeredGridCells.Fixed(columns),
         modifier = modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalItemSpacing = 2.dp,
+        horizontalArrangement = Arrangement.spacedBy(MEDIA_GRID_GAP_DP.dp),
+        verticalItemSpacing = MEDIA_GRID_GAP_DP.dp,
     ) {
         // r62: the leading full-line header slot (the Stories shelf rides
         // it on the plain timeline) --- FIRST item, its own key so it can

@@ -20,7 +20,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -78,6 +79,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -89,6 +91,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -221,6 +224,23 @@ fun ViewerScreen(
     // swipe. Restored on dispose (back, or navigating to another screen).
     val view = LocalView.current
     val context = LocalContext.current
+    // r77.2: the status-bar height SNAPSHOT, captured BEFORE the immersive
+    // hide below and FROZEN via remember. Once [WindowCompat.getInsets
+    // Controller.hide] runs, the system bars leave the inset and
+    // `WindowInsets.statusBars` collapses to 0 on the next recomposition ---
+    // so `.statusBarsPadding()` (and the shell Scaffold's innerPadding) stop
+    // paying any top inset and the chrome bar slides up under the
+    // transiently-reappearing status bar (the overlap the field report
+    // shows). The first composition frame still sees the real inset (the
+    // DisposableEffect hide runs AFTER it); reading `WindowInsets.statusBars`
+    // here (a @Composable scope) to the plain `insets` object, then freezing
+    // the resolved Dp with `remember`, pins it for the whole viewer session
+    // even after the bars hide and the live inset reads 0.
+    val density = LocalDensity.current
+    val insets = WindowInsets.statusBars
+    val statusBarTopPadding = remember {
+        with(density) { insets.getTop(this).toDp() }
+    }
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, view) }
@@ -687,6 +707,7 @@ fun ViewerScreen(
                 },
                 onRename = { renameTarget = window.items[pagerState.currentPage] },
                 onDelete = { deleteConfirmTarget = window.items[pagerState.currentPage] },
+                statusBarTopPadding = statusBarTopPadding,
                 modifier = Modifier.align(Alignment.TopCenter),
             )
             // The viewer is full-screen; ops narration surfaces through a
@@ -1361,6 +1382,10 @@ private fun ViewerTopBar(
     onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    // r77.2: the frozen status-bar height (captured before the immersive
+    // hide so the chrome stays clear of transient bars); replaces the old
+    // `.statusBarsPadding()`, which collapsed to 0 once the bars hid.
+    statusBarTopPadding: Dp,
     modifier: Modifier = Modifier,
 ) {
     // The interval menu's open flag, local to the bar (the menu closes on
@@ -1378,7 +1403,7 @@ private fun ViewerTopBar(
         Row(
             modifier = Modifier
                 .background(Color.Black.copy(alpha = 0.55f))
-                .statusBarsPadding()
+                .padding(top = statusBarTopPadding)
                 .padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

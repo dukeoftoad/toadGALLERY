@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,7 +35,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SelectableChipColors
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +56,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -60,10 +66,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.ui.theme.ToadTheme
+import com.toadgallery.gallery.ui.theme.ToadThemePalette
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeChild
 import kotlinx.coroutines.delay
@@ -351,8 +359,15 @@ fun ToadSubPageTopBar(
 }
 
 /**
- * The trailing status pill (`bgSurfaceHigh`, `10sp` bold, `textMuted`) ---
- * the sub-page headers' "Material 3" / "Encrypted" chips.
+ * A tiny rounded status pill (`bgSurfaceHigh` fill, `textMuted` 10sp Bold
+ * label) --- the prototype's `renderSubPageHeader` subtitle badge and the
+ * status pills scattered through its chrome.
+ *
+ * r77.10: the pill is now SIZE-parameterizable (`fontSize`, default 10sp
+ * keeps every existing call site byte-identical) because the Settings hub
+ * header's version badge is the prototype's `text-[11px] font-bold`
+ * `primary-container` pill --- a step larger than the sub-page badges, in
+ * the emphasized container colors (see the hub call site).
  */
 @Composable
 fun ToadStatusPill(
@@ -360,6 +375,7 @@ fun ToadStatusPill(
     modifier: Modifier = Modifier,
     background: Color? = null,
     textColor: Color? = null,
+    fontSize: TextUnit = 10.sp,
 ) {
     val palette = ToadTheme.palette
     Text(
@@ -368,7 +384,7 @@ fun ToadStatusPill(
         style = TextStyle(
             fontFamily = ToadBodyFont,
             fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
+            fontSize = fontSize,
         ),
         maxLines = 1,
         modifier = modifier
@@ -562,6 +578,11 @@ fun ToadPulsingHalo(modifier: Modifier = Modifier) {
 /**
  * A pill-shaped action button (the prototype's `rounded-full` CTAs):
  * filled (`primary`/`onPrimary`) or outlined (`borderStrong`/`textMain`).
+ *
+ * r77.9 a11y: the button role on the clickable Box --- the prototype's
+ * markup is a real `<button>`, and a bare clickable Box announces as
+ * plain text with no affordance (the r77.8 convention on the search
+ * chrome's controls).
  */
 @Composable
 fun ToadPillButton(
@@ -600,6 +621,8 @@ fun ToadPillButton(
                     Modifier
                 },
             )
+            // r77.9 a11y: Role.Button so TalkBack announces the affordance.
+            .semantics { role = Role.Button }
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = contentPadding, vertical = 10.dp),
         contentAlignment = Alignment.Center,
@@ -614,5 +637,81 @@ fun ToadPillButton(
             ),
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * The r77.7 CHIP VOCABULARY --- one answer to "what does a selectable chip
+ * look like", transcribed from the prototype's filter/prompt chip markup:
+ *
+ *  - **selected**: a solid `primary` pill with an `onPrimary` label (the
+ *    prototype's `background: var(--primary); color: var(--on-primary)`),
+ *    no stroke (the fill IS the edge --- the prototype's border-color
+ *    equals the fill);
+ *  - **unselected**: a `bgSurface` pill with a `textMuted` label and a
+ *    `1dp borderSubtle` stroke (the prototype's `background:
+ *    var(--bg-surface); color: var(--text-muted); border-color:
+ *    var(--border-subtle)`).
+ *
+ * The stock Material 3 [androidx.compose.material3.FilterChip] paints the
+ * selected state with `secondaryContainer`/`onSecondaryContainer` --- on
+ * the toad palettes a near-black green pill whose label barely clears the
+ * fill --- which is exactly the divergence this vocabulary retires. The
+ * M3 COMPONENT stays (ripple, semantics, the 48dp touch floor through
+ * `LocalMinimumInteractiveComponentSize`); only the color/border slots
+ * are re-pointed at the palette.
+ *
+ * [toadChipColors] is the PURE mapping (JVM-pinned by `ToadChipColorsTest`
+ * for every palette); [ToadChipDefaults] adapts it to the M3 chip slots at
+ * composition time.
+ */
+data class ToadChipColors(
+    val container: Color,
+    val content: Color,
+    /** `null` when the fill carries the edge (the selected pill). */
+    val stroke: Color?,
+)
+
+/** The pure chip-vocabulary mapping for one palette + selection state. */
+fun toadChipColors(palette: ToadThemePalette, selected: Boolean): ToadChipColors =
+    if (selected) {
+        ToadChipColors(
+            container = palette.primary,
+            content = palette.onPrimary,
+            stroke = null,
+        )
+    } else {
+        ToadChipColors(
+            container = palette.bgSurface,
+            content = palette.textMuted,
+            stroke = palette.borderSubtle,
+        )
+    }
+
+/**
+ * The M3 chip-slot adapter over [toadChipColors]: feed [ToadChipDefaults]
+ * to any `FilterChip` and both of its states render the prototype's
+ * vocabulary (the chip's own `selected` state picks the pair, so call
+ * sites never duplicate the selection truth).
+ */
+object ToadChipDefaults {
+
+    /** The container/label colors for BOTH chip states. */
+    @Composable
+    fun colors(): SelectableChipColors {
+        val palette = ToadTheme.palette
+        return FilterChipDefaults.filterChipColors(
+            containerColor = toadChipColors(palette, selected = false).container,
+            labelColor = toadChipColors(palette, selected = false).content,
+            selectedContainerColor = toadChipColors(palette, selected = true).container,
+            selectedLabelColor = toadChipColors(palette, selected = true).content,
+        )
+    }
+
+    /** The `1dp borderSubtle` stroke while unselected; none while selected. */
+    @Composable
+    fun border(): BorderStroke? {
+        val stroke = toadChipColors(ToadTheme.palette, selected = false).stroke
+        return stroke?.let { BorderStroke(1.dp, it) }
     }
 }

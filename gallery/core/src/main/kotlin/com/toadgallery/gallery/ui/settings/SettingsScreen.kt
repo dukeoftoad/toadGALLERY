@@ -88,6 +88,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
@@ -103,6 +104,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -183,6 +185,16 @@ fun SettingsScreen(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted -> settingsViewModel.mediaLocation.onPermissionResult(granted) }
 
+    // r77.10: the hub's LIVE storage read (the prototype's Storage & Data
+    // Management section carries the running total twice: the eyebrow hint
+    // ("N MB", bold) and the compact segmented preview bar above the
+    // manager row). The SAME [StorageInsightsViewModel] the Storage Manager
+    // sub-page instantiates --- a read-only sum over app-owned directories,
+    // no new business logic, no new scan.
+    val hubStorageViewModel: StorageInsightsViewModel = viewModel()
+    val hubStorageState by hubStorageViewModel.state.collectAsState()
+    val hubStorageTotalBytes = hubStorageState.entries.sumOf { it.bytes }
+
     var subPage by rememberSaveable { mutableStateOf(SettingsSubPage.HUB) }
     var settingsSearch by rememberSaveable { mutableStateOf("") }
 
@@ -235,7 +247,17 @@ fun SettingsScreen(
                             .weight(1f)
                             .semantics { heading() },
                     )
-                    ToadStatusPill(text = "v" + BuildConfig.VERSION_NAME)
+                    ToadStatusPill(
+                        text = "v" + BuildConfig.VERSION_NAME,
+                        // r77.10: the hub header's version badge is the
+                        // prototype's `primary-container` `text-[11px]`
+                        // pill --- one step larger and in the emphasized
+                        // container colors, unlike the sub-page status
+                        // pills that stay on `bgSurfaceHigh`.
+                        background = MaterialTheme.colorScheme.primaryContainer,
+                        textColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontSize = 11.sp,
+                    )
                 }
             }
         }
@@ -359,7 +381,10 @@ fun SettingsScreen(
         }
 
         if (appearanceMatch) {
-            SettingsSectionHeader(stringResource(R.string.settings_section_appearance))
+            SettingsSectionHeader(
+                stringResource(R.string.settings_section_appearance),
+                hint = stringResource(R.string.settings_section_hint_appearance),
+            )
             SettingsGroupCard {
                 SettingsNavRow(
                     title = stringResource(R.string.settings_theme_mode),
@@ -381,7 +406,10 @@ fun SettingsScreen(
         }
 
         if (aiMatch) {
-            SettingsSectionHeader(stringResource(R.string.settings_ai_section))
+            SettingsSectionHeader(
+                stringResource(R.string.settings_ai_section),
+                hint = stringResource(R.string.settings_section_hint_ai),
+            )
             SettingsGroupCard {
                 SettingsNavRow(
                     title = stringResource(R.string.settings_ai_engine_entry),
@@ -395,7 +423,10 @@ fun SettingsScreen(
         }
 
         if (privacyMatch) {
-            SettingsSectionHeader(stringResource(R.string.settings_section_access))
+            SettingsSectionHeader(
+                stringResource(R.string.settings_section_access),
+                hint = stringResource(R.string.settings_section_hint_access),
+            )
             SettingsGroupCard {
                 SettingsNavRow(
                     title = stringResource(R.string.settings_media_access_entry),
@@ -433,15 +464,40 @@ fun SettingsScreen(
         }
 
         if (storageMatch) {
-            SettingsSectionHeader(stringResource(R.string.settings_storage_section))
+            // r77.10: the hint is the prototype's live "N MB" total (bold
+            // muted) --- rendered only while a measurement has RESOLVED
+            // ("measuring" or an all-empty read keeps the header hint
+            // absent rather than lying with a zero).
+            SettingsSectionHeader(
+                stringResource(R.string.settings_storage_section),
+                hint = if (!hubStorageState.measuring && hubStorageTotalBytes > 0L) {
+                    DataSizeFormats.formatBytes(hubStorageTotalBytes)
+                } else {
+                    null
+                },
+                hintEmphasized = true,
+            )
             SettingsGroupCard {
+                // r77.10: the prototype hub's compact segmented preview bar
+                // (h-2.5 rounded-full track on `bg-surface-highest`, 2dp
+                // padding + 2dp inter-segment gaps, flush color fills) sits
+                // directly above the Storage & Cache Manager row, inside
+                // the same card. The segments are the LIVE per-key bytes
+                // from the same read the Storage Manager sub-page renders
+                // --- the same five-key color vocabulary, in the same
+                // order, scaled by their real share of the total.
+                ToadStorageMiniBar(
+                    entries = hubStorageState.entries,
+                    measuring = hubStorageState.measuring,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                )
                 SettingsNavRow(
                     title = stringResource(R.string.settings_storage_entry),
                     supporting = stringResource(R.string.settings_storage_section_body),
                     onClick = { subPage = SettingsSubPage.STORAGE },
                     iconVector = Icons.Filled.Storage,
                     testTag = "settings_storage_entry",
-                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                 )
             }
         }
@@ -852,20 +908,24 @@ fun SettingsScreen(
                 )
             }
             Spacer(Modifier.height(10.dp))
+            // r77.4: the field-report Storage Manager renders the breakdown
+            // as a single continuous rounded bar (an outlined track, the
+            // segments flush against each other, no inter-segment gaps),
+            // matching the screenshot. The outer 50% clip gives the pill
+            // ends; each segment is a plain fillMaxHeight Box so the colors
+            // butt up against each other and read as one stack, not five.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(12.dp)
+                    .height(14.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(2.dp),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
+                        .fillMaxSize()
+                        .padding(2.dp)
                         .clip(RoundedCornerShape(50)),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     if (totalBytes > 0L) {
                         listOf(
@@ -880,7 +940,6 @@ fun SettingsScreen(
                                     modifier = Modifier
                                         .weight(bytes.toFloat() / totalBytes)
                                         .fillMaxHeight()
-                                        .clip(RoundedCornerShape(50))
                                         .background(color),
                                 )
                             }
@@ -888,8 +947,7 @@ fun SettingsScreen(
                     } else if (storageState.measuring) {
                         Box(
                             modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
+                                .fillMaxSize()
                                 .clip(RoundedCornerShape(50))
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                         )
@@ -956,16 +1014,44 @@ fun SettingsScreen(
                 Color(0xFFFBBF24),
             )
             Spacer(Modifier.height(4.dp))
-            Button(
-                onClick = storageViewModel::clearCache,
-                enabled = !storageState.measuring,
-                shape = RoundedCornerShape(50),
+            // r77.4: the field-report Storage Manager shows the two
+            // disposable actions side-by-side (screenshot 2): Clear cache
+            // (primary pill) and Reset ML index (outlined secondary, only on
+            // the face-index flavors where there IS an index to reset). Both
+            // disable while a measurement or the index reset is in flight so
+            // the totals cannot shift under a running action.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .testTag("settings_storage_clear_cache"),
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(stringResource(R.string.settings_storage_action_clear_cache))
+                Button(
+                    onClick = storageViewModel::clearCache,
+                    enabled = !storageState.measuring,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("settings_storage_clear_cache"),
+                ) {
+                    Text(stringResource(R.string.settings_storage_action_clear_cache))
+                }
+                if (BuildShape.faceIndex) {
+                    OutlinedButton(
+                        onClick = storageViewModel::resetMlIndex,
+                        enabled = !storageState.measuring &&
+                            !storageState.resettingIndex,
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("settings_storage_reset_ml_index"),
+                    ) {
+                        Text(stringResource(R.string.settings_storage_action_reset_ml_index))
+                    }
+                }
             }
         }
         SettingsGroupCard {
@@ -2054,16 +2140,156 @@ enum class SettingsSubPage {
     MEDIA_ACCESS,
 }
 
+/**
+ * r77.10: the hub section header's TWO-EDGE shape --- the prototype's
+ * `px-1 flex items-center justify-between` eyebrow row: the section label
+ * on the leading edge as an `11sp` ExtraBold primary line with the
+ * `tracking-wider` letterspacing (the settings markup's
+ * `text-[11px] font-extrabold uppercase tracking-wider` --- the Title Case
+ * label resource is the settled app convention, per the r76.1 stories
+ * eyebrow), and the optional trailing hint on the far edge (the markup's
+ * `text-[10px]` right label: "Look & grid", "Local NPU", "Zero tracking",
+ * or the storage section's live bold "N MB" total).
+ *
+ * The heading semantics stay: the eyebrow remains the TalkBack anchor for
+ * its section. Sub-pages keep calling with no hint (the prototype's
+ * sub-pages carry no eyebrow hints) and the old `titleMedium` weight is
+ * retired everywhere --- one eyebrow vocabulary for every section header.
+ *
+ * `hintEmphasized` renders the storage variant (the markup's
+ * `text-[10px] font-bold` in the muted tone instead of the dim one).
+ */
 @Composable
-private fun SettingsSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
+private fun SettingsSectionHeader(
+    title: String,
+    hint: String? = null,
+    hintEmphasized: Boolean = false,
+) {
+    Row(
         modifier = Modifier
-            .padding(top = 24.dp)
-            .semantics { heading() },
+            .fillMaxWidth()
+            .padding(top = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = TextStyle(
+                fontFamily = ToadDisplayFont,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 11.sp,
+                letterSpacing = 0.6.sp,
+            ),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() },
+        )
+        if (hint != null) {
+            Text(
+                text = hint,
+                style = TextStyle(
+                    fontFamily = ToadBodyFont,
+                    fontWeight = if (hintEmphasized) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 10.sp,
+                ),
+                color = if (hintEmphasized) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    ToadTheme.palette.textDim
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/**
+ * r77.10: the hub Storage section's compact segmented preview bar --- the
+ * prototype's `h-2.5 rounded-full overflow-hidden flex gap-0.5 p-0.5` bar
+ * on `bg-surface-highest` that sits directly above the Storage & Cache
+ * Manager row. The segments are the LIVE per-key bytes of the same
+ * [StorageInsightsViewModel] read the Storage Manager sub-page renders,
+ * in the sub-page's five-key color vocabulary and order (catalogue sky,
+ * models primary, ML index violet, vault emerald, cache amber), each
+ * scaled by its real share of the measured total. The end segments carry
+ * the rounded ends (the markup's `rounded-l-full` / `rounded-r-full`);
+ * interior segments stay square so the 2dp gaps read as separations.
+ *
+ * While a measurement is in flight (or nothing was measured yet) the bar
+ * renders its track with the sub-page's measuring placeholder --- the
+ * honest "not known yet" state, never a fake fill.
+ */
+@Composable
+private fun ToadStorageMiniBar(
+    entries: List<StorageEntry>,
+    measuring: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val palette = ToadTheme.palette
+    val segmentColors = listOf(
+        STORAGE_KEY_CATALOGUE to Color(0xFF38BDF8),
+        STORAGE_KEY_MODELS to MaterialTheme.colorScheme.primary,
+        STORAGE_KEY_ML_INDEX to Color(0xFFA78BFA),
+        STORAGE_KEY_VAULT to Color(0xFF34D399),
+        STORAGE_KEY_CACHE to Color(0xFFFBBF24),
     )
+    val segments = segmentColors.mapNotNull { (key, color) ->
+        entries.firstOrNull { it.key == key }?.takeIf { it.bytes > 0L }?.let { it.bytes to color }
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .clip(RoundedCornerShape(50))
+            .background(palette.bgSurfaceHighest)
+            .padding(2.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (segments.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+            } else {
+                val totalBytes = segments.sumOf { it.first }
+                segments.forEachIndexed { index, (bytes, color) ->
+                    val shape = when {
+                        segments.size == 1 -> RoundedCornerShape(50)
+                        index == 0 -> RoundedCornerShape(
+                            topStartPercent = 50,
+                            bottomStartPercent = 50,
+                        )
+                        index == segments.size - 1 -> RoundedCornerShape(
+                            topEndPercent = 50,
+                            bottomEndPercent = 50,
+                        )
+                        else -> RectangleShape
+                    }
+                    // The CELL owns the weight and the trailing 2dp gap
+                    // (the markup's gap-0.5); the INNER box owns the
+                    // shape + fill --- a background painted before a
+                    // padding would bleed into the gap, so the fill must
+                    // be inset by the cell first.
+                    Box(
+                        modifier = Modifier
+                            .weight(bytes.toFloat() / totalBytes)
+                            .fillMaxHeight()
+                            .padding(end = if (index < segments.size - 1) 2.dp else 0.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(shape)
+                                .background(color),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

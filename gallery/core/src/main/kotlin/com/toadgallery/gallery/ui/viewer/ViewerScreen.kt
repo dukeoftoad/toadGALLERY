@@ -20,7 +20,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -78,6 +79,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -86,10 +88,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -118,10 +124,12 @@ import com.toadgallery.editor.contract.EditOutcome
 import com.toadgallery.editor.contract.MediaKind
 import com.toadgallery.editor.contract.removesLocation
 import com.toadgallery.editor.contract.stripsAllMetadata
+import com.toadgallery.gallery.ui.components.ToadBodyFont
 import com.toadgallery.gallery.ui.photos.FileOpsEvent
 import com.toadgallery.gallery.ui.photos.FileOpsUiState
 import com.toadgallery.gallery.ui.photos.FileOpsViewModel
 import com.toadgallery.gallery.ui.photos.UndoPayload
+import java.time.ZoneId
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -221,6 +229,23 @@ fun ViewerScreen(
     // swipe. Restored on dispose (back, or navigating to another screen).
     val view = LocalView.current
     val context = LocalContext.current
+    // r77.2: the status-bar height SNAPSHOT, captured BEFORE the immersive
+    // hide below and FROZEN via remember. Once [WindowCompat.getInsets
+    // Controller.hide] runs, the system bars leave the inset and
+    // `WindowInsets.statusBars` collapses to 0 on the next recomposition ---
+    // so `.statusBarsPadding()` (and the shell Scaffold's innerPadding) stop
+    // paying any top inset and the chrome bar slides up under the
+    // transiently-reappearing status bar (the overlap the field report
+    // shows). The first composition frame still sees the real inset (the
+    // DisposableEffect hide runs AFTER it); reading `WindowInsets.statusBars`
+    // here (a @Composable scope) to the plain `insets` object, then freezing
+    // the resolved Dp with `remember`, pins it for the whole viewer session
+    // even after the bars hide and the live inset reads 0.
+    val density = LocalDensity.current
+    val insets = WindowInsets.statusBars
+    val statusBarTopPadding = remember {
+        with(density) { insets.getTop(this).toDp() }
+    }
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, view) }
@@ -649,10 +674,24 @@ fun ViewerScreen(
                     chromeVisible = true
                 }
             }
+            // r77.8: the prototype's `lb-date` --- the top bar centers the
+            // current item's media date (the EFFECTIVE instant, the same
+            // rule the timeline headers order by) over the position
+            // counter. Formatted by the pure [ViewerInfoFormat.centerDate];
+            // `null` (no usable timestamp) keeps the counter-only layout.
+            val currentItem = window.items[pagerState.currentPage]
+            val viewerLocale: Locale = LocalConfiguration.current.locales[0]
+            val centerDateLabel = ViewerInfoFormat.centerDate(
+                captureDateMillis = currentItem.captureDateMillis,
+                dateAddedSec = currentItem.dateAddedSec,
+                locale = viewerLocale,
+                zone = ZoneId.systemDefault(),
+            )
             ViewerTopBar(
                 visible = chromeVisible,
                 current = pagerState.currentPage,
                 total = window.items.size,
+                dateLabel = centerDateLabel,
                 currentPageIsVideo = window.items[pagerState.currentPage].isVideo,
                 videoMuted = videoMuted,
                 onToggleMute = { videoMuted = !videoMuted },
@@ -687,6 +726,7 @@ fun ViewerScreen(
                 },
                 onRename = { renameTarget = window.items[pagerState.currentPage] },
                 onDelete = { deleteConfirmTarget = window.items[pagerState.currentPage] },
+                statusBarTopPadding = statusBarTopPadding,
                 modifier = Modifier.align(Alignment.TopCenter),
             )
             // The viewer is full-screen; ops narration surfaces through a
@@ -1344,6 +1384,10 @@ private fun ViewerTopBar(
     visible: Boolean,
     current: Int,
     total: Int,
+    // r77.8: the prototype's `lb-date` --- the current item's media date
+    // ("12 Nov 2026"), the bar's PRIMARY center line; null keeps the
+    // counter-only center (no usable timestamp on the item).
+    dateLabel: String?,
     currentPageIsVideo: Boolean,
     videoMuted: Boolean,
     onToggleMute: () -> Unit,
@@ -1361,6 +1405,10 @@ private fun ViewerTopBar(
     onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    // r77.2: the frozen status-bar height (captured before the immersive
+    // hide so the chrome stays clear of transient bars); replaces the old
+    // `.statusBarsPadding()`, which collapsed to 0 once the bars hid.
+    statusBarTopPadding: Dp,
     modifier: Modifier = Modifier,
 ) {
     // The interval menu's open flag, local to the bar (the menu closes on
@@ -1378,7 +1426,7 @@ private fun ViewerTopBar(
         Row(
             modifier = Modifier
                 .background(Color.Black.copy(alpha = 0.55f))
-                .statusBarsPadding()
+                .padding(top = statusBarTopPadding)
                 .padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1389,22 +1437,60 @@ private fun ViewerTopBar(
                     tint = Color.White,
                 )
             }
-            Text(
-                text = stringResource(R.string.viewer_counter, current + 1, total),
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                // r47 ux fix: single line + ellipsis --- a full actions row
-                // can shrink this counter to a few dp on narrow screens, and
-                // an unclamped Text would wrap into a vertical pile.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                // r40 a11y: the counter is a dynamic surface --- a polite
-                // live region so page swipes announce their position.
+            // r77.8: the center block takes the prototype lightbox's shape
+            // (the `lb-date`/`lb-location` stack) adapted to the data the
+            // item actually carries --- the media date as the primary line
+            // (12sp bold white, the prototype's `text-xs font-bold`), the
+            // position counter demoted to the secondary line (11sp, 75%
+            // white --- the prototype's muted second-line treatment). The
+            // polite live region stays on the whole block (the r40 a11y
+            // convention): page swipes announce date + position together.
+            // No usable timestamp -> the counter-only center the bar has
+            // always rendered.
+            Column(
                 modifier = Modifier
                     .weight(1f)
                     .semantics { liveRegion = LiveRegionMode.Polite },
-            )
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (dateLabel != null) {
+                    Text(
+                        text = dateLabel,
+                        style = TextStyle(
+                            fontFamily = ToadBodyFont,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                        ),
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.viewer_counter, current + 1, total),
+                    style = if (dateLabel != null) {
+                        TextStyle(
+                            fontFamily = ToadBodyFont,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp,
+                        )
+                    } else {
+                        MaterialTheme.typography.labelLarge
+                    },
+                    color = if (dateLabel != null) {
+                        Color.White.copy(alpha = 0.75f)
+                    } else {
+                        Color.White
+                    },
+                    textAlign = TextAlign.Center,
+                    // r47 ux fix: single line + ellipsis --- a full actions row
+                    // can shrink this counter to a few dp on narrow screens, and
+                    // an unclamped Text would wrap into a vertical pile.
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             // ---- Slideshow (r27) ----
             IconButton(
                 onClick = onToggleSlideshow,

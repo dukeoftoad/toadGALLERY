@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -44,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -53,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -68,6 +71,7 @@ import com.toadgallery.gallery.R
 import com.toadgallery.gallery.buildshape.BuildShape
 import com.toadgallery.gallery.data.MediaItem
 import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.components.ToadPillButton
 import com.toadgallery.gallery.ui.components.ToadToastBanner
 import com.toadgallery.gallery.ui.components.ToadToastState
 import com.toadgallery.gallery.ui.components.rememberToadToast
@@ -94,6 +98,8 @@ import com.toadgallery.gallery.ui.things.ThingsDetailScreen
 import com.toadgallery.gallery.ui.theme.ToadGalleryTheme
 import com.toadgallery.gallery.ui.trash.TrashScreen
 import com.toadgallery.gallery.ui.vault.VaultScreen
+import com.toadgallery.gallery.ui.vault.VaultBiometricRequest
+import com.toadgallery.gallery.ui.vault.VaultBiometrics
 import com.toadgallery.gallery.ui.vault.VaultUiState
 import com.toadgallery.gallery.data.vault.VaultBiometricReadiness
 import com.toadgallery.gallery.ui.vault.VaultViewModel
@@ -374,6 +380,48 @@ fun ToadGalleryApp() {
         val vaultState by vaultViewModel.state.collectAsState()
         val vaultBiometricsReady by vaultViewModel.biometrics.collectAsState()
 
+        // r77.5 (the field report: the Albums PIN dialog's fingerprint
+        // trigger did nothing): the BiometricPrompt requests are served
+        // HERE at the shell, not in VaultScreen. The request flow is a
+        // SharedFlow --- an emission with no collector is dropped --- and
+        // the VaultScreen collector only existed while THAT screen was
+        // composed, so a request raised anywhere else (the Albums tab's
+        // Hidden Vault dialog, the Settings vault toggle's enroll round)
+        // silently vanished. The shell is always composed and its context
+        // is MainActivity (a FragmentActivity --- the prompt's host), so
+        // ONE collector here serves every surface. VaultScreen's own
+        // collector moved out with this change: a SharedFlow multicasts to
+        // every collector, and two collectors would launch TWO prompts.
+        val activityContext = LocalContext.current
+        LaunchedEffect(vaultViewModel) {
+            // One prompt at a time: two surfaces can raise for the same
+            // unlock (the Albums dialog's fingerprint tap navigates to the
+            // vault screen, whose own "prompt once on entering Locked"
+            // effect raises again). The collector is one coroutine, so this
+            // flag serializes; [VaultBiometrics] fires its callback on every
+            // path (cipher failures included), so the flag always resets.
+            var promptInFlight = false
+            vaultViewModel.biometricRequests.collect { request ->
+                if (promptInFlight) return@collect
+                val activity = activityContext as? FragmentActivity ?: return@collect
+                promptInFlight = true
+                when (request) {
+                    is VaultBiometricRequest.Unlock -> VaultBiometrics.unlock(
+                        activity,
+                        request.sealedSecret,
+                    ) { result ->
+                        promptInFlight = false
+                        vaultViewModel.onBiometricUnlockResult(result)
+                    }
+
+                    VaultBiometricRequest.Enroll -> VaultBiometrics.enroll(activity) { result ->
+                        promptInFlight = false
+                        vaultViewModel.onBiometricEnrollResult(result)
+                    }
+                }
+            }
+        }
+
         // r76: the Settings hub-return signal (the nav bar's Settings-pop
         // rule; the Settings screen raises it while a sub-page is open).
         val settingsHubRequest = remember { SettingsHubRequest() }
@@ -474,7 +522,17 @@ fun ToadGalleryApp() {
                         onOpenTrash = { navController.navigate(Destinations.TRASH) },
                         onAttemptVaultUnlock = vaultViewModel::attemptUnlock,
                         onVaultBiometric = vaultViewModel::requestBiometricUnlock,
-                        vaultBiometricAvailable = vaultBiometricsReady is VaultBiometricReadiness.Supported,
+                        // r77.5: honest availability --- the fingerprint
+                        // trigger exists only when the user has actually
+                        // enrolled a binding (the opt-in round on the vault
+                        // screen or the Settings vault toggle). The old gate
+                        // (readiness is Supported) lit the trigger whenever
+                        // the HARDWARE could prompt, and tapping it silently
+                        // no-op'd (requestBiometricUnlock refuses an
+                        // unenrolled binding) --- a dead button.
+                        vaultBiometricAvailable =
+                            (vaultBiometricsReady as? VaultBiometricReadiness.Supported)
+                                ?.bindingEnrolled == true,
                         vaultSummary = when (val vs = vaultState) {
                             is VaultUiState.Unlocked ->
                                 "Unlocked • ${vs.entries.size} private items"
@@ -791,6 +849,13 @@ fun ToadGalleryApp() {
  * Reusable screen-state composable (roadmap Phase 2: empty / loading / denied /
  * unsupported / error system --- issue #13). Renders empty-state copy today; the
  * permission state becomes live in Phase 3 when media access lands.
+ *
+ * r77.9: the optional [pillAction] chrome --- the prototype's state surfaces
+ * close with a primary pill CTA (`rounded-full` over `var(--primary)`;
+ * the photos filtered-empty state's "Reset Filters"), not a bare text
+ * button. Default stays the M3 [TextButton] so the existing error/retry
+ * states keep their chrome; [pillAction] renders the house
+ * [ToadPillButton] (the same token pill the prototype draws).
  */
 @Composable
 fun StateScreen(
@@ -799,6 +864,7 @@ fun StateScreen(
     @StringRes bodyRes: Int,
     @StringRes actionRes: Int? = null,
     onAction: (() -> Unit)? = null,
+    pillAction: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -830,11 +896,22 @@ fun StateScreen(
                 .padding(top = 8.dp),
         )
         if (actionRes != null && onAction != null) {
-            TextButton(
-                onClick = onAction,
-                modifier = Modifier.padding(top = 24.dp),
-            ) {
-                Text(stringResource(actionRes))
+            if (pillAction) {
+                // r77.9: the prototype's primary pill CTA (the house
+                // ToadPillButton --- `primary`/`onPrimary`, `rounded-full`,
+                // `text-xs font-bold`, Role.Button carried inside).
+                ToadPillButton(
+                    text = stringResource(actionRes),
+                    onClick = onAction,
+                    modifier = Modifier.padding(top = 24.dp),
+                )
+            } else {
+                TextButton(
+                    onClick = onAction,
+                    modifier = Modifier.padding(top = 24.dp),
+                ) {
+                    Text(stringResource(actionRes))
+                }
             }
         }
         // r50 ux fix: the "Phase 3 --- on-device timeline" milestone badge is

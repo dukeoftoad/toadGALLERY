@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.Icon
@@ -239,5 +240,58 @@ fun ToadMapMemoryCard(
                 modifier = Modifier.size(14.dp),
             )
         }
+    }
+}
+
+/**
+ * The prototype's "Map Missing GPS Quick Helper Pill" (r77.6): a
+ * `bgGlass` rounded-full chip at the canvas card's top-right with the
+ * compass icon (`primary`) and an `11sp` SemiBold `textMain` label ---
+ * here the SELECTED pin's real coordinates (`17.43°N • 78.48°E`; the
+ * prototype's Hyderabad label is demo fiction, no reverse geocoding
+ * exists on-device and none is invented). [onClick] `null` renders the
+ * informational chip; non-null (the pending-reindex backlog case) makes
+ * it a real button that narrates through the shell's one toast banner.
+ */
+@Composable
+fun ToadMapPill(
+    text: String,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val palette = ToadTheme.palette
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(palette.bgGlass)
+            .border(1.dp, palette.borderSubtle, RoundedCornerShape(50))
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Explore,
+            contentDescription = null,
+            tint = palette.primary,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = text,
+            color = palette.textMain,
+            style = TextStyle(
+                fontFamily = ToadBodyFont,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

@@ -2,6 +2,7 @@ package com.toadgallery.gallery.ui.viewer
 
 import java.util.Locale
 import java.util.TimeZone
+import java.time.ZoneId
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -134,15 +135,105 @@ class ViewerInfoTest {
     @Test
     fun `date added renders through the medium date short time format`() {
         // 2025-01-12T02:40:00Z, pinned via the UTC default above.
-        assertEquals(
-            "Jan 12, 2025, 2:40 AM",
-            ViewerInfoFormat.dateAdded(1_736_649_600L, Locale.US),
-        )
+        // r77.8 fix: normalize the JDK's space before the AM/PM marker ---
+        // JDK 17 (the CI toolchain) renders U+0020, newer JDKs render the
+        // narrow no-break space U+202F, which made this pin fail on the
+        // newer JVM with no formatting difference that matters. The
+        // intent --- medium date + short time for this instant --- is
+        // unchanged.
+        val rendered = ViewerInfoFormat.dateAdded(1_736_649_600L, Locale.US)
+            ?.replace('\u202F', ' ')
+        assertEquals("Jan 12, 2025, 2:40 AM", rendered)
     }
 
     @Test
     fun `unknown date added sentinel stays unknown`() {
         assertNull(ViewerInfoFormat.dateAdded(0L, Locale.US))
         assertNull(ViewerInfoFormat.dateAdded(-1L, Locale.US))
+    }
+
+    // ---- center date (r77.8, the prototype lightbox's `lb-date`) ----
+
+    private val utcZone: ZoneId = ZoneId.of("UTC")
+
+    @Test
+    fun `center date renders the capture instant as the prototype's short date`() {
+        // 2026-11-12T00:00:00Z under the pinned UTC zone -> "12 Nov 2026",
+        // byte-for-byte the prototype's lb-date sample.
+        assertEquals(
+            "12 Nov 2026",
+            ViewerInfoFormat.centerDate(
+                captureDateMillis = 1_794_441_600_000L,
+                dateAddedSec = 0L,
+                locale = Locale.US,
+                zone = utcZone,
+            ),
+        )
+    }
+
+    @Test
+    fun `center date falls back to the date_added instant when capture is unresolved`() {
+        // 2025-01-12T02:40:00Z, the same instant the dateAdded test pins.
+        assertEquals(
+            "12 Jan 2025",
+            ViewerInfoFormat.centerDate(
+                captureDateMillis = null,
+                dateAddedSec = 1_736_649_600L,
+                locale = Locale.US,
+                zone = utcZone,
+            ),
+        )
+    }
+
+    @Test
+    fun `resolved epoch capture is a legitimate date not unknown`() {
+        // captureDateMillis == 0L is a RESOLVED capture of the epoch (the
+        // MediaItem contract): it must format, never fall through to
+        // dateAdded nor render null.
+        assertEquals(
+            "1 Jan 1970",
+            ViewerInfoFormat.centerDate(
+                captureDateMillis = 0L,
+                dateAddedSec = 1_736_649_600L,
+                locale = Locale.US,
+                zone = utcZone,
+            ),
+        )
+    }
+
+    @Test
+    fun `zone shifts the rendered calendar day`() {
+        // 2026-11-12T00:30:00Z is already 12 Nov in Kolkata (+05:30) but
+        // 11 Nov in New York (-05:00) --- the zone parameter must drive the
+        // calendar math the way the timeline headers do.
+        val millis = 1_794_443_400_000L
+        assertEquals(
+            "12 Nov 2026",
+            ViewerInfoFormat.centerDate(millis, 0L, Locale.US, ZoneId.of("Asia/Kolkata")),
+        )
+        assertEquals(
+            "11 Nov 2026",
+            ViewerInfoFormat.centerDate(millis, 0L, Locale.US, ZoneId.of("America/New_York")),
+        )
+    }
+
+    @Test
+    fun `no usable timestamp stays unknown so the bar keeps the counter-only center`() {
+        assertNull(
+            ViewerInfoFormat.centerDate(
+                captureDateMillis = null,
+                dateAddedSec = 0L,
+                locale = Locale.US,
+                zone = utcZone,
+            ),
+        )
+        assertNull(
+            ViewerInfoFormat.centerDate(
+                captureDateMillis = null,
+                dateAddedSec = -42L,
+                locale = Locale.US,
+                zone = utcZone,
+            ),
+        )
     }
 }

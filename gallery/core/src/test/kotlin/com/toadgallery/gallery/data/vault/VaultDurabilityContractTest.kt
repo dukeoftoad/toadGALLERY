@@ -181,10 +181,21 @@ class VaultDurabilityContractTest {
         )
     }
 
-    /** Unit-test working dir is the module dir (apps/gallery); be tolerant either way. */
+    /** Unit-test working dir is the module dir (gallery/core); be tolerant of the
+     * pre-push harness's repo-root cwd too (the r77.8 AccessibilityWiringTest
+     * convention --- the pre-#163 `apps/gallery/` fallback named no live dir). */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(File(cwd, relative), File(cwd.parentFile, "apps/gallery/$relative"))
+        // r77.9: the pre-#163 `apps/gallery/` fallback named a module dir that
+        // no longer exists; the candidates now follow the r77.8
+        // AccessibilityWiringTest convention --- the Gradle module dir
+        // (gallery/core) first, then the repo-root-relative path for the
+        // pre-push harness.
+        return sequenceOf(
+            File(cwd, relative),
+            File(cwd, "gallery/core/$relative"),
+            File(cwd.parentFile, "gallery/core/$relative"),
+        )
             .firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
@@ -193,15 +204,15 @@ class VaultDurabilityContractTest {
 
         /** The store whose D-3/D-9 contracts are pinned (module dir or repo root). */
         const val VAULT_STORE_SRC =
-            "src/main/kotlin/io/github/dukeoftoad/gallery/data/vault/VaultStore.kt"
+            "src/main/kotlin/com/toadgallery/gallery/data/vault/VaultStore.kt"
 
         /** The D-5 seam under test. */
         const val BIOMETRIC_KEYS_SRC =
-            "src/main/kotlin/io/github/dukeoftoad/gallery/data/vault/AndroidVaultBiometricKeys.kt"
+            "src/main/kotlin/com/toadgallery/gallery/data/vault/AndroidVaultBiometricKeys.kt"
 
         /** The read-only sibling whose D-5 fallback is mirrored. */
         const val MEDIA_KEYS_SRC =
-            "src/main/kotlin/io/github/dukeoftoad/gallery/data/vault/AndroidVaultKeys.kt"
+            "src/main/kotlin/com/toadgallery/gallery/data/vault/AndroidVaultKeys.kt"
 
         /** D-3's blob-durability anchor: the fsync inside the blob-write `.use` block. */
         const val BLOB_FSYNC_ANCHOR = "output.fd.sync()"

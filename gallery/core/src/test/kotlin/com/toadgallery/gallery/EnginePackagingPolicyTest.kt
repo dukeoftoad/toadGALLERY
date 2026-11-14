@@ -42,10 +42,21 @@ import java.io.File
  */
 class EnginePackagingPolicyTest {
 
-    /** Unit-test working dir is the module dir (apps/gallery); be tolerant either way. */
+    /** Unit-test working dir is the module dir (gallery/core); be tolerant of the
+     * pre-push harness's repo-root cwd too (the r77.8 AccessibilityWiringTest
+     * convention --- the pre-#163 `apps/gallery/` fallback named no live dir). */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(File(cwd, relative), File(cwd.parentFile, "apps/gallery/$relative"))
+        // r77.9: the pre-#163 `apps/gallery/` fallback named a module dir that
+        // no longer exists; the candidates now follow the r77.8
+        // AccessibilityWiringTest convention --- the Gradle module dir
+        // (gallery/core) first, then the repo-root-relative path for the
+        // pre-push harness.
+        return sequenceOf(
+            File(cwd, relative),
+            File(cwd, "gallery/core/$relative"),
+            File(cwd.parentFile, "gallery/core/$relative"),
+        )
             .firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
@@ -67,7 +78,10 @@ class EnginePackagingPolicyTest {
      */
     @Test
     fun `engine native libraries ship only behind the withEngine property`() {
-        val buildScript = moduleFile("build.gradle.kts").readText()
+        // r77.9: the gates live in the gallery APP module's script since the
+        // #163 module split --- the module-relative read hit the core
+        // library's script, which carries no gate.
+        val buildScript = moduleFile("../app/build.gradle.kts").readText()
         val gate = buildScript.indexOf("providers.gradleProperty(\"withEngine\").isPresent")
         val srcDir = buildScript.indexOf("dir(\"rust-jniLibs\")")
         assertTrue(
@@ -94,7 +108,8 @@ class EnginePackagingPolicyTest {
      */
     @Test
     fun `the offline model pack ships only behind the withBundledModels property`() {
-        val buildScript = moduleFile("build.gradle.kts").readText()
+        // r77.9: same app-module retarget as the withEngine gate above.
+        val buildScript = moduleFile("../app/build.gradle.kts").readText()
         val gate = buildScript.indexOf("providers.gradleProperty(\"withBundledModels\").isPresent")
         val srcDir = buildScript.indexOf("dir(\"bundled-models\")")
         assertTrue(

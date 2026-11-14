@@ -1,5 +1,6 @@
 package com.toadgallery.gallery.ui.search
 
+import androidx.annotation.PluralsRes
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,7 @@ import com.toadgallery.gallery.data.SearchQuery
 import com.toadgallery.gallery.ml.search.MagicSearchQuery
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.components.ToadChipDefaults
 import com.toadgallery.gallery.ui.media.LoadingState
 import com.toadgallery.gallery.ui.media.MediaGrid
 import com.toadgallery.gallery.ui.media.MediaPermissionState
@@ -235,28 +237,17 @@ fun SearchScreen(
             },
         )
         Spacer(Modifier.height(10.dp))
-        // r76: the results-count row's trailing badge --- only where the
-        // semantic surface could have contributed (the same gate as the
-        // mode row below).
-        if (BuildShape.semanticIndex) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = "Matches",
-                    color = ToadTheme.palette.textMuted,
-                    style = TextStyle(
-                        fontFamily = ToadBodyFont,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                    ),
-                )
-                ToadClipOcrBadge()
-            }
-            Spacer(Modifier.height(8.dp))
-        }
+        // r77.9: the results-count row's trailing badge moved DOWN to the
+        // results header slot (the prototype's order). The static
+        // "Matches" + badge row used to sit ABOVE the mode/type chip rows
+        // --- a slot the prototype never draws, showing a hardcoded label
+        // even with zero results. In the prototype the "CLIP + OCR Active"
+        // badge is the results header's TRAILING edge, beside the live
+        // "N matches found" count, immediately above the grid (below the
+        // secondary attribute filters). The badge now rides the shared
+        // [SearchResultsCountText] header (still gated on
+        // BuildShape.semanticIndex --- without the semantic index CLIP+OCR
+        // never ran, and the badge would lie).
         // The r26 "Search by" mode row: Name (the issue #62 filename
         // pipeline, untouched) vs Content (Magic Search). Switching the
         // mode flips BOTH pipelines' engagement through their own gates
@@ -280,6 +271,8 @@ fun SearchScreen(
                     },
                     label = { Text(stringResource(R.string.search_mode_name)) },
                     modifier = Modifier.testTag("search_mode_name"),
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = searchMode == SearchMode.CONTENT,
@@ -289,6 +282,8 @@ fun SearchScreen(
                     },
                     label = { Text(stringResource(R.string.search_mode_content)) },
                     modifier = Modifier.testTag("search_mode_content"),
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
             }
         }
@@ -306,16 +301,22 @@ fun SearchScreen(
                     selected = mediaType == SearchMediaType.ALL,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.ALL) },
                     label = { Text(stringResource(R.string.search_filter_all)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = mediaType == SearchMediaType.IMAGES,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.IMAGES) },
                     label = { Text(stringResource(R.string.search_filter_photos)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = mediaType == SearchMediaType.VIDEOS,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.VIDEOS) },
                     label = { Text(stringResource(R.string.search_filter_videos)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
             }
         }
@@ -391,17 +392,9 @@ fun SearchScreen(
                 is SearchUiState.Results -> Column(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.search_results_count,
-                            s.items.size,
-                            s.items.size,
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = ToadSpacing.sm),
+                    SearchResultsCountText(
+                        pluralRes = R.plurals.search_results_count,
+                        count = s.items.size,
                     )
                     // The shared staggered grid: same cells, keys, spacing
                     // and tap contract as the album detail view; the tap
@@ -417,6 +410,58 @@ fun SearchScreen(
                 }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The results-count header ROW (r77.8/r77.9 --- the prototype's results
+ * header, `flex items-center justify-between mb-2`): the LIVE count in
+ * the prototype's exact chrome --- `text-xs font-bold` over
+ * `var(--text-muted)` --- as [ToadBodyFont] bold at 12sp in the palette's
+ * [ToadThemePalette.textMuted] tone on the leading edge, the "CLIP + OCR
+ * Active" badge ([ToadClipOcrBadge]) on the trailing edge, the row sitting
+ * immediately above the results grid and BELOW the mode/type chip rows
+ * (the prototype's order; r77.9 retired the pre-header slot above the
+ * chips, which also showed a hardcoded "Matches" label with zero
+ * results).
+ *
+ * ONE composable for BOTH pipelines: the Name results and the Content
+ * results previously rendered the count as stock `bodyMedium`/
+ * `onSurfaceVariant` with two different wordings ("%1$d result(s)" vs
+ * "%1$d photos match") --- a chrome AND vocabulary drift from the
+ * prototype's single header. The plurals themselves now share the
+ * prototype's "N matches found" wording, so the two pipelines read as one
+ * surface; the shared function keeps them from drifting apart again.
+ *
+ * The badge renders only where [BuildShape.semanticIndex] holds (the
+ * r46 build-shape gate the pre-move row already used): without the
+ * semantic index the CLIP/OCR pipelines never ran and the badge would
+ * lie.
+ */
+@Composable
+private fun SearchResultsCountText(
+    @PluralsRes pluralRes: Int,
+    count: Int,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = ToadSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = pluralStringResource(pluralRes, count, count),
+            style = TextStyle(
+                fontFamily = ToadBodyFont,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+            ),
+            color = ToadTheme.palette.textMuted,
+        )
+        if (BuildShape.semanticIndex) {
+            ToadClipOcrBadge()
         }
     }
 }
@@ -528,17 +573,9 @@ private fun MagicSearchStates(
         is MagicSearchUiState.Results -> Column(
             modifier = Modifier.fillMaxSize(),
         ) {
-            Text(
-                text = pluralStringResource(
-                    R.plurals.magic_results_count,
-                    state.items.size,
-                    state.items.size,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = ToadSpacing.sm),
+            SearchResultsCountText(
+                pluralRes = R.plurals.magic_results_count,
+                count = state.items.size,
             )
             // The shared staggered grid, RELEVANCE order (the vecdb's own
             // ranking): same cells, keys, spacing and tap contract as the

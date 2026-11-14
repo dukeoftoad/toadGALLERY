@@ -33,6 +33,7 @@
     <string name="settings_storage_trash">Items in the system trash</string>
     <string name="settings_storage_trash_count">%1$d items</string>
     <string name="settings_storage_action_clear_cache">Clear cache</string>
+    <string name="settings_storage_action_reset_ml_index">Reset ML index</string>
     <string name="settings_storage_measuring">Measuring…</string>
 
     <!-- The System tab's Privacy center: an audit-style status page. -->

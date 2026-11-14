@@ -45,10 +45,11 @@
     <!-- The Settings "Group by" row's new WEEK option (the Moments round). -->
     <string name="settings_group_by_week">Week</string>
 
-    <!-- The grouped-timeline headers: the count suffix and the WEEK
-         grain's prefix. -->
+    <!-- The grouped-timeline headers: the WEEK grain's prefix and the
+         trailing count. r78: the title and the count render at opposite
+         edges of the header row, so the combined "Month / N items" string
+         is gone and the plural below carries the count alone. -->
     <string name="moments_week_of">Week starting %1$s</string>
-    <string name="moments_header_with_count">%1$s · %2$s</string>
     <plurals name="moments_header_count">
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>

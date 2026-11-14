@@ -47,7 +47,7 @@ editor/core/src/main/assets/luts/                      bundled .cube filters
 editor/core/src/main/kotlin/.../EditAiModelStore.kt    on-demand model downloader
 editor/core/src/test/                                  unit + Roborazzi tests
 shared/                                                pure-JVM contract + plans
-docs/                                                  architecture, ADRs, phase records
+docs/                                                  architecture, development, roadmap
 ```
 
 GPL-3.0 — see `LICENSE`.

@@ -1,7 +1,7 @@
 name: Release
 
 # toadGALLERY Edit release workflow --- issue #59, ADR-0018
-# (docs/integration-decisions.md).
+# (decision log in docs/ARCHITECTURE.md).
 #
 # Dedicated PRE-RELEASE pipeline for the SIGNED testing APK of the editor.
 # User directive (issue #59): release APKs for pre-release testing must be
@@ -215,7 +215,7 @@ jobs:
       # deliberately NOT asserted --- a missing allowlisted entry only breaks
       # a feature; an extra one is a privacy regression.)
       # The allowlist is derived from the source manifests plus the
-      # documented library merges; docs/phase-11/permissions-and-privacy.md
+      # documented library merges; docs/DEVELOPMENT.md (privacy gates)
       # is the record:
       #   - the editor's only REQUESTED permission is its own pre-Q capped
       #     WRITE_EXTERNAL_STORAGE; the merged APK additionally carries the
@@ -315,7 +315,7 @@ jobs:
           body: |
             **TESTING pre-release --- toadGALLERY Edit r${{ env.ROUND }}.** Not a
             stable release; the device-verification matrix stays human-only
-            (see `docs/phase-11/known-limitations.md`).
+            (see `docs/DEVELOPMENT.md`, known limitations).
 
             - `toadGALLERY-edit-<version>.apk` --- **the editor.**
               Crop/rotate/perspective, adjustments, LUT filters, text,

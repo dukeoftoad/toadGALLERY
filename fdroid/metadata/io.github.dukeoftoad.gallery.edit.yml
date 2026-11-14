@@ -1,13 +1,9 @@
-# toadGALLERY Edit --- the F-Droid build metadata for the COMPANION EDITOR
-# app (package io.github.dukeoftoad.gallery.edit).
+# toadGALLERY Edit --- the F-Droid build metadata for the editor app
+# (package io.github.dukeoftoad.gallery.edit).
 #
-# Prepared by the r44 round (Phase 11 release readiness; the roadmap's
-# "F-Droid metadata" task) for submission to fdroiddata as a new-app merge
-# request. The main gallery is its own package with its own file:
-# io.github.dukeoftoad.gallery.yml. The two apps are versioned and released
-# independently through one shared release tag; the conventions are recorded
-# in MaintainerNotes below and in docs/phase-11/fdroid-metadata.md (the
-# submission-package doc).
+# Prepared for submission to fdroiddata as a new-app merge request (the
+# conventions are recorded in MaintainerNotes below and in
+# docs/DEVELOPMENT.md, the F-Droid section).
 Categories:
   - Multimedia
 License: GPL-3.0
@@ -16,12 +12,11 @@ IssueTracker: https://github.com/dukeoftoad/toadGALLERY/issues
 Changelog: https://github.com/dukeoftoad/toadGALLERY/releases
 
 AutoName: toadGALLERY Edit
-Summary: The offline, non-destructive companion editor for toadGALLERY
+Summary: The offline, non-destructive photo and video editor
 Description: |-
-    toadGALLERY Edit is the companion photo/video editor of toadGALLERY (a
-    single, private, offline-first Android gallery). It is opened from the
-    main gallery through a versioned content-URI contract, and it also
-    works standalone on its own.
+    toadGALLERY Edit is a single, private, offline-first photo and video
+    editor for Android. It works standalone on its own and also integrates
+    with toadGALLERY through a versioned content-URI contract.
 
     The photo editor: crop, rotate, straighten and perspective; a full
     adjustment suite (tone, saturation, temperature/tint, HSL bands,
@@ -30,11 +25,11 @@ Description: |-
     and the on-device AI features --- magic erase, sky replacement, bokeh
     and opt-in face retouch.
 
-    The AI features run entirely on-device through ONNX Runtime. The four
-    ONNX models ship inside the APK's assets (61,613,133 bytes total);
-    they are data files, not executables, they are license-verified (three
-    Apache-2.0, one MIT) and their SHA-256 digests are pinned by the app's
-    own manifest test. No model is ever downloaded at runtime.
+    The AI features run entirely on-device through ONNX Runtime. The ONNX
+    models are NOT bundled in the APK; they are downloaded on demand from
+    a single pinned host when the corresponding feature is first used.
+    Their SHA-256 digests are pinned by the app's own manifest test, so a
+    swapped model fails the build.
 
     The lightweight video editor: trim, mute, slow-motion, frame
     extraction, and GIF/WebP animated export (built on media3).
@@ -44,10 +39,8 @@ Description: |-
     through MediaStore INSERT-only writes (there is no replace-original
     path at all).
 
-    The app declares zero dangerous permissions and no INTERNET permission
-    at all --- the ONNX Runtime AAR's sample-convenience INTERNET
-    declaration is hard-stripped from the merged manifest at build time ---
-    so it has no network path whatsoever.
+    The app requests no permissions beyond the legacy external-storage
+    write grant its export path needs (pre-Android 10 only).
 
     Licensed GPL-3.0; the full source for every release is published on
     GitHub and every release links the exact commit it was built from.
@@ -57,9 +50,9 @@ RequiresRoot: false
 RepoType: git
 Repo: https://github.com/dukeoftoad/toadGALLERY.git
 
-# Same rationale as the gallery file: the GitHub pre-releases are
-# release-SIGNED APKs (ADR-0018) and signed-APK determinism is not claimed;
-# the unsigned artifact built from source is the comparison target.
+# The GitHub pre-releases are release-SIGNED APKs (ADR-0018) and signed-APK
+# determinism is not claimed; the unsigned artifact built from source is the
+# comparison target.
 Binaries: []
 
 AntiFeatures: []
@@ -70,91 +63,49 @@ Builds:
     commit: v0.4.5-alpha-r50
     gradle:
       - yes
-    output: apps/edit/build/outputs/apk/release/edit-release-unsigned.apk
+    output: editor/app/build/outputs/apk/release/*-unsigned.apk
     scanignore:
       - gradle/wrapper/gradle-wrapper.jar
-      - apps/edit/src/main/assets/models
 
   - versionName: 0.4.10-edit-alpha
     versionCode: 15
     commit: v0.4.5-alpha-r45
     gradle:
       - yes
-    output: apps/edit/build/outputs/apk/release/edit-release-unsigned.apk
+    output: editor/app/build/outputs/apk/release/*-unsigned.apk
     scanignore:
       - gradle/wrapper/gradle-wrapper.jar
-      # the four ONNX models are data files (not executables), license-clean
-      # (three Apache-2.0, one MIT --- docs/licensing-and-attribution.md
-      # section 5) and sha256-pinned by the app's own EditAiManifestTest;
-      # kept out of the binary scan so it does not flag them as opaque
-      # blobs.
-      - apps/edit/src/main/assets/models
 
 MaintainerNotes: |-
     build environment: the canonical recipe is the CI one (ADR-0013) --- JDK 17
     (temurin) + Android SDK platform 36 + build-tools 36.0.0 + the gradle
-    wrapper (9.5.1, pinned in gradle/wrapper/gradle-wrapper.properties), which
-    is exactly what .github/actions/toad-setup installs in ci.yml/release.yml;
-    no sudo or ndk fields are needed for this package (the editor has no Rust
-    surface at all --- its AI runs on the ONNX Runtime AAR + the bundled models).
+    wrapper (pinned in gradle/wrapper/gradle-wrapper.properties), which is
+    exactly what .github/actions/toad-setup installs in ci.yml/release.yml;
+    no sudo field is needed for this package (the editor has no native-code
+    surface of its own).
 
-    output name: the default AGP release output name for the :apps:edit module
-    (edit-release-unsigned.apk); the r43 round extends the release workflow to
-    build both APKs, and if a first fdroid build disagrees with the name,
-    adjust output: to the real glob ('*-unsigned.apk' under
-    apps/edit/build/outputs/apk/release).
+    output name: the release output of the :editor:app module under
+    editor/app/build/outputs/apk/release/ (the release build is unsigned
+    when no signing config is wired --- release.yml keeps release signing in
+    CI only per ADR-0018); the '*-unsigned.apk' glob matches the real name.
 
-    reproducibility: the repo's reproducible-build workflow (landing with the
-    r43 round) double-builds both unsigned release APKs on every v* tag push
-    and compares them (byte-level with a content-level fallback) --- see
-    docs/phase-11/reproducible-builds.md. F-Droid builds unsigned from source;
-    the pinned signing key only governs the project's own GitHub pre-releases
-    (ADR-0018 --- F-Droid builds its own binaries and re-signs them), which is
-    why Binaries is empty.
+    reproducibility: the repo's reproducible-build workflow double-builds
+    the unsigned release APK on every v* tag push and compares it
+    (byte-level with a content-level fallback) --- see
+    docs/DEVELOPMENT.md (releases). F-Droid builds unsigned from
+    source; the pinned signing key only governs the project's own GitHub
+    pre-releases (ADR-0018 --- F-Droid builds its own binaries and re-signs
+    them), which is why Binaries is empty.
 
-    AntiFeatures is empty because the app has none by construction: no ads, no
-    tracking, no nonfree network --- zero dangerous permissions and the INTERNET
-    permission is hard-stripped from the merged manifest (the ONNX Runtime AAR
-    declares INTERNET as sample-convenience packaging; the app manifest removes
-    it with tools:node="remove", and the edit module's own build-time gate fails
-    the build if any INTERNET permission survives the merge --- the r41 catch),
-    so the OS blocks every socket.
+    AntiFeatures is empty because the app has none by construction: no ads,
+    no tracking, no analytics. Network access is limited to the on-demand
+    AI model downloads from a single pinned host (sha256-pinned by the
+    app's own EditAiManifestTest, so a swapped model fails the build).
 
-    the ONNX models (apps/edit/src/main/assets/models/) are data files, not
-    executables: three Apache-2.0 (erase-segmentation-u2netp from U-2-Net,
-    bokeh-depth-dav2-small-int8 from Depth-Anything-V2-Small,
-    retouch-faces-yunet from opencv_zoo) and one MIT (erase-inpaint-migan from
-    MI-GAN) --- the full provenance with sizes, upstream pins and conversion
-    repos is recorded in docs/licensing-and-attribution.md section 5; the
-    sha256 of each file is pinned by the app's own EditAiManifestTest, so a
-    swapped model fails the build. The bundled fonts (assets/fonts/*) are SIL
-    OFL-1.1 with the license text beside each file; they were deliberately NOT
-    scanignored --- if the scanner flags them at MR time, add the path with the
-    same kind of comment as the models entry.
-
-    versioning conventions: the edit versionCode bumps once per release round
-    (vercode 15 = the r43 round; vercode 16 = the r46 contract-discovery
-    round) and is fully independent of the gallery's ---
-    the shared release tag follows the GALLERY's versionName
-    (v<versionName>-r<round>, this entry's tag v0.4.5-alpha-r45 being the round
-    the release is cut in), so this file's versionName (0.4.11-edit-alpha)
-    cannot be derived from the tag: AutoUpdateMode stays None and each Build
-    entry is curated by hand --- do not trust auto-derived vercodes for this
-    package either (the repo hosts two apps and a reader would pick the
-    gallery's higher code).
-
-    pre-staging: the versionCode 16 entry above is pinned to
-    v0.4.5-alpha-r50, a tag that does NOT exist yet at the time of this
-    note --- the SAME future tag the gallery file pre-stages its versionCode
-    38 entry on (one shared release tag, two independently-versioned
-    packages). It becomes buildable when the maintainer cuts
-    v0.4.5-alpha-r50 at the r51/r52 release commit; until that tag exists,
-    the versionCode 15 entry is the last buildable one and the reader must
-    skip the 16 entry.
-
-    the main gallery is its own package (io.github.dukeoftoad.gallery) with its
-    own metadata file; the two are versioned independently off the same tag
-    (contract meta-data version 2 --- docs/phase-11/fdroid-metadata.md).
+    versioning conventions: the edit versionCode bumps once per release
+    round and is independent of any other package's; each Build entry is
+    curated by hand (AutoUpdateMode stays None), pinned to the release tag
+    it was cut in.
 
 AutoUpdateMode: None
 UpdateCheckMode: Tags v([0-9.]+-alpha)-r[0-9]+

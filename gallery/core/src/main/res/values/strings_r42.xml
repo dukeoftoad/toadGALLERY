@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- r42 (Phase 10 sub-scope B): the video side of the Gallery <-> Edit
-     launch narration. The image-era strings (viewer_edit_not_installed,
-     viewer_edit_outdated, viewer_edit_disabled, viewer_edit_saved,
-     viewer_edit_error) live in strings_r29.xml / strings_r31.xml and stay
-     unchanged; the video surface adds its honest not-capable line. -->
-<resources>
-    <string name="viewer_edit_video_not_installed">This toadGALLERY Edit can\'t edit video yet — update it, or pick another editor below.</string>
-</resources>

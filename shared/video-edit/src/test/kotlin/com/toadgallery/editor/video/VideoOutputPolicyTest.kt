@@ -6,10 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The non-destructive MediaStore policy (r42, decision 9): every output is
- * an INSERT of a NEW entry, the "-edit" naming rule per format, the
- * Movies/Pictures split, the pending-row discipline and the failure
- * recovery --- the photo ExportPlan's pins, video-shaped.
+ * The non-destructive MediaStore policy: every output is a NEW-row insert, the "-edit"
+ * naming rule per format, the Movies/Pictures split, pending discipline and failure recovery.
  */
 class VideoOutputPolicyTest {
 
@@ -142,9 +140,7 @@ class VideoOutputPolicyTest {
 
     @Test
     fun `there is no replace-original operation anywhere in the policy`() {
-        // The policy object exposes exactly the operations the non-destructive
-        // export needs; the pin is the source scan: no method name may even
-        // suggest writing to the source.
+        // Source scan: no method name may even suggest writing to the source.
         val methodNames = VideoOutputPlan::class.java.declaredMethods
             .map { it.name }
             .filter { it != "values" && it != "valueOf" }
@@ -156,8 +152,7 @@ class VideoOutputPolicyTest {
                     name.contains("replace", ignoreCase = true),
             )
         }
-        // and the insert values never carry a source identifier: a new row
-        // is keyed by nothing but its own name and mime type (+ Q+ columns).
+        // Insert values never carry a source identifier: a new row keys on name + mime only.
         val values = VideoOutputPlan.insertValues("a-edit.mp4", VideoOutputKind.TRIMMED_VIDEO, true)
         assertFalse(values.keys.any { it.contains("id") })
     }

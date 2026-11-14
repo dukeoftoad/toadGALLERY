@@ -6,14 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r41 inference seam over FAKES (the contract's seam set): the
- * dedicated degradations propagate unchanged, the honest no-sky refusal,
- * the derived masks (the erase refinement + the sky mask) over hand
- * saliency maps, the yunet decode over hand outputs (with NMS), the
- * cited preprocessing constants, the migan polarity, the cancellation,
- * and the commit coordinator end-to-end.
- */
+/** Pins the AI inference seam over fakes: degradations, refusals, derived masks, decode, preprocessing. */
 class EditAiEngineTest {
 
     // ---- the fakes ----
@@ -106,8 +99,7 @@ class EditAiEngineTest {
 
     @Test
     fun `a broken-runtime run propagates from inside the chain`() {
-        // The inpaint stage breaks while the saliency stage succeeds: the
-        // erase chain answers RUNTIME_BROKEN (the second leg's degradation).
+        // The inpaint stage breaks while saliency succeeds: erase answers RUNTIME_BROKEN (second leg).
         val fake = FakeInference(
             saliencyResult = AiRun.Ok(subjectSaliency()),
             inpaintResult = AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN),
@@ -135,10 +127,8 @@ class EditAiEngineTest {
 
     @Test
     fun `the sky mask is the region above the subject's top edge minus the subject`() {
-        // Working 64x64; the subject (320 rows/cols 100..220) maps to the
-        // working grid's rows/cols ~20..44; the sky is everything strictly
-        // above the subject's top row, minus the subject (which cannot be
-        // above its own top).
+        // Working 64x64; the subject (320 rows/cols 100..220) maps to working rows/cols ~20..44.
+        // Sky = everything strictly above the subject's top row, minus the subject itself.
         val ok = EditAiDerive.skyMask(64, 64, subjectSaliency()) as AiRun.Ok
         val sky = ok.value
         val mask = sky.maskAt(64, 64)
@@ -192,8 +182,7 @@ class EditAiEngineTest {
             AiEraseLayer.Point(0.5, 0.9),
         )
         val result = EditAiCommit.erase(fake, IntArray(36), 6, 6, seedPoints, progress) as AiRun.Ok
-        // The mask is the seed mask (the painted triangle), the fill the
-        // fake's grid, the patch cropped to the seed's bbox.
+        // The mask is the seed (painted triangle), the fill the fake's grid, the patch cropped to its bbox.
         val seed = RegionMask.build(seedPoints.map { RegionLayer.Point(it.x, it.y) }, 6, 6)
         assertTrue(result.value.first.maskAt(6, 6).contentEquals(seed))
         assertTrue(result.value.second != null)
@@ -231,9 +220,8 @@ class EditAiEngineTest {
 
     @Test
     fun `the yunet decode reads the anchor arithmetic and the fractions`() {
-        // stride 8, cells 80; cell (row=10, col=20) -> k=820 carries the
-        // only passing score; bbox (0.5, 0.5, 10, 20): cx=(20.5)*8=164,
-        // cy=(10.5)*8=84, w=80, h=160 -> x1=124, y1=4, x2=204, y2=164.
+        // stride 8, cells 80; cell (row=10, col=20) -> k=820 carries the only passing score.
+        // bbox (0.5, 0.5, 10, 20): cx=(20.5)*8=164, cy=(10.5)*8=84, w=80, h=160 -> x1=124, y1=4, x2=204, y2=164.
         val size = EditAiModels.FACES_SIZE
         val cells8 = size / 8
         val cls8 = FloatArray(cells8 * cells8)
@@ -260,8 +248,7 @@ class EditAiEngineTest {
 
     @Test
     fun `the yunet NMS suppresses the overlapping lower-score box`() {
-        // Two adjacent cells producing ~0.82-IoU boxes: the higher score
-        // keeps the slot, the lower is suppressed.
+        // Two adjacent cells produce ~0.82-IoU boxes: the higher score keeps the slot, the lower is suppressed.
         val size = EditAiModels.FACES_SIZE
         val cells8 = size / 8
         val cls8 = FloatArray(cells8 * cells8)

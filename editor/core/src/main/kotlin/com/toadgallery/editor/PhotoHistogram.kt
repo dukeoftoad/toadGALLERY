@@ -22,39 +22,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 
-// ---------------------------------------------------------------------------
-// The r66 histogram chart (the honest-feedback round): the Adjust panel's
-// live tonal readout, drawn from [EditorHistogram]'s bins.
-//
-// The shape is the classic photo-editor RGB histogram --- three filled
-// channel curves composited with Screen blending, so overlaps read as
-// their additive colours (red over green reads yellow, exactly like the
-// Lightroom/Snapseed charts users already know) instead of as mud. The
-// channel colours are SEMANTIC CONTENT, not chrome: the red curve IS the
-// red channel --- the same exemption the r56 reference strip's sweep
-// stops carry (only EditorTheme.kt + VideoEditTheme hold ACCENT hexes; a
-// chart whose red channel were themed green would be a lie).
-//
-// The a11y contract is the r32 one applied to a read-only chart: the
-// Canvas announces its NAME (contentDescription) and its STATE
-// (stateDescription --- the three luma zones as whole percents, computed
-// by the JVM-tested EditorHistogram.zoneFractions), so a TalkBack user
-// hears the tonal distribution a sighted user sees. There is no honest
-// way to speak a curve; the zones are its summary.
-//
-// Zero pipeline change: the chart is a pure READER of state the preview
-// render already produces (see EditorHistogram's header for where the
-// pixels come from); it renders nothing, commits nothing, and is absent
-// (never a placeholder) until the first preview lands.
-// ---------------------------------------------------------------------------
+// The Adjust panel's live tonal charts (RGB histogram, parade, luminance), pure readers of
+// EditorHistogram state. Channel colors are semantic content, not theme accents.
 
 /**
- * The live tonal chart: [histogram]'s three channel curves as filled
- * paths under Screen blending, normalized by the histogram's own peak.
- * Fixed 64dp height (the chip-row height language --- a taller chart
- * would push the tune rail out of the panel's 300dp window); width
- * fills the panel. An empty histogram (peak 0) draws nothing but still
- * announces its (empty) state.
+ * The live tonal chart: three channel curves as filled paths under Screen blending,
+ * normalized by the peak. Fixed 64dp height (keeps the panel's 300dp window intact);
+ * an empty histogram draws nothing but still announces its state.
  */
 @Composable
 internal fun HistogramChart(
@@ -69,8 +43,7 @@ internal fun HistogramChart(
         midtonesPct,
         highlightsPct,
     )
-    // The channel identity colours (semantic content --- see the file
-    // header; NOT theme accents).
+    // Channel identity colors: semantic content, not theme accents.
     val redTint = Color(0xFFF0524A)
     val greenTint = Color(0xFF57B560)
     val blueTint = Color(0xFF4C8BF5)
@@ -87,9 +60,7 @@ internal fun HistogramChart(
         if (peak <= 0) return@Canvas // the empty count: nothing to draw
         val w = size.width
         val h = size.height
-        // One polyline per channel: bin index mapped across the width,
-        // the bin count (over the peak) down from the top, closed along
-        // the bottom. 256 vertices --- the bins ARE the curve.
+        // One filled polyline per channel: bin index across the width, count/peak down, closed at bottom.
         fun channelPath(bins: IntArray): Path = Path().apply {
             moveTo(0f, h)
             for (bin in bins.indices) {
@@ -104,33 +75,16 @@ internal fun HistogramChart(
     }
 }
 
-// ---------------------------------------------------------------------------
-// r68: the photo pro round's scopes (Phase 2 of the editor rebirth plan,
-// docs/editor/lilypad-design.md). The Adjust panel leads with a scope-mode
-// row --- Histogram / Parade / Zebra --- and the chart below it follows the
-// mode: the r66 overlaid RGB histogram, or the PARADE (the three channel
-// bin arrays side by side, the colorist's scope: a channel's TONAL SPREAD
-// reads at a glance, and a color cast shows as one panel's mass sitting
-// higher or lower than its siblings'). The Zebra chip is an independent
-// TOGGLE (it overlays the photo itself, not the panel); the chart modes
-// are a radio pair.
-// ---------------------------------------------------------------------------
+// Scope modes: the overlaid RGB histogram, the Parade (three channel panels side by side),
+// and the Luminance scope; the Zebra chip is an independent toggle over the photo.
 
 /** The Adjust panel's scope chart modes; the Zebra overlay rides beside them as an independent toggle. */
 internal enum class PhotoScopeMode { Histogram, Parade, Luminance }
 
 /**
- * The scope-mode row (r68): the Histogram/Parade radio pair plus the Zebra
- * toggle, in the FilterChip language the panel rows already use. Selected
- * chips read as the r52 ember pill through the theme's selection mechanism
- * (zero per-chip overrides, the deck's convention).
- *
- * The row's end carries the CURVE entry chip (r68): the curve deck is the
- * LilypadDeck's Full state, entered from the scope neighborhood where the
- * tonal instruments live. The chip is a toggle-shaped ENTRY, not a chart
- * mode --- opening it expands the deck to Full and swaps in the curve
- * editor --- and it rides behind [LilypadFlags.curveDeckEnabled] (the
- * reviewed revert seam; off reads as the scope row without it).
+ * Scope-mode row: Histogram/Parade/Luminance radio chips, the Zebra toggle, and the curve
+ * deck entry chip. The entry chip is a toggle-shaped ENTRY, not a chart mode — opening it
+ * expands the deck to Full; gated behind [LilypadFlags.curveDeckEnabled] (off omits it).
  */
 @Composable
 internal fun ScopeRow(
@@ -158,9 +112,7 @@ internal fun ScopeRow(
             label = { Text(stringResource(R.string.editor_r68_scope_parade)) },
             modifier = Modifier.padding(end = 8.dp),
         )
-        // r74: the third tap-cycle mode (the plan doc's cycle: "histogram
-        // -> RGB parade -> luminance") --- the tonal spread free of
-        // colour, the master curve's own scope.
+        // Third mode: the tonal spread free of colour (the master curve's scope).
         FilterChip(
             selected = scopeMode == PhotoScopeMode.Luminance,
             onClick = { onScopeModeChange(PhotoScopeMode.Luminance) },
@@ -168,8 +120,7 @@ internal fun ScopeRow(
             label = { Text(stringResource(R.string.editor_scope_luminance)) },
             modifier = Modifier.padding(end = 8.dp),
         )
-        // An independent toggle, not a mode: the zebra paints the PHOTO,
-        // so it rides beside whichever chart the panel shows.
+        // Independent toggle, not a mode: zebra paints the photo, riding beside any chart.
         FilterChip(
             selected = zebraActive,
             onClick = { onZebraActiveChange(!zebraActive) },
@@ -177,10 +128,7 @@ internal fun ScopeRow(
             label = { Text(stringResource(R.string.editor_r68_scope_zebra)) },
             modifier = Modifier.padding(end = 8.dp),
         )
-        // The curve deck's entry: the Full-state surface, opened from
-        // the scope row it belongs to (the tonal board's fourth
-        // instrument). Collapsed/Half deck states keep their current
-        // content behavior --- the chip only ever EXPANDS to Full.
+        // Curve deck entry: only ever expands the deck to Full; other deck states unaffected.
         if (LilypadFlags.curveDeckEnabled) {
             FilterChip(
                 selected = curveDeckOpen,
@@ -193,18 +141,9 @@ internal fun ScopeRow(
 }
 
 /**
- * The RGB parade (r68): the three channel bin arrays as side-by-side
- * filled panels --- red, green, blue left to right, the tonal axis
- * running left (black) to right (white) inside each third, the count
- * normalized by the histogram's own peak. The Lilypad frame around the
- * data: a reed hairline grid (the tonal quarter marks inside each third,
- * hairline separators between them), the channel tints as the panels'
- * fills. No labels --- the bins ARE the axis, exactly like the histogram
- * the chart shares its row with.
- *
- * The a11y contract is the histogram's, verbatim: the chart announces its
- * NAME and its STATE (the three luma zones as whole percents --- there is
- * no honest way to speak three curves; the zones are their summary).
+ * The RGB parade: red/green/blue filled panels left to right, tonal axis black-to-white
+ * within each third, normalized by the peak; hairline separators + quarter marks, no
+ * labels. A11y mirrors the histogram: name + state (luma zones as percents).
  */
 @Composable
 internal fun ParadeChart(
@@ -219,8 +158,7 @@ internal fun ParadeChart(
         midtonesPct,
         highlightsPct,
     )
-    // The channel identity colors (semantic content --- the histogram's,
-    // verbatim; NOT theme accents).
+    // Channel identity colors: semantic content, not theme accents (same as the histogram).
     val redTint = Color(0xFFF0524A)
     val greenTint = Color(0xFF57B560)
     val blueTint = Color(0xFF4C8BF5)
@@ -239,9 +177,7 @@ internal fun ParadeChart(
         val w = size.width
         val h = size.height
         val third = w / 3f
-        // One polyline per channel inside its third: bin index mapped
-        // across the third's width, the bin count (over the peak) down
-        // from the top, closed along the bottom.
+        // One filled polyline per channel inside its third; closed along the bottom.
         fun channelPath(bins: IntArray, x0: Float): Path = Path().apply {
             moveTo(x0, h)
             for (bin in bins.indices) {
@@ -253,8 +189,7 @@ internal fun ParadeChart(
         drawPath(channelPath(histogram.red, 0f), redTint, alpha = 0.75f)
         drawPath(channelPath(histogram.green, third), greenTint, alpha = 0.75f)
         drawPath(channelPath(histogram.blue, third * 2f), blueTint, alpha = 0.75f)
-        // The reed hairline grid: the two channel separators plus the
-        // tonal quarter marks inside each third (bins 64, 128, 192).
+        // Hairline grid: channel separators + tonal quarter marks inside each third.
         val hairline = 1.dp.toPx()
         for (i in 1..2) {
             val x = third * i
@@ -271,12 +206,8 @@ internal fun ParadeChart(
 }
 
 /**
- * The luminance histogram (r74, the scope cycle's third mode): ONE
- * filled curve over the Rec.601 luma bins --- the tonal spread free of
- * colour, the scope the MASTER curve moves. The paper ink fill (the
- * neutral family --- this scope carries no channel identity), the
- * histogram's own frame conventions: quarter grid, peak normalization,
- * the a11y name + zone-state contract, verbatim.
+ * The luminance scope: one filled curve over Rec.601 luma bins, neutral paper-ink fill
+ * (no channel identity here); quarter grid + peak normalization as in the histogram.
  */
 @Composable
 internal fun LuminanceChart(
@@ -285,11 +216,9 @@ internal fun LuminanceChart(
     modifier: Modifier = Modifier,
 ) {
     val name = stringResource(R.string.editor_scope_luminance)
-    // Hoisted out of the Canvas draw lambda (the DrawScope is not
-    // composable --- the ParadeChart's own hoist, verbatim).
+    // Hoisted out of the Canvas draw lambda (DrawScope is not composable).
     val gridTint = MaterialTheme.colorScheme.outlineVariant
-    // The state rides the zone percents computed by the caller from the
-    // same pixels (passed in --- this chart holds only the bins).
+    // Zone percents for a11y state are computed by the caller; this chart holds only bins.
     Canvas(
         modifier = modifier
             .fillMaxWidth()
@@ -299,7 +228,7 @@ internal fun LuminanceChart(
         val w = size.width
         val h = size.height
         val hairline = 1.dp.toPx()
-        // The reed hairline quarter grid (the histogram's, verbatim).
+        // Hairline quarter grid, as in the histogram.
         for (quarter in 1..3) {
             val x = w * quarter / 4f
             drawLine(gridTint, Offset(x, 0f), Offset(x, h), hairline)

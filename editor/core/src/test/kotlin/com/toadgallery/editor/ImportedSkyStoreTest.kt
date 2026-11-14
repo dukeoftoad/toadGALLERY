@@ -9,13 +9,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/**
- * The user-imported sky store (r41; the `ImportedFrameStoreTest` shape,
- * sky-sized): PNG/WebP magic-before-write, verbatim bytes, derived
- * collision-suffixed ids that can never shadow the bundled set, the
- * listing-as-index, idempotent delete --- and a rejection leaving the
- * store byte-identical.
- */
+/** Imported sky store: magic checks before write, verbatim bytes, non-shadowing ids, idempotent delete. */
 class ImportedSkyStoreTest {
 
     @get:Rule

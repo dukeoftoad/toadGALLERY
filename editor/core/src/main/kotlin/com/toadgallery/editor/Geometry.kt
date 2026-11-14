@@ -7,38 +7,29 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * The geometry toolset (r30, Phase 6 v1 slice 1). Pure grid math over the
- * same IntArray-ARGB pixels [PixelAdjuster] works on; every op is
- * identity-exact at its zero state and JVM-tested:
+ * The geometry toolset: pure grid math over the same IntArray-ARGB pixels
+ * [PixelAdjuster] works on; every op is identity-exact at its zero state and
+ * JVM-tested.
  *
- *  - [CropRect]: a normalized (0..1) crop rectangle with clamping,
- *    reordering and a minimal-span floor, convertible to a pixel rect.
- *  - [CropAspect]: preset ratios (FREE / ORIGINAL / 1:1 / 4:3 / 3:4 /
- *    16:9 / 9:16) fitted as the largest centered rect of that ratio
- *    inside a box.
- *  - [flipPixels]: horizontal / vertical mirroring.
- *  - [straightenPixels]: arbitrary-angle rotation (positive = clockwise,
- *    the straighten-slider convention) around the image centre on an
- *    EXPANDED canvas (the bounding box of the rotated corners), corners
- *    outside the source filling transparent, interior sampled bilinearly.
- *  - [PerspectiveQuad] + [perspectiveWarp]: the quad-pull correction ---
- *    four corner displacements (clamped to a quarter of the corresponding
- *    dimension); the warped quad is stretched to the full output frame
- *    (the crop-with-perspective semantics: the dragged region becomes the
- *    frame), sampled bilinearly.
+ *  - [CropRect]: normalized (0..1) crop rect with clamping, reordering and a
+ *    minimal-span floor; [CropAspect]: preset ratios fitted as the largest
+ *    centered rect inside a box; [flipPixels]: H/V mirroring;
+ *  - [straightenPixels]: arbitrary-angle rotation (positive = clockwise, the
+ *    straighten-slider convention) onto an EXPANDED canvas (bounding box of the
+ *    rotated corners, rounded UP so no rotated pixel is cut), transparent
+ *    outside the source, bilinear inside;
+ *  - [PerspectiveQuad] + [perspectiveWarp]: quad-pull correction, corner
+ *    displacements clamped to a quarter dimension, warped quad stretched to the
+ *    full output frame.
  *
- * Pixel-centre convention (documented, consistent): pixel (x, y) has its
- * centre AT (x, y); the canvas centre is ((w-1)/2, (h-1)/2). This makes
- * every zero-state EXACTLY the identity (a 0-degree straighten or an
- * identity quad re-samples every pixel onto itself).
+ * Pixel-centre convention: pixel (x, y) has its centre AT (x, y); canvas centre
+ * is ((w-1)/2, (h-1)/2) — makes every zero state exactly the identity.
  */
 
 /** The shared geometry result: an output grid that may change dimensions. */
 data class GeometryResult(val pixels: IntArray, val width: Int, val height: Int)
 
-// ---------------------------------------------------------------------------
-// Crop
-// ---------------------------------------------------------------------------
+// ---- Crop ----
 
 /** A normalized crop rect: every coordinate in [0, 1] over the image. */
 data class CropRect(val left: Double, val top: Double, val right: Double, val bottom: Double) {
@@ -74,11 +65,9 @@ data class CropRect(val left: Double, val top: Double, val right: Double, val bo
         const val MIN_SPAN: Double = 1.0 / 512.0
 
         /**
-         * The inverse of [toPixels] (r32): a pixel rect over a w x h frame
-         * back to normalized coordinates, normalized on the way out. The
-         * crop-preset UI used to do this division inline; one tested pure
-         * function means the preset math and the codec's normalization can
-         * never drift apart.
+         * The inverse of [toPixels]: a pixel rect over a w x h frame back to
+         * normalized coordinates, normalized on the way out — preset math and
+         * codec normalization can never drift apart.
          */
         fun fromPixelRect(rect: PixelRect, width: Int, height: Int): CropRect {
             require(width > 0 && height > 0) { "frame dimensions must be positive ($width x $height)" }
@@ -152,9 +141,7 @@ fun cropPixels(pixels: IntArray, width: Int, height: Int, rect: PixelRect): Geom
     return GeometryResult(out, outW, outH)
 }
 
-// ---------------------------------------------------------------------------
-// Flip
-// ---------------------------------------------------------------------------
+// ---- Flip ----
 
 /** Mirrors the grid horizontally or vertically; returns a new grid. */
 fun flipPixels(pixels: IntArray, width: Int, height: Int, horizontal: Boolean): IntArray {
@@ -173,9 +160,7 @@ fun flipPixels(pixels: IntArray, width: Int, height: Int, horizontal: Boolean): 
     return out
 }
 
-// ---------------------------------------------------------------------------
-// Straighten
-// ---------------------------------------------------------------------------
+// ---- Straighten ----
 
 /**
  * Bilinear sample at continuous coordinates with edge clamping.
@@ -216,11 +201,10 @@ private fun mix2(a: Int, b: Int, t: Double): Int =
 
 /**
  * Straighten: rotates by [angleDeg] degrees (positive = CLOCKWISE, the
- * straighten-slider convention) around the image centre, onto an expanded
- * canvas --- the bounding box of the rotated corners, rounded UP so no
- * rotated pixel is ever cut. Outside-the-source points fill transparent;
- * inside points are sampled bilinearly. 0 degrees is EXACTLY the identity
- * (same grid, same pixels).
+ * straighten-slider convention) around the image centre onto an expanded canvas
+ * (the bounding box of the rotated corners, rounded UP so no rotated pixel is
+ * ever cut). Outside-the-source points fill transparent; inside points sampled
+ * bilinearly. 0 degrees is EXACTLY the identity.
  */
 fun straightenPixels(pixels: IntArray, width: Int, height: Int, angleDeg: Double): GeometryResult {
     if (angleDeg == 0.0) return GeometryResult(pixels, width, height)
@@ -253,15 +237,13 @@ fun straightenPixels(pixels: IntArray, width: Int, height: Int, angleDeg: Double
     return GeometryResult(out, outW, outH)
 }
 
-// ---------------------------------------------------------------------------
-// Perspective
-// ---------------------------------------------------------------------------
+// ---- Perspective ----
 
 /**
- * The perspective quad: four corner DISPLACEMENTS in pixels, each from the
- * image's own corresponding corner. Displacements are clamped to a quarter
- * of the corresponding dimension before use ([clamped]) --- a quad that
- * could fold or escape the image is unreachable by construction.
+ * The perspective quad: four corner DISPLACEMENTS in pixels from the image's
+ * own corners, clamped to a quarter of the corresponding dimension before use
+ * ([clamped]) — a quad that could fold or escape the image is unreachable by
+ * construction.
  */
 data class PerspectiveQuad(
     val tlX: Double, val tlY: Double,
@@ -283,9 +265,9 @@ data class PerspectiveQuad(
     }
 
     /**
-     * The bilinear map of the unit square onto the (displaced) quad, in
-     * image pixel coordinates: (u, v) in [0,1]^2 -> the quad's point.
-     * The identity quad maps (u, v) to (u*(w-1), v*(h-1)) exactly.
+     * The bilinear map of the unit square onto the (displaced) quad, in image
+     * pixel coordinates. The identity quad maps (u, v) to (u*(w-1), v*(h-1))
+     * exactly.
      */
     fun point(u: Double, v: Double, width: Int, height: Int): Pair<Double, Double> {
         val x0 = tlX
@@ -309,12 +291,10 @@ data class PerspectiveQuad(
 }
 
 /**
- * Perspective correction: the warped quad (the dragged region) is
- * stretched to the FULL output frame --- output (x, y) samples the quad's
- * bilinear map at (x/(w-1), y/(h-1)). The identity quad is EXACTLY the
- * identity transform (every output pixel re-samples its own source
- * pixel); a displaced quad puts the dragged corners exactly at the
- * output corners.
+ * Perspective correction: the warped quad (the dragged region) is stretched to
+ * the FULL output frame — output (x, y) samples the quad's bilinear map at
+ * (x/(w-1), y/(h-1)). The identity quad is EXACTLY the identity transform; a
+ * displaced quad puts the dragged corners exactly at the output corners.
  */
 fun perspectiveWarp(
     pixels: IntArray,

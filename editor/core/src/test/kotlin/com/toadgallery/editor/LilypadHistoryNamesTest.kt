@@ -3,15 +3,7 @@ package com.toadgallery.editor
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The history strip's naming JVM pins (r68, the photo pro round): every
- * family diffs to its semantic change, the priority order holds for the
- * wide reverts, and the honest generic answers a diff no family
- * describes.
- *
- * Pure JVM, no compose/android (ADR-0011) --- this class is one of the
- * Lilypad-prefixed set the editor CI filter runs.
- */
+/** History-strip naming pins: per-family semantic diffs, revert priority order, honest generic fallback. */
 class LilypadHistoryNamesTest {
 
     private val base = EditRecipe()
@@ -72,8 +64,7 @@ class LilypadHistoryNamesTest {
             LilypadHistoryNames.Look("warm-film", 80),
             diff(base.copy(lut = LutSelection("warm-film", 80))),
         )
-        // A deselection from a selected state (the None card): the
-        // empty id, the dialed-out intensity.
+        // A deselection from a selected state (the None card): empty id, dialed-out intensity.
         assertEquals(
             LilypadHistoryNames.Look("", 0),
             LilypadHistoryNames.changeBetween(
@@ -210,8 +201,7 @@ class LilypadHistoryNamesTest {
 
     @Test
     fun `a wide revert names the adjustment family first`() {
-        // A Reset-shaped commit: sliders, curve, look and geometry all
-        // revert at once --- the everyday family reads first.
+        // A Reset-shaped commit: sliders, curve, look and geometry revert at once; adjustments read first.
         val edited = base.copy(
             exposure = 35,
             contrast = -10,
@@ -237,9 +227,8 @@ class LilypadHistoryNamesTest {
 
     @Test
     fun `a schema-only difference no family describes falls back honestly`() {
-        // schemaVersion rides the recipe; nothing else changes. No
-        // family describes it, so the generic chip answers --- never a
-        // wrong specific label.
+        // schemaVersion rides the recipe; nothing else changes. No family describes it, so the
+        // generic chip answers --- never a wrong specific label.
         assertEquals(
             LilypadHistoryNames.Plain(LilypadHistoryNames.Family.Edit),
             LilypadHistoryNames.changeBetween(base, base.copy(schemaVersion = 1)),

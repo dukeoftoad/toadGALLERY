@@ -5,40 +5,32 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The LUT filter engine (r33, Phase 7 v2): parses the Adobe `.cube` 3D LUT
- * format and samples it with trilinear interpolation, blended by an
- * intensity factor.
+ * The LUT filter engine: parses the Adobe `.cube` 3D LUT format and samples it with trilinear
+ * interpolation, blended by an intensity factor. PURE Kotlin (no Android imports), JVM-testable;
+ * only the asset loader ([BundledLuts]) touches the platform (via an injected stream opener).
  *
- * The engine is PURE Kotlin (no Android imports) so it is JVM-testable
- * exactly like the rest of the r30 pipeline core. Only the asset LOADER
- * ([BundledLuts]) touches the platform (via an injected stream opener).
- *
- * Format contract (the subset this parser accepts --- anything else is a
- * structured [CubeLutParser.Result.Invalid], never a crash):
+ * Format contract (the accepted subset --- anything else is a structured
+ * [CubeLutParser.Result.Invalid], never a crash):
  *  - `TITLE "..."` optional, at most once; the human-readable look name.
  *  - `LUT_3D_SIZE N` REQUIRED, exactly once, before any data line;
- *    N in 2..64 (the spec allows any size >= 2; 64 caps a LUT at 262144
- *    samples = ~3 MB of floats, far beyond any bundled look).
+ *    N in 2..64 (64 caps a LUT at 262144 samples = ~3 MB of floats).
  *  - `DOMAIN_MIN r g b` / `DOMAIN_MAX r g b` optional, at most once each;
  *    defaults 0 0 0 / 1 1 1. A degenerate (zero-width) channel domain is
  *    rejected --- a sampler could never place an input inside it.
- *  - `LUT_1D_SIZE` is REJECTED: this is a 3D LUT engine; a 1D LUT file is
- *    a different tool, and silently mis-reading it would be a lie.
+ *  - `LUT_1D_SIZE` is REJECTED: this is a 3D LUT engine; silently
+ *    mis-reading a 1D file would be a lie.
  *  - `RANGE_MIN` / `RANGE_MAX` / `RANGE` lines are ACCEPTED and IGNORED:
- *    this engine clamps every OUTPUT sample to [0, 1], which is the
- *    default output range; a file declaring a custom output range still
+ *    every OUTPUT sample clamps to [0, 1], so a custom output range still
  *    renders (clamped) rather than failing the whole look.
  *  - Blank lines and `#` comment lines are tolerated anywhere.
  *  - Data lines are exactly three whitespace-separated finite floats, in
- *    RED-GREEN-BLUE order, R index incrementing fastest (line 1 is the
- *    (0,0,0) grid point, line 2 is (1,0,0), ...), exactly N^3 of them.
+ *    RED-GREEN-BLUE order, R index incrementing fastest, exactly N^3 of them.
  *    Table values outside [0,1] are tolerated (extended-range LUTs) and
  *    clamped at SAMPLE time, never at parse time --- the file is the
  *    author's data; the output pixel range is the engine's policy.
  *
- * A parsed table is IMMUTABLE and shared: the editor holds at most the
- * bundled set in memory (17^3 samples = ~60 KB each), and sampling never
- * mutates it.
+ * A parsed table is IMMUTABLE and shared (17^3 samples = ~60 KB per bundled look); sampling
+ * never mutates it.
  */
 class CubeLut(
     /** The registry id ("" when parsed standalone, e.g. in tests). */
@@ -63,10 +55,8 @@ class CubeLut(
     }
 
     /**
-     * The allocation-free sampler core (the pixel loop below runs at
-     * preview resolutions --- millions of samples --- so every sample
-     * must be garbage-free; [sample] is the allocating convenience
-     * wrapper for single probes).
+     * The allocation-free sampler core (the pixel loop runs at preview resolutions --- millions
+     * of samples --- so every sample must be garbage-free; [sample] wraps it for single probes).
      */
     fun sampleInto(rIn: Double, gIn: Double, bIn: Double, out: DoubleArray) {
         // Grid coordinates inside [0, N-1], clamped to the domain edges.
@@ -103,11 +93,9 @@ class CubeLut(
     }
 
     /**
-     * Applies this look to an ARGB pixel array IN PLACE at [intensity]
-     * (0.0 = the original colour untouched, 1.0 = the full look; the
-     * blend is a straight lerp per channel). The ALPHA channel is never
-     * touched --- a look must not punch holes in transparent regions
-     * (straighten's expanded canvas fills with transparent pixels).
+     * Applies this look to an ARGB pixel array IN PLACE at [intensity] (0.0 = untouched,
+     * 1.0 = full look; a straight per-channel lerp). The ALPHA channel is never touched ---
+     * a look must not punch holes in transparent regions.
      */
     fun applyTo(pixels: IntArray, intensity: Double) {
         if (intensity <= 0.0) return
@@ -201,8 +189,7 @@ object CubeLutParser {
                     }
                 }
                 "RANGE_MIN", "RANGE_MAX", "RANGE" -> {
-                    // Accepted and ignored: outputs clamp to [0, 1] (the default
-                    // output range) regardless of a declared custom range.
+                    // Accepted and ignored: outputs clamp to [0, 1] regardless of a declared custom range.
                 }
                 else -> {
                     // A data line: exactly three finite floats.

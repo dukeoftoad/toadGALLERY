@@ -11,9 +11,8 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
- * The user-imported `.cube` store (r33 extension, Phase 7): the
- * parse-before-write import, the derived collision-free ids, the
- * directory-listing-as-index, and the delete semantics.
+ * The user-imported `.cube` store: parse-before-write import, collision-free ids,
+ * directory-listing-as-index, and delete semantics.
  */
 class ImportedLutStoreTest {
 
@@ -97,8 +96,7 @@ class ImportedLutStoreTest {
     @Test
     fun `an import can never shadow a bundled look id`() {
         val store = store()
-        // The bundled registry owns "warm-film"; an import deriving the
-        // same id is suffixed --- the merged registry's keys stay disjoint.
+        // The bundled registry owns "warm-film"; a clashing import id is suffixed (keys stay disjoint).
         val entry = imported(store.import(cubeBytes("Warm Film"), null))
         assertEquals("warm-film-2", entry.id)
         assertNull(BundledLuts.byId(entry.id)) // not a bundled id

@@ -1,9 +1,9 @@
 package com.toadgallery.editor.video
 
 /**
- * The frame-extraction plan (r42, decision 5): ONE user-chosen timestamp
- * within the clip's duration, exported as a new JPEG or PNG MediaStore
- * entry. Bounds are validated, never clamped --- the honest refusal shape.
+ * The frame-extraction plan: ONE user-chosen timestamp within the clip's duration,
+ * exported as a new JPEG or PNG MediaStore entry. Bounds are validated, never clamped
+ * --- the honest refusal shape.
  */
 data class FrameExtractPlan(
     /** The source clip's duration in milliseconds (the fact). */

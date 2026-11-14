@@ -8,14 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r37 regions on the ADR-0011 sidecar wire (the contract's
- * round-trip set, the family conventions): a pre-r37 sidecar loads clean
- * (even one carrying r34 text + r35 stickers + r36 strokes --- the
- * round-four stacking proof), the full round-trip is lossless, the
- * unknown-kind skip, points tolerance, clamps and defaults --- a
- * hand-edited sidecar never loses its whole session.
- */
+/** Region layers on the sidecar wire: legacy loads, lossless round-trip, skips, points tolerance, clamps. */
 class RegionLayersRecipeTest {
 
     private fun valid(json: String): EditRecipe =
@@ -44,7 +37,7 @@ class RegionLayersRecipeTest {
         return JSONObject().put("schemaVersion", 1).put("mosaicRegions", arr).toString()
     }
 
-    // ---- The absent key (every pre-r37 sidecar in the wild) ----
+    // ---- The absent key ----
 
     @Test
     fun `a pre-r37 sidecar loads with no regions`() {
@@ -56,8 +49,7 @@ class RegionLayersRecipeTest {
 
     @Test
     fun `a pre-r37 sidecar carrying text, stickers and strokes keeps them intact`() {
-        // The stacking proof for round four: all three earlier containers
-        // are untouched by r37's key.
+        // All three earlier containers are untouched by the regions key.
         val json = JSONObject()
             .put("schemaVersion", 1)
             .put(

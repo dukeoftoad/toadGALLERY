@@ -20,33 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
-// ---------------------------------------------------------------------------
-// The r57 panel seam (F-58a): the Geometry (crop) tool panel, extracted
-// VERBATIM from `EditActivity.EditorContent`'s `PhotoScreen.Crop` branch.
-//
-// The move itself is the point (the r56 chrome move's rule): a panel that
-// composes in isolation is a panel the screenshot harness can pin. The body
-// is the r32 geometry contract, unchanged; the chassis state it read/wrote
-// arrives as explicit value + `on...Change` pairs (the state-hoisting
-// pattern), so every commit-on-release behavior is bit-identical --- the
-// committed Roborazzi chassis baselines are the regression proof.
-//
-// r58b (F-58b): the straighten slider converts to the r56 `LabeledSlider`
-// --- label + live value pill + double-tap-to-neutral (0 deg). The r32
-// live-draft contract is verbatim (tick writes the "straighten" draft,
-// release commits through `commit`).
-//
-// r68 (the photo pro round, docs/editor/lilypad-design.md): the straighten
-// ROW becomes the straighten DIAL ([LilypadDial] --- the ProSlider's rotary
-// sibling; a value that IS an angle finally reads as one), widened to the
-// recipe's own +/-45 validation bound the old +/-15 track never used, and
-// the panel gains the PERSPECTIVE block the quad has been waiting for since
-// the engine landed it: two keystone ProSlider rows (vertical + horizontal)
-// over [LilypadKeystoneMath]'s fixed two-percent carve of the quad. The
-// corner drag is Phase 4's; the sliders are its honest stand-in. Both
-// families keep the r32 live-draft contract verbatim: tick writes the
-// draft, release commits ONE recipe through `commit` and clears.
-// ---------------------------------------------------------------------------
+// The Geometry (crop) tool panel, state-hoisted as value + on...Change pairs. The straighten
+// dial and keystone sliders keep the live-draft contract: tick drafts, release commits ONE recipe.
 
 @Composable
 internal fun CropPanel(
@@ -83,11 +58,8 @@ internal fun CropPanel(
                 tint = MaterialTheme.colorScheme.onBackground,
             )
         }
-        // r32 a11y: both flip toggles are FilterChips. A text
-        // label inside an IconButton overflows the 48dp target, and
-        // a clickable Text was a sub-48dp touch target; a selected
-        // chip gives the proper target, the state highlight AND the
-        // selected/not-selected announcement next to the on/off text.
+        // Flip toggles are FilterChips for a11y: an IconButton's text label overflows the 48dp
+        // target; a chip gives the proper target, the state highlight and the a11y announcement.
         FilterChip(
             selected = committed.horizontalFlip,
             onClick = {
@@ -129,14 +101,10 @@ internal fun CropPanel(
             modifier = Modifier.padding(end = 8.dp),
         )
     }
-    // r32: the straighten control follows the drag live (the label, the
-    // readout, the preview) exactly like the adjustment sliders. The
-    // value stays a Double so a fractional sidecar straighten (e.g. 7.5)
-    // displays exactly, not truncated. r68: the DIAL --- the value IS its
-    // dial angle, the range is the recipe's own +/-45 validation window
-    // (the old +/-15 track was narrower than the engine it fed), and the
-    // r32 live-draft contract is verbatim: tick writes the "straighten"
-    // draft, release commits.
+    // The straighten dial follows the drag live (label, readout, preview). The value
+    // stays a Double so a fractional sidecar straighten (e.g. 7.5) displays exactly,
+    // not truncated; the range is the recipe's +/-45 validation window. Live-draft:
+    // tick writes the "straighten" draft, release commits.
     val straightenLive = draft?.takeIf { it.first == "straighten" }?.second?.toDouble()
         ?: committed.straightenDeg
     LilypadDial(
@@ -162,13 +130,9 @@ internal fun CropPanel(
     )
 
     // ---- Perspective: the two keystone rows over the quad ----
-    // The rows read their percents back out of the committed quad (the
-    // recipe stores the QUAD, not the knobs --- LilypadKeystoneMath's
-    // read-back), drafted against the PREVIEW grid the commit builds on,
-    // so what the drag shows is what the release lands. r72: the corner
-    // overlay owns the canvas's drag surface on this screen; the rows
-    // keep the model's a11y path (one model, two surfaces) and gain the
-    // hint that names the gesture.
+    // The rows read their percents back out of the committed quad (the recipe stores the
+    // QUAD, not the knobs), drafted against the PREVIEW grid the commit builds on. The
+    // corner overlay owns the canvas's drag surface; the rows keep the model's a11y path.
     Text(
         text = stringResource(R.string.editor_r68_section_perspective),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -183,11 +147,9 @@ internal fun CropPanel(
     }
 
     /**
-     * The keystone commit: ONE recipe per release, the quad built from
-     * the drafted knob and the other knob's committed read-back, on the
-     * preview grid. A draft with no decoded base (the pre-decode window;
-     * the render has nothing to preview either) drops honestly --- the
-     * paint gesture's own rule, never a silently invented quad.
+     * ONE recipe per release: the quad built from the drafted knob and the other knob's
+     * committed read-back, on the preview grid. A draft with no decoded base drops (never
+     * a silently invented quad).
      */
     fun commitKeystone(key: String) {
         val d = draft
@@ -258,7 +220,7 @@ internal fun CropPanel(
     // ---- Crop aspect presets (centered fits over the post-geometry frame) ----
     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
         listOf(
-            null to CropAspect.FREE, // the ratios are locale-neutral; the word is not (r32)
+            null to CropAspect.FREE, // the ratios are locale-neutral; the word is not
             "1:1" to CropAspect.SQUARE,
             "4:3" to CropAspect.RATIO_4_3,
             "3:4" to CropAspect.RATIO_3_4,
@@ -278,9 +240,8 @@ internal fun CropPanel(
                             previewBase?.height ?: 1,
                         )
                         val fitted = aspect.fit(plan.cropPixelRect, plan.postGeometryWidth, plan.postGeometryHeight)
-                        // r32: the pixel-rect -> normalized conversion
-                        // is the tested pure inverse (CropRect.fromPixelRect),
-                        // not an inline division that could drift.
+                        // The pixel-rect -> normalized conversion is the tested pure
+                        // inverse (CropRect.fromPixelRect), not an inline division.
                         commit(
                             committed.copy(
                                 crop = CropRect.fromPixelRect(
@@ -302,11 +263,8 @@ internal fun CropPanel(
     }
 }
 
-// ---------------------------------------------------------------------------
-// r68: the keystone draft keys --- one constant per knob, declared beside
-// their only writers/readers (the panel and the chassis's effectiveRecipe
-// branch), so the wire shape greps from either end.
-// ---------------------------------------------------------------------------
+// Keystone draft keys: one constant per knob, declared beside their only writers/readers
+// (the panel and the chassis's effectiveRecipe branch).
 
 /** The vertical keystone's draft key (the "straighten" slot's sibling). */
 internal const val KEYSTONE_VERTICAL = "keystone-v"

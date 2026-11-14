@@ -5,13 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The GIF encoder (r42): the header structure, the palette mapping, the
- * delay math, the sub-block splitting and --- the load-bearing pin --- a
- * full LZW round-trip through an INDEPENDENT decoder living in this test
- * (written from the decoder-side convention, not from the encoder), plus
- * the adversarial dictionary-growth case that pushes the code size to 12
- * bits and forces at least one CLEAR reset. The encoder was also
- * cross-validated against Pillow during development.
+ * GIF encoder pins: header structure, palette mapping, delay math, sub-block splitting,
+ * and a full LZW round-trip through an INDEPENDENT in-test decoder incl. the forced-CLEAR case.
  */
 class GifEncoderTest {
 
@@ -148,12 +143,8 @@ class GifEncoderTest {
         ByteArray(argb.size) { i -> GifEncoder.paletteIndex(argb[i]).toByte() }
 
     /**
-     * The independent decoder (the decoder-side convention): reads
-     * LSB-first codes, grows its code size when ITS next slot reaches the
-     * boundary, handles the first-code-after-clear and the KwKwK case. If
-     * the encoder's growth rule were off by one, this round-trip breaks.
-     * Consumes the RAW lzw stream (the sub-block framing is a separate
-     * pin above).
+     * Independent decoder (decoder-side convention): LSB-first codes, growth at ITS next-slot
+     * boundary (an off-by-one encoder rule breaks this), first-code-after-clear, KwKwK; raw stream.
      */
     private fun decodeLzw(indices: ByteArray): ByteArray {
         val stream = GifEncoder.lzwEncode(indices)
@@ -188,9 +179,7 @@ class GifEncoderTest {
                 codeSize = GifEncoder.MIN_CODE_SIZE + 1
                 nextSlot = GifEncoder.FIRST_FREE_CODE
                 prev = null
-                dict.clear() // stale entries from the previous segment would
-                // answer a re-used code with the WRONG string --- the
-                // adversarial round-trip pins exactly this
+                dict.clear() // stale entries would answer a re-used code with the WRONG string
                 for (i in 0..255) {
                     dict[i] = byteArrayOf(i.toByte())
                 }

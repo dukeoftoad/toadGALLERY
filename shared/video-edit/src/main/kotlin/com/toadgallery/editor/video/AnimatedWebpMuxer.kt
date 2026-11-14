@@ -1,21 +1,11 @@
 package com.toadgallery.editor.video
 
 /**
- * The project-authored animated WebP muxer (r42): assembles the frames the
- * platform's lossless WebP encoder produces (one static WebP FILE per
- * frame, from Bitmap.compress(WEBP_LOSSLESS) on the Android side) into a
- * minimal animated WebP container --- RIFF/WEBP + a VP8X canvas header +
- * an ANIM chunk + one ANMF chunk per frame carrying the frame's own
- * image-data chunks (ALPH/VP8L) verbatim.
- *
- * Pure Kotlin, JVM-tested: the chunk framing, the minus-one 24-bit
- * canvas encoding, the durations and the payload extraction are pinned by
- * structure tests over hand-built static-WebP byte arrays, and the muxer
- * was cross-validated against Pillow during development (a development
- * harness script outside the repo decoded muxed output back to the source
- * frames). The lossless encoder only exists from Android 11 (API 30) ---
- * the animation preflight refuses WebP below that with an honest message,
- * so this muxer never runs on a device that cannot feed it.
+ * The animated WebP muxer: assembles the platform lossless WebP encoder's per-frame
+ * static WebP files (Bitmap.compress(WEBP_LOSSLESS), Android-side) into a minimal
+ * animated container --- RIFF/WEBP + VP8X canvas header + ANIM + one ANMF per frame
+ * carrying its ALPH/VP8L chunks verbatim. Pure Kotlin, JVM-tested; the lossless
+ * encoder needs API 30+ (the animation preflight refuses WebP below that).
  */
 object AnimatedWebpMuxer {
 
@@ -59,18 +49,15 @@ object AnimatedWebpMuxer {
         body.leShort(0)
         for (frame in frames) {
             val imageChunks = extractImageChunks(frame.fileBytes)
-            // ANMF: frame x/y (0,0), size - 1, duration, blend flags (no
-            // alpha blend needed --- the frames are opaque), then the image
-            // data chunks verbatim (each padded to an even RIFF size).
+            // ANMF: frame x/y (0,0), size - 1, duration, blend flags (frames are opaque,
+            // no alpha blend), then the image data chunks verbatim (padded to even RIFF sizes).
             val anmfBody = ByteWriter()
             writeUint24(anmfBody, 0)
             writeUint24(anmfBody, 0)
             writeUint24(anmfBody, canvasWidthPx - 1)
             writeUint24(anmfBody, canvasHeightPx - 1)
             writeUint24(anmfBody, frame.durationMs)
-            anmfBody.byte(0x02) // no-blend: ANMF flags bit 1 (libwebp reads
-            // frame_info[15] & 2 as the blend method --- 2 = do not blend;
-            // bit 0 is the disposal method, which stays 0 = dispose none)
+            anmfBody.byte(0x02) // ANMF flags bit 1 = no blend (bit 0 = disposal, stays 0)
             for ((fourcc, payload) in imageChunks) {
                 anmfBody.ascii(fourcc)
                 anmfBody.leInt(payload.size)
@@ -93,10 +80,9 @@ object AnimatedWebpMuxer {
     }
 
     /**
-     * Extracts the image-data chunks (ALPH, VP8, VP8L) from a static WebP
-     * file, skipping the container-level chunks (VP8X, ANIM, ANMF, ICCP,
-     * EXIF, XMP). The payload bytes are copied verbatim --- the muxer never
-     * re-encodes frame pixels.
+     * Extracts the image-data chunks (ALPH, VP8, VP8L) from a static WebP file, skipping
+     * container-level chunks (VP8X, ANIM, ANMF, ICCP, EXIF, XMP). Payloads are copied
+     * verbatim --- the muxer never re-encodes frame pixels.
      */
     fun extractImageChunks(webpFileBytes: ByteArray): List<Pair<String, ByteArray>> {
         require(webpFileBytes.size >= 12) { "not a WebP file: too short (${webpFileBytes.size} bytes)" }
@@ -119,8 +105,7 @@ object AnimatedWebpMuxer {
                 "ALPH", "VP8 ", "VP8L" -> {
                     chunks.add(fourcc to webpFileBytes.copyOfRange(payloadStart, payloadStart + length))
                 }
-                // container-level chunks are skipped; an already-animated
-                // input is a caller bug, not something to re-wrap.
+                // Container chunks skipped; an already-animated input is a caller bug.
             }
             // chunks are padded to even sizes
             offset = payloadStart + length + (length and 1)

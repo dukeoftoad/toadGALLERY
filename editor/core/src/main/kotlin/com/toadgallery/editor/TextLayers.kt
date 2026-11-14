@@ -1,19 +1,15 @@
 package com.toadgallery.editor
 
 /**
- * The text-layer system (r34, Phase 7 v2; the design contract is
- * `docs/phase-7/text-tool.md`, decision set 1-5).
+ * The text-layer system: pure model + geometry, JVM-tested; only the
+ * Typeface/Paint pass lives on the Android side (`TextRender.kt`), sharing THIS
+ * object's layout math for preview and export — one code path, no second
+ * renderer.
  *
- * Pure Kotlin, JVM-tested (the repo's ADR-0011 convention: the model and
- * geometry are pure; only the Typeface/Paint pass lives on the Android
- * side, in `TextRender.kt`, and shares THIS object's layout math for the
- * preview and the export --- one code path, no second renderer).
- *
- * The tolerance contract mirrors r33's `LutSelection`: a pre-r34 sidecar
- * (or a clean session) has no `textLayers` key and loads byte-clean; an
- * UNRESOLVABLE `fontId` round-trips verbatim (the recipe is the user's
- * data) and degrades to the default face at RENDER time --- never a load
- * failure, never a silent layer drop.
+ * Tolerance: a sidecar with no `textLayers` key loads byte-clean; an
+ * UNRESOLVABLE `fontId` round-trips verbatim (the recipe is the user's data)
+ * and degrades to the default face at RENDER time — never a load failure, never
+ * a silent layer drop.
  */
 data class TextLayer(
     val id: String,
@@ -52,11 +48,7 @@ data class TextLayer(
         const val DEFAULT_SIZE_PCT = 20
         const val DEFAULT_COLOR = 0xFFFFFFFFL
 
-        /**
-         * The next free session id over `existing` ("t1", "t2", ...): one
-         * past the highest numeric suffix seen, so ids never collide within
-         * a session (recipe round-trips preserve them verbatim).
-         */
+        /** The next free session id ("t1", "t2", ...): one past the highest numeric suffix seen. */
         fun newId(existing: Collection<String>): String {
             var max = 0
             for (id in existing) {
@@ -69,14 +61,12 @@ data class TextLayer(
 }
 
 /**
- * The recipe's additive text container: absent (null) = a pre-r34 sidecar
- * or a clean session; empty is normalised BACK to absent by the codec (a
- * layer list that becomes empty after deletions writes no key).
+ * The recipe's additive text container: absent (null) = a clean session; empty
+ * is normalised back to absent by the codec (deletions write no key).
  */
 data class TextLayers(val layers: List<TextLayer>) {
     init {
-        // Ids must be unique: the UI's per-layer controls, the drag target
-        // and undo/redo all re-target layers by id.
+        // Ids must be unique: per-layer controls, drag target and undo/redo re-target by id.
         require(layers.size == layers.map { it.id }.toSet().size) { "duplicate text layer id" }
     }
 
@@ -88,15 +78,13 @@ data class TextLayers(val layers: List<TextLayer>) {
 }
 
 /**
- * The bundled-font registry (r34; the `BundledLuts` pattern). PURE: the
- * platform side turns entries into `Typeface`s (see `TextRender.kt`);
- * the licensing evidence for every entry is `docs/phase-7/bundled-fonts.md`
- * + the §5 ledger rows, and `BundledFontsTest` pins the committed bytes by
- * sha256 at CI time.
+ * The bundled-font registry. Pure: the platform side turns entries into
+ * `Typeface`s (see `TextRender.kt`); `BundledFontsTest` pins the committed bytes
+ * by sha256; each entry's OFL license ships beside its TTF.
  */
 object BundledFonts {
 
-    /** One bundled face: the registry id, the asset file name, the display name (a proper noun --- not localized, like the LUT titles are). */
+    /** One bundled face: registry id, asset file name, display name (a proper noun, not localized). */
     data class Entry(val id: String, val fileName: String, val displayName: String) {
         init {
             require(id.isNotBlank()) { "id must not be blank" }
@@ -125,28 +113,23 @@ object BundledFonts {
     fun licensePath(entry: Entry): String = "fonts/${entry.id}/OFL.txt"
 
     /**
-     * The render-time resolution of a layer's [TextLayer.fontId]: a bundled
-     * id resolves to itself; ANY other value (a version skew, a hand-edited
-     * sidecar) resolves to the default face --- the layer still renders,
-     * the id still round-trips verbatim in the recipe.
+     * Render-time resolution of a layer's fontId: a bundled id resolves to
+     * itself; ANY other value resolves to the default face — the layer still
+     * renders, the id still round-trips verbatim.
      */
     fun effectiveId(id: String): String = if (byId(id) != null) id else DEFAULT_ID
 }
 
 /**
- * The pure layout pass (JVM-tested): turns the recipe's fraction-space
- * layers into pixel-space draw specs IN LIST ORDER (the draw order: layers
- * render in list order, top LAST). The Android compositor executes these
- * specs verbatim; the preview and the export both call [place] through
- * `TextCompositor`, differing only in their origin/canvas arguments, so
+ * The pure layout pass (JVM-tested): fraction-space layers -> pixel-space draw
+ * specs in LIST ORDER (top layer renders last). Preview and export both call
+ * [place] through `TextCompositor`, differing only in origin/canvas arguments —
  * preview ≡ export by construction.
  *
- * Text anchors are fractions of the OUTPUT canvas (`text-tool.md`
- * decision 3): the export passes (0, 0, outW, outH); the preview passes
- * the crop rect's origin and dimensions over the post-geometry frame, so
- * text lands where the crop's output will carry it. Text does NOT move
- * fractionally when a crop changes --- its center is re-expressed in the
- * new output canvas (the documented v1 honesty).
+ * Anchors are fractions of the OUTPUT canvas: export passes (0, 0, outW, outH);
+ * preview passes the crop rect's origin/dimensions over the post-geometry frame.
+ * Text does NOT move fractionally when a crop changes — its center is
+ * re-expressed in the new output canvas.
  */
 object TextLayout {
 
@@ -169,9 +152,8 @@ object TextLayout {
     fun sizePxFor(sizePct: Int, canvasMinEdge: Float): Float = sizePct / 100f * canvasMinEdge
 
     /**
-     * The paint alpha: the color's OWN alpha byte scaled by the opacity
-     * slider, rounded half-up ((a*opacity + 50) / 100 in integer math ---
-     * 0xFF at 100% stays 255; 0xFF at 50% is 128, not 127).
+     * The paint alpha: the color's alpha byte scaled by the opacity slider,
+     * rounded half-up ((a*opacity + 50) / 100) — 0xFF at 50% is 128, not 127.
      */
     fun alphaFor(layer: TextLayer): Int {
         val colorAlpha = ((layer.colorArgb ushr 24) and 0xFFL).toInt()
@@ -179,10 +161,8 @@ object TextLayout {
     }
 
     /**
-     * Places every layer in list order. The fraction clamp happens at
-     * model/parse time; the pixel coerce here is pure defense (a
-     * hand-constructed layer cannot leave 0..1, but the clamp documents
-     * the invariant where it is consumed).
+     * Places every layer in list order. The pixel coerce is pure defense — the
+     * fraction clamp happens at model/parse time.
      */
     fun place(
         layers: List<TextLayer>,

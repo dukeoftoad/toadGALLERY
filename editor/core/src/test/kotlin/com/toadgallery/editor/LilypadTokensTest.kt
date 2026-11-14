@@ -5,24 +5,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The Lilypad token ladder's JVM pins (ADR-0011: the tokens are pure
- * data, so their arithmetic is tested here, on the JVM, where the data
- * lives).
- *
- * The pins are the properties the design language LEANS ON: the ladder
- * climbs strictly by luminance (depth from lightness steps is only honest
- * if the steps are real), the text/accent pairings meet their WCAG
- * contrast floors on the surfaces they render against, every color is a
- * canonical opaque ARGB (no half-transparent accident can slip in), the
- * motion constants are physical (positive, in-range), the type stops are
- * the documented scale, and the haptic vocabulary is exactly the four
- * primitives (a vocabulary that grows silently is a vocabulary nobody
- * learns).
+ * The Lilypad token ladder's pins: luminance-ordered ladder, WCAG contrast floors,
+ * canonical opaque ARGB colors, physical motion, documented type scale, four-primitive haptics.
  */
 class LilypadTokensTest {
 
-    // ---- The WCAG arithmetic (the test's own, like the luminance math
-    // the histogram's zone fractions use --- pure functions of the bits).
+    // ---- The WCAG arithmetic (the test's own; pure functions of the bits) ----
 
     private fun linear(channel: Int): Float {
         val c = channel / 255f

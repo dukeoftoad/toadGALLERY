@@ -8,10 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The per-export metadata-policy choice (r31; contract section 4.4): the
- * launch request's policy is the PRIVACY FLOOR --- the export sheet may
- * strip more for one export, never less; the applied policy is what the
- * result echoes; and the choice never rides the recipe/sidecar.
+ * Per-export metadata-policy choice (contract 4.4): the request's policy is the privacy floor
+ * (strip more, never less); the result echoes the applied policy; the choice never rides the sidecar.
  */
 class ExportPolicyTest {
 
@@ -137,8 +135,7 @@ class ExportPolicyTest {
 
     @Test
     fun `the recipe serialization carries no policy key`() {
-        // The ADR-0011 sidecar must not inherit a privacy decision: a
-        // re-edit of the source starts from the request's floor again.
+        // The sidecar must not inherit a privacy decision: a re-edit starts from the request's floor again.
         val recipe = EditRecipe(quarterTurns = 1, saturation = 40)
         val json = EditRecipeCodec.toJson(recipe)
         assertFalse("policy leaked into the recipe", json.contains("polic", ignoreCase = true))

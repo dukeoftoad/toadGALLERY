@@ -4,18 +4,14 @@ import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
 /**
- * The project-authored animated GIF encoder (r42): GIF89a, a fixed
- * 256-colour global palette (the 216-colour web cube + a 40-step grey
- * tail), the NETSCAPE2.0 loop extension, per-frame graphic control
- * (delay in hundredths, no transparency) and the standard LZW image data
- * with min code size 8. Pure Kotlin, JVM-tested: the test suite carries an
- * independent LZW decoder plus structural pins, and the encoder was
- * cross-validated against Pillow during development (the development
- * harness script lives outside the repo).
+ * Project-authored animated GIF encoder: GIF89a, fixed 256-colour global palette
+ * (216-colour web cube + 40-step grey tail), NETSCAPE2.0 loop extension,
+ * per-frame graphic control (delay in hundredths, no transparency), standard
+ * LZW image data at min code size 8. Pure Kotlin, JVM-tested (independent LZW
+ * decoder + structural pins in the test suite).
  *
- * The quantizer is deliberately simple and honest: nearest cube entry per
- * channel (round(v / 51)), documented as the v1 quality note --- a median
- * cut palette is a recorded follow-up, not a promise.
+ * The quantizer is deliberately simple: nearest cube entry per channel
+ * (round(v / 51)); a median-cut palette is a recorded follow-up.
  */
 object GifEncoder {
 
@@ -38,10 +34,8 @@ object GifEncoder {
     const val MAX_CODE: Int = 4095
 
     /**
-     * The frame delay for a frame interval in milliseconds, in hundredths:
-     * round(ms / 10). GIF's visible-delay convention floors below 2cs, so
-     * the derived delay is clamped UP to 2cs --- an honest note, not a lie
-     * about the interval.
+     * Frame delay (hundredths of a second) for a millisecond interval:
+     * round(ms / 10), clamped UP to 2cs — GIF renders sub-2cs delays unreliably.
      */
     fun delayCsFor(frameIntervalMs: Long): Int {
         require(frameIntervalMs > 0) { "frame interval must be positive, was $frameIntervalMs" }
@@ -150,11 +144,11 @@ object GifEncoder {
     }
 
     /**
-     * The LZW encoder (the GIF variant): clear at the start, code size
-     * grows 9..12 as the dictionary fills, a clear when it hits 4096. The
-     * write-time rule: before writing a code, if the next free code no
-     * longer fits the current size, the size grows (the decoder is one
-     * dictionary entry behind the encoder and grows at the same boundary).
+     * The GIF LZW encoder: clear at the start, code size grows 9..12 as the
+     * dictionary fills, a clear when it hits 4096. Write-time rule: before
+     * writing a code, if the next free code no longer fits the current size,
+     * grow first (the decoder is one dictionary entry behind the encoder and
+     * grows at the same boundary).
      */
     internal fun lzwEncode(indices: ByteArray): ByteArray {
         val bits = BitWriter()
@@ -170,8 +164,7 @@ object GifEncoder {
             if (existing != null) {
                 w = existing
             } else {
-                // the next code to emit may reference anything up to
-                // nextCode --- grow the size first when that overflows.
+                // The next emitted code may reference up to nextCode — grow the size first on overflow.
                 if (nextCode > (1 shl codeSize) && codeSize < 12) {
                     codeSize++
                 }

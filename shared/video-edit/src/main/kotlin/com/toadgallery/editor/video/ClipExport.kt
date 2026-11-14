@@ -1,51 +1,33 @@
 package com.toadgallery.editor.video
 
 /**
- * The multi-clip export request (r70, Phase 3 --- the realization half of
- * F-77's chain): a VALIDATED [ClipTimeline] plus the session-level
- * treatment the whole composition shares (the mute request, the volume
- * gain, the nine ADR-0012 adjustments, the container), in the exact
- * shape of the v1 [VideoExportRequest] beside it --- the same seam
- * discipline: URIs are strings, the render lands in a caller-supplied
- * working directory, no Android type crosses.
- *
- * AUDIO IS PER-CLIP, TREATMENT IS WHOLE-TIMELINE: each entry carries its
- * own [ClipTimelineEntry.audioTrackPresent] fact, so the mute request
- * resolves PER ENTRY (a muted composition strips the track only on the
- * clips that have one --- the v1 RECORDED_NO_OP honesty, per clip); the
- * volume gain and the adjustments apply to the whole composition (the
- * r52 maintainer-approved bundle shape, promoted one level up).
+ * The multi-clip export request: a VALIDATED [ClipTimeline] plus the session-level treatment
+ * the whole composition shares (mute, volume gain, the nine ADR-0012 adjustments, the
+ * container), in the exact shape of the v1 [VideoExportRequest] --- URIs are strings, the
+ * render lands in a caller-supplied working directory, no Android type crosses. AUDIO IS
+ * PER-CLIP, TREATMENT IS WHOLE-TIMELINE: the mute resolves per entry against each clip's
+ * audio fact; the volume gain and adjustments apply to the whole composition.
  */
 data class ClipExportRequest(
     /** The validated composition; the coordinator refuses anything else. */
     val timeline: ClipTimeline,
     /** The mute request; resolved per entry against each clip's audio fact. */
     val mute: Boolean = false,
-    /** The whole-timeline audio gain (r52 bounds: 0 = silent .. 2 = +6 dB; 1f = unchanged). */
+    /** The whole-timeline audio gain (bounds: 0 = silent .. 2 = +6 dB; 1f = unchanged). */
     val volume: Float = 1f,
     /** The nine ADR-0012 adjustments applied to every clip (0 = neutral). */
     val adjustments: VideoAdjustParams = VideoAdjustParams(),
     /**
-     * The shared look over the whole composition (r74, the "one
-     * language" promise): the SAME bundled `.cube` ids the photo Looks
-     * deck ships, with the r33 intensity grammar. Absent = no look ---
-     * the pre-r74 shape, byte-compatible.
+     * The shared look over the whole composition: the SAME bundled `.cube` ids the photo
+     * Looks deck ships, with the same intensity grammar. Absent = no look (byte-compatible
+     * with the pre-look shape).
      */
     val look: VideoLutLook? = null,
-    /**
-     * The text overlays, validated against the composition's derived
-     * output duration (r74, the P0 ladder's text rung). Absent = none.
-     */
+    /** The text overlays, validated against the composition's derived output duration. Absent = none. */
     val textOverlays: List<VideoTextOverlay> = emptyList(),
-    /**
-     * The music track (r74, the P1 ladder's "music import with
-     * ducking"). Absent = the clips' own audio only.
-     */
+    /** The music track (import with ducking). Absent = the clips' own audio only. */
     val music: VideoMusicTrack? = null,
-    /**
-     * The crossfade transitions (r74, the P1 ladder's rung), one per
-     * boundary. Absent = hard cuts, the r70 shape.
-     */
+    /** The crossfade transitions, one per boundary. Absent = hard cuts. */
     val transitions: List<VideoCrossfade> = emptyList(),
     /** The output container (v1: MP4 only --- the honest encodable set). */
     val container: VideoContainer = VideoContainer.MP4,
@@ -56,13 +38,10 @@ data class ClipExportRequest(
 ) : VideoExportJob
 
 /**
- * ONE renderable item, the unit the media3 runner builds its
- * EditedMediaItem from: which source, which window of it, at what speed,
- * with its audio stripped or not. The v1 plan path resolves to the SAME
- * spec type (one per [VideoEditMath.timelineRuns] run --- same source
- * URI, the run's range and factor, the plan-level strip decision), so the
- * runner has ONE item builder and the two request types cannot drift
- * apart.
+ * ONE renderable item, the unit the media3 runner builds its EditedMediaItem from: which
+ * source, which window, at what speed, audio stripped or not. The single-clip plan path
+ * resolves to the SAME spec type (one per [VideoEditMath.timelineRuns] run), so the runner
+ * has ONE item builder and the two request types cannot drift apart.
  */
 data class ClipExportItemSpec(
     /** The source clip's URI (a string; the seam is pure). */
@@ -92,8 +71,8 @@ object ClipExportValidator {
             }
             is ClipTimelineValidation.Valid -> Unit
         }
-        // The volume gain: NaN refused FIRST (every comparison against NaN
-        // is false --- the v1 validator's defensive rule, verbatim).
+        // NaN refused FIRST: every comparison against NaN is false, so it would
+        // slip past the range check.
         if (request.volume.isNaN()) {
             return ClipExportValidation.Invalid(
                 "volume ${request.volume} is not a number (NaN) --- not a gain the export can apply",
@@ -112,12 +91,12 @@ object ClipExportValidator {
         VideoAdjustProjection.validate(request.adjustments)?.let { reason ->
             return ClipExportValidation.Invalid(reason)
         }
-        // r74: the shared look's own grammar (intensity bounds, table shape).
+        // The shared look's own grammar (intensity bounds, table shape).
         when (val look = VideoLutLookValidator.validate(request.look)) {
             is VideoLutLookValidation.Invalid -> return ClipExportValidation.Invalid(look.reason)
             is VideoLutLookValidation.Valid -> Unit
         }
-        // r74: the text overlays against the composition's derived duration.
+        // The text overlays against the composition's derived duration.
         when (
             val overlays = VideoTextOverlayValidator.validate(
                 request.textOverlays,
@@ -128,12 +107,12 @@ object ClipExportValidator {
                 return ClipExportValidation.Invalid(overlays.reason)
             is VideoTextOverlayValidation.Valid -> Unit
         }
-        // r74: the music track against the same derived duration.
+        // The music track against the same derived duration.
         when (val music = VideoMusicValidator.validate(request.music, request.timeline)) {
             is VideoMusicValidation.Invalid -> return ClipExportValidation.Invalid(music.reason)
             is VideoMusicValidation.Valid -> Unit
         }
-        // r74: the transitions against the composition's boundaries.
+        // The transitions against the composition's boundaries.
         when (
             val transitions = VideoCrossfadeValidator.validate(
                 request.transitions,
@@ -149,20 +128,17 @@ object ClipExportValidator {
 }
 
 /**
- * The pure projection from a request to the runner's item list (r70): one
- * [ClipExportItemSpec] per timeline entry, in order, carrying the entry's
- * trim, speed, and the PER-ENTRY mute resolution. The media3 runner maps
- * specs one-to-one onto EditedMediaItems; nothing about media3 leaks back
- * here (the ADR-0011 split --- the projection is JVM-pinned, the runner is
- * the thin shell).
+ * The pure projection from a request to the runner's item list: one [ClipExportItemSpec] per
+ * timeline entry, in order, carrying the entry's trim, speed, and the PER-ENTRY mute
+ * resolution. The media3 runner maps specs one-to-one onto EditedMediaItems; nothing about
+ * media3 leaks back here (JVM-pinned projection, thin-shell runner).
  */
 object ClipExportProjection {
 
     /**
-     * The item specs of a request, in timeline order. `removeAudio` is the
-     * per-entry mute resolution: mute && the clip HAS a track (a muted
-     * silent clip is the recorded no-op --- nothing to strip, the export
-     * proceeds video-only for that entry).
+     * The item specs of a request, in timeline order. `removeAudio` is the per-entry mute
+     * resolution: mute && the clip HAS a track (a muted silent clip is a no-op --- nothing
+     * to strip).
      */
     fun itemSpecs(request: ClipExportRequest): List<ClipExportItemSpec> =
         request.timeline.entries.map { entry ->

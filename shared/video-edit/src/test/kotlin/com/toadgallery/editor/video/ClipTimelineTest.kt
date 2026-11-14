@@ -5,8 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r69 composition-model pins: validation totals, the per-clip walk,
- * the single-clip equivalence with the v1 plan math, and the round trip.
+ * Composition-model pins: validation, the per-clip walk, single-clip equivalence
+ * with the v1 plan math, and the inverse round trip.
  */
 class ClipTimelineTest {
 
@@ -24,9 +24,7 @@ class ClipTimelineTest {
         speedFactor = speed,
     )
 
-    // ------------------------------------------------------------------ //
-    // validation
-    // ------------------------------------------------------------------ //
+    // ---- validation ----
 
     @Test
     fun `an empty composition is not an edit`() {
@@ -67,9 +65,7 @@ class ClipTimelineTest {
         assertTrue(ClipTimelineValidator.validate(timeline) is ClipTimelineValidation.Valid)
     }
 
-    // ------------------------------------------------------------------ //
-    // the single-clip equivalence (the adoption bridge)
-    // ------------------------------------------------------------------ //
+    // ---- the single-clip equivalence (the adoption bridge) ----
 
     @Test
     fun `a one-clip timeline agrees with the v1 plan math on output duration`() {
@@ -108,9 +104,7 @@ class ClipTimelineTest {
         }
     }
 
-    // ------------------------------------------------------------------ //
-    // the multi-clip walk
-    // ------------------------------------------------------------------ //
+    // ---- the multi-clip walk ----
 
     @Test
     fun `the output duration sums the per-clip trimmed lengths at speed`() {
@@ -172,9 +166,8 @@ class ClipTimelineTest {
                 entry(8_000, 100, 7_900, 1.0),
             ),
         )
-        // Compare the ABSOLUTE source-position stream (clip index breaks
-        // the comparison): walk in output time and demand the playhead
-        // never repeats a clip-index/source pair going backwards.
+        // Compare the ABSOLUTE source-position stream (clip index breaks the comparison): walk in
+        // output time and demand the playhead never go backwards.
         var previous = ClipTimelineMath.playheadAtOutputOffset(timeline, 0)
         var offset = 250L
         val total = ClipTimelineMath.outputDurationMs(timeline)
@@ -190,9 +183,7 @@ class ClipTimelineTest {
         }
     }
 
-    // ------------------------------------------------------------------ //
-    // the inverse round trip
-    // ------------------------------------------------------------------ //
+    // ---- the inverse round trip ----
 
     @Test
     fun `source-to-output and output-to-source round trip within a millisecond`() {

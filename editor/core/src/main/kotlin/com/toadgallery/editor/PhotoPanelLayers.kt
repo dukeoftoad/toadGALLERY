@@ -29,17 +29,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-// ---------------------------------------------------------------------------
-// The r57 panel seam (F-58a): the layer family's tool panels, extracted
-// VERBATIM from `EditActivity.EditorContent`'s `PhotoScreen.Text` and
-// `PhotoScreen.Stickers` branches.
-//
-// The bodies are the r34 text and r35 sticker contracts --- the add chip,
-// the layer chips, the ONE-selection-across-families rule, the per-layer
-// live-draft sliders --- unchanged; the chassis state arrives as explicit
-// value + `on...Change` pairs. The committed Roborazzi chassis baselines are
-// the regression proof.
-// ---------------------------------------------------------------------------
+// Layer-family tool panels (text, stickers): stateless chassis receiving explicit
+// value + on...Change pairs; one selected layer at a time across the families.
 
 @Composable
 internal fun TextPanel(
@@ -62,14 +53,9 @@ internal fun TextPanel(
     onSelectRegionLayerChange: (String?) -> Unit,
 ) {
 
-    // ---- Text layers (r34: the OFL-font text tool) ----
-    // The contract's UI shape (text-tool.md decision 5): an Add
-    // chip -> the layer list -> per-layer controls (text field,
-    // font chip row, size/opacity/rotation sliders with the r32
-    // semantics conventions, color swatches). Layer chips show
-    // their text (the fallback labels empty layers); repositioning
-    // is the drag gesture on the preview (documented nit: position
-    // has no slider, so it is not TalkBack-reachable in v1).
+    // ---- Text layers ----
+    // Add chip -> layer list -> per-layer controls. Repositioning is the preview drag only
+    // (no slider, so not TalkBack-reachable in v1).
     Text(
         text = stringResource(R.string.editor_section_text),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -89,8 +75,7 @@ internal fun TextPanel(
                     committed.copy(textLayers = TextLayers(existing + newLayer)),
                 )
                 onSelectTextLayerChange(newLayer.id)
-                // r35: the new layer becomes THE selection --- one
-                // selected layer at a time across the families.
+                // The new layer becomes the selection: one selected layer across the families.
                 onSelectStickerLayerChange(null)
                 onSelectRegionLayerChange(null)
             },
@@ -105,7 +90,7 @@ internal fun TextPanel(
                     if (selectedTextLayerId != layer.id) {
                         sweepPendingDrafts()
                         onSelectTextLayerChange(layer.id)
-                        // r35/r37: one selection across the families.
+                        // One selection across the families.
                         onSelectStickerLayerChange(null)
                         onSelectRegionLayerChange(null)
                     }
@@ -124,9 +109,8 @@ internal fun TextPanel(
         ?.firstOrNull { it.id == selectedTextLayerId }
     if (selectedTextLayer != null) {
         val layerId = selectedTextLayer.id
-        // -- The text field: drafts locally (per-keystroke commits
-        //    would flood the undo stack); commits on IME Done, on
-        //    target switch, on add/remove and before an export.
+        // Text field drafts locally (per-keystroke commits flood the undo stack); commits on
+        // IME Done, target switch, add/remove, and before export.
         val fieldText = textDraft?.takeIf { it.first == layerId }?.second
             ?: selectedTextLayer.text
         val textContentName = stringResource(R.string.editor_a11y_text_content)
@@ -149,11 +133,8 @@ internal fun TextPanel(
                 .fillMaxWidth()
                 .semantics { contentDescription = textContentName },
         )
-        // -- The font chips: the bundled four, each previewed in the
-        //    REAL bundled Typeface the canvas renderer uses (one code
-        //    path); an unresolvable fontId selects NO chip (the
-        //    tolerance contract, shown honestly exactly like an
-        //    unknown look id).
+        // Font chips preview the real bundled Typeface (one code path with the renderer);
+        // an unresolvable fontId selects no chip.
         Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
             BundledFonts.ORDERED.forEach { entry ->
                 FontPreviewChip(
@@ -170,9 +151,7 @@ internal fun TextPanel(
             ?: selectedTextLayer.sizePct
         val sizeLabel = stringResource(R.string.editor_text_size, sizeLive)
         val sizeName = stringResource(R.string.editor_a11y_text_size)
-        // r56: the crafted slider row (the live value pill; the
-        // r34 draft contract verbatim, double-tap back to the
-        // layer default).
+        // Crafted slider row: live value pill; double-tap resets to the layer default.
         LabeledSlider(
             name = sizeName,
             label = sizeLabel,
@@ -237,9 +216,7 @@ internal fun TextPanel(
             },
             resetValue = 0,
         )
-        // -- The color swatches: a fixed named palette, a11y-labelled
-        //    (TalkBack announces each control; selection is radio
-        //    semantics --- one color at a time).
+        // Color swatches: fixed named palette, a11y-labelled; radio semantics, one color at a time.
         Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
             TEXT_COLORS.forEach { (colorArgb, nameRes) ->
                 ColorSwatch(
@@ -296,15 +273,9 @@ internal fun StickersPanel(
     onSelectRegionLayerChange: (String?) -> Unit,
 ) {
 
-    // ---- Stickers (r35: the sticker tool) ----
-    // The contract's UI shape (stickers.md decision 6): the
-    // registry chip row (bundled eight, imported id-sorted, the
-    // SAF import chip for image/png + image/webp) --- a chip tap
-    // ADDS a layer at canvas centre; registry chips are ADD
-    // actions, not selections (the layer chips below carry the
-    // selection). One selected layer at a time across the
-    // families; the drag gesture and the per-layer controls
-    // follow the single selection.
+    // ---- Stickers ----
+    // Registry chips ADD a layer at canvas centre; they are not selections (the layer chips
+    // below carry it). One selection across the families; drag + per-layer controls follow it.
     Text(
         text = stringResource(R.string.editor_section_stickers),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -333,8 +304,7 @@ internal fun StickersPanel(
                 modifier = Modifier.padding(end = 8.dp),
             )
         }
-        // The user-imported stickers (r35), id-sorted; the store's
-        // collision rule makes the keys disjoint from the bundled set.
+        // User-imported stickers, id-sorted; keys are disjoint from the bundled set.
         importedStickers.keys.sorted().forEach { id ->
             FilterChip(
                 selected = false,
@@ -357,8 +327,7 @@ internal fun StickersPanel(
                 modifier = Modifier.padding(end = 8.dp),
             )
         }
-        // The import action: SAF-pick a PNG/WebP (the zero-network
-        // editor reads local documents only).
+        // Import action: SAF-pick a PNG/WebP (local documents only).
         AssistChip(
             onClick = { stickerImportLauncher.launch(arrayOf("image/png", "image/webp")) },
             enabled = !exporting,
@@ -373,9 +342,7 @@ internal fun StickersPanel(
             style = MaterialTheme.typography.labelSmall,
         )
     }
-    // The layer chips: their sticker's display name (the raw id for
-    // an import or an unresolvable id --- the tolerance contract,
-    // shown honestly exactly like an unknown look id).
+    // Layer chips show the sticker display name; raw id for imports or unresolvable ids.
     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
         committed.stickerLayers?.layers?.forEach { layer ->
             FilterChip(
@@ -402,16 +369,12 @@ internal fun StickersPanel(
         ?.firstOrNull { it.id == selectedStickerLayerId }
     if (selectedStickerLayer != null) {
         val layerId = selectedStickerLayer.id
-        // -- size / opacity / rotation: the live-draft pattern
-        //    (the r34 conventions; the keys carry the sticker-
-        //    prefix so effectiveRecipe() routes them).
+        // size / opacity / rotation live-draft; keys carry the sticker- prefix so effectiveRecipe() routes them.
         val sizeLive = draft?.takeIf { it.first == "sticker-size@$layerId" }?.second
             ?: selectedStickerLayer.sizePct
         val sizeLabel = stringResource(R.string.editor_sticker_size, sizeLive)
         val sizeName = stringResource(R.string.editor_a11y_sticker_size)
-        // r56: the crafted slider row (the live value pill; the
-        // r35 draft contract verbatim, double-tap back to the
-        // layer default).
+        // Crafted slider row: live value pill; double-tap resets to the layer default.
         LabeledSlider(
             name = sizeName,
             label = sizeLabel,

@@ -1,13 +1,6 @@
-// :shared:video-edit --- the Phase 10 lightweight video editor's pure plan
-// module (r42, sub-scope B; ADR-0012; docs/phase-10/video-editor.md).
-//
-// A deliberate PURE-JVM Kotlin module (the :shared:editor-contract pattern):
-// no Android type anywhere. The plan layer encodes every policy as data ---
-// the ExportPlan precedent verbatim in spirit --- so every edge is JVM-tested
-// in milliseconds and the activity merely executes the validated plan. The
-// media3 realizations (the ExoPlayer preview, the Transformer export, the
-// retriever frame path) live in the edit app behind the VideoExportRunner
-// seam this module defines.
+// :shared:video-edit — the lightweight video editor's pure export-plan module.
+// No Android types: every export policy is data, JVM-tested in milliseconds; the media3
+// realizations (preview, Transformer export) live in :editor:core behind VideoExportRunner.
 
 plugins {
     alias(libs.plugins.kotlin.jvm)

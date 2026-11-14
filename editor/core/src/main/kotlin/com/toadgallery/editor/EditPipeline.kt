@@ -1,9 +1,8 @@
 package com.toadgallery.editor
 
 /**
- * The edit pipeline (r30, Phase 6 v1; the r33 filter stage): applies a
- * whole [EditRecipe] to a pixel grid in ONE documented stage order, so
- * preview and export agree byte-for-byte by construction:
+ * The edit pipeline: applies a whole [EditRecipe] to a pixel grid in ONE documented stage
+ * order, so preview and export agree byte-for-byte by construction:
  *
  *  1. flips (horizontal, then vertical)
  *  2. straighten (expanded canvas, transparent fill)
@@ -11,43 +10,32 @@ package com.toadgallery.editor
  *  4. quarter turns (90-degree steps)
  *  5. crop (the normalized rect over the post-geometry frame)
  *  6. the composed tone LUT (exposure -> brightness -> contrast ->
- *     highlights -> shadows -> curve, one pass; the master curve
- *     composes after the five sliders since r68; the per-channel R/G/B
- *     curves compose over the master since r71 --- the three-table
- *     apply, Phase 2's declared follow-up landed)
+ *     highlights -> shadows -> curve, one pass; the master curve composes
+ *     after the five sliders; the per-channel R/G/B curves compose over
+ *     the master --- the three-table apply)
  *  7. saturation
  *  8. temperature / tint
  *  9. per-channel HSL bands
- * 10. LUT filter (the `.cube` look at its intensity; r33)
+ * 10. LUT filter (the `.cube` look at its intensity)
  * 11. vignette
  * 12. sharpen (unsharp mask)
- * 13. the r41 AI pixel stages: erase -> sky -> bokeh -> retouch (the
- *     semantic order, stated: erase first so later stages see the
- *     restored surroundings; sky next so the new sky exists before the
- *     depth-driven blur; bokeh over the replaced world; retouch polishes
- *     the subject last among the AI stages)
- * 14. mosaic/blur regions (r37: the painted regions censor the
- *     FULLY graded pixels; the FINAL pixel stage --- no downstream
- *     stage re-processes the censored output, so sharpening a mosaic
- *     edge cannot halo it, and a mosaic over a retouched face is still
- *     a mosaic)
+ * 13. the AI pixel stages: erase -> sky -> bokeh -> retouch (erase first
+ *     so later stages see the restored surroundings; sky next so the new
+ *     sky exists before the depth-driven blur; bokeh over the replaced
+ *     world; retouch polishes the subject last among the AI stages)
+ * 14. mosaic/blur regions (the painted regions censor the FULLY graded
+ *     pixels; the FINAL pixel stage --- no downstream stage re-processes
+ *     the censored output, so sharpening a mosaic edge cannot halo it)
  *
- * The r34-r36 compositing passes (text over everything; stickers below
- * text; strokes between them) are NOT stages of this pixel pipeline:
- * they run after `apply` returns, over the OUTPUT canvas (see the
- * compositors --- geometry/adjustments/LUT/vignette/sharpen/regions all
- * render first, then the layers draw, through the same shared code
- * paths the previews use).
+ * The compositing passes (text over everything; stickers below text; strokes between) are NOT
+ * stages here: they run after `apply` returns, over the OUTPUT canvas.
  *
- * The look stage sits AFTER the colour grade (the look grades the
- * graded pixels, like a film stock over a developed negative) and
- * BEFORE the spatial effects (vignette and sharpen are position
- * masks; a colour-only look must not shift what they see).
+ * The look stage sits AFTER the colour grade (a film stock over a developed negative) and
+ * BEFORE the spatial effects (vignette/sharpen are position masks; a colour-only look must
+ * not shift what they see).
  *
- * The identity recipe returns the input grid EXACTLY (no stage runs),
- * so a saved copy of an untouched session is a pure re-encode --- and
- * the crop-presets UI can trust the geometry plan below for its
- * overlay math. A look at intensity 0 is dialed out: same fast path.
+ * The identity recipe returns the input grid EXACTLY (no stage runs), so a saved copy of an
+ * untouched session is a pure re-encode; a look at intensity 0 is dialed out (same fast path).
  */
 object EditPipeline {
 
@@ -58,19 +46,13 @@ object EditPipeline {
             "AI bokeh -> AI retouch -> mosaic/blur regions"
 
     /**
-     * Applies [recipe] to the grid. [filter] is the caller-RESOLVED
-     * `.cube` look for `recipe.lut` (the pipeline is pure --- it never
-     * touches assets); the stage runs only when the selection, the
-     * resolved look and the id PAIR UP (`filter.id == lutId`) and the
-     * intensity is above zero. Anything else --- no selection, an
-     * unresolvable id, a mismatched pairing --- degrades to no-look,
-     * never to a crash (the r33 tolerance contract).
+     * Applies [recipe] to the grid. [filter] is the caller-RESOLVED `.cube` look for
+     * `recipe.lut` (the pipeline is pure --- it never touches assets); the stage runs only
+     * when the selection, the resolved look and the id PAIR UP (`filter.id == lutId`) and
+     * the intensity is above zero; anything else degrades to no-look, never a crash.
      *
-     * [ai] is the caller-RESOLVED r41 artifact bundle (the same shape:
-     * the pipeline is pure --- no model ever runs here). The caller loads
-     * the recipe's artifact keys from `EditAiStore` and resolves the sky
-     * source; a missing entry degrades that stage to nothing, never a
-     * crash (the frame/sticker tolerance contract).
+     * [ai] is the caller-RESOLVED artifact bundle (no model ever runs here): a missing
+     * entry degrades that stage to nothing, never a crash.
      */
     fun apply(
         pixels: IntArray,
@@ -107,17 +89,11 @@ object EditPipeline {
         }
 
         // ---- Tone (one composed per-channel pass) ----
-        // r68: the gate opens for the five sliders OR a non-identity
-        // curve; the six-parameter build composes the master curve after
-        // the shadows stage (see LutBuilder.ORDER). r71: a state with
-        // CHANNEL curves takes the three-table path (LutBuilder
-        // .buildChannels + PixelOps.applyChannelLuts --- the master-then-
-        // channel composition Phase 2's forward state waited for); the
-        // master-only path stays byte-frozen as the r68 contract.
-        // r74: whites/blacks join the gate and the seven-stage build (the
-        // far-end pair composes into the SAME LUT --- see LutBuilder's
-        // seven-stage overload); a 0 value is a zero term, so pre-r74
-        // recipes bake byte-identical tables.
+        // The gate opens for any tone slider OR a non-identity curve. The master curve
+        // composes after the shadows stage (LutBuilder.ORDER); a state with CHANNEL curves
+        // takes the three-table path (LutBuilder.buildChannels + PixelOps.applyChannelLuts);
+        // whites/blacks join the same seven-stage build (a 0 value is a zero term, so older
+        // recipes bake byte-identical tables).
         val curves = recipe.toneCurves
         if (listOf(
                 recipe.exposure,
@@ -160,15 +136,14 @@ object EditPipeline {
         }
 
         // ---- Colour ----
-        // r74: vibrance leads saturation (the luma-weighted pull runs
-        // before the flat pull, so each stage sees the prior stage's
-        // output --- the documented single order both stages share).
+        // Vibrance leads saturation: the luma-weighted pull runs before the flat pull,
+        // so each stage sees the prior stage's output.
         PixelOps.applyVibrance(current, recipe.vibrance)
         PixelOps.applySaturation(current, recipe.saturation)
         PixelOps.applyTemperatureTint(current, recipe.temperature, recipe.tint)
         applyHslBands(current, recipe.hslBands)
 
-        // ---- Filter (r33: the look over the graded pixels) ----
+        // ---- Filter (the look over the graded pixels) ----
         val selection = recipe.lut
         if (selection != null && selection.intensity > 0 &&
             filter != null && filter.id == selection.lutId
@@ -180,23 +155,18 @@ object EditPipeline {
         applyVignette(current, w, h, recipe.vignette)
         applySharpen(current, w, h, recipe.sharpness)
 
-        // ---- The r41 AI pixel stages (erase -> sky -> bokeh -> retouch) ----
-        // They replay over the artifacts the inference seam produced at
-        // COMMIT time; no model ever runs during render. The stages inherit
-        // the grid-relative honesty verbatim: exact in the export where the
-        // stage grid IS the output canvas; approximate in the preview under
-        // an active crop, exactly as the vignette's centre is. An absent
-        // bundle ([ai] null) or an absent container runs NOTHING; the
-        // identity fast path above already covers the all-absent case.
+        // ---- The AI pixel stages (erase -> sky -> bokeh -> retouch) ----
+        // They replay over artifacts produced at COMMIT time; no model runs during render.
+        // Grid-relative like the vignette: exact in the export (stage grid = output canvas),
+        // approximate in the preview under an active crop. An absent bundle or container
+        // runs NOTHING.
         if (ai != null) {
             AiStages.applyAll(current, w, h, recipe, ai)
         }
 
-        // ---- Regions (r37: the final pixel stage, after the AI tail) ----
-        // The painted regions censor the fully graded grid; the stage is
-        // grid-relative (the vignette's honesty: exact in the export, where
-        // the stage grid IS the output canvas; approximate in the preview
-        // when a crop is active, exactly as the vignette's centre is).
+        // ---- Regions (the final pixel stage, after the AI tail) ----
+        // The painted regions censor the fully graded grid; grid-relative like the
+        // vignette (exact in the export, approximate in the preview under a crop).
         recipe.mosaicRegions?.let { regions ->
             if (!regions.isIdentity) {
                 RegionPass.applyAll(current, w, h, regions)
@@ -208,11 +178,9 @@ object EditPipeline {
 }
 
 /**
- * The pure geometry plan: the post-geometry frame dimensions (flips ->
- * straighten -> perspective -> quarter turns, WITHOUT the crop) plus the
- * crop's pixel rect over that frame. One computation shared by the preview
- * overlay (draw the crop rect at the right place) and the export (crop
- * after the geometry) --- they can never disagree.
+ * The pure geometry plan: the post-geometry frame dimensions (flips, straighten, perspective,
+ * quarter turns --- WITHOUT the crop) plus the crop's pixel rect over that frame. One
+ * computation shared by the preview overlay and the export --- they can never disagree.
  */
 object EditGeometryPlan {
 

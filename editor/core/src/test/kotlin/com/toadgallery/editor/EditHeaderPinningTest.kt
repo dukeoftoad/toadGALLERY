@@ -31,35 +31,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The r63a fix-first round's layout pins (the F-71 / P1 hard-pin + the P3
- * CTA wire).
- *
- * F-71: the r62 device screenshot showed the photo editor's header ~630px
- * below the top edge with pure black above it, while EditActivity composes
- * the header as the FIRST child of the ONLY root container. The code hunt
- * exonerates the composition tree (single systemBarsPadding, no wrappers,
- * no spacers, no alternate entry) --- the offset was a device-side window
- * state, not producible by this tree. This suite is the repro attempt's
- * negative result turned into a permanent pin: under the PRODUCTION root
- * shape (fillMaxSize Surface -> fillMaxSize Column with the single
- * systemBarsPadding -> header first -> weight(1f) stage), the header MUST
- * be the top-most composed element with zero phantom band above it and no
- * dead band before the canvas.
- *
- * Subject choice, determinism-first: the real `PhotoToolHeader` chrome and
- * the replica of the main header row are PARAM-LIGHT (no Activity, no
- * decode, no animation), so the captures depend only on the pinned
- * Robolectric SDK (34) and the fixed w411dp-h891dp-420dpi viewport --- the
- * EditChassisScreenshotTest harness shape, reused exactly. The frame clock
- * is frozen before setContent and advanced one fixed 16ms frame.
- *
- * The main header's Row is private inside EditActivity, so the P3 test
- * drives a replica carrying the same wiring (weighted title, the text
- * buttons, the CTA label with `maxLines = 1` + ellipsis --- the exact
- * r63a EditActivity.kt change); R63aFixPinsTest ties that wiring to the
- * real file so a revert cannot slip past source-scan either.
- */
+/** Layout pins: the header tops the production root shape; the Save copy CTA stays single-line. */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
@@ -73,20 +45,16 @@ class EditHeaderPinningTest {
     private val saveTag = "r63a_save_copy"
 
     /**
-     * F-71: the header is the top-most composed element of the production
-     * root shape. At the pinned qualifiers the Robolectric system-bar insets
-     * are zero, so ANY nonzero top bound would be exactly the phantom band
-     * the device screenshot showed.
+     * F-71: the header is the top-most element of the production root shape; the
+     * Robolectric insets are zero here, so any nonzero top bound is a phantom band.
      */
     @Test
     fun headerIsTheTopMostElementInTheProductionRootShape() {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             EditorTheme {
-                // The production root: EditActivity.onCreate's setContent
-                // shape (fillMaxSize Surface) -> EditorContent's root Column
-                // (fillMaxSize, black background, the ONE systemBarsPadding)
-                // -> the header branch FIRST -> the weight(1f) canvas.
+                // The production root: fillMaxSize Surface -> root Column with the
+                // ONE systemBarsPadding -> header branch first -> the weight(1f) canvas.
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                     Column(
                         modifier = Modifier
@@ -101,8 +69,7 @@ class EditHeaderPinningTest {
                                 confirmA11y = "Done",
                                 onBack = {},
                                 onConfirm = {},
-                                // r63c: the promoted session Reset rides the
-                                // production header shape this test pins.
+                                // The session Reset rides the production header shape this test pins.
                                 resetA11y = "Reset",
                                 onReset = {},
                                 resetEnabled = true,
@@ -144,22 +111,15 @@ class EditHeaderPinningTest {
     }
 
     /**
-     * P3: the Save copy CTA stays a single-line pill even when the header's
-     * text buttons starve it (the r62 device symptom: the label wrapped to
-     * two lines). The replica carries the r63a wiring verbatim; the
-     * long-locale-shaped labels guarantee the row overflows its 411dp, so a
+     * P3: the Save copy CTA stays a single-line pill even under text-button starvation.
+     * The replica carries the real wiring; long-locale labels overflow 411dp, so a
      * wrapped pill would stand ~56-64dp tall against the single-line 40dp.
      */
     @Test
     fun saveCopyPillStaysSingleLineWhenTheHeaderTextButtonsStarveIt() {
         rule.mainClock.autoAdvance = false
-        // The 50dp single-line floor, measured in px under the composition's
-        // REAL density (the pinned w411dp-h891dp-420dpi viewport). Measured
-        // in composition via LocalDensity --- the compose-ui (1.7.6)
-        // SemanticsNode exposes no density accessor for the post-hoc
-        // `node.density` read this test originally used (that reference did
-        // not resolve; r63c compile repair, the assertion's intent is
-        // unchanged).
+        // The 50dp single-line floor in px under the composition's real density
+        // (measured via LocalDensity in-composition; the node exposes no density).
         var singleLinePillHeight = 0f
         rule.setContent {
             singleLinePillHeight = with(LocalDensity.current) { 50.dp.toPx() }
@@ -171,8 +131,7 @@ class EditHeaderPinningTest {
                             .background(Color.Black)
                             .systemBarsPadding(),
                     ) {
-                        // The r63a EditActivity main-header row shape:
-                        // weighted title + text buttons + the primary CTA.
+                        // The EditActivity main-header row shape: weighted title + text buttons + CTA.
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -191,7 +150,7 @@ class EditHeaderPinningTest {
                             Button(onClick = {}, modifier = Modifier.testTag(saveTag)) {
                                 Text(
                                     text = "Save copy",
-                                    // The r63a P3 wiring, verbatim.
+                                    // The P3 wiring, verbatim.
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )

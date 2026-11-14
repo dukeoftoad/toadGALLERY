@@ -3,24 +3,17 @@ package com.toadgallery.editor
 import java.io.File
 
 /**
- * The user-imported frame store (r38, Phase 7): the SAF-picked PNG/WebP
- * files copied VERBATIM into the editor's app-private `imported-frames/`
- * directory, completing the roadmap's Phase 7 frame bullet ("the user
- * can import their own").
+ * The user-imported frame store: SAF-picked PNG/WebP files copied VERBATIM into the
+ * app-private `imported-frames/` directory, under the `ImportedStickerStore` contract
+ * (bytes verbatim, atomic writes, validation before any write, no image decoding ---
+ * the magic-byte + size check IS the parse-before-write step). Ids derive from the
+ * picked file-name stem, collision-suffixed against the bundled registry and existing
+ * imports; the file keeps its magic's extension; the directory listing IS the index;
+ * delete is idempotent and path-safe. An imported frame stretches to the FULL output
+ * canvas (assumes a frame authored at the canvas aspect).
  *
- * The `ImportedStickerStore` contract verbatim (image-shaped; the store
- * never decodes images --- the magic-byte + size check IS the
- * parse-before-write step, and a payload that later fails to decode is
- * skipped at render time, never thrown). Ids derive from the picked
- * file-name stem, collision-suffixed against the bundled registry
- * ([BundledFrames.ORDERED]) and existing imports; the file keeps its
- * magic's extension; the directory listing IS the index; delete is
- * idempotent and path-safe. An imported frame stretches to the FULL
- * output canvas (the import assumes a frame authored at the canvas
- * aspect --- `frames.md` decision 4).
- *
- * Pure Kotlin (JVM-testable). The id/slug helpers duplicate the family
- * convention rather than coupling the stores.
+ * Pure Kotlin (JVM-testable). The id/slug helpers duplicate the family convention rather
+ * than coupling the stores.
  */
 class ImportedFrameStore(private val dir: File) {
 
@@ -46,8 +39,8 @@ class ImportedFrameStore(private val dir: File) {
             .map { id -> ImportedFrame(id = id, fileName = fileNameFor(id)) }
 
     /**
-     * Imports one image: validate FIRST (a rejection writes nothing),
-     * derive a collision-free id, then store the bytes atomically.
+     * Imports one image: validate FIRST (a rejection writes nothing), derive a collision-free
+     * id, then store the bytes atomically.
      */
     fun import(bytes: ByteArray, suggestedName: String?): ImportResult {
         val kind = detectKind(bytes)
@@ -60,8 +53,7 @@ class ImportedFrameStore(private val dir: File) {
         val fileName = "$id.$kind"
         val target = File(dir, fileName)
         if (target.exists()) {
-            // collisionFreeId guarantees a fresh name; unreachable
-            // defensive honesty, not an expected path.
+            // Unreachable (collisionFreeId guarantees a fresh name); defensive, not an expected path.
             return ImportResult.Rejected("could not derive a free id for the frame")
         }
         val tmp = File(dir, "$fileName.tmp")
@@ -128,7 +120,7 @@ class ImportedFrameStore(private val dir: File) {
         BundledFrames.byId(id) == null && fileFor(id) == null
 
     companion object {
-        /** The import size cap (the sticker store's, verbatim). */
+        /** The import size cap (same as the sticker store's). */
         const val MAX_BYTES: Int = 2_000_000
 
         /** Ids are `[a-z0-9-]`, 1..40 chars (they become file names). */

@@ -19,25 +19,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-// ---------------------------------------------------------------------------
-// The r57 panel seam (F-58a): the AI tool panel, extracted VERBATIM from
-// `EditActivity.EditorContent`'s `PhotoScreen.Ai` branch.
-//
-// The body is the r39-r41 AI contract --- magic erase (the third paint
-// mode), sky replacement (detect once, then pure re-renders), bokeh
-// (estimate once), face retouch (the OPT-IN consent machine) --- unchanged;
-// the chassis state and the three ai runner closures (`runBokehEstimate`,
-// `runRetouchDetect`, `selectSky`) arrive as explicit value + callback
-// parameters. The committed Roborazzi chassis baselines are the regression
-// proof.
-//
-// r58b (F-58b): every raw Slider in the panel converts to the r56
-// `LabeledSlider` --- label + live value pill + double-tap-to-neutral.
-// The r39-r41 live-draft contracts are verbatim (tick writes the named
-// draft, release commits through `commit`); only the control's VISUAL shape
-// changes. Six sliders converted: sky-opacity, bokeh-strength, bokeh-focal,
-// retouch-smoothing, retouch-eyes, retouch-slim.
-// ---------------------------------------------------------------------------
+// AI tool panel (extracted from EditActivity): magic erase, sky replacement,
+// bokeh, and opt-in face retouch; chassis state + ai runners arrive as params.
 
 @Composable
 internal fun AiPanel(
@@ -77,13 +60,8 @@ internal fun AiPanel(
     selectSky: (String, Boolean) -> Unit,
 ) {
     // ---- Magic erase: the third paint mode ----
-    // The r37 region section's shape: the mode chip (ONE paint
-    // mode at a time across Draw/Region/Erase, enforced at all
-    // three toggles), the layer chips, and the controls under
-    // the mode. The erase gesture paints the seed; the inference
-    // (segmentation + inpainting) runs ONCE at gesture end ---
-    // off the UI thread, cancellable, honest progress --- and the
-    // refined mask + fill persist as ONE derived artifact.
+    // Gesture paints the seed; segment+inpaint runs once at gesture end, off
+    // the UI thread, cancellable; mask + fill persist as one derived artifact.
     Text(
         text = stringResource(R.string.editor_section_ai_erase),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -96,9 +74,8 @@ internal fun AiPanel(
                 sweepPendingDrafts()
                 onEraseModeChange(!eraseMode)
                 if (eraseMode) {
-                    // The duality's rule, third member: entering
-                    // Erase paint mode exits the other two and
-                    // drops every selection.
+                    // Entering Erase exits the other paint modes and drops
+                    // every selection.
                     onDrawModeChange(false)
                     onRegionModeChange(false)
                     onSelectTextLayerChange(null)
@@ -134,8 +111,7 @@ internal fun AiPanel(
         }
     }
     if (eraseMode) {
-        // The honest bounds note (ADR-0010: on-device quality is
-        // bounded; the strings say so without apologising).
+        // On-device quality is bounded; the hint says so plainly.
         Text(
             text = stringResource(R.string.editor_ai_erase_hint),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -152,8 +128,7 @@ internal fun AiPanel(
                     selectedEraseLayer.artifactRef,
                 )
             ) {
-                // The honest degraded note: the layer's artifact is
-                // gone, it renders nothing (never dead controls).
+                // Artifact gone: the layer renders nothing (never dead controls).
                 Text(
                     text = stringResource(R.string.editor_ai_degraded_layer),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -184,19 +159,9 @@ internal fun AiPanel(
     }
 
     // ---- Sky replacement: detect once, then the registry ----
-    // The frames section's shape: None, the bundled five
-    // (PROJECT-AUTHORED parametric skies --- no third-party sky
-    // bitmaps ship in this APK), the imports (the
-    // ImportedFrameStore contract verbatim), the import chip. A
-    // sky chip that finds no resolvable mask runs the detection
-    // first (once, cancellable); a re-detect is a deliberate
-    // re-apply. The opacity slider re-renders from the stored
-    // mask --- no re-inference.
-    //
-    // r66: the sky chips wear HONEST THUMBS now (SkyThumbChip) --- the
-    // bundled five render through the same BundledSkies.render the sky
-    // stage blends through, the imports show their own bitmap (the
-    // look/frame chip contract; this row was the last text-only picker).
+    // No third-party sky bitmaps ship; chips show honest thumbs via the same
+    // BundledSkies.render the stage uses. Opacity re-renders the stored mask —
+    // no re-inference.
     Text(
         text = stringResource(R.string.editor_section_ai_sky),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -254,8 +219,7 @@ internal fun AiPanel(
     if (skySelection != null) {
         val skyOpacityLive = draft?.takeIf { it.first == "sky-opacity" }?.second
             ?: skySelection.opacityPct
-        // r58b: the crafted LabeledSlider on the r39 sky-opacity live-draft
-        // contract (tick drafts, release commits, double-tap to 100% full).
+        // Live-draft: tick drafts, release commits; double-tap resets to 100 (full).
         LabeledSlider(
             name = stringResource(R.string.editor_a11y_ai_sky_opacity),
             label = stringResource(R.string.editor_ai_sky_opacity, skyOpacityLive),
@@ -296,9 +260,8 @@ internal fun AiPanel(
                 style = MaterialTheme.typography.labelSmall,
             )
         }
-        // A deliberate re-apply: re-detect the sky against the
-        // CURRENT working grid (a changed adjustment means a new
-        // artifact key; the old one stays for the undo stack).
+        // Re-detect against the CURRENT grid: a changed adjustment means a new
+        // artifact key; the old one stays for the undo stack.
         TextButton(
             onClick = { sweepPendingDrafts(); selectSky(skySelection.skyId, true) },
             enabled = !exporting && !aiBusy,
@@ -342,8 +305,7 @@ internal fun AiPanel(
     if (bokehSelection != null) {
         val strengthLive = draft?.takeIf { it.first == "bokeh-strength" }?.second
             ?: bokehSelection.blurStrengthPct
-        // r58b: the crafted LabeledSlider on the r40 bokeh-strength live-draft
-        // contract (tick drafts, release commits, double-tap to 50% medium).
+        // Live-draft: tick drafts, release commits; double-tap resets to 50 (medium).
         LabeledSlider(
             name = stringResource(R.string.editor_a11y_ai_bokeh_strength),
             label = stringResource(R.string.editor_ai_bokeh_strength, strengthLive),
@@ -370,8 +332,7 @@ internal fun AiPanel(
         )
         val focalLive = draft?.takeIf { it.first == "bokeh-focal" }?.second
             ?: (bokehSelection.focalDepthNorm * 100).toInt()
-        // r58b: the bokeh-focal live-draft contract on the crafted LabeledSlider
-        // (double-tap to 50, the mid-depth neutral).
+        // Live-draft; double-tap resets to the mid-depth neutral (50).
         LabeledSlider(
             name = stringResource(R.string.editor_a11y_ai_bokeh_focal),
             label = stringResource(R.string.editor_ai_bokeh_focal, focalLive),
@@ -407,13 +368,9 @@ internal fun AiPanel(
         }
     }
 
-    // ---- Face retouch: OPT-IN (ADR-0010 section 5) ----
-    // Hidden entirely under the permanent kill-switch; before a
-    // grant the only entry is the enable chip that opens the
-    // first-use consent dialog (what it does / on-device only /
-    // no face data leaves the device). Under consent-off the
-    // STAGE refuses even with a restored sidecar --- the layer
-    // stays verbatim in the recipe, the stage skips.
+    // ---- Face retouch: opt-in consent ----
+    // Hidden under the permanent kill-switch. Consent-off refuses even with a
+    // restored sidecar: the layer stays in the recipe, the stage skips.
     if (retouchConsent != RetouchConsent.PERMANENTLY_DISABLED) {
         Text(
             text = stringResource(R.string.editor_section_ai_retouch),
@@ -440,8 +397,7 @@ internal fun AiPanel(
             if (retouchSelection != null) {
                 val smoothingLive = draft?.takeIf { it.first == "retouch-smoothing" }?.second
                     ?: retouchSelection.smoothingPct
-                // r58b: the crafted LabeledSlider on the r41 retouch live-draft
-                // contracts (tick drafts, release commits, double-tap to 0 off).
+                // Live-draft: tick drafts, release commits; double-tap resets to 0 (off).
                 LabeledSlider(
                     name = stringResource(R.string.editor_a11y_ai_retouch_smoothing),
                     label = stringResource(
@@ -535,9 +491,8 @@ internal fun AiPanel(
                 }
             }
         } else {
-            // Default-off: the single opt-in entry. A deny keeps
-            // it (the next use re-asks); the never is the
-            // Settings kill-switch.
+            // Default-off; a deny re-asks next use. PERMANENTLY_DISABLED only
+            // via the Settings kill-switch.
             AssistChip(
                 onClick = { onRetouchConsentDialogChange(true)},
                 enabled = !exporting,
@@ -545,10 +500,8 @@ internal fun AiPanel(
             )
         }
 
-        // The first-use consent dialog (ADR-0010 section 5): the
-        // text states what the model does, that it runs on-device
-        // only, and that no face data leaves the device. A grant
-        // persists per install; a deny re-asks on the next use.
+        // First-use consent: on-device only, no face data leaves the device;
+        // a grant persists per install, a deny re-asks next use.
         if (retouchConsentDialog && retouchConsent == RetouchConsent.NOT_GRANTED) {
             AlertDialog(
                 onDismissRequest = { onRetouchConsentDialogChange(false)},
@@ -570,8 +523,7 @@ internal fun AiPanel(
                 dismissButton = {
                     TextButton(
                         onClick = {
-                            // A deny stays NOT_GRANTED (the next
-                            // use re-asks); nothing persists.
+                            // Deny stays NOT_GRANTED; nothing persists (re-asks next use).
                             onRetouchConsentChange(RetouchConsentMachine.onDeny(retouchConsent))
                             onRetouchConsentDialogChange(false)
                         },

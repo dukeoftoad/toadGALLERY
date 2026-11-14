@@ -19,9 +19,8 @@ enum class MetadataPolicy(val wireName: String) {
 }
 
 /**
- * The r42 additive media kind: image (the v1 default) or video. Absent on
- * the wire means IMAGE --- a v1 editor that never reads the extra behaves
- * exactly as before (the additive-versioning rule).
+ * The additive media kind: image (the default) or video. Absent on the wire means IMAGE ---
+ * a v1 editor that never reads the extra behaves exactly as before (additive-versioning rule).
  */
 enum class MediaKind(val wireName: String) {
     IMAGE(EditContract.MEDIA_KIND_IMAGE),

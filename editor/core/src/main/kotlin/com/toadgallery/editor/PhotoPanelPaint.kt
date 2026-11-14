@@ -14,26 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
-// ---------------------------------------------------------------------------
-// The r57 panel seam (F-58a): the paint family's tool panels, extracted
-// VERBATIM from `EditActivity.EditorContent`'s `PhotoScreen.Draw` and
-// `PhotoScreen.Regions` branches.
-//
-// The bodies are the r36 draw and r37/r38 region contracts --- the paint-mode
-// duality (plain state tunes the NEXT stroke/region; a selected layer
-// re-binds the same controls through the live-draft pattern; Draw/Region/
-// Erase mutually exclusive) --- unchanged; the chassis state arrives as
-// explicit value + `on...Change` pairs. The committed Roborazzi chassis
-// baselines are the regression proof.
-//
-// r58b (F-58b): every raw Slider in both panels converts to the r56
-// `LabeledSlider` --- label + live value pill + double-tap-to-neutral.
-// The r36 plain-state contract (every tick writes the chassis state) and
-// the r36 per-layer live-draft contract (tick writes the draft, release
-// commits through `commitSelectedDrawLayer`/`commitSelectedRegionLayer`)
-// are verbatim; only the control's VISUAL shape changes (the pill makes
-// the number readable, the double-tap replaces the drag-back-to-zero hunt).
-// ---------------------------------------------------------------------------
+// The paint family's tool panels. Paint modes (Draw/Region/Erase) are mutually exclusive;
+// plain state tunes the NEXT stroke/region, a selected layer re-binds the controls via live-draft.
 
 @Composable
 internal fun DrawPanel(
@@ -68,15 +50,10 @@ internal fun DrawPanel(
     onSelectRegionLayerChange: (String?) -> Unit,
 ) {
 
-    // ---- Drawing (r36: the freehand tool) ----
-    // The contract's UI shape (drawing-tool.md decision 6): the
-    // Draw-mode chip + the stroke layer chips, then the controls
-    // under the duality --- Draw mode ON tunes the NEXT stroke
-    // (the brush, plain state; the live gesture previews through
-    // a transient draft layer); a selected layer re-binds the SAME
-    // controls to it through the live-draft pattern. The two states
-    // are exclusive; ONE selection at a time across ALL the
-    // families (the r35 contract extended).
+    // ---- Drawing (the freehand tool) ----
+    // Draw mode ON tunes the NEXT stroke (plain state; the live gesture previews via a
+    // transient draft layer); a selected layer re-binds the SAME controls (live-draft).
+    // The two states are exclusive; ONE selection at a time across ALL families.
     Text(
         text = stringResource(R.string.editor_section_drawing),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -89,11 +66,8 @@ internal fun DrawPanel(
                 sweepPendingDrafts()
                 onDrawModeChange(!drawMode)
                 if (drawMode) {
-                    // Entering paint mode drops every selection ---
-                    // painting owns the gesture; the user keeps
-                    // painting across strokes. The r37 twin grew to
-                    // THREE paint modes in r41 (Draw/Region/Erase):
-                    // mutually exclusive, enforced at every toggle.
+                    // Entering paint mode drops every selection and exits the other
+                    // paint modes (Draw/Region/Erase are mutually exclusive).
                     onRegionModeChange(false)
                     onEraseModeChange(false)
                     onSelectTextLayerChange(null)
@@ -114,8 +88,8 @@ internal fun DrawPanel(
                         sweepPendingDrafts()
                         onSelectDrawLayerChange(layer.id)
                         onDrawModeChange(false) // the duality is exclusive
-                        onRegionModeChange(false) // and so are the paint modes
-                        onEraseModeChange(false) // all three of them (r41)
+                        onRegionModeChange(false) // so are the paint modes
+                        onEraseModeChange(false)
                         onSelectTextLayerChange(null)
                         onSelectStickerLayerChange(null)
                         onSelectRegionLayerChange(null)
@@ -130,9 +104,8 @@ internal fun DrawPanel(
     val selectedDrawLayer = committed.drawLayers?.layers
         ?.firstOrNull { it.id == selectedDrawLayerId }
     if (drawMode) {
-        // -- The brush (tunes the NEXT stroke): the swatches and
-        //    sliders are plain state, applied at commit; the live
-        //    gesture previews them through the draft layer.
+        // -- The brush (tunes the NEXT stroke): plain state applied at commit;
+        //    the live gesture previews it through the draft layer.
         Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
             TEXT_COLORS.forEach { (colorArgb, nameRes) ->
                 ColorSwatch(
@@ -144,9 +117,8 @@ internal fun DrawPanel(
                 )
             }
         }
-        // r58b: the crafted LabeledSlider (r56) --- label + live value
-        // pill + double-tap-to-neutral. The r36 plain-state contract is
-        // verbatim (every tick writes the chassis state; no draft).
+        // LabeledSlider: label + live value pill + double-tap-to-neutral;
+        // every tick writes the chassis state (plain state, no draft).
         LabeledSlider(
             name = stringResource(R.string.editor_a11y_draw_width),
             label = stringResource(R.string.editor_draw_width, brushWidth),
@@ -179,9 +151,8 @@ internal fun DrawPanel(
         )
     } else if (selectedDrawLayer != null) {
         val layerId = selectedDrawLayer.id
-        // -- Per-layer re-edit (the live-draft pattern; the keys
-        //    carry the draw- prefix so effectiveRecipe() routes
-        //    them). The swatches and sliders re-bind to the layer.
+        // -- Per-layer re-edit (live-draft; the "draw-" key prefix routes
+        //    through effectiveRecipe()). Controls re-bind to the layer.
         Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
             TEXT_COLORS.forEach { (colorArgb, nameRes) ->
                 ColorSwatch(
@@ -197,9 +168,8 @@ internal fun DrawPanel(
         }
         val widthLive = draft?.takeIf { it.first == "draw-width@$layerId" }?.second
             ?: selectedDrawLayer.widthPct
-        // r58b: the per-layer live-draft pattern on the crafted LabeledSlider;
-        // the r36 contract is verbatim (tick drafts, release commits through
-        // commitSelectedDrawLayer, double-tap returns to the control's neutral).
+        // Per-layer live-draft: tick drafts, release commits through
+        // commitSelectedDrawLayer, double-tap returns to the control's neutral.
         LabeledSlider(
             name = stringResource(R.string.editor_a11y_draw_width),
             label = stringResource(R.string.editor_draw_width, widthLive),
@@ -312,25 +282,12 @@ internal fun RegionsPanel(
     onSelectRegionLayerChange: (String?) -> Unit,
 ) {
 
-    // ---- Regions (r37: the mosaic/blur pixel stage) ----
-    // The r37 UI section, landed here as the recorded debt fix (the
-    // r37 insertion script wrote the gradle file but never the
-    // activity --- the section existed only in a Python variable;
-    // the merged r37 carried the model, the recipe, the pipeline
-    // stage and the gesture scaffolding without this surface, and
-    // regionMode was unreachable. The correction rides r38; the
-    // r37 delivery record gains the note).
-    //
-    // The contract's UI shape (mosaic-regions.md decision 6): the
-    // Region-mode chip (mutually exclusive with Draw mode --- one
-    // paint mode at a time, enforced at both toggles), the region
-    // layer chips, and the controls under the duality: paint mode
-    // tunes the NEXT region (kind chips + strength slider, plain
-    // state, previewed live through the transient draft region);
-    // a selected region re-binds the same controls through the
-    // live-draft pattern. The effect previews AT PAINT TIME: the
-    // draft region rides the effective recipe through the same
-    // pipeline stage the export runs.
+    // ---- Regions (the mosaic/blur pixel stage) ----
+    // Region-mode chip (mutually exclusive with Draw mode) + region layer chips.
+    // Paint mode tunes the NEXT region (kind + strength, plain state, previewed live
+    // through the transient draft region); a selected region re-binds the same
+    // controls (live-draft). Previews AT PAINT TIME: the draft region rides the
+    // effective recipe through the same pipeline stage the export runs.
     Text(
         text = stringResource(R.string.editor_section_regions),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -343,9 +300,8 @@ internal fun RegionsPanel(
                 sweepPendingDrafts()
                 onRegionModeChange(!regionMode)
                 if (regionMode) {
-                    // Entering region paint mode drops every
-                    // selection and exits the other paint modes;
-                    // the user keeps painting across regions.
+                    // Entering region paint mode drops every selection and exits
+                    // the other paint modes.
                     onDrawModeChange(false)
                     onEraseModeChange(false)
                     onSelectTextLayerChange(null)
@@ -400,8 +356,7 @@ internal fun RegionsPanel(
                 modifier = Modifier.padding(end = 8.dp),
             )
         }
-        // r58b: the crafted LabeledSlider on the r37 plain-state contract
-        // (every tick writes the chassis regionStrength; no draft).
+        // Plain state: every tick writes the chassis regionStrength (no draft).
         LabeledSlider(
             name = stringResource(R.string.editor_a11y_region_strength),
             label = stringResource(R.string.editor_region_strength, regionStrength),
@@ -438,9 +393,8 @@ internal fun RegionsPanel(
         }
         val strengthLive = draft?.takeIf { it.first == "region-strength@$layerId" }?.second
             ?: selectedRegionLayer.strengthPct
-        // r58b: the per-layer live-draft pattern on the crafted LabeledSlider;
-        // the r38 contract is verbatim (tick drafts, release commits through
-        // commitSelectedRegionLayer, double-tap returns to the control's neutral).
+        // Per-layer live-draft: tick drafts, release commits through
+        // commitSelectedRegionLayer, double-tap returns to the control's neutral.
         LabeledSlider(
             name = stringResource(R.string.editor_a11y_region_strength),
             label = stringResource(R.string.editor_region_strength, strengthLive),

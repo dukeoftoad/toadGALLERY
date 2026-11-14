@@ -35,8 +35,7 @@ class EditorNegotiationTest {
 
     @Test
     fun `hostile prefix extensions never match`() {
-        // Only the exact id and the exact .debug suffix are accepted; any
-        // further suffix is a different (potentially spoofed) package.
+        // Only the exact id and the exact .debug suffix pass; any further suffix may be spoofed.
         assertFalse(EditorIdentity.matches("com.toadgallery.editor.evil"))
         assertFalse(EditorIdentity.matches("com.toadgallery.editor.debug.extra"))
     }

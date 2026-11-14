@@ -9,54 +9,29 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * The prototype's contract-conformance suite (Issue #14): parses the EDIT
- * APP's source manifests on the JVM and pins the contract surface the
- * gallery relies on. CI cannot install two APKs on an emulator (ADR-0016),
- * so the round-trip is proven in two layers: this manifest-level
- * conformance suite (the editor's side of the contract) plus the contract
- * module's negotiation/request/result tests (the shared logic), with the
- * on-device dogfood checklist carrying the physical round trip.
- *
- * Phase 1 layout (the deliberate split, see the manifest headers): the
- * CONTRACT SURFACE (activities, intent-filters, mime sets, the two
- * activity-level contract markers, the legacy capped write grant) rides
- * the :editor:core library manifest that both installable shells merge;
- * the APP-LEVEL pieces (the application attributes, the APPLICATION-level
- * r46 fallback marker, and the r41 INTERNET hard-strip) ride the
- * :editor:app SHELL manifest alone --- the unified build embeds the
- * library and keeps the gallery's model-download INTERNET grant, so the
- * strip must never ride the library. Each assertion below reads exactly
- * the manifest that owns its subject.
+ * JVM-parsed manifest conformance: pins the editor's side of the gallery
+ * contract (launch surfaces, contract versions, permissions, zero-network posture).
  */
 class EditManifestConformanceTest {
 
-    /**
-     * Unit-test working dir is the module dir (:editor:core) under Gradle;
-     * the local r41 harness pins the WORKTREE ROOT as the cwd --- be
-     * tolerant of both (the repo-root candidate the round's harness runs
-     * from, generalized for the post-Phase-1 module layout).
-     */
+    /** Tolerates both the Gradle module-dir and the repo-root working directories. */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         return sequenceOf(
             File(cwd, relative), // the Gradle module cwd (:editor:core)
             File(cwd.parentFile, "core/$relative"), // a sibling :editor:* module cwd
-            File(cwd, "editor/core/$relative"), // the repo/worktree-root cwd (the harness)
+            File(cwd, "editor/core/$relative"), // the repo/worktree-root cwd
         ).firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
 
-    /**
-     * The APP-LEVEL shell manifest resolver: same tolerant pattern, pointed
-     * at the :editor:app shell that carries the application attributes, the
-     * APPLICATION-level r46 fallback marker, and the r41 INTERNET strip.
-     */
+    /** Resolves the :editor:app shell manifest (application attributes, fallback marker, INTERNET strip). */
     private fun appManifestFile(): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         return sequenceOf(
             File(cwd, "app/src/main/AndroidManifest.xml"), // a sibling :editor:app cwd
             File(cwd.parentFile, "app/src/main/AndroidManifest.xml"), // the Gradle module cwd (:editor:core)
-            File(cwd, "editor/app/src/main/AndroidManifest.xml"), // the repo/worktree-root cwd (the harness)
+            File(cwd, "editor/app/src/main/AndroidManifest.xml"), // the repo/worktree-root cwd
         ).firstOrNull { it.exists() }
             ?: error("Cannot locate the :editor:app shell manifest from ${cwd.absolutePath}")
     }
@@ -91,8 +66,7 @@ class EditManifestConformanceTest {
                     "true",
                     activity.attributes.getNamedItem("android:exported").nodeValue,
                 )
-                // The filter's action/category live in the CHILD ELEMENTS'
-                // attributes --- textContent is whitespace-only here.
+                // Action/category live in child-element attributes; textContent is whitespace-only here.
                 val filters = activity.getElementsByTagName("intent-filter")
                 var hasAction = false
                 var hasDefault = false
@@ -136,7 +110,7 @@ class EditManifestConformanceTest {
         }
     }
 
-    /** The r42 two-surface meta-data pin: image declares v1 (the byte-identical v1 wire), video declares v2. */
+    /** Collects the contract-version meta-data values at every manifest level. */
     private fun contractVersionMetaValues(): List<Int> {
         val doc = manifest()
         val metas = doc.getElementsByTagName("meta-data")
@@ -153,16 +127,14 @@ class EditManifestConformanceTest {
 
     @Test
     fun `the image surface declares contract v1 (the v1 wire stays byte-identical)`() {
-        // The image activity keeps declaring 1: an image launch against a
-        // v1-era editor behaves exactly as before --- the additive rule.
+        // The image surface stays at v1: an image launch against a v1-era editor behaves exactly as before.
         val values = contractVersionMetaValues()
         assertTrue("the image surface must declare version 1", values.contains(1))
     }
 
     @Test
     fun `the video surface declares the current contract version`() {
-        // The r42 video surface IS the v2 addition, so it declares the
-        // module's current version and the gallery's video query
+        // The video surface declares the module's current version; the gallery's video query
         // negotiates against exactly it.
         val values = contractVersionMetaValues()
         assertTrue(
@@ -171,15 +143,7 @@ class EditManifestConformanceTest {
         )
     }
 
-    /**
-     * The r46 extension to the parsing approach: `contractVersionMetaValues`
-     * above collects the contract meta-data at EVERY level of the document
-     * and cannot tell WHERE a marker was declared. The application-level
-     * fallback marker is a DIRECT child of `<application>`, so this helper
-     * walks only that element's own child nodes (the same child-element
-     * walking style the intent-filter tests use) and returns the declared
-     * value, or null when the application carries no marker at all.
-     */
+    /** Reads the contract-version marker declared directly under <application>, or null if absent. */
     private fun applicationLevelContractVersion(): Int? {
         val doc = appManifest()
         val application = doc.getElementsByTagName("application").item(0)
@@ -198,14 +162,9 @@ class EditManifestConformanceTest {
 
     @Test
     fun `the application element carries the r46 fallback contract marker (value 2)`() {
-        // r46 (the contract-discovery hardening round): the gallery's
-        // hardened resolver falls back to the APPLICATION-level marker when
-        // the activity-level bundle is unavailable on some PackageManager
-        // paths (EditorVersionMetadata.pick: activity-first, application-
-        // second). The fallback must declare a version the negotiator
-        // accepts (>= CONTRACT_VERSION_MIN); the editor declares the
-        // module's current version --- the fallback must never understate
-        // what the newest surface can do.
+        // The gallery's resolver falls back to the application-level marker when the activity
+        // bundle is unavailable; the fallback must never understate the newest surface
+        // (>= CONTRACT_VERSION_MIN).
         assertEquals(
             "the application-level contract marker must declare the current contract version",
             EditContract.CONTRACT_VERSION,
@@ -213,7 +172,7 @@ class EditManifestConformanceTest {
         )
     }
 
-    // ---- The r42 video launch surface (the additive contract v2 half) ----
+    // ---- The video launch surface (the additive contract v2 half) ----
 
     @Test
     fun `the video edit activity is exported and filtered on the contract action with video mimes`() {
@@ -256,8 +215,7 @@ class EditManifestConformanceTest {
                 }
                 assertTrue("the video surface must carry the contract action", hasAction)
                 assertTrue("the video filter must keep the DEFAULT category", hasDefault)
-                // The honest encodable set the media3 Transformer pipeline
-                // re-encodes on-device (MP4 / MOV / 3GP).
+                // The honest encodable set media3 Transformer re-encodes on-device (MP4 / MOV / 3GP).
                 assertEquals(
                     listOf("video/mp4", "video/quicktime", "video/3gpp"),
                     mimes,
@@ -269,8 +227,7 @@ class EditManifestConformanceTest {
 
     @Test
     fun `the image surface stays filtered on image mimes only`() {
-        // The additive rule's other half: the IMAGE activity never gained a
-        // video mime (a video launch cannot resolve the image surface).
+        // The image activity never gained a video mime (a video launch cannot resolve it).
         val doc = manifest()
         val activities = doc.getElementsByTagName("activity")
         for (i in 0 until activities.length) {
@@ -290,13 +247,9 @@ class EditManifestConformanceTest {
 
     @Test
     fun `the source manifest's only INTERNET mention is the hard-remove strip`() {
-        // r41 (the CI merge-gate catch): the onnxruntime-android AAR's own
-        // manifest declares INTERNET; the app manifest hard-strips it at
-        // merge time (tools:node=remove) so the MERGED manifest the gate
-        // reads --- and the device installs --- carries no INTERNET at
-        // all. Every occurrence of the INTERNET string in the source
-        // manifest must therefore live inside that strip directive and
-        // nowhere else: no request, no allowlist, ever (contract 4.5).
+        // The onnxruntime AAR's own manifest declares INTERNET; the app manifest hard-strips it
+        // at merge (tools:node=remove) so the merged manifest carries none. Every dotted INTERNET
+        // mention in the source manifest must be that strip: no request, no allowlist (contract 4.5).
         val doc = appManifest()
         val permissions = doc.getElementsByTagName("uses-permission")
         var internetStrips = 0
@@ -328,15 +281,11 @@ class EditManifestConformanceTest {
 
     @Test
     fun `the only declared permission REQUEST is the pre-Q capped storage write`() {
-        // Phase 1 layout: the legacy write request rides :editor:core (both
-        // installable shells merge it); the APP shell's only uses-permission
-        // element is the r41 INTERNET strip directive, which requests
-        // nothing.
+        // The legacy write request rides :editor:core (merged by both shells); the APP shell's
+        // only uses-permission is the INTERNET strip directive, which requests nothing.
         val doc = manifest()
         val permissions = doc.getElementsByTagName("uses-permission")
-        // Exactly one uses-permission ELEMENT on the library: the legacy
-        // write request (the r41 INTERNET strip lives on the :editor:app
-        // shell, asserted below).
+        // Exactly one uses-permission element on the library: the legacy write request.
         assertEquals("exactly the legacy write request on the library", 1, permissions.length)
         val p = permissions.item(0)
         assertEquals(
@@ -369,9 +318,7 @@ class EditManifestConformanceTest {
 
     @Test
     fun `allowBackup is off for the editor prototype`() {
-        // The prototype holds no user data worth backing up; the gallery's
-        // backup-exclusion posture carries over as the conservative default.
-        // (Phase 1: the application attributes ride the :editor:app shell.)
+        // No user data worth backing up; the gallery's conservative default carries over.
         val doc = appManifest()
         val application = doc.getElementsByTagName("application").item(0)
         assertEquals("false", application.attributes.getNamedItem("android:allowBackup").nodeValue)

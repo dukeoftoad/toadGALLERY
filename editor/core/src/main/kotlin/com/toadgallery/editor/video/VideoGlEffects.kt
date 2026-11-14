@@ -12,36 +12,18 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /**
- * The GL realization of the nine ADR-0012 adjustments (r42, contract
- * decisions 6-7): ONE shader + ONE uniform mapping, held by
- * [VideoAdjustProjection] in :shared:video-edit and consumed VERBATIM by
- * both realizations --- the ExoPlayer preview (ExoPlayer.setVideoEffects)
- * and the Transformer export (EditedMediaItem.Builder.setEffects) --- so
- * preview and export agree by construction: there is nothing to agree
- * about, both sides compile the same source and bind the same
- * [VideoAdjustProjection.uniforms] over the same [VideoAdjustParams].
+ * The GL realization of the nine ADR-0012 adjustments: ONE shader + ONE uniform mapping held by
+ * [VideoAdjustProjection] and consumed verbatim by both the ExoPlayer preview and the Transformer
+ * export, so preview and export agree by construction. The parameter struct, projection math and
+ * shader text are pure Kotlin (JVM-pinned); this file is the thin media3 binding --- the ONLY
+ * place the edit app compiles GL. The shader's stage order is the photo pipeline's LutBuilder
+ * order, so the same parameter VALUES mean the same colour math.
  *
- * The parameter struct, the projection math and the shader text are pure
- * Kotlin (JVM-pinned edge by edge, including the nine-row table
- * conformance); this file is the thin media3 binding --- the ONLY place
- * the edit app compiles GL. The stage order inside the shader is the
- * photo pipeline's LutBuilder order (exposure -> brightness -> contrast
- * -> highlights/shadows -> saturation -> temperature/tint -> vignette),
- * so the same parameter VALUES mean the same colour math the photo
- * editor taught.
- *
- * The 1.11.1 effect contract this binds (verified against the
- * media3-effect 1.11.1 artifact): [GlEffect.toGlShaderProgram] creates
- * the program; [BaseGlShaderProgram] owns the output texture pool, focuses
- * the output framebuffer, clears it and THEN calls [drawFrame], which
- * only binds the INPUT texture as the sampler and draws the full-canvas
- * quad. The vertex/texcoord convention is media3's own
- * (vertex_shader_transformation_es2 with identity matrices):
- * `vTexCoord = aFramePosition.xy * 0.5 + 0.5`, the full NDC quad ---
- * the shared shader's VERTEX_SHADER_LINES encode exactly that, so no
- * flip matrix is needed. The input frame arrives as a regular
- * GL_TEXTURE_2D (media3 hands shader programs 2D intermediate textures,
- * the fragment_shader_lut_es2 sampler2D precedent).
+ * media3 1.11.1 contract: [BaseGlShaderProgram] owns the output texture pool, focuses and clears
+ * the output framebuffer, then calls [drawFrame] (bind the input texture, draw the full-canvas
+ * NDC quad). The vertex/texcoord convention (`vTexCoord = aFramePosition.xy * 0.5 + 0.5`) is
+ * encoded in the shared VERTEX_SHADER_LINES --- no flip matrix. The input frame is a regular
+ * GL_TEXTURE_2D.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VideoAdjustShaderProgram(
@@ -57,9 +39,8 @@ class VideoAdjustShaderProgram(
     private var samplerLoc: Int = 0
     private var uniformLocs: Map<String, Int> = emptyMap()
 
-    // The full-canvas quad as two triangles of (x, y) NDC pairs; the
-    // shared vertex shader derives the texture coordinates (media3's own
-    // TRIANGLE_STRIP bounds cover the same quad).
+    // Full-canvas quad as two triangles of (x, y) NDC pairs; the shared vertex
+    // shader derives the texture coordinates.
     private val quad: FloatBuffer = floatArrayOf(
         -1f, -1f,
         +1f, -1f,
@@ -73,11 +54,9 @@ class VideoAdjustShaderProgram(
     override fun configure(inputWidth: Int, inputHeight: Int): Size = Size(inputWidth, inputHeight)
 
     /**
-     * Draws the input frame through the shared adjustment shader into the
-     * ALREADY-FOCUSED output framebuffer (the base class focuses and
-     * clears it): bind the input texture as the sampler, push the
-     * projection's uniforms, draw the quad. Nothing else --- the base
-     * class owns every texture and framebuffer.
+     * Draws the input frame through the shared shader into the ALREADY-FOCUSED output
+     * framebuffer (the base class focuses/clears it); the base class owns every texture
+     * and framebuffer.
      */
     override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
         ensureProgram()
@@ -115,8 +94,7 @@ class VideoAdjustShaderProgram(
         programHandle = program
         positionLoc = GLES20.glGetAttribLocation(program, "aFramePosition")
         samplerLoc = GLES20.glGetUniformLocation(program, "uTexSampler")
-        // the uniform mapping is pinned by the shared module's tests: the
-        // shader declares exactly these names, in this order.
+        // The uniform mapping is pinned by the shared module's tests: the shader declares exactly these names.
         uniformLocs = VideoAdjustProjection.uniforms(params).associate { uniform ->
             uniform.name to GLES20.glGetUniformLocation(program, uniform.name)
         }
@@ -144,11 +122,9 @@ class VideoAdjustShaderProgram(
 }
 
 /**
- * The [GlEffect] handle both realizations receive: carries the parameter
- * struct to the shader program media3 builds for it. The effect instance
- * changes identity on every parameter commit, which is what makes the
- * preview re-apply (ExoPlayer.setVideoEffects re-sends the effect list
- * to the video renderer; a fresh instance is a fresh program).
+ * The [GlEffect] handle both realizations receive: carries the parameter struct to the shader
+ * program media3 builds. The instance changes identity on every parameter commit, which is
+ * what makes the preview re-apply (a fresh instance is a fresh program).
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VideoAdjustEffect(private val params: VideoAdjustParams) : GlEffect {
@@ -160,18 +136,13 @@ class VideoAdjustEffect(private val params: VideoAdjustParams) : GlEffect {
 }
 
 /**
- * The GL realization of the shared look (r74, the "one language"
- * promise): the parsed `.cube` uploaded as ONE 2D texture --- the cube's
- * RED-MAJOR unwrap, x = r + g*size and y = b, `size^2` by `size` texels
- * --- sampled trilinearly by the look stage's shader lines
- * ([VideoAdjustProjection.LOOK_STAGE_LINES], the same arithmetic
- * [VideoLutSampler.sampleCube] pins on the JVM). The shader is the
- * composed source ([VideoAdjustProjection.fragmentShaderWithLookStage])
- * with a neutral parameter set: this effect OWNS the look stage, the
- * [VideoAdjustEffect] owns the nine sliders, and the two effects chain
- * in media3's effects list --- the photo pipeline's own stage order
- * (adjustments, then the look over the graded pixels), realized as two
- * passes instead of one composed shader.
+ * The GL realization of the shared look: the parsed `.cube` uploaded as ONE 2D texture --- the
+ * RED-MAJOR unwrap, x = r + g*size, y = b, size^2 x size texels --- sampled trilinearly by the
+ * look stage's shader lines ([VideoAdjustProjection.LOOK_STAGE_LINES], the same arithmetic
+ * [VideoLutSampler.sampleCube] pins on the JVM). The shader is the composed source with a
+ * neutral parameter set: this effect OWNS the look stage, [VideoAdjustEffect] owns the nine
+ * sliders, and the two chain in media3's effects list (adjustments, then the look over the
+ * graded pixels).
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VideoLookShaderProgram(
@@ -189,7 +160,7 @@ class VideoLookShaderProgram(
     private var uniformLocs: Map<String, Int> = emptyMap()
     private var lookTexId: Int = 0
 
-    // The full-canvas quad (the adjust program's own, verbatim).
+    // The full-canvas quad, same as the adjust program's.
     private val quad: FloatBuffer = floatArrayOf(
         -1f, -1f,
         +1f, -1f,
@@ -208,10 +179,8 @@ class VideoLookShaderProgram(
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTexId)
         GLES20.glUniform1i(samplerLoc, 0)
-        // ...the look's unwrapped cube on unit 1 (LINEAR filtering does
-        // the r/g/b axis interpolation's first half; the shader's own
-        // trilinear math rides on top for exactness against the
-        // reference sampler).
+        // ...the look's unwrapped cube on unit 1 (LINEAR filtering does the r/g/b axis
+        // interpolation's first half; the shader's trilinear math rides on top).
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lookTexId)
         GLES20.glUniform1i(lookSamplerLoc, 1)
@@ -233,9 +202,9 @@ class VideoLookShaderProgram(
     }
 
     /**
-     * Compiles the composed shader and uploads the look's unwrapped cube
-     * as one RGBA 2D texture: size^2 wide (r + g*size), size tall (b),
-     * row-major --- exactly the layout the look stage's UV math walks.
+     * Compiles the composed shader and uploads the unwrapped cube as one RGBA 2D texture:
+     * size^2 wide (r + g*size), size tall (b), row-major --- the layout the look stage's
+     * UV math walks.
      */
     private fun ensureProgram() {
         if (programHandle != 0) return
@@ -333,7 +302,7 @@ class VideoLookShaderProgram(
             .apply { put(this@toDirectFloatBuffer); position(0) }
 }
 
-/** The look's [GlEffect] handle (the VideoAdjustEffect shape, verbatim). */
+/** The look's [GlEffect] handle (the VideoAdjustEffect shape). */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VideoLookEffect(private val look: VideoLutLook) : GlEffect {
 

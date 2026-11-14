@@ -119,6 +119,8 @@ import com.toadgallery.editor.contract.RawExtras
 import com.toadgallery.editor.contract.RequestValidation
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -126,38 +128,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * toadGALLERY Edit --- the contract launch activity (r29 Issue #14 gate;
- * r30 the Phase 6 v1 pipeline). Spec `docs/architecture/editor-contract.md`.
- *
- * Round trip (contract-exact):
- *  1. LAUNCH: the gallery's v1 extras validated through the SHARED
- *     [EditRequestValidator]; the source URI rides the Parcelable extra or
- *     the ClipData item; the read-only grant scopes everything the editor
- *     may touch.
- *  2. RESTORE: the ADR-0011 sidecar for this source (if any) restores the
- *     previous session --- the non-destructive promise survives process
- *     death and cancel.
- *  3. MODIFY: the whole session is ONE [EditRecipe] snapshot stack
- *     ([EditSessionState]); the live preview runs the ordered
- *     [EditPipeline] over a bounded decode; every stage's zero state is
- *     skipped exactly. The sidecar is saved on every commit.
- *  4. EXPORT (Save copy): full-resolution decode -> [EditPipeline] ->
- *     compress (JPEG quality / PNG lossless / WebP; the honest set
- *     encoder supports it, honest JPEG fallback otherwise) -> MediaStore
- *     INSERT of a NEW row (IS_PENDING on Q+, cancelled on failure --- no
- *     partial entry) -> EXIF metadata policy applied exactly ->
- *     sidecar cleared (the edit resolved) -> RESULT_OK with
- *     EXTRA_OUTPUT_URI + the applied policy echoed. The source URI is
- *     read-only by construction: never opened for write, never updated,
- *     never deleted.
- *  5. TERMINAL STATES: RESULT_OK / RESULT_CANCELED (back) / RESULT_ERROR
- *     with the structured codes --- validation failures answer before any
- *     UI exists.
- *
- * Zero network: the module's build-time gate fails if INTERNET ever rides
- * into the merged manifest; the activity opens no sockets itself. The
- * export scope OUTLIVES the composition so a mid-export close still
- * answers a terminal state or cancels its pending row.
+ * toadGALLERY Edit --- the contract launch activity (spec
+ * `docs/ARCHITECTURE.md`). Round trip: validate the launch
+ * extras (invalid calls answer before any UI); restore the ADR-0011 sidecar
+ * session (non-destructive, survives process death); edit as ONE
+ * [EditRecipe] snapshot stack over a bounded decode; Save copy re-decodes
+ * full resolution, runs [EditPipeline], compresses, INSERTs a NEW MediaStore
+ * row (IS_PENDING on Q+, cancelled on failure), applies the EXIF policy and
+ * clears the sidecar. The source URI is read-only by construction; zero
+ * network; the export scope outlives the composition so a mid-export close
+ * still answers a terminal state.
  */
 class EditActivity : ComponentActivity() {
 
@@ -172,51 +152,39 @@ class EditActivity : ComponentActivity() {
         private set
 
     /**
-     * The bundled `.cube` looks (r33), parsed ONCE and shared by the
-     * preview and every export --- the same [CubeLut] instances, so the
-     * look cannot differ between what the user previews and what the
-     * pipeline exports. Lazily evaluated off the main thread by the
-     * first reader (the composition's loader or an export); a broken
-     * asset is simply absent (the conformance test pins the committed
-     * set, so an absence means a broken build, not bad data).
+     * The bundled `.cube` looks, parsed once and shared by the preview and
+     * every export (the same [CubeLut] instances, so the look cannot
+     * differ). Parsed lazily off the main thread by the first reader; a
+     * broken asset is absent (the conformance test pins the committed set).
      */
     internal val bundledLooks: Map<String, CubeLut> by lazy {
         BundledLuts.loadAll { path -> assets.open(path) }
     }
 
     /**
-     * The user-imported `.cube` store (r33 extension): SAF-picked looks
-     * copied verbatim into app-private storage, ids derived and
-     * collision-suffixed so they can never shadow the bundled set.
+     * SAF-picked `.cube` looks copied verbatim into app-private storage;
+     * ids derived and collision-suffixed so they never shadow the bundled set.
      */
     internal val importedLutStore: ImportedLutStore by lazy {
         ImportedLutStore(File(filesDir, "imported-luts"))
     }
 
     /**
-     * The user-imported sticker store (r35): SAF-picked PNG/WebP files
-     * copied verbatim into app-private storage, ids derived and
-     * collision-suffixed so they can never shadow the bundled set (the
-     * ImportedLutStore pattern, image-shaped).
+     * SAF-picked sticker PNG/WebP files copied verbatim into app-private
+     * storage; ids collision-suffixed so they never shadow the bundled set.
      */
     internal val importedStickerStore: ImportedStickerStore by lazy {
         ImportedStickerStore(File(filesDir, "imported-stickers"))
     }
 
     /**
-     * The imported-sticker bitmaps (r35), decoded once per registry load
-     * and shared by the preview and every export --- the same instances,
-     * so a rendered sticker cannot differ between them (the bundledFonts
-     * pattern; a payload that fails to decode is absent, never thrown).
+     * Imported-sticker bitmaps, decoded once per registry load and shared by
+     * the preview and every export; a payload that fails to decode is absent.
      */
     internal val importedStickerBitmaps: MutableMap<String, Bitmap> =
         java.util.Collections.synchronizedMap(java.util.LinkedHashMap())
 
-    /**
-     * Re-decodes every imported sticker (per import/removal; called off
-     * the main thread by the composition's loader). Broken files are
-     * absent from the result, never thrown.
-     */
+    /** Re-decodes every imported sticker (per import/removal, off the main thread); broken files are absent. */
     internal fun reloadImportedStickers(): Map<String, Bitmap> {
         val reloaded = java.util.LinkedHashMap<String, Bitmap>()
         for (sticker in importedStickerStore.list()) {
@@ -233,29 +201,25 @@ class EditActivity : ComponentActivity() {
     }
 
     /**
-     * The render resolution for a sticker id (the tolerance contract):
-     * the bundled vector, else the imported bitmap, else null --- the
-     * compositor renders nothing for an unresolvable id, never a crash.
-     * One resolver shared by the preview and the export.
+     * The render payload for a sticker id: the bundled vector, else the
+     * imported bitmap, else null --- an unresolvable id renders nothing,
+     * never a crash. One resolver shared by the preview and the export.
      */
     internal fun stickerResolver(id: String): StickerCompositor.Resolved? =
         BundledStickers.shape(id)?.let { StickerCompositor.Resolved.Vector(it) }
             ?: importedStickerBitmaps[id]?.let { StickerCompositor.Resolved.Bitmap(it) }
 
     /**
-     * The user-imported frame store (r38): the SAF-picked PNG/WebP files
-     * copied verbatim into app-private storage, ids derived and
-     * collision-suffixed so they can never shadow the bundled set (the
-     * sticker store's contract, frame-shaped).
+     * SAF-picked frame PNG/WebP files copied verbatim into app-private
+     * storage; ids collision-suffixed so they never shadow the bundled set.
      */
     internal val importedFrameStore: ImportedFrameStore by lazy {
         ImportedFrameStore(File(filesDir, "imported-frames"))
     }
 
     /**
-     * The imported-frame bitmaps (r38), decoded once per registry load and
-     * shared by the preview and every export (the sticker bitmaps'
-     * pattern; a payload that fails to decode is absent, never thrown).
+     * Imported-frame bitmaps, decoded once per registry load and shared by
+     * the preview and every export; a payload that fails to decode is absent.
      */
     internal val importedFrameBitmaps: MutableMap<String, Bitmap> =
         java.util.Collections.synchronizedMap(java.util.LinkedHashMap())
@@ -276,33 +240,30 @@ class EditActivity : ComponentActivity() {
         return java.util.LinkedHashMap(reloaded)
     }
 
-    // ---- r41: the Edit v3 AI seam (Phase 10 sub-scope A) ----
+    // ---- AI seam: derived-artifact stores, inference, stage-input resolution ----
 
     /**
-     * The derived-artifact store (r41): `edit-ai/` in the app-private
-     * storage, BESIDE the sidecar directory --- the artifacts the four
-     * inference commits persist (masks, fills, depth grids, face boxes);
-     * every render replays over them, no model ever runs at render time.
-     * Swept together with the sidecar when the edit resolves.
+     * The derived-artifact store: `edit-ai/` in app-private storage beside
+     * the sidecar directory --- the masks/fills/depth/face-box artifacts the
+     * AI commits persist; every render replays over them, no model ever runs
+     * at render time. Swept with the sidecar when the edit resolves.
      */
     internal val aiStore: EditAiStore by lazy {
         EditAiStore(File(filesDir, "edit-ai"), request.sourceUri)
     }
 
     /**
-     * The user-imported sky store (r41): the ImportedFrameStore contract
-     * VERBATIM, sky-shaped --- PNG/WebP magic-before-write, verbatim
-     * bytes, the size cap, collision-suffixed ids that can never shadow
-     * the bundled parametric set.
+     * SAF-picked sky PNG/WebP files copied verbatim into app-private storage
+     * (magic-before-write, size cap); ids collision-suffixed so they never
+     * shadow the bundled parametric set.
      */
     internal val importedSkyStore: ImportedSkyStore by lazy {
         ImportedSkyStore(File(filesDir, "imported-skies"))
     }
 
     /**
-     * The imported-sky bitmaps (r41), decoded once per registry load and
-     * shared by the preview and every export (the frame bitmaps' pattern;
-     * a payload that fails to decode is absent, never thrown).
+     * Imported-sky bitmaps, decoded once per registry load and shared by the
+     * preview and every export; a payload that fails to decode is absent.
      */
     internal val importedSkyBitmaps: MutableMap<String, Bitmap> =
         java.util.Collections.synchronizedMap(java.util.LinkedHashMap())
@@ -323,36 +284,30 @@ class EditActivity : ComponentActivity() {
         return java.util.LinkedHashMap(reloaded)
     }
 
+    /** The on-device model store: app-private files, download-on-demand (see EditAiModelStore). */
+    internal val aiModelStore: EditAiModelStore by lazy { EditAiModelStore(this) }
+
     /**
-     * The inference seam (r41): the ORT facade, NNAPI-first with CPU
-     * fallback. Lazy --- the runtime loads when the first AI commit runs,
-     * never at launch; a missing/broken runtime degrades the affected
-     * feature with its dedicated message, never a crash.
+     * The inference seam: the ORT facade, NNAPI-first with CPU fallback.
+     * Lazy --- the runtime loads on the first AI commit, never at launch; a
+     * missing/broken runtime degrades the affected feature, never a crash.
      */
     internal val aiInference: EditAiInference by lazy {
-        OrtEditAiInference { path ->
-            try {
-                assets.open(path)
-            } catch (_: RuntimeException) {
-                null
-            }
-        }
+        OrtEditAiInference { path -> aiModelStore.openRelative(path) }
     }
 
-    /** The face-retouch consent store (r41, ADR-0010 section 5; default-off). */
+    /** The face-retouch consent store (ADR-0010 section 5; default-off). */
     internal val retouchConsentStore: RetouchConsentStore by lazy {
         RetouchConsentStore(File(filesDir, "edit-settings"))
     }
 
     /**
-     * The caller-RESOLVED r41 artifact bundle for a recipe: the store's
-     * artifacts for the recipe's keys, the resolved sky source (the
-     * bundled parametric code, or an imported bitmap), and the retouch
-     * consent gate (the stage REFUSES under consent-off even with a
-     * restored sidecar --- the layer stays verbatim, the stage skips).
-     * ONE resolver shared by the preview and every export, so they agree
-     * by construction. A missing artifact degrades that stage to nothing
-     * --- the frame/sticker tolerance contract, never a crash.
+     * The caller-resolved AI artifact bundle for a recipe: the store's
+     * artifacts for the recipe's keys, the resolved sky source (bundled
+     * parametric code or imported bitmap), and the retouch consent gate
+     * (the stage refuses under consent-off even with a restored sidecar).
+     * ONE resolver shared by the preview and every export; a missing
+     * artifact degrades that stage to nothing, never a crash.
      */
     internal fun resolveAiStageInputs(recipe: EditRecipe): EditAiStageInputs {
         val eraseMasks = HashMap<String, FractionRleMask>()
@@ -391,11 +346,9 @@ class EditActivity : ComponentActivity() {
     }
 
     /**
-     * The bundled Typefaces (r34), created ONCE per session and shared by
-     * the preview and every export --- the same instances, so a rendered
-     * face cannot differ between them. A broken asset is simply absent
-     * (BundledFontsTest pins the committed bytes by sha256, so an absence
-     * means a broken build, not bad data).
+     * The bundled Typefaces, created once per session and shared by the
+     * preview and every export; a broken asset is absent (the conformance
+     * test pins the committed bytes).
      */
     internal val bundledFonts: Map<String, Typeface> by lazy {
         BundledFonts.ORDERED.mapNotNull { entry ->
@@ -409,9 +362,8 @@ class EditActivity : ComponentActivity() {
     }
 
     /**
-     * The render face for a layer fontId (the tolerance contract):
-     * the bundled face, else the DEFAULT face, else null --- the platform
-     * face in the compositor. Never a crash, never a dropped layer.
+     * The render face for a layer fontId: the bundled face, else the DEFAULT
+     * face --- never a crash, never a dropped layer.
      */
     internal fun fontFor(fontId: String): Typeface? =
         bundledFonts[fontId] ?: bundledFonts[BundledFonts.DEFAULT_ID]
@@ -419,12 +371,8 @@ class EditActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // r47 ux fix: targetSdk 36 enforces edge-to-edge on API 35+, so the
-        // chrome drew under the system bars AND the status-bar icons took
-        // the auto (theme-following) style --- dark icons on the editor's
-        // always-black canvas, i.e. invisible in light mode. The dark
-        // SystemBarStyle forces light icons; the layout inset follows below
-        // (root Column systemBarsPadding).
+        // Dark SystemBarStyle: light icons on the always-black canvas under
+        // edge-to-edge; the layout inset is paid at the root Column below.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -472,9 +420,8 @@ class EditActivity : ComponentActivity() {
         val restored = sidecarStore.load(request.sourceUri) ?: EditRecipe()
 
         setContent {
-            // r67: the family theme (Lilypad, fixed dark) instead of
-            // the bare MaterialTheme whose baseline purple leaked through
-            // every accent role (the maintainer's device screenshot).
+            // The family theme (fixed dark) instead of bare MaterialTheme,
+            // whose baseline purple leaks through every accent role.
             EditorTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color(LilypadTokens.POND.toInt())) {
                     EditorContent(activity = this@EditActivity, initialRecipe = restored)
@@ -586,9 +533,9 @@ class EditActivity : ComponentActivity() {
     }
 
     /**
-     * The device's allocatable bytes (the r31 storage preflight), or null
-     * when the platform answer is unavailable --- an unknown value must
-     * never block an export (MediaStore enforces regardless).
+     * The device's allocatable bytes, or null when the platform answer is
+     * unavailable --- an unknown value must never block an export (MediaStore
+     * enforces regardless).
      */
     internal fun queryAllocatableBytes(): Long? = try {
         val storageManager = getSystemService(StorageManager::class.java) ?: return null
@@ -611,9 +558,8 @@ class EditActivity : ComponentActivity() {
         val format = export.format
         try {
 
-            // 1. The cheap bounds pass: the large-file decode guard refuses
-            //    a source the pipeline could not hold anyway (r31) --- the
-            //    honest failure is ERROR_UNSUPPORTED before any work.
+            // 1. The cheap bounds pass: the decode guard refuses a source the
+            //    pipeline could not hold --- ERROR_UNSUPPORTED before any work.
             val bounds = decodeBounds(sourceUri)
             if (bounds != null &&
                 ExportPreflight.decodeGuard(
@@ -628,10 +574,9 @@ class EditActivity : ComponentActivity() {
                 )
             }
 
-            // 2. The storage preflight: refuse to start an insert the device
-            //    cannot hold (advisory --- unknown availability proceeds;
-            //    MediaStore still enforces). The error rides ERROR_IO so the
-            //    frozen v1 contract surface stays untouched.
+            // 2. Storage preflight: refuse an insert the device cannot hold
+            //    (advisory --- unknown availability proceeds; MediaStore still
+            //    enforces). ERROR_IO keeps the v1 contract surface untouched.
             val allocatable = queryAllocatableBytes()
             if (allocatable != null) {
                 val assumedPixels =
@@ -658,27 +603,22 @@ class EditActivity : ComponentActivity() {
                     "cannot decode the source at full resolution",
                 )
 
-            // 4. The ordered pipeline (geometry first, then colour/detail).
-            //    The r33 look stage resolves through the SAME lazy cache
-            //    the preview used --- one parse, one shared instance.
+            // 4. The ordered pipeline (geometry first, then colour/detail);
+            //    the look resolves through the SAME lazy cache the preview used.
             val width = source.width
             val height = source.height
             val pixels = IntArray(width * height)
             source.getPixels(pixels, 0, width, 0, 0, width, height)
             val look = export.recipe.lut?.let { bundledLooks[it.lutId] }
-            // r41: the AI stages replay over the SAME resolved artifact
-            // bundle the preview used (one resolver, one store) --- no
-            // model ever runs during export; the fill patch is bounded by
-            // the session's working resolution, so an erased region on a
-            // very large export is softer than its surroundings (the
-            // contract's stated honest limitation).
+            // The AI stages replay over the SAME resolved artifact bundle the
+            // preview used --- no model runs during export; the fill patch is
+            // bounded by the session's working resolution, so an erased region
+            // on a very large export is softer than its surroundings.
             val ai = resolveAiStageInputs(export.recipe)
-            // r68: the keystone quad was authored on the PREVIEW grid; the
-            // export decodes the source at full resolution, so the SAME
-            // warp retargets first (the percents are the
-            // resolution-independent truth both grids agree on --- the
-            // scaling rule LilypadKeystoneMath pins). A 0 preview grid (no
-            // base decoded) or an identity quad rides verbatim.
+            // The keystone quad was authored on the PREVIEW grid; the export
+            // decodes full resolution, so the same warp retargets via the
+            // resolution-independent percent pairs (LilypadKeystoneMath pins
+            // the rule). A 0 preview grid or an identity quad rides verbatim.
             val exportRecipe = if (
                 export.recipe.perspective != PerspectiveQuad.IDENTITY &&
                 export.previewWidth > 0 && export.previewHeight > 0
@@ -703,13 +643,11 @@ class EditActivity : ComponentActivity() {
                 pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height,
             )
 
-            // 4.5 The compositing passes AFTER the whole pixel pipeline
-            //     (geometry -> adjustments -> LUT -> vignette -> sharpen),
-            //     over the FULL output canvas at origin 0 --- the same
-            //     compositors the preview uses, so preview ≡ export by
-            //     construction (no second renderer). The family order:
-            //     stickers (r35, scene objects) BELOW strokes (r36,
-            //     annotation) BELOW text (r34, captions on top).
+            // 4.5 The compositing passes AFTER the whole pixel pipeline, over
+            //     the FULL output canvas at origin 0 --- the same compositors
+            //     the preview uses, so preview ≡ export by construction.
+            //     Family order: stickers (scene objects) BELOW strokes
+            //     (annotation) BELOW text (captions on top).
             export.recipe.stickerLayers?.let { stickerSpec ->
                 if (stickerSpec.layers.isNotEmpty()) {
                     StickerCompositor.draw(
@@ -748,7 +686,7 @@ class EditActivity : ComponentActivity() {
                     )
                 }
             }
-            // r38: the frame LAST, the mounting over everything.
+            // The frame LAST: the mounting covers everything.
             export.recipe.frame?.let { frameSel ->
                 FrameCompositor.draw(
                     adjusted,
@@ -808,11 +746,10 @@ class EditActivity : ComponentActivity() {
             }
 
             // 9. The sidecar's edit resolved into the copy: clear it BEFORE
-            // reporting success (a failure here answers OK --- the export
-            // itself succeeded; a leftover sidecar self-heals on next load).
-            // r41: the derived-artifact store sweeps TOGETHER with the
-            // sidecar (append-only until the edit resolves; this is the
-            // only delete).
+            //    reporting success (the export itself succeeded; a leftover
+            //    sidecar self-heals on next load). The derived-artifact store
+            //    sweeps together with the sidecar (append-only until the edit
+            //    resolves; this is the only delete).
             try {
                 sidecarStore.clear(sourceUri)
                 aiStore.sweep()
@@ -865,8 +802,7 @@ class EditActivity : ComponentActivity() {
     /**
      * Copies the source EXIF onto the saved copy per the policy: PRESERVE
      * copies every tag, STRIP_LOCATION nulls the GPS tags, STRIP_ALL writes
-     * nothing at all. androidx.exifinterface on a read-write file
-     * descriptor (minSdk 26 >= 24, always live).
+     * nothing at all.
      */
     private fun applyMetadataPolicy(
         sourceUri: String,
@@ -879,10 +815,9 @@ class EditActivity : ComponentActivity() {
         } ?: return
         contentResolver.openFileDescriptor(outputUri, "rw")?.use { fd ->
             val target = androidx.exifinterface.media.ExifInterface(fd.fileDescriptor)
-            // androidx.exifinterface exposes NO public tag enumeration (the
-            // gallery's r15 EditableExifCodec established the explicit-list
-            // precedent), so the copy walks MetadataPolicyApplier's
-            // COPYABLE_TAGS and skips the tags the source does not carry.
+            // androidx.exifinterface exposes no public tag enumeration, so
+            // the copy walks MetadataPolicyApplier.COPYABLE_TAGS and skips
+            // tags the source does not carry.
             for (tag in MetadataPolicyApplier.COPYABLE_TAGS) {
                 val value = sourceExif.getAttribute(tag) ?: continue
                 when (MetadataPolicyApplier.decide(policy, tag)) {
@@ -900,9 +835,7 @@ class EditActivity : ComponentActivity() {
     private class ExportException(val errorCode: String, message: String) : RuntimeException(message)
 }
 
-// ---------------------------------------------------------------------------
-// Compose UI
-// ---------------------------------------------------------------------------
+// ---- Compose UI ----
 
 /** Maximum preview dimension --- the session edits a bounded preview; export re-decodes full. */
 private const val PREVIEW_MAX_DIMENSION: Int = 2048
@@ -917,8 +850,8 @@ data class EditorUiState(
 /**
  * The export sheet's state: format, quality, and the per-export metadata
  * policy chosen by the user. A `null` [metadataPolicy] means "no override"
- * --- the launch request's policy rides as-is (r31: the request's policy is
- * the privacy floor; the sheet may strip more, never less).
+ * --- the launch request's policy rides as-is (the privacy floor: the sheet
+ * may strip more, never less).
  */
 data class ExportChoice(
     val format: ExportFormat = ExportPlan.DEFAULT_FORMAT,
@@ -929,13 +862,9 @@ data class ExportChoice(
 /**
  * The session engine bridging the pure [EditSessionState] stack to Compose:
  * every commit/undo/redo returns a fresh [EditorUiState] the UI observes.
- *
- * r68 adds the history strip's readers: [depth]/[pointerIndex]/[entryAt]
- * are the ring's READ-ONLY view (the engine commit's contract --- the
- * pointer's only moves stay undo/redo/commit), and [jumpTo] walks the
- * ring to a tapped index by REPEATED undo/redo --- the sanctioned moves
- * only, never a new pointer path, so the strip the readers label can
- * never corrupt the trail it renders.
+ * [depth]/[pointerIndex]/[entryAt] are the ring's read-only view for the
+ * history strip; [jumpTo] walks to a tapped index by repeated undo/redo
+ * only --- the sanctioned moves, so the strip can never corrupt the trail.
  */
 private class EditSessionEngine(initial: EditRecipe) {
     private val stack = EditSessionState(initial)
@@ -967,11 +896,9 @@ private class EditSessionEngine(initial: EditRecipe) {
     }
 
     /**
-     * Moves the pointer to [index] by repeated undo/redo --- each step is
-     * the ring's own O(1) move, so even the cap-deep worst case is
-     * trivial. An index outside the ring clamps at its ends (the loops
-     * simply stop where the moves do), and the caller sweeps any pending
-     * gesture draft FIRST (the header undo/redo contract).
+     * Moves the pointer to [index] by repeated undo/redo (each an O(1) ring
+     * move); an index outside the ring clamps at its ends. The caller sweeps
+     * any pending gesture draft first.
      */
     fun jumpTo(index: Int): EditorUiState {
         while (stack.pointerIndex > index) stack.undo()
@@ -982,9 +909,8 @@ private class EditSessionEngine(initial: EditRecipe) {
 
 /**
  * One slider's binding: identity key, current value, next-state builder.
- * The a11y name (r32) is the semantics contentDescription; the label string
- * still carries the live value for the visible text AND the
- * stateDescription.
+ * The a11y name is the semantics contentDescription; the label string still
+ * carries the live value for the visible text and the stateDescription.
  */
 internal data class SliderSpec(
     val key: String,
@@ -994,19 +920,18 @@ internal data class SliderSpec(
     val set: (EditRecipe, Int) -> EditRecipe,
 )
 
-/** The tone + colour + detail sliders (the full r30 adjustment suite minus HSL bands). */
+/** The tone + colour + detail sliders (the full adjustment suite minus HSL bands). */
 internal val ADJUST_SLIDERS: List<SliderSpec> = listOf(
     SliderSpec("exposure", R.string.editor_exposure, R.string.editor_a11y_exposure, { it.exposure }, { r, v -> r.copy(exposure = v) }),
     SliderSpec("brightness", R.string.editor_brightness, R.string.editor_a11y_brightness, { it.brightness }, { r, v -> r.copy(brightness = v) }),
     SliderSpec("contrast", R.string.editor_contrast, R.string.editor_a11y_contrast, { it.contrast }, { r, v -> r.copy(contrast = v) }),
-    // r74: the far-end tone pair (the plan doc's board list) rides right
-    // after shadows --- the Lightroom order the doc's mock shows.
+    // The far-end tone pair rides right after shadows --- the Lightroom order.
     SliderSpec("highlights", R.string.editor_highlights, R.string.editor_a11y_highlights, { it.highlights }, { r, v -> r.copy(highlights = v) }),
     SliderSpec("shadows", R.string.editor_shadows, R.string.editor_a11y_shadows, { it.shadows }, { r, v -> r.copy(shadows = v) }),
     SliderSpec("whites", R.string.editor_whites, R.string.editor_a11y_whites, { it.whites }, { r, v -> r.copy(whites = v) }),
     SliderSpec("blacks", R.string.editor_blacks, R.string.editor_a11y_blacks, { it.blacks }, { r, v -> r.copy(blacks = v) }),
     SliderSpec("saturation", R.string.editor_saturation, R.string.editor_a11y_saturation, { it.saturation }, { r, v -> r.copy(saturation = v) }),
-    // r74: the luma-weighted saturation, right after its flat sibling.
+    // Vibrance: the luma-weighted saturation, right after its flat sibling.
     SliderSpec("vibrance", R.string.editor_vibrance, R.string.editor_a11y_vibrance, { it.vibrance }, { r, v -> r.copy(vibrance = v) }),
     SliderSpec("temperature", R.string.editor_temperature, R.string.editor_a11y_temperature, { it.temperature }, { r, v -> r.copy(temperature = v) }),
     SliderSpec("tint", R.string.editor_tint, R.string.editor_a11y_tint, { it.tint }, { r, v -> r.copy(tint = v) }),
@@ -1037,12 +962,7 @@ private fun HslBands.withBand(name: String, band: HslBandAdjust): HslBands = whe
     else -> copy(magenta = band)
 }
 
-// The r56 move: the PhotoScreen enum, the tool header and the tab bar now
-// live in `PhotoChrome.kt` (composable in isolation --- the edit screenshot
-// harness renders them); this file keeps the chassis logic.
-//
-// r63c: the value-tools session-Reset footer retired --- Reset moved INTO
-// the tool header row (PhotoChrome.kt), one chrome shape for all ten tools.
+// The PhotoScreen enum, the tool header and the tab bar live in `PhotoChrome.kt`.
 
 @OptIn(ExperimentalMaterial3Api::class) // FilterChip in the export sheet
 @Composable
@@ -1053,52 +973,37 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var uiState by remember { mutableStateOf(engine.initial) }
     var selectedBand by remember { mutableStateOf(HSL_BANDS.first().first) }
     var exportChoice by remember { mutableStateOf<ExportChoice?>(null) }
-    // r74: the copy-paste edits clipboard --- ONE recipe slot, remembered
-    // at the chassis (so it survives tool switches and photo handoffs
-    // within the editor's lifetime, and dies with the session: no
-    // cross-process storage for a grade, the honest boundary).
+    // The copy-paste edits clipboard: ONE recipe slot, remembered at the
+    // chassis so it survives tool switches and photo handoffs but dies with
+    // the session (no cross-session storage for a grade).
     var copiedGrade by remember { mutableStateOf<EditRecipe?>(null) }
     var previewBase by remember { mutableStateOf<Bitmap?>(null) }
     var previewImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    // r66: the Adjust panel's live tonal histogram --- recomputed by the
-    // preview render from the SAME pipelined pixels the canvas shows,
-    // re-keyed with the render's own keys (the committed recipe + the ONE
-    // draft slot), so the chart follows a drag tick for tick and can
-    // never disagree with the preview.
+    // The Adjust panel's live tonal histogram, recomputed by the preview
+    // render from the SAME pipelined pixels the canvas shows --- it follows
+    // a drag tick for tick and can never disagree with the preview.
     var previewHistogram by remember { mutableStateOf<EditorHistogram?>(null) }
-    // r68: the pro scopes' chassis state --- the Adjust board's scope mode
-    // (Histogram/Parade, a view preference) and the ZEBRA overlay's toggle.
-    // The zebra bitmap is a pure reader of the preview render's pipelined
-    // pixels (the histogram's source, verbatim): recomputed inside the
-    // render pass, only while the overlay is on, so it follows a drag tick
-    // for tick and can never disagree with the canvas.
+    // The pro scopes' chassis state: the scope mode (a view preference) and
+    // the zebra overlay toggle. The zebra bitmap reads the same pipelined
+    // pixels as the histogram, recomputed inside the render pass while the
+    // overlay is on.
     var scopeMode by remember { mutableStateOf(PhotoScopeMode.Histogram) }
     var zebraActive by remember { mutableStateOf(false) }
     var previewZebra by remember { mutableStateOf<ImageBitmap?>(null) }
-    // r68: the curve deck's chassis state --- the Full-state host flag
-    // (the scope row's Curve chip opens it, the deck's own Done and any
-    // deck collapse close it), the edited CHANNEL (a view preference,
-    // like the scope mode --- it commits nothing), and the LIVE
-    // whole-curve draft (the text-position pattern's shape: every drag
-    // tick writes it, ONE recipe commit on release; the tap-insert and
-    // the long-press-delete are discrete gestures that draft and finish
-    // in the same breath).
+    // The curve deck's chassis state: the Full-state host flag, the edited
+    // channel (a view preference, commits nothing), and the LIVE whole-curve
+    // draft --- every drag tick writes it, ONE recipe commit on release.
     var curveDeckOpen by remember { mutableStateOf(false) }
     var curveChannel by remember { mutableStateOf(CurveChannel.Master) }
     var curveDraft by remember { mutableStateOf<ToneCurves?>(null) }
-    // r72: the corner drag's live quad draft --- every clamped drag tick
-    // writes it (the curve draft's own shape: the whole model state, the
-    // preview re-rendering live), release snaps + commits ONE recipe.
+    // The corner drag's live quad draft: every clamped drag tick writes it,
+    // release commits ONE recipe.
     var cornerDraft by remember { mutableStateOf<PerspectiveQuad?>(null) }
-    // r68: the history strip's chassis state --- the open flag (the Main
-    // header's History entry toggles it; a view preference like the scope
-    // mode, it commits nothing and rides LilypadFlags.historyStripEnabled)
-    // and the REVISION the strip's label model recomputes on. The revision
-    // exists because EditorUiState can compare EQUAL across a pointer move
-    // (adjacent ring snapshots of the same recipe, with canUndo/canRedo
-    // unchanged in the ring's interior), so the strip keys on this counter
-    // instead --- the ring's three mutation funnels (commit, the header
-    // undo/redo pair, the strip's own jump) each bump it.
+    // The history strip's chassis state: the open flag (a view preference,
+    // gated by LilypadFlags.historyStripEnabled) and the REVISION the label
+    // model recomputes on --- EditorUiState can compare EQUAL across a
+    // pointer move, so the strip keys on this counter; the ring's three
+    // mutation funnels (commit, header undo/redo, strip jump) each bump it.
     var historyOpen by remember { mutableStateOf(false) }
     var historyTick by remember { mutableStateOf(0) }
     var previewCropRect by remember { mutableStateOf<PixelRect?>(null) }
@@ -1106,38 +1011,31 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var pendingExportAfterPermission by remember { mutableStateOf(false) }
     // The ONE live-drag draft (key -> value); committed on release.
     var draft by remember { mutableStateOf<Pair<String, Int>?>(null) }
-    // The parsed look registry (r33): the bundled set MERGED with the
-    // user-imported store (disjoint ids by construction). Empty until
-    // the IO load lands; the version counter re-runs it after an import
-    // or a removal.
+    // The parsed look registry: the bundled set MERGED with the user-imported
+    // store (disjoint ids by construction); the version counter re-runs it
+    // after an import or a removal.
     var looks by remember { mutableStateOf<Map<String, CubeLut>>(emptyMap()) }
     var looksVersion by remember { mutableStateOf(0) }
     var importError by remember { mutableStateOf<String?>(null) }
-    // r34 text state: the selected layer, the TextField's LOCAL draft
-    // (per-keystroke commits would flood the undo stack --- the per-commit
-    // granularity is the round contract) and the position drag's live
-    // draft. All three live-preview through effectiveRecipe() and commit
-    // once on done/release/target-switch/export.
+    // Text state: the selected layer, the TextField's LOCAL draft
+    // (per-keystroke commits would flood the undo stack) and the position
+    // drag's live draft. All three live-preview through effectiveRecipe()
+    // and commit once on done/release/target-switch/export.
     var selectedTextLayerId by remember { mutableStateOf<String?>(null) }
     var textDraft by remember { mutableStateOf<Pair<String, String>?>(null) }
     var posDraft by remember { mutableStateOf<Triple<String, Double, Double>?>(null) }
-    // r35 sticker state: the selected layer and the position drag's live
-    // draft (the r34 pattern); the imported-bitmap snapshot the preview
-    // re-renders on; the import rejection line. ONE selected layer at a
-    // time across the families (the round contract: the drag target and
-    // the per-layer controls follow the single selection).
+    // Sticker state: the selected layer and the position drag's live draft;
+    // the imported-bitmap snapshot the preview re-renders on; the import
+    // rejection line. ONE selected layer at a time across the families.
     var selectedStickerLayerId by remember { mutableStateOf<String?>(null) }
     var stickerPosDraft by remember { mutableStateOf<Triple<String, Double, Double>?>(null) }
     var importedStickers by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     var stickersVersion by remember { mutableStateOf(0) }
     var stickerImportError by remember { mutableStateOf<String?>(null) }
-    // r36 drawing state: the paint mode (ON = painting; a selected layer
-    // = editing --- the two states are exclusive, and ONE selection at a
-    // time across ALL the families), the in-progress gesture's live point
-    // list (a transient draft layer under the brush's current settings),
-    // and the brush itself (the NEXT stroke's colour/width/opacity/
-    // smoothing; plain state, applied at commit --- the per-LAYER edits
-    // ride the draft slot like the other families).
+    // Drawing state: the paint mode (ON = painting; a selected layer =
+    // editing, one selection at a time across all families), the in-progress
+    // gesture's live point list, and the brush settings for the NEXT stroke
+    // (applied at commit).
     var selectedDrawLayerId by remember { mutableStateOf<String?>(null) }
     var drawMode by remember { mutableStateOf(false) }
     var paintDraft by remember { mutableStateOf<List<DrawLayer.Point>?>(null) }
@@ -1145,32 +1043,26 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var brushWidth by remember { mutableStateOf(3) }
     var brushOpacity by remember { mutableStateOf(100) }
     var brushSmoothing by remember { mutableStateOf(50) }
-    // r37 region state: the region paint mode (mutually exclusive with
-    // Draw mode --- one paint mode at a time, enforced at both toggles),
-    // the in-progress gesture's live point list, and the next region's
-    // kind + strength (plain state in paint mode; the live-draft pattern
-    // for a selected region).
+    // Region state: the region paint mode (mutually exclusive with Draw
+    // mode, enforced at both toggles), the in-progress gesture's live point
+    // list, and the next region's kind + strength.
     var selectedRegionLayerId by remember { mutableStateOf<String?>(null) }
     var regionMode by remember { mutableStateOf(false) }
     var regionPaintDraft by remember { mutableStateOf<List<RegionLayer.Point>?>(null) }
     var regionKind by remember { mutableStateOf(RegionKind.MOSAIC) }
     var regionStrength by remember { mutableStateOf(12) }
-    // r38 frame state: the imported-bitmap snapshot + the version counter
-    // + the import rejection line. The frame selection itself lives in
-    // the recipe (a single selection, like the look); the width slider
-    // drafts through the generic draft slot (key "frame-width").
+    // Frame state: the imported-bitmap snapshot, the version counter and the
+    // import rejection line. The frame selection lives in the recipe (a
+    // single selection, like the look).
     var importedFrames by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     var framesVersion by remember { mutableStateOf(0) }
     var frameImportError by remember { mutableStateOf<String?>(null) }
-    // r41 AI state: the Erase paint mode (the exclusive duality's THIRD
-    // member --- one paint mode at a time across Draw/Region/Erase,
-    // enforced at all three toggles) + its live point list; the commit
-    // machinery's honest progress (aiBusy + the fraction + the cancel
-    // flag the inference seam polls); the dedicated degradation message
-    // (a string resource, shown until the next attempt); the imported-sky
-    // registry snapshot + its version counter + the import rejection
-    // line; the retouch consent state (default-off, ADR-0010 section 5)
-    // + the first-use dialog + the settings sheet's open flag.
+    // AI state: the Erase paint mode (one paint mode at a time across
+    // Draw/Region/Erase, enforced at all three toggles) + its live point
+    // list; the commit progress (aiBusy, the fraction, the cancel flag the
+    // inference seam polls); the degradation message; the imported-sky
+    // registry + version counter + import rejection line; the retouch
+    // consent state (default-off) + first-use dialog + settings sheet flag.
     var eraseMode by remember { mutableStateOf(false) }
     var erasePaintDraft by remember { mutableStateOf<List<AiEraseLayer.Point>?>(null) }
     var selectedEraseLayerId by remember { mutableStateOf<String?>(null) }
@@ -1178,6 +1070,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var aiProgressPct by remember { mutableStateOf(0) }
     var aiCancelRequested by remember { mutableStateOf(false) }
     var aiNotice by remember { mutableStateOf<Int?>(null) }
+    // The on-demand model gate: the models are not bundled in the APK; each AI
+    // commit first ensures its models are on the device, asking for ONE explicit
+    // consent per batch to download from the pinned release URLs (the editor's
+    // only network use). The gate is a fresh CompletableDeferred per prompt.
+    var aiDownloadPrompt by remember { mutableStateOf<List<EditAiManifest.ModelFile>?>(null) }
+    var aiDownloadPct by remember { mutableStateOf(-1) }
+    var aiDownloadTotalMb by remember { mutableStateOf(1) }
+    val aiDownloadGate = remember { mutableStateOf(CompletableDeferred<Boolean>()) }
     var importedSkies by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     var skiesVersion by remember { mutableStateOf(0) }
     var skyImportError by remember { mutableStateOf<String?>(null) }
@@ -1185,13 +1085,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var retouchConsentDialog by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
 
-    // r54: the chassis navigation state (the video editor's screen enum,
-    // photo-adapted): the main canvas screen vs the ten tool screens.
+    // The chassis navigation state: the main canvas screen vs the ten tool screens.
     var screen by remember { mutableStateOf(PhotoScreen.Main) }
-    // r54: the recipe as it was when the CURRENT tool screen was entered
-    // --- the tool Reset's honest boundary (reverting a tool session is
-    // ONE undoable commit against this snapshot; the r63c header Reset
-    // reads it).
+    // The recipe as it was when the CURRENT tool screen was entered --- the
+    // tool Reset's boundary (reverting is ONE undoable commit against it).
     var entryRecipe by remember { mutableStateOf<EditRecipe?>(null) }
 
     val committed = uiState.recipe
@@ -1204,15 +1101,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             val spec = ADJUST_SLIDERS.firstOrNull { it.key == d.first }
             effective = when {
                 spec != null -> spec.set(effective, d.second)
-                // r32: the straighten drag previews live too (it previously
-                // waited for release, burning a per-tick re-render for nothing).
+                // The straighten drag previews live, like the adjustment sliders.
                 d.first == "straighten" -> effective.copy(straightenDeg = d.second.toDouble())
-                // r68: the keystone drags preview live too (the crop dial's
-                // own rule --- the drafted knob rides on top of the other
-                // knob's committed read-back, so what the drag shows is
-                // what the release lands, on the SAME preview grid the
-                // commit builds on; a draft with no decoded base drops ---
-                // the paint gesture's own honesty, never an invented quad).
+                // The keystone drags preview live: the drafted knob rides on
+                // top of the other knob's committed read-back, so what the
+                // drag shows is what the release lands; a draft with no
+                // decoded base drops.
                 d.first == KEYSTONE_VERTICAL || d.first == KEYSTONE_HORIZONTAL -> {
                     val base = previewBase
                     if (base != null) {
@@ -1238,8 +1132,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         effective
                     }
                 }
-                // r33: the intensity drag previews live, exactly like the
-                // adjustment sliders (the look commits on release).
+                // The intensity drag previews live, like the adjustment sliders.
                 d.first == "lut-intensity" -> {
                     val selection = effective.lut
                     if (selection != null) {
@@ -1251,10 +1144,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 else -> effective
             }
         }
-        // r68 (C5): the HSL band drags preview live too --- the rows'
-        // release-commit contract needs the chassis draft merged, exactly
-        // like the text layers' per-layer sliders (the key shape is
-        // theirs: "hsl-<field>@<band>", one commit on release).
+        // The HSL band drags preview live too --- the chassis draft merged,
+        // one commit on release (key shape "hsl-<field>@<band>").
         val hslSlider = d?.takeIf { it.first.startsWith("hsl-") }
             ?.let { (key, value) ->
                 val parts = key.removePrefix("hsl-").split("@", limit = 2)
@@ -1274,11 +1165,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 )
             }
         }
-        // r34: the text LIVE state --- per-layer slider drafts (keys
-        // "text-size@<id>" / "text-opacity@<id>" / "text-rotation@<id>"),
-        // the TextField draft and the position drag all apply over the
-        // committed layers; each commits exactly once (the per-commit
-        // granularity the round contract pins).
+        // The text LIVE state: per-layer slider drafts ("text-size@<id>",
+        // "text-opacity@<id>", "text-rotation@<id>"), the TextField draft
+        // and the position drag all apply over the committed layers; each
+        // commits exactly once.
         val textSlider = d?.takeIf { it.first.startsWith("text-") }
             ?.let { (key, value) ->
                 val parts = key.removePrefix("text-").split("@", limit = 2)
@@ -1309,11 +1199,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ),
             )
         }
-        // r35: the sticker LIVE state --- per-layer slider drafts (keys
-        // "sticker-size@<id>" / "sticker-opacity@<id>" /
-        // "sticker-rotation@<id>") and the position drag, over the
-        // committed layers; each commits exactly once (the per-commit
-        // granularity the round contract pins).
+        // The sticker LIVE state: per-layer slider drafts ("sticker-size@<id>",
+        // "sticker-opacity@<id>", "sticker-rotation@<id>") and the position
+        // drag over the committed layers; each commits exactly once.
         val stickerSlider = d?.takeIf { it.first.startsWith("sticker-") }
             ?.let { (key, value) ->
                 val parts = key.removePrefix("sticker-").split("@", limit = 2)
@@ -1340,9 +1228,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ),
             )
         }
-        // r36: the stroke LIVE state, part 1 --- the per-layer slider
-        // drafts (keys "draw-width@<id>" / "draw-opacity@<id>" /
-        // "draw-smoothing@<id>"), the live-draft pattern verbatim.
+        // The stroke LIVE state: per-layer slider drafts ("draw-width@<id>",
+        // "draw-opacity@<id>", "draw-smoothing@<id>").
         val drawSlider = d?.takeIf { it.first.startsWith("draw-") }
             ?.let { (key, value) ->
                 val parts = key.removePrefix("draw-").split("@", limit = 2)
@@ -1365,13 +1252,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ),
             )
         }
-        // r36, part 2 --- the in-progress paint gesture: a TRANSIENT draft
-        // layer (id "draft", never a session id) under the brush's current
-        // settings, so the preview shows the stroke exactly as its commit
-        // will render it. The draft layer rides ABOVE the committed
-        // strokes (list order, top last) --- the live-paint position.
-        // (Distinct local name: `pd` is already the r34 posDraft binding
-        // in this same scope --- the 41839665527 lesson.)
+        // The in-progress paint gesture: a TRANSIENT draft layer (id "draft",
+        // never a session id) under the brush's current settings, riding
+        // ABOVE the committed strokes (list order, top last), so the preview
+        // shows the stroke exactly as its commit will render it. (The local
+        // is `paintPts`: `pd` is already the posDraft binding in this scope.)
         val paintPts = paintDraft
         if (paintPts != null && paintPts.isNotEmpty()) {
             effective = effective.copy(
@@ -1387,11 +1272,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ),
             )
         }
-        // r37: the region LIVE state --- the strength slider draft (key
-        // "region-strength@<id>") for a selected region, and the
-        // in-progress paint gesture as a TRANSIENT draft region (the
-        // pipeline's region stage reads it through the same apply() call,
-        // so the preview shows the effect AT PAINT TIME).
+        // The region LIVE state: the strength slider draft
+        // ("region-strength@<id>") and the in-progress paint gesture as a
+        // TRANSIENT draft region --- the pipeline's region stage reads it
+        // through the same apply() call, so the effect previews AT PAINT TIME.
         val regionSlider = d?.takeIf { it.first.startsWith("region-strength@") }
             ?.let { (key, value) ->
                 val id = key.removePrefix("region-strength@")
@@ -1423,14 +1307,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 ),
             )
         }
-        // r38: the frame width's live draft (the intensity slider's shape:
-        // a single selection, no per-layer id in the key).
+        // The frame width's live draft (a single selection, no per-layer id).
         if (d != null && d.first == "frame-width" && effective.frame != null) {
             effective = effective.copy(frame = effective.frame!!.copy(widthPct = d.second))
         }
-        // r41: the AI single-selection sliders' live drafts (the frame
-        // width's shape verbatim --- one selection per family, no per-layer
-        // id in the key; each commits once on release).
+        // The AI single-selection sliders' live drafts (one selection per
+        // family, no per-layer id in the key; each commits once on release).
         if (d != null && d.first == "sky-opacity" && effective.sky != null) {
             effective = effective.copy(sky = effective.sky!!.copy(opacityPct = d.second.coerceIn(0, 100)))
         }
@@ -1450,15 +1332,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 },
             )
         }
-        // r68: the curve LIVE state --- the deck's point gestures draft
-        // the whole ToneCurves; ONE commit on release (the per-commit
-        // granularity the round contract pins, the text-position
-        // pattern's shape).
+        // The curve LIVE state: the deck's point gestures draft the whole
+        // ToneCurves; ONE commit on release.
         curveDraft?.let { effective = effective.copy(toneCurves = it) }
-        // r72: the corner drag's LIVE state --- the overlay's clamped
-        // ticks draft the whole quad; ONE commit on release (the curve
-        // draft's own shape, the quad's grid being the preview grid the
-        // keystone rows commit on).
+        // The corner drag's LIVE state: the overlay's clamped ticks draft
+        // the whole quad; ONE commit on release.
         cornerDraft?.let { effective = effective.copy(perspective = it) }
         return effective
     }
@@ -1474,9 +1352,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // ---- r34 text helpers (all read the LIVE delegated states, so calls
-    // from long-lived closures --- the drag gesture, chips --- can never
-    // commit against a stale recipe) ----
+    // ---- Text helpers (read the LIVE delegated states, so calls from
+    // long-lived closures never commit against a stale recipe) ----
 
     /** Commits an edit to ONE layer, by id, over the CURRENT recipe. */
     fun commitLayerById(id: String, edit: (TextLayer) -> TextLayer) {
@@ -1512,9 +1389,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitLayerById(d.first) { it.copy(centerX = d.second, centerY = d.third) }
     }
 
-    // ---- r35 sticker helpers (all read the LIVE delegated states, so
-    // calls from long-lived closures --- the drag gesture, chips --- can
-    // never commit against a stale recipe; the r34 conventions) ----
+    // ---- Sticker helpers (the text helpers' conventions) ----
 
     /** Commits an edit to ONE sticker layer, by id, over the CURRENT recipe. */
     fun commitStickerLayerById(id: String, edit: (StickerLayer) -> StickerLayer) {
@@ -1543,7 +1418,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitStickerLayerById(d.first) { it.copy(centerX = d.second, centerY = d.third) }
     }
 
-    // ---- r36 drawing helpers (the family conventions) ----
+    // ---- Drawing helpers ----
 
     /** Commits an edit to ONE stroke layer, by id, over the CURRENT recipe. */
     fun commitDrawLayerById(id: String, edit: (DrawLayer) -> DrawLayer) {
@@ -1566,11 +1441,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * Sweeps the in-progress paint gesture into one snapshot: thin the
-     * live point list to the model cap, then commit ONE layer carrying
-     * the brush's current settings (drag end/cancel, mode exit, undo/
-     * redo, export --- a draft is never silently lost). Does NOT select
-     * the new stroke: the user keeps painting.
+     * Sweeps the in-progress paint gesture into one snapshot: thin the live
+     * point list to the model cap, then commit ONE layer with the brush's
+     * current settings (called on drag end/cancel, mode exit, undo/redo,
+     * export). Does NOT select the new stroke: the user keeps painting.
      */
     fun commitPaintDraftIfPending() {
         val pd = paintDraft ?: return
@@ -1589,7 +1463,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commit(current.copy(drawLayers = DrawLayers(existing + newLayer)))
     }
 
-    // ---- r37 region helpers (the family conventions) ----
+    // ---- Region helpers ----
 
     /** Commits an edit to ONE region layer, by id, over the CURRENT recipe. */
     fun commitRegionLayerById(id: String, edit: (RegionLayer) -> RegionLayer) {
@@ -1612,11 +1486,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * Sweeps the in-progress region gesture into one snapshot: thin the
-     * live point list, then commit ONE region IF it still has >= 3 points
-     * (a region needs a painted AREA; a tap or a two-sample flick drops
-     * honestly --- the model refuses less). Does NOT select the new
-     * region: the user keeps painting.
+     * Sweeps the in-progress region gesture into one snapshot: thin the live
+     * point list, then commit ONE region IF it still has >= 3 points (a
+     * region needs a painted AREA). Does NOT select the new region: the user
+     * keeps painting.
      */
     fun commitRegionPaintDraftIfPending() {
         val pending = regionPaintDraft ?: return
@@ -1633,7 +1506,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commit(current.copy(mosaicRegions = RegionLayers(existing + newLayer)))
     }
 
-    // ---- r41 AI helpers (the inference-at-COMMIT machinery) ----
+    // ---- AI helpers (inference runs at commit time) ----
 
     /** The dedicated degradation message for a boundary kind + feature. */
     fun aiDegradationRes(kind: EditAiDegradation, modelsMissingRes: Int): Int = when (kind) {
@@ -1644,9 +1517,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * The inference seam's honest progress + cancellation plumbing: the
-     * fraction feeds the UI line, the cancel flag is polled inside the
-     * model runs --- a cancel answers CANCELLED, never an error.
+     * The inference seam's progress + cancellation plumbing: the fraction
+     * feeds the UI line, the cancel flag is polled inside the model runs ---
+     * a cancel answers CANCELLED, never an error.
      */
     val aiProgress = object : AiProgress {
         override fun report(fraction: Int) {
@@ -1657,12 +1530,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * The WORKING GRID the models see: the preview's own fully-graded
-     * pixels (the pipeline output the user is looking at, at preview
-     * resolution) --- the same resolver and pipeline the render uses, so
-     * the inference input can never disagree with the preview. The
-     * artifact keys embed this grid's hash, so a changed adjustment
-     * derives a NEW key (the append-only rule).
+     * The WORKING GRID the models see: the preview's own fully-graded pixels
+     * (the same resolver and pipeline the render uses, so the inference
+     * input can never disagree with the preview). Artifact keys embed this
+     * grid's hash, so a changed adjustment derives a NEW key (append-only).
      */
     suspend fun aiWorkingGrid(): Triple<IntArray, Int, Int>? = withContext(Dispatchers.Default) {
         val base = previewBase ?: return@withContext null
@@ -1678,16 +1549,55 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         Triple(pipelined.pixels, pipelined.width, pipelined.height)
     }
 
-    // The composable's own scope, declared BEFORE the first use: the AI
-    // commit runner below launches on it (the r41 CI catch --- Kotlin
-    // locals are visible only below their declaration point).
+    // The composable's own scope, declared BEFORE its first use below
+    // (Kotlin locals are visible only below their declaration point).
     val uiScope = rememberCoroutineScope()
 
     /**
-     * ONE runner for the four AI commits: off the UI thread (the coroutine
-     * scope is Main; the work blocks hop to Default), cancellable through
-     * [aiProgress], one snapshot when the artifact lands. Refuses while a
-     * commit is already running or an export is in flight.
+     * The on-demand model gate: answers true only when every listed model is on the
+     * device, downloading the missing ones after an explicit user confirmation.
+     * Refusal, cancellation, or a failed download answers false and leaves the
+     * notice behind.
+     */
+    suspend fun ensureAiModels(models: List<EditAiManifest.ModelFile>): Boolean {
+        val missing = models.filter { !activity.aiModelStore.present(it) }
+        if (missing.isEmpty()) return true
+        aiDownloadTotalMb =
+            ((missing.sumOf { it.bytes } + (1024L * 1024L) - 1) / (1024L * 1024L)).toInt()
+        aiDownloadGate.value = CompletableDeferred()
+        aiDownloadPrompt = missing
+        val confirmed = aiDownloadGate.value.await()
+        aiDownloadPrompt = null
+        if (!confirmed) return false
+        aiCancelRequested = false
+        aiDownloadPct = 0
+        val totalBytes = missing.sumOf { it.bytes }.coerceAtLeast(1L)
+        var received = 0L
+        return try {
+            for (model in missing) {
+                activity.aiModelStore.download(model) { chunk ->
+                    if (aiCancelRequested) throw IOException("the model download was cancelled")
+                    received += chunk
+                    aiDownloadPct = ((received * 100L) / totalBytes).toInt().coerceIn(0, 99)
+                }
+            }
+            aiDownloadPct = -1
+            missing.all { activity.aiModelStore.present(it) }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            aiDownloadPct = -1
+            aiNotice =
+                if (aiCancelRequested) R.string.editor_ai_cancelled else R.string.editor_ai_download_failed
+            aiCancelRequested = false
+            false
+        }
+    }
+
+    /**
+     * ONE runner for the four AI commits: off the UI thread, cancellable
+     * through [aiProgress], one snapshot when the artifact lands. Refuses
+     * while a commit is already running or an export is in flight.
      */
     fun runAiCommit(work: suspend () -> Unit) {
         if (aiBusy || exporting) return
@@ -1705,13 +1615,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * Sweeps the in-progress erase gesture into its COMMIT: thin the live
-     * point list, then run the segmentation + inpainting ONCE (off the UI
-     * thread, cancellable, honest progress), persist the refined mask +
-     * fill pair as ONE artifact, and commit the erase layer referencing
-     * it. A tap under three samples drops honestly (the region commit
-     * rule). The undo snapshot lands when the artifact does --- inference
-     * IS the commit.
+     * Sweeps the in-progress erase gesture into its COMMIT: run segmentation
+     * + inpainting once, persist the mask + fill pair as ONE artifact, and
+     * commit the erase layer referencing it. A tap under three samples drops.
+     * The undo snapshot lands when the artifact does --- inference IS the
+     * commit.
      */
     fun commitErasePaintDraftIfPending() {
         val pending = erasePaintDraft ?: return
@@ -1719,6 +1627,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         if (pending.size < 3 || aiBusy || exporting) return
         val thinned = AiEraseLayer.thin(pending, AiEraseLayer.MAX_POINTS)
         runAiCommit {
+            if (!ensureAiModels(listOf(EditAiManifest.ERASE_SEGMENTATION, EditAiManifest.ERASE_INPAINT))) {
+                return@runAiCommit
+            }
             val grid = aiWorkingGrid()
             if (grid == null) {
                 aiNotice = R.string.editor_ai_runtime_broken
@@ -1761,6 +1672,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     /** Runs the sky detection against the CURRENT working grid and persists the mask artifact. */
     suspend fun detectSkyMaskKey(): String? {
+        if (!ensureAiModels(listOf(EditAiManifest.ERASE_SEGMENTATION))) return null
         val grid = aiWorkingGrid() ?: run {
             aiNotice = R.string.editor_ai_runtime_broken
             return null
@@ -1793,9 +1705,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     /**
      * Selects a sky: instant when a resolvable mask artifact exists, else
-     * the detection runs first (once, cancellable); [freshDetection]
-     * forces the re-apply (a changed adjustment derives a NEW artifact
-     * key; the previous one stays for the undo stack).
+     * the detection runs first; [freshDetection] forces the re-apply (a
+     * changed adjustment derives a NEW artifact key; the previous one stays
+     * for the undo stack).
      */
     fun selectSky(skyId: String, freshDetection: Boolean = false) {
         if (aiBusy || exporting) return
@@ -1826,6 +1738,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     /** Runs the depth estimation once and commits the bokeh selection over the artifact. */
     fun runBokehEstimate() {
         runAiCommit {
+            if (!ensureAiModels(listOf(EditAiManifest.BOKEH_DEPTH))) return@runAiCommit
             val grid = aiWorkingGrid()
             if (grid == null) {
                 aiNotice = R.string.editor_ai_runtime_broken
@@ -1865,6 +1778,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     fun runRetouchDetect() {
         if (retouchConsent != RetouchConsent.GRANTED) return
         runAiCommit {
+            if (!ensureAiModels(listOf(EditAiManifest.RETOUCH_FACES))) return@runAiCommit
             val grid = aiWorkingGrid()
             if (grid == null) {
                 aiNotice = R.string.editor_ai_runtime_broken
@@ -1900,12 +1814,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * Sweeps the curve drag's live draft into one snapshot (drag end /
-     * cancel, tool exit, export --- the family conventions; a draft is
-     * never silently lost). The commit is the null-for-identity rule at
-     * the recipe's edge: a curve that came back to the diagonal leaves
-     * NO residue, and a gesture that changed nothing pushes NO history
-     * entry (an empty snapshot is a lie the strip would have to display).
+     * Sweeps the curve drag's live draft into one snapshot (drag end/cancel,
+     * tool exit, export --- a draft is never silently lost). A curve back at
+     * the diagonal leaves NO residue; a gesture that changed nothing pushes
+     * NO history entry.
      */
     fun commitCurveDraftIfPending() {
         val cd = curveDraft ?: return
@@ -1918,12 +1830,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * Sweeps the corner drag's live draft into one snapshot (drag end
-     * covered by the overlay's own commit; this is the safety net for
-     * tool exit, export and the header's undo/redo --- a draft is never
-     * silently lost). A quad that came back to the identity leaves NO
-     * residue, and a gesture that changed nothing pushes NO history
-     * entry (the curve sweep's own honesty).
+     * Sweeps the corner drag's live draft into one snapshot (the safety net
+     * for tool exit, export and undo/redo; the overlay's commit covers drag
+     * end). A quad back at the identity leaves NO residue; a no-op gesture
+     * pushes NO history entry.
      */
     fun commitCornerDraftIfPending() {
         val qd = cornerDraft ?: return
@@ -1935,10 +1845,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 
     /**
-     * The ONE sweep point for every pending draft across the families
-     * (r36): each pending draft commits as its own snapshot, exactly as
-     * the r34 handlers did inline --- one helper so later rounds extend
-     * HERE instead of at every call site.
+     * The ONE sweep point for every pending draft across the families: each
+     * pending draft commits as its own snapshot.
      */
     fun sweepPendingDrafts() {
         commitTextDraftIfPending()
@@ -1946,21 +1854,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         commitStickerPosDraftIfPending()
         commitPaintDraftIfPending()
         commitRegionPaintDraftIfPending()
-        // r68: the curve deck's drag rides the same sweep.
         commitCurveDraftIfPending()
-        // r72: the corner drag's quad rides the same sweep.
         commitCornerDraftIfPending()
-        // r41: the erase gesture sweeps into its own ASYNC commit (the
-        // inference IS the commit); it refuses while another AI commit or
-        // an export runs --- the honest drop, same as a gesture released
-        // exactly at an export boundary.
+        // The erase gesture sweeps into its own ASYNC commit; it refuses
+        // while another AI commit or an export runs.
         commitErasePaintDraftIfPending()
     }
 
 
-    // First composition: decode the bounded preview + parse the bundled
-    // looks (both off the main thread; the looks feed the chip row and
-    // the preview's filter stage --- the export shares the same cache).
+    // First composition: decode the bounded preview off the main thread.
     LaunchedEffect(Unit) {
         val decoded = withContext(Dispatchers.IO) {
             activity.decodeBitmap(activity.request.sourceUri, PREVIEW_MAX_DIMENSION)
@@ -1975,15 +1877,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // Live preview: re-run the ordered pipeline (without the crop --- the
-    // crop draws as the overlay rect) whenever the effective recipe or
-    // the loaded look set changes. The r34 text pass composites over the
-    // same CROP REGION the overlay draws (the output canvas the export
-    // will produce), through the SAME TextCompositor --- one code path.
-    // r35: the sticker pass composites over the same region, BELOW the
-    // text pass. r36: the stroke pass sits between them; the effect also
-    // re-runs on the brush values (the draft layer reads them live) and
-    // on the imported-bitmap registry.
+    // Live preview: re-run the ordered pipeline (without the crop --- it
+    // draws as the overlay rect) whenever the effective recipe or the loaded
+    // look set changes. The scene layers composite over the same crop region
+    // the export will produce, through the SAME compositors --- stickers
+    // below strokes below text, the frame last.
     LaunchedEffect(
         previewBase, committed, draft, textDraft, posDraft, stickerPosDraft,
         paintDraft, brushColor, brushWidth, brushOpacity, brushSmoothing,
@@ -2002,12 +1900,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             val plan = EditGeometryPlan.plan(effective, width, height)
             previewCropRect = plan.cropPixelRect
             if (displayRecipe.isIdentity) {
-                // r66: the identity short-circuit still owes the Adjust
-                // panel its histogram --- one read of the decode for the
-                // counting (the preview bitmap itself still reuses the
-                // decode, the 2026-11-10 rule). r68: the zebra reads the
-                // same pixels (the untouched decode IS the tonal state
-                // here).
+                // The identity short-circuit still owes the Adjust panel its
+                // histogram (and the zebra its clipping state): one read of
+                // the untouched decode.
                 val raw = IntArray(width * height)
                 base.getPixels(raw, 0, width, 0, 0, width, height)
                 previewHistogram = EditorHistogram.fromPixels(raw)
@@ -2018,18 +1913,13 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
             val pixels = IntArray(width * height)
             base.getPixels(pixels, 0, width, 0, 0, width, height)
-            // r41: the AI stages replay over the SAME resolved artifact
-            // bundle the export uses (one resolver, one store) --- no
-            // model ever runs during a render; re-keyed on the imported
-            // skies and the consent state so a kill-switch or an import
-            // re-renders immediately.
+            // The AI stages replay over the SAME resolved artifact bundle the
+            // export uses --- no model ever runs during a render.
             val ai = activity.resolveAiStageInputs(displayRecipe)
             val pipelined = EditPipeline.apply(pixels, width, height, displayRecipe, look, ai)
-            // r66: the tone-honest histogram source --- the pipeline
-            // output BEFORE the scene layers composite (a sticker or a
-            // caption is not a tonal state), the same uncropped working
-            // grid the AI seam reads. r68: the zebra reads the same
-            // pixels (the clipping state IS the tonal state).
+            // The tone-honest histogram source: the pipeline output BEFORE
+            // the scene layers composite (a sticker or caption is not a tonal
+            // state), the same uncropped grid the AI seam and zebra read.
             previewHistogram = EditorHistogram.fromPixels(pipelined.pixels)
             if (zebraActive) {
                 previewZebra = buildZebraOverlayImage(pipelined.pixels, pipelined.width, pipelined.height)
@@ -2037,8 +1927,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             val out = Bitmap.createBitmap(pipelined.width, pipelined.height, Bitmap.Config.ARGB_8888)
             out.setPixels(pipelined.pixels, 0, pipelined.width, 0, 0, pipelined.width, pipelined.height)
             val crop = plan.cropPixelRect
-            // r35: stickers are scene objects --- they composite BELOW the
-            // text pass, through the same crop-region output canvas.
+            // Stickers are scene objects: they composite BELOW the text pass.
             val stickerSpec = effective.stickerLayers
             if (stickerSpec != null && stickerSpec.layers.isNotEmpty()) {
                 StickerCompositor.draw(
@@ -2051,9 +1940,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     crop.height.toFloat(),
                 )
             }
-            // r36: strokes sit between the stickers and the text ---
-            // annotation paints over the scene objects, captions float
-            // above the annotation.
+            // Strokes sit between the stickers and the text.
             val drawSpec = effective.drawLayers
             if (drawSpec != null && drawSpec.layers.isNotEmpty()) {
                 DrawCompositor.draw(
@@ -2077,9 +1964,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     crop.height.toFloat(),
                 )
             }
-            // r38: the frame LAST --- the mounting covers the edges of
-            // everything (a caption spilling into the border goes under
-            // it, the physical metaphor).
+            // The frame LAST: the mounting covers the edges of everything.
             effective.frame?.let { frameSel ->
                 FrameCompositor.draw(
                     out,
@@ -2097,41 +1982,38 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // The merged look registry: bundled first, imported appended (the
-    // store's collision rule guarantees disjoint keys). Re-keyed on the
-    // version counter so an import/removal re-runs it.
+    // The merged look registry: bundled first, imported appended (disjoint
+    // keys by the store's collision rule); re-run per version counter bump.
     LaunchedEffect(looksVersion) {
         looks = withContext(Dispatchers.IO) {
             activity.bundledLooks + activity.importedLutStore.loadAll()
         }
     }
 
-    // The imported-sticker registry (r35): re-decoded per import/removal
-    // (the version counter re-runs it); the preview and the export
-    // resolve through the SAME shared instances (the activity's map).
+    // The imported-sticker registry: re-decoded per import/removal; preview
+    // and export resolve through the SAME shared instances.
     LaunchedEffect(stickersVersion) {
         importedStickers = withContext(Dispatchers.IO) {
             activity.reloadImportedStickers()
         }
     }
 
-    // The imported-frame registry (r38): the sticker machinery, frame-shaped.
+    // The imported-frame registry (the sticker machinery, frame-shaped).
     LaunchedEffect(framesVersion) {
         importedFrames = withContext(Dispatchers.IO) {
             activity.reloadImportedFrames()
         }
     }
 
-    // The imported-sky registry (r41): the frame machinery, sky-shaped.
+    // The imported-sky registry (the frame machinery, sky-shaped).
     LaunchedEffect(skiesVersion) {
         importedSkies = withContext(Dispatchers.IO) {
             activity.reloadImportedSkies()
         }
     }
 
-    // The retouch consent state (r41): loaded once per composition from
-    // the per-install store (default-off; the dialog and the settings
-    // kill-switch write through it).
+    // The retouch consent state, loaded once per composition from the
+    // per-install store (default-off).
     LaunchedEffect(Unit) {
         retouchConsent = withContext(Dispatchers.IO) {
             activity.retouchConsentStore.load()
@@ -2154,7 +2036,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // The r33 import flow: SAF-pick a .cube, read it off-main, hand the
+    // The look import flow: SAF-pick a .cube, read it off-main, hand the
     // BYTES to the store (parse-before-write); an import selects the new
     // look at the current intensity, a rejection surfaces the reason.
     val importLauncher = rememberLauncherForActivityResult(
@@ -2199,10 +2081,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // The r35 sticker import flow: SAF-pick a PNG/WebP, read it off-main,
-    // hand the BYTES to the store (magic-before-write). An import lands
-    // in the registry (its chip appears; the user taps it to add a
-    // layer), a rejection surfaces the reason.
+    // The sticker import flow: SAF-pick a PNG/WebP, read it off-main, hand
+    // the BYTES to the store (magic-before-write); the imported chip
+    // appears, a rejection surfaces the reason.
     val stickerImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -2235,7 +2116,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // The r38 frame import flow: the sticker import flow, frame-shaped.
+    // The frame import flow (the sticker import flow, frame-shaped).
     val frameImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -2268,8 +2149,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // The r41 sky import flow: the frame import flow, sky-shaped (the
-    // ImportedFrameStore contract verbatim through ImportedSkyStore).
+    // The sky import flow (the frame import flow, sky-shaped).
     val skyImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -2316,9 +2196,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         policy,
                         choice.metadataPolicy,
                     ),
-                    // r68: the grid the keystone quad was authored on (the
-                    // export retargets the same warp to the full decode ---
-                    // LilypadKeystoneMath.scaledForExport inside runExport).
+                    // The grid the keystone quad was authored on (the export
+                    // retargets the warp to the full decode via
+                    // LilypadKeystoneMath.scaledForExport).
                     previewWidth = previewBase?.width ?: 0,
                     previewHeight = previewBase?.height ?: 0,
                 ),
@@ -2328,9 +2208,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     fun requestSave() {
         if (exporting) return
-        // r34/r35/r36: sweep any pending drafts into snapshots first ---
-        // the export reads the COMMITTED recipe, and a draft must never be
-        // silently lost at the moment of export.
+        // Sweep any pending drafts first --- the export reads the COMMITTED
+        // recipe, and a draft must never be silently lost.
         sweepPendingDrafts()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
@@ -2343,14 +2222,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
     }
 
-    // ---- r54: the chassis navigation (the video editor's screen
-    // contract, photo-adapted) ----
-    // Entering a tool snapshots the recipe (the tool Reset's honest
-    // boundary); leaving one sweeps any pending gesture draft and drops
-    // the paint modes --- painting belongs to its tool's screen now,
-    // where the scroll era kept the modes alive across sections (the one
-    // deliberate behavior change; the modes were unreachable from other
-    // sections' controls anyway).
+    // ---- The chassis navigation ----
+    // Entering a tool snapshots the recipe (the tool Reset's boundary);
+    // leaving one sweeps any pending gesture draft and drops the paint
+    // modes --- painting belongs to its tool's screen.
     fun enterTool(target: PhotoScreen) {
         if (target == PhotoScreen.Main || target == screen) return
         sweepPendingDrafts()
@@ -2371,62 +2246,26 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         screen = PhotoScreen.Main
     }
 
-    // The system-back contract: a tool screen pops to the main chassis
-    // (the gallery app's three selection screens set the in-repo
-    // precedent); the main screen keeps the default back = the activity's
-    // cancel path.
+    // System back: a tool screen pops to the main chassis; the main screen
+    // keeps the default back = the activity's cancel path.
     BackHandler(enabled = screen != PhotoScreen.Main) { exitToMain() }
 
-    // F-71 (the r63a audit's P1, ledger item): on the r62 device screenshot
-    // this header rendered ~630px below the top edge with pure black above
-    // it, yet the code composes it as the FIRST child of the ONLY root
-    // container. The r63a root-cause hunt exonerates this tree, with line
-    // evidence: (a) the root fills the window --- fillMaxSize here under the
-    // fillMaxSize Surface in onCreate's setContent (EditActivity.kt:465),
-    // default Arrangement.Top, no contentAlignment; (b) insets are consumed
-    // EXACTLY ONCE --- this systemBarsPadding is the only inset modifier in
-    // the whole edit app (no statusBars/displayCutout/ime/safeDrawing
-    // padding exists), there is no Scaffold, and no manifest or theme
-    // declares fitsSystemWindows/translucent bars/cutout modes that could
-    // double-pay at the decor; (c) nothing is composed above the header ---
-    // the first child below is the header branch itself (no spacers, no
-    // wrapper Box, no early-return layout, the one verticalScroll lives in
-    // the export sheet's own window); (d) the unified APK launches THIS
-    // activity class (apps/gallery/src/unified/AndroidManifest.xml registers
-    // com.toadgallery.editor.EditActivity; the gallery's
-    // EditorLaunch resolves exactly it), so there is no alternate entry; and
-    // (e) the VIDEO editor (VideoEditActivity: the identical root pattern,
-    // same device, same audit) rendered top-anchored --- a window-mode cause
-    // would have hit both. Verdict: the offset is a device-side window state
-    // (a mid-launch window transition or a compat/windowed placement
-    // captured by the screenshot), not producible by this composition tree;
-    // EditHeaderPinningTest pins the header as the top-most composed element
-    // on the JVM harness (the repro attempt, negative). The layout contract
-    // stands: header pinned to the top of a fillMaxSize root, insets paid
-    // exactly once.
+    // Layout contract: the header is the first child of the fillMaxSize
+    // root, and this root-level systemBarsPadding is the only inset payment
+    // in the edit app (pinned by EditHeaderPinningTest).
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(LilypadTokens.POND.toInt()))
-            // r47 ux fix: pay the system-bar insets once, at the root, so
-            // the top bar and the control stack never sit under the
-            // status/navigation bars (edge-to-edge is enforced at
-            // targetSdk 36+); the pond background still reaches the bars.
+            // Pay the system-bar insets once, at the root, so the chrome
+            // never sits under the status/navigation bars (edge-to-edge is
+            // enforced at targetSdk 36+).
             .systemBarsPadding(),
     ) {
-        // ---- Top bar: the r54 chassis header, r63b §4 icon chrome ----
+        // ---- Top bar ----
         // The MAIN screen keeps the photo editor's own chrome (close /
-        // title / settings / undo / redo / save) --- the video header is a
-        // back / title / export pill, but the photo surface's undo-redo
-        // and the r41 settings entry are contract chrome that stays one
-        // tap from the canvas. A tool screen swaps in the video shape.
-        //
-        // r63b §4: 56dp row, 8dp horizontal padding; the three r54
-        // TextButtons retire into 48dp-touch IconButtons with 24dp glyphs
-        // (undo/redo disabled at 38% alpha), the title gains the one-line
-        // ellipsis, and the CTA pill holds the §4 shape (40dp tall, 20dp
-        // radius, 20dp horizontal padding, labelLarge, maxLines = 1 --- the
-        // r63a P3 pin). The icons free the ~140dp that used to wrap P3.
+        // title / settings / undo / redo / history / save); a tool screen
+        // swaps in the tool-header shape.
         if (screen == PhotoScreen.Main) {
             Row(
                 modifier = Modifier
@@ -2446,18 +2285,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     text = stringResource(R.string.editor_app_name),
                     color = MaterialTheme.colorScheme.onBackground,
                     style = MaterialTheme.typography.titleMedium,
-                    // r40 a11y: the editor's title is the heading anchor (the
-                    // gallery screens' r40 heading convention, editor side).
+                    // The title is the heading anchor (a11y).
                     modifier = Modifier
                         .weight(1f)
                         .semantics { heading() },
-                    // §4: one line --- longer locales ellipsize, never wrap.
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // r41: the editor's FIRST settings entry --- a one-row sheet
-                // (the retouch kill-switch lives there; ADR-0010 section 5).
-                // §4: the gear icon, not a text button.
+                // The settings entry: a one-row sheet (the retouch kill-switch
+                // lives there, ADR-0010 section 5).
                 val settingsLabel = stringResource(R.string.editor_settings)
                 IconButton(
                     onClick = { settingsOpen = !settingsOpen },
@@ -2472,10 +2308,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 }
                 val undoLabel = stringResource(R.string.editor_undo)
                 val redoLabel = stringResource(R.string.editor_redo)
-                // r68: the history strip's entry, state-dependent like the
-                // deck handle's a11y (the label announces what the tap
-                // does). Beside the undo/redo pair it belongs to --- the
-                // three are one neighborhood: walk, walk, jump.
+                // State-dependent a11y: the label announces what the tap does.
                 val historyA11y = stringResource(
                     if (historyOpen) {
                         R.string.editor_r68_history_hide
@@ -2517,9 +2350,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                             .copy(alpha = if (redoEnabled) 1f else 0.38f),
                     )
                 }
-                // r68: the history strip's header entry --- visible on
-                // the Main chassis only, and only behind the round's
-                // revert seam (off reads as the r67 header verbatim).
+                // The history strip's header entry: Main screen only, behind
+                // the LilypadFlags revert seam.
                 if (LilypadFlags.historyStripEnabled) {
                     IconButton(
                         onClick = { historyOpen = !historyOpen },
@@ -2557,13 +2389,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                                     R.string.editor_cancel_export
                                 },
                             ),
-                            // r63a P3: the CTA pill never wraps --- longer
-                            // locales ellipsize instead of breaking the
-                            // primary control into two lines.
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            // §4: labelLarge (14sp) --- also Button's
-                            // default, pinned explicitly against drift.
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }
@@ -2576,23 +2403,15 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 confirmA11y = stringResource(R.string.editor_v2_confirm),
                 onBack = { exitToMain() },
                 onConfirm = { exitToMain() },
-                // r63c: the session Reset, promoted into the header row
-                // (the old value-tools footer row retired) --- one chrome
-                // shape for all ten tools; same ONE-undoable-commit revert
-                // against the entry snapshot, disabled while the snapshot
-                // IS the recipe and during the export freeze.
+                // The session Reset, in the header row: one undoable commit
+                // against the entry snapshot.
                 resetA11y = stringResource(R.string.editor_v2_reset),
                 onReset = { entryRecipe?.let { commit(it) } },
                 resetEnabled = !exporting && entryRecipe != null && committed != entryRecipe,
-                // r74: the copy-paste edits pair, riding the Adjust tool
-                // (the grade's home). Copy lifts the committed grade into
-                // the chassis clipboard --- a plain remembered value, so it
-                // lives exactly as long as the session does (the honest
-                // boundary: the editor holds no cross-session storage for
-                // it; the feature is "between photos" within the editor's
-                // own lifetime). Paste lands it as ONE undoable commit;
-                // disabled when the clipboard is empty (nothing to paste,
-                // the honest-note rule) or during the export freeze.
+                // The copy-paste edits pair, riding the Adjust tool. Copy
+                // lifts the committed grade into the session clipboard; paste
+                // lands it as ONE undoable commit (disabled when empty or
+                // during export).
                 copyA11y = if (screen == PhotoScreen.Adjust) {
                     stringResource(R.string.editor_copy_edits)
                 } else {
@@ -2615,40 +2434,26 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             )
         }
 
-        // r34: the box also carries the text-layer DRAG gesture (drag near
-        // the SELECTED layer's center to reposition it; live-drafted, one
-        // commit on release). r35: the same gesture targets the SELECTED
-        // STICKER layer first (one selection across the families). r36:
-        // with Draw mode ON, the gesture PAINTS instead. r37: a SECOND
-        // paint mode --- Region mode paints the region path (the effect
-        // previews through the pipeline stage at paint time); the two
-        // paint modes are mutually exclusive, enforced at their toggles.
-        // Keyed on the selections AND both modes: the handler restarts
-        // when any of them changes, and every value it reads is a LIVE
-        // delegated state so long-lived closures never see stale data.
-        // r56: the press-and-hold BEFORE/AFTER compare --- the untouched
-        // decode (previewBase) under the finger while held, the pipelined
-        // preview on release. The original is ALREADY in memory for the
-        // render loop, so the compare costs nothing. Gated to the Main
-        // chassis with no paint mode and no layer selection (those gestures
-        // own the canvas); everywhere else the modifier is inert.
+        // The box carries the canvas gestures: drag near the SELECTED text
+        // or sticker layer's center to reposition (live-drafted, one commit
+        // on release; the sticker wins --- one selection across the
+        // families). With a paint mode ON it PAINTS instead (Draw, Region,
+        // Erase --- mutually exclusive, enforced at the toggles). Keyed on
+        // the selections and modes; every value read is a LIVE delegated
+        // state. The press-and-hold compare shows the untouched decode under
+        // the finger, gated to the Main chassis with no paint mode and no
+        // selection (those gestures own the canvas).
         val compareEligible = screen == PhotoScreen.Main && !drawMode && !regionMode && !eraseMode &&
             selectedTextLayerId == null && selectedStickerLayerId == null && !exporting
         var showOriginal by remember { mutableStateOf(false) }
-        // The compare renders the SAME compose type the pipeline preview uses:
-        // previewBase is the platform decode, wrapped once per decode (the
-        // wrapper is a view of the same pixel buffer, not a copy).
+        // The compare renders the SAME compose type as the pipeline preview:
+        // previewBase wrapped once per decode (a view, not a copy).
         val originalImage = remember(previewBase) { previewBase?.asImageBitmap() }
 
-        // F-72 (r65, the r63 proposal's deferred canvas craft): the MAIN
-        // canvas zooms --- pinch to scale between 1x (fit) and 4x (the
-        // proposal's "clamped 1x-4x"), pan while zoomed (two fingers),
-        // double-tap to fit. The math lives in CanvasZoomMath (JVM-tested);
-        // this state is session-local UI (the compose-side pose the
-        // graphicsLayer replays) and RESETS on every tool entry --- the ten
-        // tool canvases own their own gestures and their unzoomed coordinate
-        // space, exactly Ente's split (the main canvas zooms, sub-editors
-        // own their gestures).
+        // The MAIN canvas zooms: pinch 1x (fit) to 4x, pan while zoomed,
+        // double-tap to fit (math in CanvasZoomMath, JVM-tested). This pose
+        // is session-local UI and RESETS on every tool entry --- the tool
+        // canvases own their own gestures and unzoomed coordinate space.
         var canvasScale by remember { mutableFloatStateOf(1f) }
         var canvasOffset by remember { mutableStateOf(Offset.Zero) }
         var canvasSize by remember { mutableStateOf(IntSize.Zero) }
@@ -2664,10 +2469,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                // F-72: the zoomed preview must never paint over the chrome
-                // (the header above, the tab bar below) --- the canvas clips
-                // its own bounds (the image was Fit-fit inside anyway; the
-                // clip only becomes visible once the zoom exceeds 1x).
+                // The zoomed preview must never paint over the chrome ---
+                // the canvas clips its own bounds (visible only past 1x zoom).
                 .clipToBounds()
                 .onSizeChanged { canvasSize = it }
                 .pointerInput(
@@ -2678,8 +2481,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     val grabRadiusPx = 48.dp.toPx()
 
                     // Screen position -> output-canvas fractions (the same
-                    // FIT mapping the crop overlay draws; the crop rect is
-                    // the output canvas the export will produce).
+                    // FIT mapping the crop overlay draws).
                     fun mapToFraction(position: Offset): Pair<Double, Double>? {
                         val image = previewImage ?: return null
                         val rect = previewCropRect ?: return null
@@ -2742,9 +2544,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         return Offset(offX + cxImg * scale, offY + cyImg * scale)
                     }
 
-                    // Seeds the right draft for whichever family owns the
-                    // selection (the sticker wins --- one selection across
-                    // the families is the round contract).
+                    // Seeds the draft for whichever family owns the selection
+                    // (the sticker wins --- one selection across the families).
                     fun seedDraftAt(fx: Double, fy: Double) {
                         val stickerId = selectedStickerLayerId
                         if (stickerId != null) {
@@ -2825,10 +2626,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         },
                     )
                 }
-                // r56: the compare gesture --- a second, INDEPENDENT pointer
-                // observer alongside the drag handler above (drag still owns
-                // movement; the compare only watches press/release, and only
-                // where the drag handler is inert anyway).
+                // The compare gesture: a second, independent pointer observer
+                // alongside the drag handler (drag owns movement; the compare
+                // only watches press/release).
                 .pointerInput(compareEligible) {
                     if (compareEligible) {
                         detectTapGestures(
@@ -2843,16 +2643,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                     }
                 }
-                // F-72 gesture 1: the two-pointer transform (pinch zoom + pan
-                // while zoomed). A CUSTOM loop, not detectTransformGestures,
-                // on purpose: the generic detector consumes ONE-finger drags
-                // too, which would cancel the compare press-hold above the
-                // moment a held finger moved (waitForUpOrCancellation treats
-                // a consumed position change as a cancellation). This loop
-                // only reacts --- and only consumes --- while TWO or more
-                // pointers are down, so the compare hold's single-finger
-                // event stream stays byte-identical to the pre-F-72 shape:
-                // the zoom can never eat the compare's contract.
+                // The two-pointer transform (pinch zoom + pan): a CUSTOM loop,
+                // not detectTransformGestures, because the generic detector
+                // consumes one-finger drags too, which would cancel the
+                // compare press-hold above. This loop only reacts --- and only
+                // consumes --- while TWO or more pointers are down.
                 .pointerInput(screen == PhotoScreen.Main, exporting) {
                     if (screen == PhotoScreen.Main && !exporting) {
                         awaitEachGesture {
@@ -2886,12 +2681,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         }
                     }
                 }
-                // F-72 gesture 2: double-tap-to-fit. Sits AFTER the compare's
-                // detector in the chain, so the compare observes every event
-                // unconsumed first (its press-hold semantics are untouched);
-                // the reset is a no-op at the fit pose, and while the pose is
-                // zoomed the brief first-tap compare flash IS the honest
-                // original-vs-edited look at the moment of reset.
+                // Double-tap-to-fit, AFTER the compare's detector so the
+                // compare observes every event unconsumed first.
                 .pointerInput(screen == PhotoScreen.Main, exporting) {
                     if (screen == PhotoScreen.Main && !exporting) {
                         detectTapGestures(
@@ -2903,11 +2694,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         ) {
             val image = if (showOriginal) originalImage else previewImage
             if (image != null) {
-                // F-72: the pose layer --- the preview AND its overlays (the
-                // crop dim rect) transform TOGETHER, so the zoomed canvas
-                // stays self-consistent. The chrome overlays (the compare
-                // chip/badge below) sit OUTSIDE this layer: they are canvas
-                // chrome, not canvas content.
+                // The pose layer: the preview AND its overlays transform
+                // TOGETHER, so the zoomed canvas stays self-consistent. The
+                // compare chrome below sits OUTSIDE this layer.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2924,11 +2713,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
-                // r68: the clipping zebra --- painted over the preview
-                // (never over the compare's original: a press-and-hold
-                // comparison shows the unedited truth, stripes would be
-                // editorializing), under the crop dim. No pointer input:
-                // the canvas's compare, zoom and crop gestures stay live.
+                // The clipping zebra: over the preview (never over the
+                // compare's original), under the crop dim; no pointer input,
+                // so the canvas's gestures stay live.
                 if (!showOriginal) {
                     ZebraOverlay(zebra = previewZebra)
                 }
@@ -2936,10 +2723,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 if (crop != null && (crop.x0 > 0 || crop.y0 > 0 ||
                         crop.x1 < image.width || crop.y1 < image.height)
                 ) {
-                    // The crop overlay: dim everything outside the rect.
-                    // Drawn in image pixel coordinates scaled to the FIT
-                    // box --- approximate but honest (the rect's ratio is
-                    // what the user needs to see).
+                    // The crop overlay: dim everything outside the rect,
+                    // drawn in image pixel coordinates scaled to the FIT box
+                    // (approximate but honest: the rect's ratio is the point).
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val scale = minOf(
                             size.width / image.width,
@@ -2966,15 +2752,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                     }
                 }
-                // r72: THE PERSPECTIVE CORNER OVERLAY (Phase 4's corner
-                // drag) --- the displaced quad's outline and four
-                // draggable handles over the PRE-WARP source fit box,
-                // live on the Geometry (crop) tool screen only, behind
-                // the round's revert seam. Sits OUTSIDE the crop dim's
-                // Canvas but INSIDE the pose layer (it is canvas
-                // content): the handles must stay reachable at any crop,
-                // and the quad belongs to the source grid the keystone
-                // rows commit on, not the crop's output canvas.
+                // The perspective corner overlay: the displaced quad's
+                // outline and four drag handles over the PRE-WARP source fit
+                // box, on the Geometry tool screen only, behind the revert
+                // seam. INSIDE the pose layer but OUTSIDE the crop dim
+                // (canvas content): the handles stay reachable at any crop,
+                // on the source grid the keystone rows commit on.
                 if (LilypadFlags.cornerDragEnabled && screen == PhotoScreen.Crop && !showOriginal) {
                     val base = previewBase
                     CornerOverlay(
@@ -2992,13 +2775,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         },
                     )
                 }
-                } // F-72 pose layer (the graphicsLayer Box)
+                } // pose layer (the graphicsLayer Box)
             } else {
                 CircularProgressIndicator(color = Color.White)
             }
-            // r56: the compare badge --- while the original shows, a small
-            // pill names what the user is looking at (honesty: the canvas
-            // must never silently swap content).
+            // The compare badge: while the original shows, a pill names what
+            // the user is looking at (the canvas never silently swaps content).
             if (showOriginal) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
@@ -3015,16 +2797,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     )
                 }
             }
-            // r63b §4: the floating compare chip --- the r56 press-and-hold
-            // gesture made discoverable. Bottom-leading overlay, 8dp from
-            // the edges, surfaceVariant @ 72% alpha behind a 1dp
-            // outlineVariant border, full-radius pill, 12sp label, 40dp min
-            // height. Holding it drives the SAME showOriginal flag the
-            // canvas gesture does (press = the untouched decode, release =
-            // the pipelined preview); the r56 top badge still names the
-            // state while held. Hidden exactly when the gesture is (a paint
-            // mode, a layer selection, an export --- compareEligible), so
-            // the affordance and the gesture can never disagree.
+            // The floating compare chip: the press-and-hold gesture made
+            // discoverable. Holding it drives the SAME showOriginal flag the
+            // canvas gesture does; hidden exactly when the gesture is
+            // (compareEligible), so the affordance and the gesture agree.
             if (compareEligible) {
                 Surface(
                     shape = RoundedCornerShape(percent = 50),
@@ -3054,15 +2830,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
         }
 
-        // ---- r68: THE HISTORY STRIP (the design doc's third promise:
-        // "history you can scrub") ----
-        // Bottom-anchored between the canvas and the deck, on the Main
-        // chassis only (the tool screens own their own surfaces), behind
-        // the round's revert seam. The label model recomputes on the
-        // history REVISION (the state block's comment explains why
-        // uiState alone cannot drive it); the jump sweeps any pending
-        // gesture first, exactly like the header's undo/redo pair, then
-        // walks the ring's own moves.
+        // ---- The history strip ----
+        // Bottom-anchored on the Main chassis only, behind the revert seam.
+        // The label model recomputes on the history revision (see the state
+        // block: uiState alone cannot drive it); the jump sweeps any pending
+        // gesture first, then walks the ring's own moves.
         if (LilypadFlags.historyStripEnabled && historyOpen && screen == PhotoScreen.Main) {
             val historyChanges = remember(historyTick) {
                 List(engine.depth) { i ->
@@ -3088,15 +2860,11 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             )
         }
 
-        // ---- The r41 settings sheet (the editor's FIRST, one row) ----
-        // The retouch kill-switch lives here (ADR-0010 section 5): a
-        // permanent disable hides the entry AND the stage refuses even
-        // with a restored sidecar (the layer stays verbatim, the stage
-        // skips --- pinned in RetouchConsentTest + AiRenderTest).
-        // r56: a real bottom sheet (the gallery ViewerScreen's M3 pattern)
-        // --- the sheet renders in its own window, so the canvas no longer
-        // shrinks under the rows while it is open. Same content, same
-        // consent machine.
+        // ---- The settings sheet ----
+        // The retouch kill-switch (ADR-0010 section 5): a permanent disable
+        // hides the entry AND the stage refuses even with a restored sidecar
+        // (the layer stays verbatim). A real bottom sheet, so the canvas no
+        // longer shrinks under the rows while it is open.
         if (settingsOpen && !exporting) {
             ModalBottomSheet(
                 onDismissRequest = { settingsOpen = false },
@@ -3143,9 +2911,8 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
 
         // ---- The export sheet (format + quality) ----
-        // r56: a real bottom sheet (the settings sheet's rationale) --- the
-        // format/quality/policy rows overlay the canvas instead of squeezing
-        // it; same content, same policy floor, same requestSave().
+        // A real bottom sheet: the rows overlay the canvas instead of
+        // squeezing it; same content, same policy floor, same requestSave().
         val choice = exportChoice
         if (choice != null && !exporting) {
             ModalBottomSheet(
@@ -3195,10 +2962,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                         )
                     }
 
-                    // ---- The per-export metadata-policy choice (r31) ----
-                    // The launch request's policy is the privacy floor: options
-                    // that would strip LESS than the request are disabled (the
-                    // editor respects the requested policy exactly, contract 4.4).
+                    // The per-export metadata-policy choice: the launch
+                    // request's policy is the privacy floor --- options that
+                    // would strip LESS are disabled (contract 4.4).
                     Text(
                         text = stringResource(R.string.editor_section_metadata),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3239,15 +3005,12 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
         }
 
-        // ---- The r41 AI job machinery, hoisted by r54 out of the controls ----
-        // A RUNNING job stays visible and cancellable from EVERY screen
-        // (the video chassis hoisted its still-export progress block for
-        // exactly this reason). Every AI commit runs ONCE, off the UI
-        // thread, when the user applies or re-applies a feature; the
-        // models never run during a render or an export. The quality note
-        // is honest per ADR-0010: compact on-device models, bounded
-        // results.
-        if (aiBusy) {
+        // ---- The AI job machinery ----
+        // A RUNNING job stays visible and cancellable from EVERY screen.
+        // Every AI commit runs ONCE, off the UI thread; the models never run
+        // during a render or an export. Compact on-device models, bounded
+        // results (ADR-0010).
+        if (aiBusy && aiDownloadPct < 0) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
@@ -3267,6 +3030,43 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 }
             }
         }
+        if (aiDownloadPct >= 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = stringResource(R.string.editor_ai_download_progress, aiDownloadPct),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                TextButton(
+                    onClick = { aiCancelRequested = true },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_ai_cancel))
+                }
+            }
+        }
+        aiDownloadPrompt?.let {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                Text(
+                    text = stringResource(R.string.editor_ai_download_text, aiDownloadTotalMb),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Row {
+                    TextButton(onClick = { aiDownloadGate.value.complete(true) }) {
+                        Text(stringResource(R.string.editor_ai_download_yes))
+                    }
+                    TextButton(onClick = { aiDownloadGate.value.complete(false) }) {
+                        Text(stringResource(R.string.editor_ai_no))
+                    }
+                }
+            }
+        }
         aiNotice?.let { noticeRes ->
             Text(
                 text = stringResource(noticeRes),
@@ -3275,25 +3075,18 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             )
         }
 
-        // ---- Controls: the r67 Lilypad Deck (the three-state sheet) ----
-        // The r54 fixed 300dp window retires as the DEFAULT: the panels
-        // ride the Deck --- Collapsed (the 64dp peek), Half (the 45%
-        // working surface), Full (78%, the Phase 2 curve deck) --- with
-        // the sheet's own scroll, spring motion and hairline top edge.
-        // LilypadFlags.decksEnabled is the round's reviewed revert seam:
-        // false restores the r54 window verbatim (the flag covers the
-        // PANEL CONTAINER only --- the TuneRail is retired either way).
-        // The panels themselves are untouched re-hosts (the r30-r41
-        // behavior contracts --- commit-on-release, the draft machinery,
-        // the cross-family layer exclusivity). ONE preview above,
-        // never recomposed away (the video chassis's rule).
+        // ---- Controls: the Lilypad Deck (the three-state sheet) ----
+        // The panels ride the Deck --- Collapsed (the 64dp peek), Half (the
+        // 45% working surface), Full (78%) --- with the sheet's own scroll
+        // and spring motion; LilypadFlags.decksEnabled=false restores the
+        // fixed 300dp window. The panels are untouched re-hosts: the
+        // commit-on-release, draft and cross-family-exclusivity contracts
+        // hold. ONE preview above, never recomposed away.
         var deckState by remember { mutableStateOf(LilypadDeckState.Half) }
-        // The working default per screen: tools open on the Half working
-        // surface; the Main canvas collapses to the peek so the photo
-        // stays the hero. The user's explicit handle tap/drag always wins
-        // until the next screen change. r68: a screen change also CLOSES
-        // the curve deck --- the Full state's immersive host belongs to
-        // the Adjust board that opened it, never to the next tool.
+        // The working default per screen: tools open on Half; the Main
+        // canvas collapses to the peek. A screen change also CLOSES the
+        // curve deck --- the Full state's host belongs to the Adjust board
+        // that opened it.
         LaunchedEffect(screen) {
             deckState = if (screen == PhotoScreen.Main) {
                 LilypadDeckState.Collapsed
@@ -3303,12 +3096,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             if (curveDeckOpen) curveDeckOpen = false
         }
         /**
-         * The curve deck's open/close pair (the scope row's Curve chip
-         * and the deck's own Done): opening sweeps any pending curve
-         * gesture, expands the deck to Full and swaps the deck's content
-         * to the curve editor; closing sweeps, drops back to Half and
-         * restores the tool board. The Full state IS the curve deck's
-         * host --- nothing else references it.
+         * The curve deck's open/close pair: opening sweeps any pending curve
+         * gesture, expands the deck to Full and swaps in the curve editor;
+         * closing sweeps and restores the tool board. The Full state IS the
+         * curve deck's host --- nothing else references it.
          */
         fun setCurveDeckOpen(open: Boolean) {
             if (open == curveDeckOpen) return
@@ -3318,12 +3109,10 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         }
         val panels: @Composable ColumnScope.() -> Unit = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // r68: THE CURVE DECK --- the Full state's reserved
-                // content. While it is open on the Adjust board, it
-                // REPLACES the board (the scope row's Curve chip is the
-                // entry; the deck's own Done is the exit); every other
-                // screen and the flag's off-rail keep the tool panels,
-                // verbatim.
+                // The curve deck: the Full state's reserved content. While
+                // open on the Adjust board it REPLACES the board (the scope
+                // row's Curve chip is the entry, the deck's Done the exit);
+                // every other screen keeps the tool panels.
                 if (LilypadFlags.curveDeckEnabled && curveDeckOpen && screen == PhotoScreen.Adjust) {
                     CurveDeck(
                         committed = committed,
@@ -3416,15 +3205,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     )
                 }
             }
-            // ---- The always-visible honesty chip (the r54 chassis's Main
-            // home: the export decision surface; tool screens don't repeat
-            // it) ----
-            // r63b §4: the r54 text line becomes a tappable pill --- the
-            // same effective-policy copy, now legible AND actionable: a
-            // surfaceVariant pill with the shield glyph in the accent and a
-            // 10dp margin, tapping it opens the export-policy sheet (the
-            // same sheet the Save-copy CTA opens; the privacy floor and the
-            // policy choice machinery are untouched).
+            // The Main-screen honesty chip: the effective policy copy,
+            // tappable to open the export sheet (same one the Save-copy CTA
+            // opens).
             if (screen == PhotoScreen.Main) {
                 Surface(
                     onClick = {
@@ -3464,11 +3247,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
             }
         }
         if (LilypadFlags.decksEnabled) {
-            // The Lilypad Deck: the three-state sheet hosts the panels
-            // (Half by default on tools, the Collapsed peek on Main; the
-            // Full state is the curve deck's immersive host). r68: a
-            // handle move OFF Full closes the curve deck with it --- the
-            // Full state and the curve surface are one thing.
+            // The Lilypad Deck hosts the panels; a handle move OFF Full
+            // closes the curve deck with it --- the Full state and the curve
+            // surface are one thing.
             LilypadDeck(
                 state = deckState,
                 onStateChange = { next ->
@@ -3482,9 +3263,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                 panels()
             }
         } else {
-            // The r54 fallback window (the flag's other rail): the exact
-            // heightIn(max = 300dp) scroll column this round retires as
-            // the DEFAULT, kept as the reviewed revert seam.
+            // The fixed 300dp scroll-column fallback (the flag's off rail).
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3507,13 +3286,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     }
 }
 
-// The r56 move: PhotoToolHeader and PhotoTabBar live in `PhotoChrome.kt`
-// (same package, internal --- the call sites in this file are unchanged).
-
-// r68 (C5): the HSL band rows moved ONTO the ProSlider kit (the Color
-// panel's own ProSlider rows, led by the band's hue swatch); the
-// r32-skinned HslBandSlider that lived in `PhotoControls.kt` retired
-// with the round.
+// PhotoToolHeader and PhotoTabBar live in `PhotoChrome.kt` (same package, internal).
 
 
 @Composable

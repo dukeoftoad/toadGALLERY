@@ -1,24 +1,14 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-// :editor:core --- the editor LIBRARY (Phase 1 modularization).
-//
-// The whole editor implementation moved here from :apps:edit verbatim (zero
-// logic changes): the photo editor chassis, the Ente tune-rail, the video
-// editor, the export pipeline. Two consumers now reach it as a STANDARD
-// Gradle project dependency:
-//   - :editor:app      (the standalone installable APK)
-//   - :unified:app     (the everything-in-one build)
-// which REPLACES the old :apps:gallery unified-flavor sourceSets hack
-// (../edit/src/main registrations + the generated edit-package R class) ---
-// that whole F-74 machinery is retired: R resolves normally because this
-// library owns its namespace (com.toadgallery.editor) and its resources.
+// :editor:core — the editor library: photo chassis, tune rail, video editor, export
+// pipeline. Consumed as a standard Gradle project dependency by :editor:app (the
+// standalone APK); it owns its namespace and resources.
 
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
-    // Roborazzi (r56, the editor's screenshot harness): record/verify tasks
-    // on the library variants (:editor:core:recordRoborazziDebug ...).
+    // Screenshot harness: record/verify tasks run on the library variants.
     alias(libs.plugins.roborazzi)
 }
 
@@ -35,10 +25,10 @@ android {
     }
 
     buildFeatures {
-        compose = true // ADR-0009
+        compose = true
     }
 
-    // Screenshot tests (r56): verbatim wiring from the old :apps:edit build.
+    // Screenshot tests: NATIVE graphics and fully-qualified baseline naming.
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -62,9 +52,8 @@ android {
     }
 }
 
-// AGP 9's built-in Kotlin reports 2.2.10 for compose-group-mapping, a
-// version never published; pin the mapping artifact to the catalog Kotlin
-// (the exact fixup the gallery module carries since issue #59).
+// Pin compose-group-mapping to the catalog Kotlin: AGP 9's built-in Kotlin reports
+// a version that was never published.
 configurations.configureEach {
     if (name == "composeMappingProducerClasspath") {
         resolutionStrategy.eachDependency {

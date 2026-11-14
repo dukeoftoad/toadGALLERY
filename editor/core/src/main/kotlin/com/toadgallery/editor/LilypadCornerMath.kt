@@ -2,83 +2,44 @@ package com.toadgallery.editor
 
 import kotlin.math.hypot
 
-// ---------------------------------------------------------------------------
-// r72: the craft polish round (Phase 4 of the editor rebirth plan,
-// docs/editor/lilypad-design.md §5) --- the PERSPECTIVE CORNER DRAG's
-// arithmetic as PURE DATA (the ADR-0011 split: LilypadCornerMathTest
-// pins every rule on the JVM; the overlay and the chassis only READ
-// these numbers).
+// The perspective corner drag's arithmetic as PURE DATA (JVM-pinned by LilypadCornerMathTest;
+// the overlay and chassis only READ these numbers). [PerspectiveQuad] is the recipe's state:
+// eight pixel displacements, one (dx, dy) per corner, measured against the identity corners
+// (0,0), (w-1,0), (w-1,h-1), (0,h-1), clamped to +/- w/4, +/- h/4. The keystone sliders carve
+// a fixed two-percent shape; the corner drag is the model's full surface. The drag happens on
+// the DISPLAYED image (source pixel p sits at o + p*s); the preview IS the pre-warp source
+// (the pipeline re-renders the warp live), so the drag maps finger motion into source-pixel
+// displacement on the preview grid the commit lands.
 //
-// THE MODEL IT DRIVES. [PerspectiveQuad] is the recipe's perspective
-// state: EIGHT pixel displacements, one (dx, dy) per corner, measured
-// against the identity corners (0,0), (w-1,0), (w-1,h-1), (0,h-1) of
-// the grid the warp runs on, clamped to +/- w/4 and +/- h/4. The r68
-// keystone sliders carve a FIXED two-percent shape out of that freedom;
-// the corner drag is the model's full surface --- any corner, any
-// direction, one finger.
+// THE THREE RULES:
+//  - HIT-TESTING: the NEAREST corner within the radius wins; ties to reading order (TL, TR, BR, BL).
+//  - DRAG CLAMP: displacement clamps to the engine's +/- w/4, +/- h/4 (PerspectiveQuad.clamped):
+//    the drag never shows what the warp would cut. Corners are independent.
+//  - IDENTITY SNAP: a release within the deadband of a zeroed displacement snaps the corner home.
 //
-// THE DISPLAY GEOMETRY. The drag happens on the DISPLAYED image: the
-// preview grid fit into the canvas box (scale s, offset o), where a
-// source pixel p sits at o + p*s. The quad's DISPLACED corner of the
-// pre-warp source sits at the identity corner PLUS its displacement;
-// [cornerScreen] and its inverse [dragToQuad] carry that round trip.
-// The preview the user warps IS the pre-warp source (the pipeline
-// re-renders the warp live under the finger --- the zero-ms feedback
-// rule), so the overlay draws the SOURCE's corners and the drag maps
-// finger motion into source-pixel displacement, on the preview grid the
-// commit lands (the keystone rows' own honesty: what the finger scrubbed
-// is what the release lands, byte-for-byte).
-//
-// THE THREE RULES (the curve deck's, re-derived for four points):
-//
-//  - HIT-TESTING: a corner is grabbable within a fixed radius (the
-//    24dp/48dp touch-target floor, the deck's own constant); the
-//    NEAREST corner inside the radius wins, ties to the reading order
-//    (TL, TR, BR, BL --- the quad's own field order).
-//  - THE DRAG CLAMP: a displacement clamps into the engine's own +/-
-//    w/4, +/- h/4 bounds ([PerspectiveQuad.clamped] --- the warp clips
-//    there anyway; the drag must never SHOW a displacement the engine
-//    would silently cut). This is the whole clamp: corners are
-//    independent (the quad has no cross-corner invariant to guard).
-//  - THE IDENTITY SNAP: a release within a small deadband of a zeroed
-//    displacement snaps that corner home (the deck's diagonal tick, the
-//    ProSlider's neutral --- the honest way back to "no perspective").
-//
-// THE READ-BACK. The recipe stores the QUAD, not the drag: the overlay
-// redraws from the committed quad every composition (the keystone
-// rows' read-back sibling), and the rows keep reading the
-// keystone-shaped PART of a corner-dragged quad (r68's documented
-// honest nearest reading --- the two surfaces compose, never fight).
-// ---------------------------------------------------------------------------
+// READ-BACK: the recipe stores the QUAD, not the drag; the keystone rows keep reading the
+// keystone-shaped part of a corner-dragged quad (the two surfaces compose, never fight).
 
-/**
- * Which corner of the quad a gesture owns (the field order of
- * [PerspectiveQuad] itself: reading order around the frame).
- */
+/** Which corner of the quad a gesture owns ([PerspectiveQuad]'s field order, reading order around the frame). */
 internal enum class QuadCorner {
     TopLeft, TopRight, BottomRight, BottomLeft;
 }
 
 /**
- * The perspective corner drag's pure arithmetic (the file header's
- * contract): the hit-test, the display<->grid geometry, and the drag
- * clamp with its identity snap.
+ * The corner drag's pure arithmetic: the hit-test, the display<->grid geometry, and the
+ * drag clamp with its identity snap.
  */
 internal object LilypadCornerMath {
 
     /**
-     * The corner grab radius, dp: a touch within this radius of a
-     * corner grabs it (48dp of diameter --- the WCAG 2.5.5 floor, the
-     * curve deck's HIT_RADIUS_DP verbatim); a touch outside every
-     * radius is canvas-space, not corner-space.
+     * The corner grab radius, dp (48dp of diameter, the WCAG 2.5.5 touch-target floor);
+     * a touch outside every radius is canvas-space, not corner-space.
      */
     const val HIT_RADIUS_DP = 24
 
     /**
-     * The identity snap deadband, in normalized units of the clamp
-     * bound: a released displacement under w/160 (resp. h/160) snaps
-     * that corner's component home --- about 4 display pixels at the
-     * bound's own scale, the deck's neutral neighborhood.
+     * The identity snap deadband, normalized to the clamp bound: a released displacement
+     * under w/160 (resp. h/160) snaps that corner's component home (~4 display pixels).
      */
     const val SNAP_DEADBAND = 1.0 / 160.0
 
@@ -103,12 +64,10 @@ internal object LilypadCornerMath {
     // ---- hit-testing ----
 
     /**
-     * HIT-TESTING in SOURCE-PIXEL space: the index (0..3, the reading
-     * order) of the NEAREST corner within [radiusPx] of (x, y), ties to
-     * the lower index, or -1 when every corner is out of reach. The
-     * caller converts its display position to source pixels first (the
-     * display geometry below); the radius is the px form of
-     * [HIT_RADIUS_DP] scaled the same way.
+     * HIT-TESTING in SOURCE-PIXEL space: the index (0..3, reading order) of the NEAREST
+     * corner within [radiusPx] of (x, y), ties to the lower index, or -1 when every corner
+     * is out of reach. The caller converts its display position to source pixels first;
+     * [radiusPx] is [HIT_RADIUS_DP] scaled the same way.
      */
     fun hitCorner(
         corners: List<Pair<Double, Double>>,
@@ -132,12 +91,10 @@ internal object LilypadCornerMath {
     // ---- the drag clamp ----
 
     /**
-     * THE DRAG CLAMP: [corner] of [quad] displaced to the source-grid
-     * position (x, y) --- the displacement is the position's offset
-     * from the corner's identity corner, clamped into the engine's own
-     * +/- w/4, +/- h/4 bounds ([PerspectiveQuad.clamped]'s exact rule;
-     * the drag never shows what the warp would cut). An out-of-range
-     * corner index returns the quad verbatim.
+     * THE DRAG CLAMP: [corner] displaced to source-grid (x, y) --- the displacement is the
+     * offset from the identity corner, clamped into +/- w/4, +/- h/4 ([PerspectiveQuad.clamped]'s
+     * exact rule; the drag never shows what the warp would cut). An out-of-range corner index
+     * returns the quad verbatim.
      */
     fun dragCornerTo(
         quad: PerspectiveQuad,
@@ -163,11 +120,9 @@ internal object LilypadCornerMath {
     }
 
     /**
-     * THE IDENTITY SNAP: the released quad with [corner]'s displacement
-     * zeroed when it landed inside the deadband ([SNAP_DEADBAND] of its
-     * axis bound), verbatim otherwise --- the honest way back to no
-     * perspective, one corner at a time (the ProSlider's neutral, the
-     * deck's diagonal).
+     * THE IDENTITY SNAP: the released quad with [corner]'s displacement zeroed when it landed
+     * inside the deadband ([SNAP_DEADBAND] of its axis bound), verbatim otherwise --- the way
+     * back to no perspective, one corner at a time.
      */
     fun snapOnRelease(
         quad: PerspectiveQuad,

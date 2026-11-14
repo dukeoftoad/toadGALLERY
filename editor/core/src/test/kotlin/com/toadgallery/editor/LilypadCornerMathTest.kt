@@ -4,14 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The perspective corner drag's JVM pins (r72, Phase 4's corner drag):
- * the identity/displaced corner geometry, the hit-test's nearest-wins
- * rule, the engine-bounds drag clamp, and the identity snap's deadband.
- *
- * Pure JVM, no compose/android (ADR-0011) --- this class is one of the
- * Lilypad-prefixed set the editor CI filter runs.
- */
+/** Corner-drag pins: corner geometry, nearest-wins hit-test, engine-bounds clamp, identity snap. */
 class LilypadCornerMathTest {
 
     // ---- the corner geometry ----
@@ -52,8 +45,7 @@ class LilypadCornerMathTest {
         val corners = LilypadCornerMath.identityCorners(400, 200)
         // ~30px from TL, far from everything else.
         assertEquals(0, LilypadCornerMath.hitCorner(corners, 25.0, 16.0, 40.0))
-        // Inside BOTH TL's and TR's reach is impossible on a 400px grid
-        // with r=40; nearer-to-TR proves the nearest (not the first) wins.
+        // Nearer to TR than TL proves the nearest (not the first) corner wins.
         assertEquals(1, LilypadCornerMath.hitCorner(corners, 380.0, 10.0, 40.0))
         // Near BR.
         assertEquals(2, LilypadCornerMath.hitCorner(corners, 395.0, 195.0, 40.0))
@@ -100,15 +92,13 @@ class LilypadCornerMathTest {
         )
         assertEquals(100.0, dragged.trX, 1e-9)
         assertEquals(-50.0, dragged.trY, 1e-9)
-        // And the clamp agrees with the engine's own: clamping again is
-        // a no-op (the two rules cannot drift).
+        // The clamp agrees with the engine's own: clamping again is a no-op (the rules cannot drift).
         assertEquals(dragged, dragged.clamped(400, 200))
     }
 
     @Test
     fun `the keystone rows' quad reads back through the drag clamp identically`() {
-        // The two surfaces compose: a keystone-built quad, dragged at a
-        // corner, keeps the keystone corners the drag did not touch.
+        // The surfaces compose: a keystone quad dragged at a corner keeps the untouched corners verbatim.
         val keystone = LilypadKeystoneMath.quadFor(verticalPct = 50, horizontalPct = 0, width = 400, height = 200)
         val dragged = LilypadCornerMath.dragCornerTo(
             keystone, QuadCorner.BottomRight, 350.0, 150.0, 400, 200,
@@ -168,8 +158,7 @@ class LilypadCornerMathTest {
 
     @Test
     fun `a corner-dragged quad is a legal engine input`() {
-        // The end-to-end promise: whatever the drag produces, the warp
-        // runs it EXACTLY (clamped is a no-op on a clamped drag).
+        // End-to-end: whatever the drag produces, the warp runs it EXACTLY (clamp is a no-op on it).
         var quad = PerspectiveQuad.IDENTITY
         for (corner in QuadCorner.entries) {
             quad = LilypadCornerMath.dragCornerTo(

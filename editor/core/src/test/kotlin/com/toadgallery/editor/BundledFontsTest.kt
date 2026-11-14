@@ -9,13 +9,8 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * The bundled-font conformance suite (r34, Phase 7 v2; the
- * `BundledLutsTest` pattern): the registry's self-consistency, and ---
- * reading the COMMITTED asset files from the module tree --- that every
- * bundled TTF is byte-identical to its provenance pin (the sha256s from
- * `docs/phase-7/bundled-fonts.md` / the §5 ledger rows) and that each
- * font's SIL OFL 1.1 license sits BESIDE it. A swapped or corrupted font
- * fails the build, not the user.
+ * Bundled-font conformance: registry self-consistency, every TTF byte-identical to its
+ * sha256 provenance pin, and each SIL OFL 1.1 license sitting beside its font.
  */
 class BundledFontsTest {
 
@@ -63,7 +58,6 @@ class BundledFontsTest {
     private fun assetsDir(): File {
         val candidates = listOf(
             File("src/main/assets/fonts"), // working dir = the module (Gradle unit tests)
-            File("apps/edit/src/main/assets/fonts"), // working dir = the repo root
         )
         return candidates.firstOrNull { it.isDirectory }
             ?: error("bundled-font assets not found; tried ${candidates.map { it.path }}")
@@ -73,7 +67,7 @@ class BundledFontsTest {
         MessageDigest.getInstance("SHA-256").digest(file.readBytes())
             .joinToString("") { "%02x".format(it) }
 
-    /** The provenance pins (docs/phase-7/bundled-fonts.md; google/fonts @ 2fe1e8c). */
+    /** The provenance pins for the committed TTFs. */
     private val pinnedSha256 = mapOf(
         "fira-sans" to "c29556a2719bf613ef3d5e070e40d903a8965d9c081beca1375dc1e6e0f93c23",
         "playfair-display" to "c40f2293766a503bc70cce9e512ef844a4ccb7cbcde792fe2ea31d191917d8d6",
@@ -116,8 +110,7 @@ class BundledFontsTest {
         val total = BundledFonts.ORDERED.sumOf { entry ->
             File(assetsDir(), "${entry.id}/${entry.fileName}").length()
         }
-        // docs/phase-7/bundled-fonts.md: 1,260,724 bytes committed; the
-        // budget headroom keeps an accidental double-bundle from passing.
+        // The committed byte total plus budget headroom keeps an accidental double-bundle from passing.
         assertTrue("four TTFs must stay under 1.3 MB, got $total", total in 1L..1_300_000L)
     }
 }

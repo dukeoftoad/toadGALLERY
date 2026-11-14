@@ -3,33 +3,22 @@ package com.toadgallery.editor
 import java.io.File
 
 /**
- * The user-imported `.cube` look store (r33 extension, Phase 7): the
- * SAF-picked look files copied into the editor's app-private
- * `imported-luts/` directory, completing the roadmap's Phase 7 task-1
- * bullet ("the user can import their own .cube files").
+ * The user-imported `.cube` look store: SAF-picked files copied into the
+ * app-private `imported-luts/` directory.
  *
- * Design contract:
- *  - The user's BYTES are stored verbatim (never re-serialized) — the
- *    same "the file is the author's data" philosophy as the parser's
- *    out-of-range tolerance and the recipe's unresolvable-id
- *    round-trip. Writes are atomic (tmp + rename, the sidecar store's
- *    pattern); a REJECTED import leaves the store byte-identical
+ *  - The user's BYTES are stored verbatim (never re-serialized); writes are
+ *    atomic (tmp + rename); a REJECTED import leaves the store byte-identical
  *    (parse happens BEFORE any write).
- *  - The id is DERIVED, never trusted: slug of the parsed TITLE (or
- *    the suggested file-name stem), sanitized to `[a-z0-9-]`, capped at
- *    40 chars. An id that would collide with a BUNDLED look
- *    ([BundledLuts.ORDERED]) or an EXISTING import is SUFFIXED
- *    (`-2`, `-3`, ...) — an import can never shadow the bundled set,
- *    so the merged registry's keys are disjoint by construction.
- *  - There is no index file: the directory listing IS the index
- *    (list/loadAll re-derive), so it can never drift from the files.
- *  - Deleting a look a sidecar still references is SAFE by the r33
- *    tolerance contract: the recipe keeps the id verbatim and the
- *    pipeline degrades to no-look.
+ *  - The id is DERIVED, never trusted: slug of the parsed TITLE (or the
+ *    suggested file-name stem), sanitized to `[a-z0-9-]`, capped at 40 chars.
+ *    Collisions with a BUNDLED look ([BundledLuts.ORDERED]) or an existing
+ *    import are SUFFIXED (`-2`, `-3`, ...) — an import can never shadow the
+ *    bundled set, so the merged registry's keys are disjoint by construction.
+ *  - No index file: the directory listing IS the index (can never drift).
+ *  - Deleting a look a sidecar still references is safe: the recipe keeps the
+ *    id verbatim and the pipeline degrades to no-look.
  *
- * Pure Kotlin (JVM-testable): the caller supplies the bytes (the UI
- * reads the SAF stream through the content resolver) and the store
- * owns everything else.
+ * Pure Kotlin: the caller supplies the bytes, the store owns everything else.
  */
 class ImportedLutStore(private val dir: File) {
 
@@ -56,10 +45,9 @@ class ImportedLutStore(private val dir: File) {
         }
 
     /**
-     * Imports one `.cube` file: parse FIRST (a rejection writes
-     * nothing), derive a collision-free id, then store the bytes
-     * atomically. [suggestedName] (the picked file's display name) is
-     * the id fallback when the file carries no usable TITLE.
+     * Imports one `.cube`: parse FIRST (a rejection writes nothing), derive a
+     * collision-free id, store atomically. [suggestedName] is the id fallback
+     * when the file carries no usable TITLE.
      */
     fun import(bytes: ByteArray, suggestedName: String?): ImportResult {
         val parsed = when (val result = CubeLutParser.parse(bytes.decodeToString())) {
@@ -67,16 +55,14 @@ class ImportedLutStore(private val dir: File) {
             is CubeLutParser.Result.Invalid ->
                 return ImportResult.Rejected(result.reason)
         }
-        // The suggestedName's STEM (the extension is the picker's artifact,
-        // not the look's name): "Beach 2026.cube" slugs to "beach-2026".
+        // Use the STEM of suggestedName (the extension is the picker's artifact, not the name).
         val stem = suggestedName?.substringBeforeLast('.', missingDelimiterValue = suggestedName) ?: ""
         val baseId = slugId(parsed.title.ifBlank { stem })
         val id = collisionFreeId(baseId)
         val fileName = "$id.cube"
         val target = File(dir, fileName)
         if (target.exists()) {
-            // collisionFreeId guarantees a fresh name; this is unreachable
-            // defensive honesty, not an expected path.
+            // Unreachable defensive check (collisionFreeId guarantees a fresh name).
             return ImportResult.Rejected("could not derive a free id for the look")
         }
         val tmp = File(dir, "$fileName.tmp")
@@ -117,9 +103,8 @@ class ImportedLutStore(private val dir: File) {
     // ---- internals ----
 
     /**
-     * One directory scan, one parse per file: id-sorted (id, parsed)
-     * pairs. Non-id-shaped or corrupt files surface as null parses
-     * (absent from loadAll, title-fallback in list) --- never thrown.
+     * One directory scan, one parse per file: id-sorted (id, parsed) pairs.
+     * Non-id-shaped or corrupt files surface as null parses — never thrown.
      */
     private fun scanned(): List<Pair<String, CubeLut?>> =
         dir.listFiles { file -> file.isFile && file.name.endsWith(".cube") }

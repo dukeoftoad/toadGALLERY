@@ -7,10 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r42 additive media-kind extension (v2): absent = image (the v1 wire
- * stays byte-identical for image launches), an unknown value is refused,
- * and the builder carries the extra only on video launches --- the
- * additive-versioning rule the EditorVersionNegotiator governs.
+ * Additive media-kind extension (v2): absent = image (the v1 wire stays byte-identical for image
+ * launches), unknown values are refused, the extra rides video launches only.
  */
 class MediaKindLaunchTest {
 
@@ -106,9 +104,7 @@ class MediaKindLaunchTest {
 
     @Test
     fun `a video request against a v1-only accepted window is refused by version`() {
-        // An editor compiled against the v1 contract (accepted max 1) must
-        // refuse a v2 request through the existing version gate, not
-        // silently mis-handle it.
+        // A v1-only editor must refuse a v2 request through the version gate, not silently mis-handle it.
         val validation = EditRequestValidator.validate(baseExtras("video"), 1, 1)
         assertTrue(validation is RequestValidation.Invalid)
     }

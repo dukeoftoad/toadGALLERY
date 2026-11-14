@@ -126,7 +126,7 @@ class EditResultParserTest {
         assertEquals(2, EditContract.RESULT_ERROR)
     }
 
-    // ---- The r31 honesty-UI triggers over the applied-policy echo ----
+    // ---- The honesty-UI triggers over the applied-policy echo ----
 
     @Test
     fun `a preserve echo triggers neither honesty narration`() {

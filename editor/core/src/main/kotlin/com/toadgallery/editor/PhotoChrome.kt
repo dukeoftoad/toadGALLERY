@@ -51,40 +51,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-// ---------------------------------------------------------------------------
-// The r56 chrome --- the photo editor's navigation shell, extracted verbatim
-// from `EditActivity` (the r54 chassis) with the bar's craft pass applied.
-//
-// The move itself is the point: `EditActivity` had grown into a 4,900-line
-// single file whose UI shell (this enum, the tool header, the tab bar) was
-// unrenderable in isolation --- which is exactly why the edit app had no
-// screenshot harness while the gallery had one since r47. The chrome now
-// composes standalone (see `EditChassisScreenshotTest`), and the r54
-// contracts it carries are unchanged:
-//
-// - the Main screen is never a tab (the bar navigates FROM the chassis);
-// - the header's check is the chassis's signature, not a fake apply (the
-//   photo tools commit LIVE on release --- nothing to apply, nothing to
-//   discard);
-// - the title is the a11y heading anchor (the r40 convention).
-// ---------------------------------------------------------------------------
+// The photo editor's navigation shell, composable standalone for the screenshot harness.
+// Main is never a tab; the header check is the chassis signature (tools commit live).
 
 /**
- * The photo editor's screens; Main is the chassis, the rest are the ten tabs.
- *
- * r63b re-orders the tabs into the approved §4 groups --- tone, canvas,
- * geometry --- while keeping every tool and every string verbatim:
- *
- * - tone: Adjust · Looks · Color
- * - canvas: Crop · AI · Text · Stickers · Draw · Regions
- * - geometry: Frames
- *
- * (The old interleaved r54 order --- Adjust · Color · Looks · Frames ·
- * Text · Stickers · Draw · Regions · AI · Crop --- scattered the tonal
- * tools and buried AI between geometry and layers. Nothing reads the enum
- * declaration order except the tab bar; the panel dispatch `when` is by
- * value. F-73's Regions-into-Draw merge candidate stays OPEN: this round
- * ships the approved order only, no tool merge.)
+ * The photo editor's screens; Main is the chassis, the rest are the ten tabs, in the
+ * approved groups: tone (Adjust · Looks · Color), canvas (Crop · AI · Text · Stickers ·
+ * Draw · Regions), geometry (Frames). Only the tab bar reads declaration order; the
+ * panel dispatch `when` is by value.
  */
 internal enum class PhotoScreen(val labelRes: Int, val iconRes: Int) {
     /** The main chassis; never a tab (the tab bar shows the ten tools only). */
@@ -102,10 +76,8 @@ internal enum class PhotoScreen(val labelRes: Int, val iconRes: Int) {
 }
 
 /**
- * The §4 tab groups: the ten tools in their approved runs, separated by
- * hairline group separators after Color (tone ‖ canvas) and after Regions
- * (canvas ‖ geometry). The bar renders THIS model, not the raw enum, so a
- * future re-group is a one-list edit.
+ * The tab groups the bar renders (not the raw enum): hairline separators after
+ * Color (tone ‖ canvas) and after Regions (canvas ‖ geometry).
  */
 internal val PhotoTabGroups: List<List<PhotoScreen>> = listOf(
     listOf(PhotoScreen.Adjust, PhotoScreen.Looks, PhotoScreen.Color),
@@ -121,22 +93,10 @@ internal val PhotoTabGroups: List<List<PhotoScreen>> = listOf(
 )
 
 /**
- * The r54 tool-screen header, r63c-promoted: back on the left, the tool's
- * title (the heading anchor), then the session RESET icon, then the confirm
- * check on the right --- ONE consistent shape for all ten photo tools (the
- * approved section 4 spec row: back 48dp, title weight(1f), Reset icon
- * disabled when committed == entry, confirm check accent 48dp).
- *
- * The Reset promotion (r63c): the value tools' trailing TextButton footer
- * row retired --- Reset moved INTO the header row and now rides EVERY tool
- * screen, not just the five recipe-value tools. Same honest semantics: the
- * photo tools commit LIVE on release, so there is no draft to apply or
- * discard --- Reset reverts the tool session as ONE undoable commit against
- * the entry snapshot, disabled while that snapshot IS the recipe (or during
- * an export, the freeze-everything rule). The a11y name is the old footer
- * button's label (editor_v2_reset), carried as the icon's
- * contentDescription; the back/confirm contracts are unchanged (the check
- * is the chassis's signature, not a fake apply).
+ * The tool-screen header: back, title (the heading anchor), session Reset, then the
+ * confirm check --- one shape for all ten tools. Reset reverts the tool session as ONE
+ * undoable commit against the entry snapshot, disabled while that snapshot IS the
+ * recipe (or during an export); the check is the chassis signature, not a fake apply.
  */
 @Composable
 internal fun PhotoToolHeader(
@@ -148,9 +108,7 @@ internal fun PhotoToolHeader(
     resetA11y: String,
     onReset: () -> Unit,
     resetEnabled: Boolean,
-    // r74: the copy-paste edits pair (C6's closing move). Optional so
-    // every existing call site stays source-compatible; the Adjust tool
-    // --- the grade's home --- carries the pair.
+    // Copy-paste edits pair, optional for source compatibility; the Adjust tool carries it.
     copyA11y: String? = null,
     onCopy: () -> Unit = {},
     copyEnabled: Boolean = true,
@@ -182,10 +140,7 @@ internal fun PhotoToolHeader(
                 .weight(1f)
                 .semantics { heading() },
         )
-        // r63c: the session Reset, promoted out of the value tools' footer
-        // row into the header --- one chrome shape for all ten tools. The
-        // disabled tint is the section 4 spec's disabled-alpha convention
-        // (38%), the same language the main header's undo/redo pair uses.
+        // Session Reset in the header: disabled tint is the 38% disabled-alpha convention.
         IconButton(
             onClick = onReset,
             enabled = resetEnabled,
@@ -201,12 +156,8 @@ internal fun PhotoToolHeader(
                 },
             )
         }
-        // r74: the copy-paste edits pair (C6: "copy-paste edits between
-        // photos"). Copy lifts THIS session's grade into the chassis
-        // clipboard; Paste lands the clipboard's grade as ONE undoable
-        // commit through [EditTransfer.pasteGrade] --- geometry and scene
-        // layers stay this photo's own. The pair rides the Adjust tool
-        // only (the grade's home); the same disabled-alpha language.
+        // Copy lifts this session's grade into the chassis clipboard; Paste lands it as
+        // ONE undoable commit via [EditTransfer.pasteGrade] (geometry/scene layers stay own).
         if (copyA11y != null) {
             IconButton(
                 onClick = onCopy,
@@ -255,21 +206,14 @@ internal fun PhotoToolHeader(
 }
 
 /**
- * The bottom tab bar (r54 chassis, r56 craft pass, r63b §4 rebuild): the
- * ten tools, horizontally scrollable, icon over micro-label --- in the §4
- * grouped order ([PhotoTabGroups]) with
+ * The bottom tab bar: ten tools, horizontally scrollable, icon over micro-label,
+ * in the grouped order ([PhotoTabGroups]):
  *
- * - 68dp touch rows and 56dp-minimum tab widths;
- * - 22dp glyphs over readable Material `labelSmall` labels;
- * - the selected tab = the accent glyph inside a 30dp accent-pill halo
- *   (14% alpha) --- the §4 selected language, superseding the r56
- *   40x28dp pill + underline;
+ * - 68dp touch rows, 56dp-minimum tab widths, 22dp glyphs over `labelSmall` labels;
+ * - selected tab: glyph inside a 30dp accent-pill halo (14% alpha);
  * - 1dp outlineVariant group separators after Color and after Regions;
- * - auto-scroll: when a selected tab lands outside the viewport (or the
- *   selection changes), it scrolls to the viewport's horizontal center;
- * - 26dp fade padders: the content keeps 26dp end insets so no tab can
- *   butt the chrome edge, and a 26dp surface-gradient fade overlays each
- *   edge that actually has clipped content (none at the scroll bounds).
+ * - auto-scroll centers the selected tab on selection or first position;
+ * - 26dp fade padders: a surface-gradient fade overlays only edges with clipped content.
  */
 @Composable
 internal fun PhotoTabBar(
@@ -282,7 +226,7 @@ internal fun PhotoTabBar(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface),
     ) {
-        // The r56 hairline: the bar is docked, not floating.
+        // The hairline: the bar is docked, not floating.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -291,13 +235,10 @@ internal fun PhotoTabBar(
         )
         val scrollState = rememberScrollState()
         var viewportWidth by remember { mutableStateOf(0) }
-        // Each tab's horizontal CENTER in the scroll content coordinates,
-        // reported post-layout (keyed by tab; the auto-scroll reads it).
+        // Each tab's horizontal center in scroll-content coords, post-layout (auto-scroll reads it).
         val tabCenters = remember { mutableStateMapOf<PhotoScreen, Int>() }
-        // The §4 auto-scroll: bring the SELECTED tab to the viewport's
-        // horizontal center. Re-runs when the selection changes OR when the
-        // selected tab's first position arrives; when a tool is active it
-        // stays centered so direct tool-to-tool navigation remains visible.
+        // Auto-scroll: bring the selected tab to the viewport's horizontal center; re-runs
+        // on selection change or first position, keeping tools centered during navigation.
         LaunchedEffect(current, tabCenters[current]) {
             val center = tabCenters[current] ?: return@LaunchedEffect
             scrollState.animateScrollTo((center - viewportWidth / 2).coerceAtLeast(0))
@@ -312,14 +253,12 @@ internal fun PhotoTabBar(
                 modifier = Modifier
                     .fillMaxHeight()
                     .horizontalScroll(scrollState)
-                    // The 26dp end padders: tabs scroll clear of both edges
-                    // (the fade overlays sit over this inset).
+                    // 26dp end padding: tabs scroll clear of both edges (fades overlay this inset).
                     .padding(horizontal = 26.dp),
             ) {
                 PhotoTabGroups.forEachIndexed { groupIndex, group ->
                     if (groupIndex > 0) {
-                        // The §4 group separator: a 1dp outlineVariant
-                        // hairline after Color and after Regions.
+                        // Group separator: 1dp outlineVariant hairline between groups.
                         Box(
                             modifier = Modifier
                                 .padding(horizontal = 3.dp)
@@ -350,9 +289,7 @@ internal fun PhotoTabBar(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            // The §4 selected halo: a 30dp accent pill (14%
-                            // alpha) behind the glyph --- the active tab
-                            // reads at a glance even before the label does.
+                            // Selected halo: 30dp accent pill (14% alpha) behind the glyph.
                             Box(
                                 modifier = Modifier
                                     .size(30.dp)
@@ -384,9 +321,8 @@ internal fun PhotoTabBar(
                     }
                 }
             }
-            // The §4 26dp fade padders: each edge fades ONLY the content
-            // actually clipped under it (hidden at the scroll bounds), so
-            // the padder never paints a fake gradient over reachable tabs.
+            // Edge fades paint only over content actually clipped (hidden at the scroll
+            // bounds), never a fake gradient over reachable tabs.
             val fadeColor = MaterialTheme.colorScheme.surface
             if (scrollState.value > 0) {
                 Box(

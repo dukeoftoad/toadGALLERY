@@ -61,10 +61,8 @@ class PixelAdjusterTest {
 
     @Test
     fun `brightness composes before contrast`() {
-        // +50 brightness then +50 contrast differs from either alone; the
-        // exact composition is pinned by a hand-computed value:
-        // v=10 -> brightened 137.5 -> factor(+50) = (259*382.5)/(255*131.5) ~ 2.958
-        // -> (137.5-128)*2.958+128 = 156.1 -> 156.
+        // Brightness composes before contrast; pinned by a hand-computed value:
+        // v=10 -> 137.5 -> factor(+50) = (259*382.5)/(255*131.5) ~ 2.958 -> (137.5-128)*2.958+128 = 156.1 -> 156.
         val lut = PixelAdjuster.buildLut(50, 50)
         assertEquals(156, lut[10])
     }
@@ -170,8 +168,7 @@ class EditSessionStateTest {
         val session = EditSessionState()
         session.commit(recipe(brightness = 40))
         assertTrue(session.canUndo)
-        // undo() returns the state undone TO (the identity); the committed
-        // recipe is where redo() goes.
+        // undo() returns the state undone TO (the identity); redo() returns the committed recipe.
         assertEquals(EditRecipe(), session.undo())
         assertFalse(session.canUndo)
         assertTrue(session.current.isIdentity)

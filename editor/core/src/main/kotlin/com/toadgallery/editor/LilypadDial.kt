@@ -36,80 +36,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 
-// ---------------------------------------------------------------------------
-// r68: the photo pro round (Phase 2 of the editor rebirth plan,
-// docs/editor/lilypad-design.md) --- the STRAIGHTEN DIAL, the ProSlider's
-// rotary sibling. The straighten row was the one adjustment whose value is
-// itself an ANGLE; a linear track has to fake that with a scaled axis,
-// while a dial can simply BE the instrument --- the value reads as the arc
-// it burns from twelve o'clock, and the photo turns the way the finger did.
-//
-// THE C1 CONTRACT, bent round a circle (the interaction parity the design
-// doc asks of the sibling --- every rule below is ProSlider's own, with the
-// arithmetic's angle twin in LilypadDialMath, JVM-pinned in
-// LilypadDialMathTest):
-//
-//  - DRAG ANYWHERE ON THE DIAL: the gesture surface is the whole circle
-//    (112dp, the generous rotary target), and the scrub is ANGULAR and
-//    POSITION-RELATIVE --- the finger's shortest-way-round delta around
-//    the dial's centre maps to the value span at a fixed 4:1 reduction
-//    (one full finger turn covers the whole +/-45 span), anchored at the
-//    value the drag started from. No knob-sized target, no dead zones:
-//    grab the rim, grab the middle, twist.
-//  - LONG-PRESS FINE MODE: press and hold, then drag --- the same scrub at
-//    LilypadSliderMath.FINE_GAIN (10%), the surgical touch for a horizon
-//    that is ALMOST level.
-//  - DOUBLE-TAP TO NEUTRAL: back to 0 deg, the draft-write -> finish
-//    sequence the r56 kit established.
-//  - HAPTIC ZERO TICK on the DETENT CROSSING: the zero detent is magnetic
-//    (LilypadDialMath.snappedToDetent pulls values within 1.5 deg of level
-//    home), and every emission rides ONE wrapper whose crossedNeutral
-//    check fires the light TextHandleMove tick --- the P0 stand-in for
-//    ZERO_TICK, exactly as ProSlider pins it. COMMIT_SOFT (the TextHandleMove
-//    stand-in the curve deck pins) lands when a released drag commits.
-//    DETENT_DOUBLE stays silent this round: the vocabulary's snap-point
-//    pulse has no platform stand-in, and conflating it with either of the
-//    two honest ids would muddy all three (the history strip's own call).
-//  - EMBER-WHEN-LIVE: the value's arc and the centered readout burn ember
-//    the moment the value leaves level; at level the arc is zero-length
-//    (nothing drawn --- the quiet state IS bare track) and the readout
-//    rests in the ink tone.
-//
-// The contracts that ride unchanged from the row it replaces:
-//  - r32 a11y: the dial announces its NAME (contentDescription) and its
-//    formatted VALUE (stateDescription), PLUS progressBarRangeInfo so
-//    TalkBack keeps the adjustability the M3 Slider provided;
-//  - the commit-on-release draft contract: every drag tick calls
-//    [onChange] (the caller writes its draft, the preview re-renders
-//    live), release/abort and the double-tap reset call [onFinish] (the
-//    caller commits and clears). The value is CALLER-OWNED.
-//
-// Drawing (one Canvas, in order): the hairline full-circle track
-// (outlineVariant, 4dp, the ProSlider track's own stroke) -> the ember arc
-// from twelve o'clock (0 deg) to the value's own angle, round-capped,
-// skipped at level -> the centre detent tick at twelve o'clock (2dp x 12dp
-// in the outline role, the r66 NeutralNotch language --- the mark that
-// makes the double-tap target discoverable). The mono readout (the value
-// style over the bundled JetBrains Mono) centers in the circle; the label
-// reads under it in reed. Disabled dials drop to the M3 convention's 38%
-// alpha and install no gesture detectors.
-// ---------------------------------------------------------------------------
+// The straighten dial, the ProSlider's rotary sibling (interaction parity, arithmetic
+// in LilypadDialMath, JVM-pinned in LilypadDialMathTest).
 
 /** The dial's diameter: the generous rotary target (>= the 48dp floor the rows obey). */
 private const val DIAL_SIZE_DP = 112
 
 /**
- * The Lilypad straighten dial (see the file header): the circular track
- * with its ember value arc, the twelve o'clock detent tick, the centered
- * mono readout and the reed label under it. All arithmetic comes from
- * [LilypadDialMath]; all colors from the theme's scheme. The neutral is 0
- * by construction --- a dial with a detent is inherently bipolar, so the
- * detent IS the neutral and no unipolar caller exists for this shape.
- *
- * The drag anchors, the crossing tracker and the drag-active flag are
- * UI-layer session state; the VALUE is caller-owned, per the r32 draft
- * contract: every tick -> [onChange], release/abort and the double-tap
- * reset -> [onFinish].
+ * The straighten dial: circular track, ember value arc, twelve-o'clock detent tick,
+ * centered mono readout. All arithmetic from [LilypadDialMath]. The neutral is 0 by
+ * construction (a detent dial is inherently bipolar). The value is caller-owned:
+ * every tick -> [onChange]; release/abort and double-tap reset -> [onFinish].
  */
 @Composable
 internal fun LilypadDial(
@@ -125,35 +62,23 @@ internal fun LilypadDial(
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
-    // The gesture anchors: where the drag started, in value space and in
-    // finger-angle space (the angle the finger's vector read when the
-    // drag began --- the scrub measures its shortest-way-round delta
-    // against THIS, never against a recomputed absolute).
+    // Gesture anchors: drag start in value space + finger-angle space (the scrub
+    // measures the shortest-way-round delta against THIS, never an absolute).
     var dragStartValue by remember { mutableStateOf(0f) }
     var dragStartAngle by remember { mutableStateOf(0f) }
-    // The ZERO_TICK tracker (the ProSlider's own): the last value THIS
-    // dial emitted (or synced from an external change), so the next
-    // emission compares against its immediate predecessor.
+    // Zero-tick tracker: last emitted/synced value, so the next emission compares to its predecessor.
     var previousValue by remember { mutableStateOf(value) }
-    // The pointerInput coroutines are keyed on (enabled, valueRange) ---
-    // deliberately NOT on `value`, which changes every drag tick --- so
-    // the canonical rememberUpdatedState indirection keeps the anchors,
-    // the finish callback and the emissions reading the CURRENT
-    // composition's values.
+    // pointerInput is keyed on (enabled, valueRange), NOT `value` (changes every
+    // tick); rememberUpdatedState keeps the callbacks reading the current composition.
     val currentValue by rememberUpdatedState(value)
     val currentOnChange by rememberUpdatedState(onChange)
     val currentOnFinish by rememberUpdatedState(onFinish)
-    // External value changes (a tool Reset, a draft swap) never pass
-    // through this dial's onChange; without this sync the crossing
-    // tracker would compare the next drag against a value that no longer
-    // exists (the ProSlider's own honesty rule).
+    // External value changes (Reset, draft swap) bypass onChange; this sync keeps the
+    // crossing tracker from comparing against a stale value.
     LaunchedEffect(value) { previousValue = value }
 
-    /** Every value emission rides the SAME wrapper (the C1 haptic rule):
-     * the detent snaps first (float space, BEFORE the caller's integer
-     * rounding --- the detent must bite where the thumb actually is),
-     * then a move that crosses or lands on level fires the light tick,
-     * then the value hands off to the caller. */
+    /** Every emission: detent snap first (float space, before caller rounding), then
+     * the light tick on a neutral crossing, then the handoff to the caller. */
     fun emit(next: Float) {
         val snapped = LilypadDialMath.snappedToDetent(next)
         if (LilypadSliderMath.crossedNeutral(previousValue, snapped, 0f)) {
@@ -169,8 +94,7 @@ internal fun LilypadDial(
         currentOnFinish?.invoke()
     }
 
-    // The quiet chrome + the one ember role (hoisted out of the draw
-    // lambda, the ProSlider convention).
+    // Chrome tints + the ember role, hoisted out of the draw lambda (the ProSlider convention).
     val live = LilypadSliderMath.isLive(value, 0f)
     val trackTint = MaterialTheme.colorScheme.outlineVariant
     val arcTint = MaterialTheme.colorScheme.primary
@@ -180,24 +104,20 @@ internal fun LilypadDial(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            // The M3 disabled convention: present but dimmed, and (below)
-            // with no gesture detectors installed.
+            // M3 disabled convention: dimmed, and no gesture detectors installed (below).
             .alpha(if (enabled) 1f else 0.38f),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
                 .size(DIAL_SIZE_DP.dp)
-                // r32 a11y: the NAME, the formatted VALUE, and the
-                // adjustability the M3 Slider provided (the ProSlider's
-                // semantics wiring, verbatim).
+                // A11y: name, formatted value, and M3 Slider adjustability (as ProSlider wires).
                 .semantics {
                     contentDescription = name
                     stateDescription = state
                     progressBarRangeInfo = ProgressBarRangeInfo(current = value, range = valueRange)
                 }
-                // Double-tap: back to level (the r56 reset sequence
-                // re-targeted: draft write -> finish).
+                // Double-tap: back to level (draft write -> finish).
                 .pointerInput(enabled) {
                     if (enabled) {
                         detectTapGestures(
@@ -208,10 +128,8 @@ internal fun LilypadDial(
                         )
                     }
                 }
-                // Relative rotary scrub: an ANY-DIRECTION drag anywhere on
-                // the dial maps its angular delta (shortest way round the
-                // centre) to the value span, anchored at the value the
-                // drag started from.
+                // Relative rotary scrub: any-direction drag anywhere on the dial maps its
+                // angular delta (shortest way round) to the value span, anchored at drag start.
                 .pointerInput(enabled, valueRange) {
                     if (enabled) {
                         fun angleAt(position: Offset): Float {
@@ -280,8 +198,7 @@ internal fun LilypadDial(
                 val cx = size.width / 2f
                 val cy = size.height / 2f
                 val trackStroke = 4.dp.toPx()
-                // The track rides the box's inscribed circle, a half
-                // stroke in from the edge so the 4dp line stays whole.
+                // Track rides the inscribed circle, half a stroke in from the edge (line stays whole).
                 val radius = size.minDimension / 2f - trackStroke / 2f
                 // 1. The full track: a hairline circle.
                 drawCircle(
@@ -290,14 +207,9 @@ internal fun LilypadDial(
                     center = Offset(cx, cy),
                     style = Stroke(width = trackStroke),
                 )
-                // 2. The value's arc: ember, from twelve o'clock (0 deg)
-                //    to the value's OWN dial angle (the value IS its
-                //    angle --- the identity the math pins, so the arc
-                //    cannot lie about which way the photo will turn). A
-                //    zero-length arc draws nothing: the quiet state at
-                //    level is bare track, exactly the ProSlider's rule.
-                //    Compose's arc space starts at three o'clock and runs
-                //    clockwise, so the dial angle shifts by -90.
+                // 2. The value's arc: ember, from twelve o'clock to the value's own dial
+                //    angle (the value IS its angle; zero length draws nothing --- bare track
+                //    at level). Compose arcs start at three o'clock, hence the -90 shift.
                 if (value != 0f) {
                     drawArc(
                         color = arcTint,
@@ -309,10 +221,8 @@ internal fun LilypadDial(
                         style = Stroke(width = trackStroke, cap = StrokeCap.Round),
                     )
                 }
-                // 3. The centre detent tick: the r66 NeutralNotch language
-                //    (2dp x 12dp hairline in the outline role) laid ACROSS
-                //    the track at twelve o'clock --- the mark that makes
-                //    the double-tap target discoverable.
+                // 3. The centre detent tick: 2dp x 12dp hairline across the track at twelve
+                //    o'clock (NeutralNotch language); makes double-tap discoverable.
                 val tickHalf = 6.dp.toPx()
                 drawLine(
                     color = tickTint,
@@ -321,9 +231,8 @@ internal fun LilypadDial(
                     strokeWidth = 2.dp.toPx(),
                 )
             }
-            // 4. The readout: the value style (mono 12sp/600 --- a tool
-            //    readout, not prose), centered in the circle, burning
-            //    ember the moment the value leaves level.
+            // 4. The readout: value style (mono 12sp/600, a tool readout), centered in the
+            //    circle, burning ember when the value leaves level.
             Text(
                 text = valueText,
                 color = readoutTint,

@@ -8,31 +8,17 @@ import java.nio.ByteBuffer
 import java.nio.FloatBuffer
 
 /**
- * The r41 ONNX Runtime implementation of the inference seam (the
- * prebuilt-AAR answer to the contract's open item 1:
- * `com.microsoft.onnxruntime:onnxruntime-android` --- no editor NDK
- * build surface is added). This file is ANDROID-BOUND (the AAR lives
- * on the device classpath), so it stays OUT of the local pure harness
- * (`verify-r41.sh`); its gates are the lexer check + CI. The JVM tests
- * drive the seam over fakes (`EditAiEngineTest`) through the SAME
- * [EditAiInference] interface this class implements.
- *
- * Execution-provider policy (ADR-0010 §3): NNAPI-FIRST with CPU
- * fallback. The honest note: the int8 depth graph's
- * DynamicQuantizeLinear/MatMulInteger ops largely resolve to the CPU
- * execution provider, so NNAPI is requested for every session and the
- * fallback is EXPECTED for the depth model --- the request stands, the
- * honest fallback is recorded (the round doc).
- *
- * Every failure is a DEDICATED degradation, never a crash and never a
- * generic inference error: a model that fails the presence+size check
- * answers [EditAiDegradation.MODELS_MISSING_FROM_BUILD]; a session that
- * fails to load or a run that throws answers
- * [EditAiDegradation.RUNTIME_BROKEN] --- the affected feature says so,
- * the rest of the editor keeps working (the LibraryMissing precedent).
+ * ONNX Runtime implementation of the inference seam (prebuilt
+ * `com.microsoft.onnxruntime:onnxruntime-android` AAR; no NDK build surface). Android-bound
+ * (out of the local pure harness). Execution-provider policy: NNAPI-first with CPU fallback
+ * --- the int8 depth graph's DynamicQuantizeLinear/MatMulInteger ops largely resolve to the
+ * CPU EP, so the fallback is EXPECTED for the depth model. Every failure is a dedicated
+ * degradation, never a crash: a model failing the presence+size check answers
+ * [EditAiDegradation.MODELS_MISSING_FROM_BUILD]; a session/run failure answers
+ * [EditAiDegradation.RUNTIME_BROKEN].
  */
 class OrtEditAiInference(
-    private val openAsset: (String) -> InputStream?,
+    private val openModel: (String) -> InputStream?,
 ) : EditAiInference {
 
     private val env: OrtEnvironment by lazy { OrtEnvironment.getEnvironment() }
@@ -52,7 +38,7 @@ class OrtEditAiInference(
     private fun saliencySessionOrNull(): OrtSession? {
         if (saliencyChecked) return saliencySession
         saliencyChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.ERASE_SEGMENTATION)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.ERASE_SEGMENTATION)) return null
         saliencySession = openSession(EditAiManifest.ERASE_SEGMENTATION)
         return saliencySession
     }
@@ -60,7 +46,7 @@ class OrtEditAiInference(
     private fun inpaintSessionOrNull(): OrtSession? {
         if (inpaintChecked) return inpaintSession
         inpaintChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.ERASE_INPAINT)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.ERASE_INPAINT)) return null
         inpaintSession = openSession(EditAiManifest.ERASE_INPAINT)
         return inpaintSession
     }
@@ -68,7 +54,7 @@ class OrtEditAiInference(
     private fun depthSessionOrNull(): OrtSession? {
         if (depthChecked) return depthSession
         depthChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.BOKEH_DEPTH)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.BOKEH_DEPTH)) return null
         depthSession = openSession(EditAiManifest.BOKEH_DEPTH)
         return depthSession
     }
@@ -76,14 +62,14 @@ class OrtEditAiInference(
     private fun facesSessionOrNull(): OrtSession? {
         if (facesChecked) return facesSession
         facesChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.RETOUCH_FACES)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.RETOUCH_FACES)) return null
         facesSession = openSession(EditAiManifest.RETOUCH_FACES)
         return facesSession
     }
 
     private fun openSession(model: EditAiManifest.ModelFile): OrtSession? {
         return try {
-            val bytes = openAsset(model.assetPath)?.use { it.readBytes() } ?: return null
+            val bytes = openModel(model.storePath)?.use { it.readBytes() } ?: return null
             if (bytes.size.toLong() != model.bytes) return null
             val session = createSessionNnapiFirst(bytes)
             session
@@ -94,7 +80,7 @@ class OrtEditAiInference(
         }
     }
 
-    /** NNAPI-first: an NNAPI failure falls back to the CPU EP (the request stands). */
+    /** NNAPI-first: an NNAPI failure falls back to the CPU EP. */
     private fun createSessionNnapiFirst(bytes: ByteArray): OrtSession? {
         return try {
             val options = OrtSession.SessionOptions()
@@ -105,7 +91,7 @@ class OrtEditAiInference(
                 options.close()
             }
         } catch (_: RuntimeException) {
-            // The honest fallback: the CPU EP is the default provider.
+            // CPU EP is the default provider.
             val options = OrtSession.SessionOptions()
             try {
                 env.createSession(bytes, options)
@@ -134,10 +120,8 @@ class OrtEditAiInference(
             OnnxTensor.createTensor(env, FloatBuffer.wrap(tensorData), shape).use { input ->
                 session.run(mapOf(EditAiModels.SALIENCY_INPUT_NAME to input)).use { result ->
                     progress.report(70)
-                    // Result is Iterable<Map.Entry<String, OnnxValue>> (NOT a Map:
-                    // the ORT 1.31.1 Java surface); collect the output names,
-                    // sort, take the LAST as the fused d6 map (the graph's
-                    // numeric output names sort in graph order).
+                    // ORT 1.31.1's run() result is Iterable, not a Map. Output names are
+                    // numeric and sort in graph order: take the LAST as the fused d6 map.
                     val outputs = ArrayList<String>()
                     for (entry in result) outputs.add(entry.key)
                     outputs.sort()
@@ -171,19 +155,16 @@ class OrtEditAiInference(
             ?: return AiRun.Unavailable(EditAiDegradation.MODELS_MISSING_FROM_BUILD)
         progress.report(10)
         return try {
-            // The committed pipeline graph is DYNAMIC (the upstream's
-            // promise: it crops around the mask and resizes internally),
-            // so the working grid is fed at its own dims; the on-host
-            // validation covered the 512x512 case --- other sizes ride the
-            // dynamic promise and degrade honestly if the provider refuses.
+            // The graph is DYNAMIC (crops around the mask, resizes internally),
+            // so the working grid is fed at its own dims; other sizes ride the
+            // dynamic promise and degrade if the provider refuses.
             if (width < 1 || height < 1 || working.size != width * height) {
                 return AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
             }
             if (mask8.size != width * height) {
                 return AiRun.Unavailable(EditAiDegradation.RUNTIME_BROKEN)
             }
-            // image: uint8 CHW at [0,255], RGB planes (the cited convention:
-            // uint8 RGB image; 255=keep, 0=hole for the mask plane).
+            // image: uint8 CHW at [0,255], RGB planes; mask: 255=keep, 0=hole.
             val plane = width * height
             val imageBytes = ByteArray(3 * plane)
             for (i in 0 until plane) {
@@ -357,9 +338,8 @@ class OrtEditAiInference(
     }
 
     /**
-     * The upstream min-max normalisation to 0..255 ints (u2netp's
-     * `normPRED` * 255 floor; the depth map's min-max), over a map whose
-     * length is exactly [expected].
+     * Min-max normalisation to 0..255 ints (u2netp's `normPRED` * 255 floor; the depth map's
+     * min-max), over a map whose length is exactly [expected].
      */
     private fun normaliseTo255(flat: FloatArray, expected: Int): IntArray {
         var min = Float.POSITIVE_INFINITY

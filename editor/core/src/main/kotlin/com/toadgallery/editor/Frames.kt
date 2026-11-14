@@ -1,27 +1,20 @@
 package com.toadgallery.editor
 
 /**
- * The frame system (r38, Phase 7 v2 --- the campaign's closing round;
- * the design contract is `docs/phase-7/frames.md`, decision set 1-6).
- *
- * A frame is a SINGLE selection like the look (the `LutSelection`
- * shape), not a layer list: one mounting at a time. The bundled set is
- * PARAMETRIC CODE (the r35 verdict carried: authored in code, no image
- * asset); imported frames are bitmaps stretched to the canvas.
- *
- * Pure Kotlin, JVM-tested (the repo's ADR-0011 convention): the
- * geometry functions are pure over integers; only the Canvas pass
- * lives on the Android side, in `FrameRender.kt`, through THIS object's
- * layout math for the preview and the export --- one code path.
+ * The frame system: a frame is a SINGLE selection (the LutSelection shape), not
+ * a layer list. The bundled set is parametric code (authored geometry, no image
+ * assets); imported frames are bitmaps stretched to the canvas. Pure Kotlin,
+ * JVM-tested; only the Canvas pass lives on Android (`FrameRender.kt`), through
+ * this file's shared layout math for preview and export.
  */
 
 /**
- * The recipe's additive frame selection: absent (null) = no frame (a
- * pre-r38 sidecar or a clean session); ONE frame at a time.
+ * The recipe's additive frame selection: absent (null) = no frame; ONE frame at
+ * a time.
  */
 data class FrameSelection(
     val frameId: String,
-    /** 1..100 -> thicknessPx = max(1, widthPct x minEdge / 1000), the r37 kernels' formula. */
+    /** 1..100 -> thicknessPx = max(1, widthPct x minEdge / 1000). */
     val widthPct: Int = DEFAULT_WIDTH_PCT,
     /** Full 0xAARRGGBB; the swatches pick it, the render uses it as authored (opaque palette). */
     val colorArgb: Long = DEFAULT_COLOR,
@@ -41,13 +34,12 @@ data class FrameSelection(
 }
 
 /**
- * The bundled-frame registry (r38; the `BundledStickers` pattern for
- * parametric code): five authored geometry functions, pure over
+ * The bundled-frame registry: five authored geometry functions, pure over
  * integers, pinned by exact `PixelRect` lists in `BundledFramesTest`.
  */
 object BundledFrames {
 
-    /** One bundled frame: the registry id and its display name (a proper noun --- not localized). */
+    /** One bundled frame: registry id + display name (a proper noun, not localized). */
     data class Entry(val id: String, val displayName: String) {
         init {
             require(id.isNotBlank()) { "id must not be blank" }
@@ -67,18 +59,10 @@ object BundledFrames {
     /** The entry for [id], or null when this build does not bundle it. */
     fun byId(id: String): Entry? = ORDERED.firstOrNull { it.id == id }
 
-    /**
-     * One frame's geometry: filled rects plus holes (the film sprockets
-     * punch through to the photo). Pure over integers; the holes list
-     * is empty for every def but `film`.
-     */
+    /** One frame's geometry: filled rects plus holes (film sprockets punch through to the photo). */
     data class FrameGeometry(val rects: List<PixelRect>, val holes: List<PixelRect>)
 
-    /**
-     * The authored geometry for [id] at thickness [t] over a [w] x [h]
-     * canvas: `(t, w, h) -> rects + holes`. Null for an unresolvable id
-     * (the tolerance contract: the caller degrades to no frame).
-     */
+    /** Authored geometry for [id]: `(t, w, h) -> rects + holes`; null for an unresolvable id. */
     fun geometry(id: String): ((Int, Int, Int) -> FrameGeometry)? = when (id) {
         "plain" -> ::plain
         "inner-line" -> ::innerLine
@@ -88,7 +72,7 @@ object BundledFrames {
         else -> null
     }
 
-    // ---- The authored functions (the geometry IS the specification) ----
+    // ---- The authored functions ----
 
     /** A solid border of thickness t on all four sides. */
     private fun plain(t: Int, w: Int, h: Int): FrameGeometry = FrameGeometry(
@@ -122,11 +106,7 @@ object BundledFrames {
         return FrameGeometry(rects = base.rects + ring.rects, holes = emptyList())
     }
 
-    /**
-     * Sprocket bands of height t top and bottom; holes max(2, t/2) wide
-     * every t (first at t/2), centred in the band --- the holes punch
-     * through to the photo.
-     */
+    /** Sprocket bands of height t; holes max(2, t/2) wide every t, centred in the band. */
     private fun film(t: Int, w: Int, h: Int): FrameGeometry {
         val hole = maxOf(2, t / 2)
         val bandOffset = (t - hole) / 2
@@ -159,23 +139,17 @@ object BundledFrames {
 }
 
 /**
- * The pure layout pass (JVM-tested): resolves a selection into the
- * pixel-space geometry the compositor executes --- the thickness over
- * the canvas min-edge, the authored rects at the origin offset. For an
- * imported frame the layout is trivial (the full canvas) and the
- * compositor stretches the bitmap --- the resolution split is the
- * sticker round's (`StickerCompositor.Resolved`).
+ * The pure layout pass (JVM-tested): resolves a selection into pixel-space
+ * geometry for the compositor (thickness over the canvas min-edge, authored
+ * rects at the origin offset). Imported frames are trivial (the full canvas);
+ * the compositor stretches the bitmap.
  */
 object FrameLayout {
 
-    /** The border thickness: max(1, widthPct x minEdge / 1000), integer floor --- the r37 kernels' formula. */
+    /** The border thickness: max(1, widthPct x minEdge / 1000), integer floor. */
     fun thicknessPx(widthPct: Int, minEdge: Int): Int = maxOf(1, widthPct * minEdge / 1000)
 
-    /**
-     * The parametric geometry for a selection over a [w] x [h] canvas:
-     * null when the frameId is unresolvable (the tolerance contract ---
-     * the caller renders no frame).
-     */
+    /** Parametric geometry for a selection over a [w] x [h] canvas; null when the frameId is unresolvable. */
     fun geometryFor(selection: FrameSelection, w: Int, h: Int): BundledFrames.FrameGeometry? {
         val authored = BundledFrames.geometry(selection.frameId) ?: return null
         val t = thicknessPx(selection.widthPct, minOf(w, h))

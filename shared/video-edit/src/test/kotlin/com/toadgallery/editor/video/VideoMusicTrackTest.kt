@@ -4,11 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r74 music model's JVM pins: the window rules, the ducking
- * envelope's shape, and the duck-span derivation from a composition's
- * per-clip audio facts.
- */
+/** Music track model: window rules, ducking envelope shape, duck-span derivation. */
 class VideoMusicTrackTest {
 
     private fun timeline(vararg sounding: Boolean): ClipTimeline {
@@ -47,8 +43,7 @@ class VideoMusicTrackTest {
 
     @Test
     fun `a window longer than the asset is refused`() {
-        // A 3-clip timeline (30s) so the 25s window fits the TIMELINE and
-        // the failure names the ASSET fact, not the timeline bound.
+        // 3-clip timeline (30s) so the 25s window fits the timeline; the failure names the asset fact.
         val long = track(endMs = 25_000).copy(durationMs = 20_000)
         val result = VideoMusicValidator.validate(long, timeline(true, true, true))
         assertTrue(result is VideoMusicValidation.Invalid)
@@ -107,8 +102,7 @@ class VideoMusicTrackTest {
 
     @Test
     fun `a duck span dips to the ducked level with ramps on both sides`() {
-        // Music 0..20s; the clip sounds 2..12s (offset INSIDE the
-        // window, so the lead-in genuinely exists).
+        // Music 0..20s; the clip sounds 2..12s (inside the window, so the lead-in exists).
         val points = VideoMusicDucking.envelope(
             track(),
             listOf(TimeRange(2_000, 12_000)),
@@ -126,8 +120,7 @@ class VideoMusicTrackTest {
 
     @Test
     fun `a duck span starting at the window start begins ducked - honest`() {
-        // The clip's audio is present from frame 0: there is no lead-in
-        // to preserve, and the envelope says so (offset 0 = ducked).
+        // Audio present from frame 0: no lead-in to preserve, so offset 0 = ducked.
         val points = VideoMusicDucking.envelope(
             track(),
             listOf(TimeRange(0, 10_000)),
@@ -140,12 +133,10 @@ class VideoMusicTrackTest {
 
     @Test
     fun `overlapping duck spans fold into one dip`() {
-        // Two overlapping spans fold to ONE union (2..10s): one dip with
-        // a ramp down into it and a ramp up out of it.
+        // Two overlapping spans fold to one union (2..10s): one dip with ramps both sides.
         val spans = listOf(TimeRange(0, 6_000), TimeRange(5_000, 10_000))
         val points = VideoMusicDucking.envelope(track(), spans)
-        // The union starts at 0: the envelope begins ducked, ramps up
-        // once at the union's end --- one dip total.
+        // The union starts at 0: begins ducked, ramps up once at its end --- one dip total.
         val levelChanges = points.zipWithNext { a, b -> a.second != b.second }.count { it }
         assertEquals("one dip, one rise out", 1, levelChanges)
         assertEquals(0.3f, points.first().second, 0.0001f)
@@ -154,8 +145,7 @@ class VideoMusicTrackTest {
 
     @Test
     fun `a fully ducked window never rises`() {
-        // duckFactor 0 over the whole window: the envelope is silent
-        // throughout, including the ramp-out to the SAME level (0).
+        // duckFactor 0 over the whole window: silent throughout, ramp-out to the same 0.
         val points = VideoMusicDucking.envelope(
             track(startMs = 0, endMs = 10_000, duck = 0f),
             listOf(TimeRange(0, 10_000)),

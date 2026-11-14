@@ -6,12 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The runner seam over a FAKE (r42, decision 7; widened to the two-job
- * seam in r70): the coordinator validates before the runner sees
- * anything, enforces single-flight, forwards typed progress in order and
- * delivers exactly one terminal result; cancellation reaches the runner
- * and maps to the Canceled result the runner emits. Only the thin media3
- * implementation in the edit app touches Transformer.
+ * Pins the export coordinator over a fake runner: the validation gate, single-flight,
+ * ordered progress forwarding, exactly one terminal result, cancellation mapping.
  */
 class VideoExportRunnerTest {
 
@@ -57,7 +53,7 @@ class VideoExportRunnerTest {
         workingDirPath = "/cache",
     )
 
-    /** A valid two-clip composition job (the r70 half of the seam). */
+    /** A valid two-clip composition job. */
     private fun clipRequest(mute: Boolean = false) = ClipExportRequest(
         timeline = ClipTimeline(
             listOf(
@@ -107,7 +103,7 @@ class VideoExportRunnerTest {
         assertEquals(request, fake.startedJob)
     }
 
-    // ---- the r70 composition jobs ride the same rules ----
+    // ---- the composition jobs ride the same rules ----
 
     @Test
     fun `a valid composition job starts the runner and is remembered as the last job`() {

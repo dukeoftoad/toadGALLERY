@@ -57,25 +57,13 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * The r69 zoomable timeline strip (Phase 3, the video timeline foundation):
- * the r63d TrimStrip's Main-screen role --- filmstrip, trim window, dim
- * scrim, clamped playhead, the two 16dp accent handles --- grown a
- * viewport. A pinch zooms (anchored under the fingers, snapped to the
- * 1/2/4/8/16x detents on release); zoomed in, a one-finger drag pans the
- * window and a tap still seeks; at fit, one finger scrubs exactly as the
- * TrimStrip always did. The geometry lives in [LilypadTimelineMath]
- * (pure, JVM-pinned); this composable is the thin shell.
- *
- * HONEST THUMBNAILS: the frames decode EVENLY over the whole clip (the
- * TrimStrip contract) and draw at their TRUE source positions, so a
- * zoomed window shows the subset that lands inside it --- sparsely, never
- * misrepresenting which frame is which. Window-aware decode with caching
- * is the R2 follow-up (F-78), deliberately not this round.
- *
- * The surface is single-clip TODAY (the session's one source spans the
- * strip); the ClipTimeline model beside it is the multi-clip contract
- * the Phase 3 surfaces grow into, the same additive way every model here
- * has grown.
+ * Zoomable timeline strip: filmstrip, trim window, dim scrim, clamped playhead,
+ * accent handles. Pinch zooms (anchored, snapped to 1/2/4/8/16x detents on
+ * release); zoomed in a drag pans and a tap still seeks; at fit a drag scrubs.
+ * Geometry lives in [LilypadTimelineMath] (pure, JVM-pinned). Thumbnails decode
+ * evenly over the clip and draw at true source positions, so a zoomed window
+ * shows its subset sparsely, never misrepresenting frames. Single-clip today;
+ * ClipTimeline beside it is the multi-clip contract.
  */
 @Composable
 internal fun TimelineStrip(
@@ -101,8 +89,7 @@ internal fun TimelineStrip(
     modifier: Modifier = Modifier,
 ) {
     var stripThumbs by remember { mutableStateOf<List<Bitmap>?>(null) }
-    // The viewport resets when the source changes (a remembered-per-source
-    // camera); every gesture within a source evolves it in place.
+    // Viewport resets per source (keyed on durationMs); gestures evolve it in place.
     var viewport by remember(durationMs) {
         mutableStateOf(
             TimelineViewport(LilypadTimelineMath.ZOOM_MIN, (durationMs / 2).toFloat()),
@@ -110,8 +97,8 @@ internal fun TimelineStrip(
     }
     val haptics = LocalHapticFeedback.current
 
-    // The r63d discipline: everything the long-lived gesture loop reads
-    // rides rememberUpdatedState, so the loop's captures never go stale.
+    // Everything the long-lived gesture loop reads rides rememberUpdatedState
+    // (no stale captures).
     val currentEnabled by rememberUpdatedState(enabled)
     val currentTrimStartMs by rememberUpdatedState(trimStartMs)
     val currentTrimEndMs by rememberUpdatedState(trimEndMs)
@@ -147,9 +134,8 @@ internal fun TimelineStrip(
                         .coerceIn(0f, durationF)
                         .toLong()
 
-                    // The r63d classifier, viewport-aware: a down within the
-                    // grab radius of a handle grabs it (at any zoom); a down
-                    // anywhere else pans while zoomed in, scrubs at fit.
+                    // Classifier: a down within grab radius of a handle grabs
+                    // it (any zoom); otherwise pan while zoomed in, scrub at fit.
                     val slopPx = TIMELINE_TAP_SLOP.toPx()
                     val grabPx = TIMELINE_HANDLE_GRAB_RADIUS.toPx()
                     val startX = down.position.x
@@ -172,8 +158,7 @@ internal fun TimelineStrip(
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.size >= 2) {
-                            // The canvas lesson: transform only while TWO or
-                            // more pointers are down, and only then consume.
+                            // Transform (and consume) only while 2+ pointers are down.
                             multiTouch = true
                             val zoomChange = event.calculateZoom()
                             val pan = event.calculatePan()
@@ -201,8 +186,8 @@ internal fun TimelineStrip(
                         } else if (pressed.size == 1) {
                             val change = pressed.first()
                             moved += abs(change.position.x - change.previousPosition.x)
-                            // After a pinch, the remaining finger pans the
-                            // window (navigation), whatever the down classified.
+                            // After a pinch, the remaining finger pans regardless
+                            // of the down's classification.
                             val effective = if (multiTouch) TimelineDragMode.PAN else mode
                             if (moved >= slopPx && change.positionChange() != Offset.Zero) {
                                 when (effective) {
@@ -227,8 +212,7 @@ internal fun TimelineStrip(
                     } while (event.changes.any { it.pressed })
 
                     if (multiTouch) {
-                        // The dial's detent lesson: a released pinch settles
-                        // on a detent, with the one sanctioned haptic.
+                        // A released pinch settles on a detent, with a single haptic.
                         val snapped = LilypadTimelineMath.snapZoomToDetent(viewport.zoom)
                         if (abs(snapped - viewport.zoom) > 1e-4f) {
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -239,11 +223,9 @@ internal fun TimelineStrip(
                                 ),
                             )
                         }
-                        // The pairing contract: the onDragStarted that opened
-                        // this gesture paused the player and raised the
-                        // active flag, so the release MUST close it (both
-                        // finishers are idempotent, guarded on the flag ---
-                        // the TrimStrip onDragCancel lesson).
+                        // onDragStarted paused the player and raised the active
+                        // flag; the release MUST close it (finishers are
+                        // idempotent, guarded on the flag).
                         when (mode) {
                             TimelineDragMode.HANDLE_START, TimelineDragMode.HANDLE_END ->
                                 currentOnHandleDragFinished()
@@ -256,9 +238,8 @@ internal fun TimelineStrip(
                             TimelineDragMode.SCRUB -> currentOnScrubFinished()
                             TimelineDragMode.PAN -> Unit
                         }
-                        // The r63d tap rule, kept at every zoom: a touch that
-                        // never crossed the slop seeks (handle downs excepted
-                        // --- a tap on a handle is a grab, not a jump).
+                        // Tap rule (all zooms): a touch that never crossed the
+                        // slop seeks; handle downs excepted (a tap is a grab).
                         if (moved < slopPx &&
                             (mode == TimelineDragMode.SCRUB || mode == TimelineDragMode.PAN)
                         ) {
@@ -299,8 +280,7 @@ internal fun TimelineStrip(
                     cornerRadius = corner,
                     size = size,
                 )
-                // The frames, at their true source positions (the honest-
-                // sparse rule: a zoomed window shows the subset inside it).
+                // Frames at their true source positions (zoomed window shows its subset).
                 if (!thumbImages.isNullOrEmpty()) {
                     val n = thumbImages.size
                     val slotW = size.width / n
@@ -308,8 +288,6 @@ internal fun TimelineStrip(
                         val centerMs = durationF * (index + 0.5f) / n
                         val dstX = pxAt(centerMs) - slotW / 2f
                         if (dstX + slotW < 0f || dstX > size.width) continue
-                        // Center-crop the source into the slot (the
-                        // FilmstripRow framing, in canvas form).
                         val dstAspect = slotW / size.height
                         val srcW = image.width.toFloat()
                         val srcH = image.height.toFloat()
@@ -334,7 +312,7 @@ internal fun TimelineStrip(
                         )
                     }
                 }
-                // The dim scrim outside the live trim window (r63d, scaled).
+                // Dim scrim outside the live trim window.
                 val trimStartPx = pxAt(trimStartMs.toFloat())
                 val trimEndPx = pxAt(trimEndMs.toFloat())
                 if (trimStartPx > 0f) {
@@ -362,7 +340,7 @@ internal fun TimelineStrip(
                     topLeft = Offset(playheadPx - playheadW / 2f, 0f),
                     size = Size(playheadW, size.height),
                 )
-                // The two 16dp accent handles (the TrimHandle visuals).
+                // The two trim handles.
                 val handleW = TIMELINE_HANDLE_WIDTH.toPx()
                 drawRoundRect(
                     color = ember,
@@ -379,8 +357,8 @@ internal fun TimelineStrip(
             }
         }
 
-        // The handle a11y targets: transparent 16dp nodes over the drawn
-        // handles, carrying the Trim tab's name + timestamp state verbatim.
+        // Handle a11y targets: transparent nodes over the drawn handles, with
+        // the name + timestamp state.
         Box(
             modifier = Modifier
                 .offset {
@@ -412,8 +390,7 @@ internal fun TimelineStrip(
                 },
         )
 
-        // The zoom chip: the live multiplier, mono, top-end --- the value
-        // pill's little sibling, shown only while zoomed past fit.
+        // Zoom chip: live multiplier, shown only while zoomed past fit.
         if (viewport.zoom > LilypadTimelineMath.ZOOM_MIN + ZOOM_EPSILON) {
             Box(
                 modifier = Modifier
@@ -434,7 +411,7 @@ internal fun TimelineStrip(
     }
 }
 
-/** The strip's drag classification (the TrimDragMode shape, viewport-grown). */
+/** The strip's drag classification. */
 private enum class TimelineDragMode {
     HANDLE_START,
     HANDLE_END,

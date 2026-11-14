@@ -3,22 +3,16 @@ package com.toadgallery.editor
 import java.io.File
 
 /**
- * The user-imported sky store (r41, Phase 10 sub-scope A): the
- * SAF-picked PNG/WebP files copied VERBATIM into the editor's
- * app-private `imported-skies/` directory, the `ImportedFrameStore`
- * contract VERBATIM (the task's instruction; image-shaped; the store
- * never decodes images --- the magic-byte + size check IS the
- * parse-before-write step, and a payload that later fails to decode is
- * skipped at render time, never thrown). Ids derive from the picked
- * file-name stem, collision-suffixed against the bundled registry
- * ([BundledSkies.ORDERED]) and existing imports; the file keeps its
- * magic's extension; the directory listing IS the index; delete is
- * idempotent and path-safe. An imported sky COVER-CROPS over the sky
- * mask's bounding box (not the frames' full-canvas stretch; a stretched
- * sky reads wrong).
- *
- * Pure Kotlin (JVM-testable). The id/slug helpers duplicate the family
- * convention rather than coupling the stores.
+ * The user-imported sky store: SAF-picked PNG/WebP files copied VERBATIM into
+ * the app-private `imported-skies/` directory. Image-shaped; the store never
+ * decodes images — the magic-byte + size check IS the parse-before-write step,
+ * and a payload that later fails to decode is skipped at render time, never
+ * thrown. Ids derive from the picked file-name stem, collision-suffixed against
+ * [BundledSkies.ORDERED] and existing imports; the file keeps its magic's
+ * extension; the directory listing IS the index; delete is idempotent and
+ * path-safe. An imported sky COVER-CROPS over the sky mask's bounding box (not
+ * a full-canvas stretch — a stretched sky reads wrong). Pure Kotlin; the id/slug
+ * helpers duplicate the family convention rather than coupling the stores.
  */
 class ImportedSkyStore(private val dir: File) {
 
@@ -58,8 +52,7 @@ class ImportedSkyStore(private val dir: File) {
         val fileName = "$id.$kind"
         val target = File(dir, fileName)
         if (target.exists()) {
-            // collisionFreeId guarantees a fresh name; unreachable
-            // defensive honesty, not an expected path.
+            // Unreachable defensive check (collisionFreeId guarantees a fresh name).
             return ImportResult.Rejected("could not derive a free id for the sky")
         }
         val tmp = File(dir, "$fileName.tmp")
@@ -126,7 +119,7 @@ class ImportedSkyStore(private val dir: File) {
         BundledSkies.byId(id) == null && fileFor(id) == null
 
     companion object {
-        /** The import size cap (the frame store's, verbatim). */
+        /** The import size cap. */
         const val MAX_BYTES: Int = 2_000_000
 
         /** Ids are `[a-z0-9-]`, 1..40 chars (they become file names). */

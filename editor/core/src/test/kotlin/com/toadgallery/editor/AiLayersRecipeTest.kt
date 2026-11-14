@@ -8,13 +8,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r41 AI containers on the ADR-0011 sidecar wire (the contract's
- * round-trip set): a pre-r41 sidecar loads clean (even one carrying ALL
- * FIVE earlier containers --- the round-nine stacking proof), the
- * lossless round-trips, the unresolvable-ref degradations, clamps and
- * defaults, the malformed-container skips, and the model validation.
- */
+/** The AI containers on the sidecar wire: round-trips, ref degradations, clamps, defaults, skips, model validation. */
 class AiLayersRecipeTest {
 
     private fun valid(json: String): EditRecipe =
@@ -23,7 +17,7 @@ class AiLayersRecipeTest {
     private fun pts(vararg xy: Double): List<AiEraseLayer.Point> =
         xy.toList().chunked(2).map { AiEraseLayer.Point(it[0], it[1]) }
 
-    // ---- The absent keys (every pre-r41 sidecar in the wild) ----
+    // ---- The absent keys ----
 
     @Test
     fun `a pre-r41 sidecar loads with no AI containers`() {
@@ -38,8 +32,7 @@ class AiLayersRecipeTest {
 
     @Test
     fun `a pre-r41 sidecar carrying all five earlier containers keeps them intact`() {
-        // The round-nine stacking proof: every earlier container is
-        // untouched by r41's keys.
+        // Every earlier container is untouched by the AI keys.
         val json = JSONObject()
             .put("schemaVersion", 1)
             .put(
@@ -196,8 +189,7 @@ class AiLayersRecipeTest {
             .toString()
         val restored = valid(json)
         assertNull(restored.sky) // blank skyId = no sky selection
-        // The blank id was skipped; the blank-ref layer is KEPT (the
-        // unresolvable-ref rule --- it round-trips, renders nothing).
+        // Blank id skipped; blank-ref layer kept (round-trips, renders nothing).
         assertEquals(listOf("e1"), restored.aiErase?.layers?.map { it.id })
         assertEquals("", restored.aiErase?.layers?.get(0)?.artifactRef)
     }
@@ -255,8 +247,7 @@ class AiLayersRecipeTest {
             )
             .toString()
         val restored = valid(json)
-        // The two-point seed was skipped (an erase needs an area) and the
-        // array normalised to absent.
+        // Two-point seed skipped (an erase needs an area); array normalises to absent.
         assertNull(restored.aiErase)
         assertEquals(70, restored.sky?.opacityPct)
     }
@@ -287,9 +278,7 @@ class AiLayersRecipeTest {
         assertEquals("e1", AiEraseLayer.newId(emptyList()))
         assertEquals("e4", AiEraseLayer.newId(listOf("e1", "e3")))
         assertEquals("e2", AiEraseLayer.newId(listOf("t1", "s1", "d1", "r1", "e1")))
-        // The families stay collision-free by construction: each family's
-        // newId counts only its OWN prefix, so a cross-family id list is
-        // invisible to the other family (the prefixes partition the space).
+        // Each family's newId counts only its own prefix, so the prefixes partition the id space.
         assertEquals("r1", RegionLayer.newId(listOf("e1")))
         assertEquals("e1", AiEraseLayer.newId(listOf("r1")))
     }

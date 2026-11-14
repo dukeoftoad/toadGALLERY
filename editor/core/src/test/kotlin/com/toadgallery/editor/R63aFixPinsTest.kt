@@ -7,56 +7,17 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The r63a fix-first round's source pins (the executable half of the five
- * fixes, in the established pure-JVM style of `AccessibilityWiringTest` /
- * `PrivacyPolicyTest`: the wiring is text in the tree, and the r37 lesson
- * --- "CI compiles what's there, it cannot test for absence" --- is exactly
- * what a source-scan test is for).
- *
- * Pinned here, per flaw:
- *  - P3  (EditActivity): the Save copy CTA label carries `maxLines = 1` +
- *        `TextOverflow.Ellipsis` --- the pill can never wrap;
- *  - F-71 (EditActivity): the root Column's `systemBarsPadding()` stays the
- *        edit app's ONLY inset payment (the header must sit one inset below
- *        the window top, never two);
- *  - V1  (VideoEditorScreen): `PreviewSurface` owns no height anymore ---
- *        the owning Column decides (weight(1f) on Main, fixed 220dp on the
- *        tool screens);
- *  - V5  (VideoEditorScreen): the dead weight(1f) Spacer between the
- *        filmstrip and the tab bar stays gone;
- *  - V2  (VideoEditorScreen): the fullscreen toggle survives the transport
- *        retirement --- r63d re-anchors it top-trailing INSIDE the preview
- *        frame (the approved section-5 spec) with the r63a a11y strings
- *        verbatim, and the three-button row itself stays retired;
- *  - V6  (strings): the honest tool labels --- Frame and GIF --- and the
- *        jargon-free frame-timestamp description.
- *
- * r63d note (the deliberate redesign, approved): the three-button transport
- * row and the two-row TimestampRow RETIRED per the proposal --- this file's
- * video pins were rewritten for the new shape in the same round (the V2 pin
- * guards the toggle's new anchor + the row's absence; the V1 end-anchor is
- * now the transport overlay; the Main strip is TrimStrip). The photo pins
- * (P3, F-71) are untouched.
- *
- * A failing assertion here means an r63a/r63d wiring was reverted ---
- * restore it or (for a deliberate redesign) retire the pin WITH the design
- * round's approval; do not relax it silently.
+ * Source-scan pins for editor wiring fixes (P3, F-71, V1, V2, V5, V6): a
+ * failing pin means reverted wiring -- restore or retire it deliberately, never relax silently.
  */
 class R63aFixPinsTest {
 
-    /**
-     * The edit module-relative prefix of every pinned source file. Phase 1
-     * moved the sources into :editor:core and renamed the package to the
-     * module namespace (com.toadgallery.editor), so the pinned files are
-     * src/main/kotlin/com/toadgallery/editor/{EditActivity.kt, video/...}.
-     */
+    /** The module-relative prefix of every pinned source file. */
     private val EDIT_SRC = "src/main/kotlin/com/toadgallery/editor/"
 
     /**
-     * Unit-test working dir is the module dir under Gradle (:editor:core)
-     * but is the repo root under the pre-push harness; be tolerant of both
-     * (the gallery AccessibilityWiringTest moduleFile pattern, generalized
-     * for the post-Phase-1 module layout).
+     * The working dir is the module dir under Gradle but the repo root under the
+     * pre-push harness; accept both layouts.
      */
     private fun sourceFile(moduleRelative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
@@ -149,9 +110,7 @@ class R63aFixPinsTest {
     @Test
     fun `filmstrip docks against the tab bar with no dead spacer`() {
         val source = editSource(EDIT_SRC + "video/VideoEditorScreen.kt")
-        // The MAIN branch: from the chassis TrimStrip call (the first
-        // occurrence; r63d made the trim strip the Main strip) to the
-        // chassis EditorTabBar call (the first one).
+        // The Main branch: from the first TrimStrip call to the first EditorTabBar call.
         val start = source.indexOf("TrimStrip(")
         val end = source.indexOf("EditorTabBar(")
         assertTrue("the Main-branch trim strip/tab bar calls must exist", start >= 0 && end > start)
@@ -168,9 +127,7 @@ class R63aFixPinsTest {
     @Test
     fun `fullscreen toggle anchors inside the preview frame`() {
         val source = editSource(EDIT_SRC + "video/VideoEditorScreen.kt")
-        // r63d (approved): the three-button transport row retired; the
-        // toggle re-anchored top-trailing INSIDE the preview frame, hosting
-        // the same action with the r63a a11y strings verbatim.
+        // The three-button transport row is retired; the toggle lives inside the preview frame.
         assertFalse(
             "r63d: the three-button transport row must stay retired",
             source.contains("private fun TransportRow("),

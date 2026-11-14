@@ -42,23 +42,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 
-// ---------------------------------------------------------------------------
-// The r56 control kit --- the crafted control surfaces for the photo editor's
-// tool panels.
-//
-// Why this file exists: the r54 chassis moved every tool behind its tab but
-// re-hosted each panel's CONTROLS verbatim from the r30-r41 rounds, so the
-// panels still read as a settings form --- bare label-over-Slider pairs with
-// no value readout, text-only chips for the looks/frames/fonts (no visual
-// preview of the effect), and no way to get back to a slider's neutral. The
-// maintainer's 2026-11-07 chat instruction ("generic and flawed ... fix it
-// and improve and redesign if necessary") is this file's mandate.
-//
-// The r32 a11y contract rides unchanged in every control here: the slider
-// announces its NAME (contentDescription) and its formatted VALUE
-// (stateDescription); the chips carry the row's single-selection semantics
-// through FilterChip itself.
-// ---------------------------------------------------------------------------
+// The control kit for the editor's tool panels; sliders announce name
+// (contentDescription) + formatted value (stateDescription), chips carry selection semantics.
 
 /** The thumbnail raster every honest preview renders at (3:2, 96x64). */
 internal const val THUMB_WIDTH = 96
@@ -66,22 +51,14 @@ internal const val THUMB_WIDTH = 96
 internal const val THUMB_HEIGHT = 64
 
 /**
- * The reference strip the thumbs render through the REAL pipeline: the top
- * two thirds sweep teal -> violet -> amber under a vertical exposure ramp
- * (the hue + tone response in one glance); the bottom third is a neutral
- * gray ramp (a look's tone curve shows on neutrals, not just on color).
- * Pure deterministic arithmetic over sRGB ints --- JVM-tested in
- * `PhotoControlsTest` so the strip can never silently drift.
+ * The reference strip thumbs render through the REAL pipeline: top two thirds sweep
+ * teal -> violet -> amber under a vertical exposure ramp; bottom third a neutral
+ * gray ramp. Deterministic sRGB int arithmetic, JVM-tested in `PhotoControlsTest`.
  */
 internal fun thumbGradientPixels(width: Int, height: Int): IntArray {
     require(width > 0 && height > 0) { "thumb raster must be non-empty" }
     val pixels = IntArray(width * height)
-    // The three sweep stops (sRGB): teal, violet, amber. The violet stop is
-    // a HUE-WHEEL reference (teal -> violet -> amber maximizes the hue
-    // coverage the LUT response shows in one glance) --- it is CONTENT, not
-    // the chrome accent, and it is NOT the r53 chrome violet that the r63
-    // re-pin retired from every theme role (see the r63 proposal's §3: only
-    // EditorTheme.kt + VideoEditTheme carry accent hexes now).
+    // Sweep stops (sRGB): teal, violet, amber (violet is a hue-wheel reference, not the chrome accent).
     val stops = intArrayOf(0xFF2E8B8B.toInt(), 0xFF8B72E8.toInt(), 0xFFE8A04B.toInt())
     val neutralTop = height * 2 / 3
     for (y in 0 until height) {
@@ -119,11 +96,8 @@ internal fun thumbGradientPixels(width: Int, height: Int): IntArray {
 }
 
 /**
- * The looks' honest thumbnail: the reference strip through the SAME
- * `EditPipeline.apply` the preview and the export use (the lut rides the
- * recipe so the identity short-circuit cannot skip it --- the pipeline's
- * filter gate matches `filter.id == selection.lutId`). What the chip shows
- * is what the look does.
+ * The look thumbnail: reference strip through the SAME `EditPipeline.apply` the preview
+ * and export use (lut rides the recipe so the identity short-circuit cannot skip it).
  */
 internal fun renderLookThumb(lut: CubeLut): Bitmap {
     val pixels = thumbGradientPixels(THUMB_WIDTH, THUMB_HEIGHT)
@@ -135,10 +109,8 @@ internal fun renderLookThumb(lut: CubeLut): Bitmap {
 }
 
 /**
- * The frames' honest thumbnail: the reference strip with the REAL parametric
- * geometry composited by the SAME `FrameCompositor.draw` the preview and the
- * export use (resolver = null: the bundled frames resolve internally, and an
- * imported frame never routes here --- its chip shows the imported bitmap).
+ * The frame thumbnail: reference strip through the SAME `FrameCompositor.draw` the
+ * preview and export use; resolver = null (bundled frames resolve internally).
  */
 internal fun renderFrameThumb(frameId: String, colorArgb: Long): Bitmap {
     val bitmap = Bitmap
@@ -157,11 +129,8 @@ internal fun renderFrameThumb(frameId: String, colorArgb: Long): Bitmap {
 }
 
 /**
- * The bundled sky's honest thumbnail (r66): the parametric render at the
- * reference strip's own raster, through the SAME `BundledSkies.render`
- * the sky stage blends through at commit --- what the chip shows is what
- * the stage paints. An unresolvable id (the tolerance contract) returns
- * null and the chip degrades to its name, like the None chip.
+ * The bundled sky thumbnail through the SAME `BundledSkies.render` the sky stage
+ * blends; an unresolvable id (tolerance contract) returns null and the chip degrades to its name.
  */
 internal fun renderSkyThumb(skyId: String): Bitmap? {
     val pixels = BundledSkies.render(skyId, THUMB_WIDTH, THUMB_HEIGHT) ?: return null
@@ -171,25 +140,11 @@ internal fun renderSkyThumb(skyId: String): Bitmap? {
 }
 
 /**
- * The r56 slider row: the label and a LIVE value pill on one line, the
- * slider under them, and a double-tap that returns to a control's neutral
- * (the pill makes the number readable at a glance; the double-tap replaces
- * the "drag back to zero" hunt every stock slider panel punts on).
- *
- * Behavior parity with the r32 pattern it replaces: the value is CALLER-OWNED
- * --- every drag tick calls [onChange] (the caller updates its draft, the
- * live preview re-renders exactly as before) and the release calls
- * [onFinish] (the caller commits its draft and clears it). The a11y contract
- * is verbatim: name = [name], state = [label].
- *
- * r66: [neutralTick] opts a bipolar control into the NEUTRAL NOTCH --- a
- * hairline vertical mark at the track's exact center, where the thumb
- * sits at 0 for any range symmetric around zero ([-100, 100], [-15, 15]).
- * The double-tap-to-reset affordance becomes DISCOVERABLE (the mark is
- * what you double-tap back to); unipolar controls (0..100
- * strength/opacity rows) must NOT opt in --- their zero is the track's
- * end, not its center. The guard is honest: an asymmetric range draws
- * nothing even if a caller passes true.
+ * Slider row: label + live value pill, double-tap resets to the neutral. Value is
+ * caller-owned: every tick calls [onChange], release calls [onFinish]; a11y name =
+ * [name], state = [label]. [neutralTick] draws a center notch for ranges symmetric
+ * around zero --- bipolar controls only (unipolar 0..100 rows must not opt in);
+ * asymmetric ranges draw nothing even if true.
  */
 @Composable
 internal fun LabeledSlider(
@@ -250,9 +205,7 @@ internal fun LabeledSlider(
                         }
                     },
             )
-            // r66: the neutral notch, drawn only for the honest case ---
-            // a range symmetric around zero puts the thumb's 0 at the
-            // track's exact center (the M3 travel insets are symmetric).
+            // Neutral notch: drawn only for a range symmetric around zero (thumb's 0 at track center).
             if (neutralTick && valueRange.start + valueRange.endInclusive == 0f) {
                 NeutralNotch(modifier = Modifier.matchParentSize())
             }
@@ -261,12 +214,8 @@ internal fun LabeledSlider(
 }
 
 /**
- * The r66 neutral notch: a 2dp hairline at the track's exact center,
- * half the track height tall, in the outline role. The caller hosts it
- * as a `matchParentSize` overlay INSIDE the same Box as the Slider (the
- * Box is what keeps the slider's layout byte-identical --- the overlay
- * only paints). Purely decorative: no semantics, nothing for TalkBack
- * to read that the slider's own state does not already say.
+ * The neutral notch: 2dp hairline at the track's center, outline role, hosted as a
+ * `matchParentSize` overlay (paints only). Purely decorative --- no semantics.
  */
 @Composable
 internal fun NeutralNotch(modifier: Modifier = Modifier) {
@@ -285,20 +234,8 @@ internal fun NeutralNotch(modifier: Modifier = Modifier) {
 }
 
 /**
- * One look chip: the honest pipeline thumb over the look's name, the
- * selected state carried by FilterChip itself (the theme's accent-fill
- * mechanism). `lut == null` renders the None chip: name only, no thumb ---
- * "no look" has nothing honest to preview.
- *
- * r67: RETIRED --- the Looks panel's chips became the [LookCard] shelf
- * (LilypadCards.kt); the composable is deleted, its honest-render helper
- * `renderLookThumb` lives on as the card renderer's null-base fallback.
- */
-
-/**
- * One frame chip: the composited parametric thumb (or the imported frame's
- * own bitmap) over the frame's name --- same honest-render contract as the
- * look chips. `thumb == null` renders the None chip: name only.
+ * One frame chip: the composited thumb (or the imported frame's bitmap) over the name;
+ * `thumb == null` renders the None chip (name only).
  */
 @Composable
 internal fun FrameThumbChip(
@@ -341,14 +278,8 @@ internal fun FrameThumbChip(
 }
 
 /**
- * One sky chip (r66): the honest thumb over the sky's name, the
- * LookThumbChip/FrameThumbChip contract applied to the last text-only
- * picker row. [bundled] renders through `renderSkyThumb` (the same
- * `BundledSkies.render` the sky stage blends through, remembered per
- * sky id); an imported sky shows [imported] --- its own bitmap (the
- * imported-frame precedent: the chip shows the pixels the stage would
- * paste). Both null renders the None chip: name only --- "no sky" has
- * nothing honest to preview.
+ * One sky chip: [bundled] renders through `renderSkyThumb` (remembered per id);
+ * an imported sky shows its own bitmap. Both null renders the None chip (name only).
  */
 @Composable
 internal fun SkyThumbChip(
@@ -397,13 +328,9 @@ internal fun SkyThumbChip(
 }
 
 /**
- * One font chip: "Ag" set in the REAL bundled Typeface (the platform object
- * the canvas renderer already uses --- one code path) over the font's name.
- * The preview rides `AndroidView(TextView)`: the compose-ui 1.7 surface has
- * no public android.graphics.Typeface bridge, and the canvas' Typefaces are
- * created from assets (`EditActivity.bundledFonts`) --- reusing them here is
- * both honest and free. A missing typeface (the tolerance contract) renders
- * the name only.
+ * One font chip: "Ag" in the real bundled Typeface over the name, via
+ * `AndroidView(TextView)` (no compose-ui android.graphics.Typeface bridge). A missing
+ * typeface renders the name only.
  */
 @Composable
 internal fun FontPreviewChip(
@@ -443,15 +370,9 @@ internal fun FontPreviewChip(
     )
 }
 
-// ---------------------------------------------------------------------------
-// The r57 move: the r34 swatch palette + its swatch control live in the
-// control kit now (their only readers are the extracted tool panels; same
-// package, internal --- the panel call sites are unchanged).
-// ---------------------------------------------------------------------------
-
 /**
- * The r34 swatch palette: fixed, named, TalkBack-labelled (one of N radio
- * semantics). ARGB Longs; the layer keeps the exact value it picked.
+ * The swatch palette: fixed, named, TalkBack-labelled (one-of-N radio semantics).
+ * ARGB Longs; the layer keeps the exact value it picked.
  */
 internal val TEXT_COLORS: List<Pair<Long, Int>> = listOf(
     0xFFFFFFFFL to R.string.editor_color_white,
@@ -473,16 +394,12 @@ internal fun ColorSwatch(
     enabled: Boolean,
     onPick: () -> Unit,
 ) {
-    // A local with a distinct name: inside the semantics {} lambda the
-    // receiver's own `selected` property shadows this parameter, so an
-    // unqualified `selected = selected` reads as self-assignment.
+    // Renamed local: the semantics receiver's `selected` would shadow the parameter.
     val isSelected = selected
     Box(
         modifier = Modifier
             .padding(end = 10.dp)
-            // r47 ux fix: 36dp was under the 48dp touch-target floor
-            // (design-tokens.md section 2.5, WCAG 2.5.5); the swatch circle
-            // grows to meet it.
+            // 48dp meets the touch-target floor (WCAG 2.5.5).
             .size(48.dp)
             .clip(CircleShape)
             .background(Color(colorArgb.toInt()))
@@ -491,10 +408,8 @@ internal fun ColorSwatch(
                 color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 shape = CircleShape,
             )
-            // toggleable is not on this foundation build's API surface
-            // (unresolved at the r34 head's first compile); clickable +
-            // explicit semantics carries the same a11y contract --- the
-            // repo-wide clickable convention, role + selected stated here.
+            // toggleable is unavailable in this foundation build; clickable + explicit
+            // semantics (role + selected) carries the same a11y contract.
             .clickable(
                 enabled = enabled,
                 role = Role.RadioButton,

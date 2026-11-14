@@ -2,8 +2,8 @@ name: Editor CI
 
 # Phase 2 branch isolation --- the editor integration branch builds ONLY
 # the standalone editor APK. Editor-side changes (the editor modules, the
-# shared contract, the Gradle catalog) trigger this workflow; gallery and unrelated feature changes do not. The editor branch contributes
-# to unified through a reviewed PR; unified validates the integrated product family.
+# shared contract, the Gradle catalog) trigger this workflow; unrelated
+# changes do not.
 
 on:
   push:
@@ -44,24 +44,18 @@ jobs:
       - name: Run editor lint
         run: ./gradlew :editor:app:lintDebug --no-daemon --stacktrace
 
-      # r69: :shared:video-edit joins the lane --- the editor is the pure
-      # module's primary consumer, and its suite (VideoEditPlan, the r69
-      # ClipTimeline model) had NO workflow gate anywhere (the pre-r69
-      # rounds ran it only via the screenshots workflow's task graph, which
-      # the r68 suspension retired).
+      # :shared:video-edit joins the lane --- the editor is the pure
+      # module's primary consumer, and its suite (VideoEditPlan,
+      # ClipTimeline) had no other workflow gate.
       - name: Run editor + contract + video-edit unit tests
         run: ./gradlew :editor:app:testDebugUnitTest :shared:editor-contract:test :shared:video-edit:test --no-daemon --stacktrace
 
-      # r67 gated only the Lilypad-prefixed classes (the design system's
-      # JVM-pinned tests). r68 (the suspension round) widens the net: the
-      # Roborazzi PR gates rest (screenshots.yml is manual-dispatch only
-      # now), so the FULL :editor:core unit suite runs here --- the r30-r66
-      # legacy tests join the gate, and the screenshot classes ride along
-      # as no-op captures (the plugin skips captureRoboImage() outside the
-      # roborazzi task graph, so they pass without recording or gating).
-      # The suite already proved green on this exact tree via the r68
-      # edit-chassis verify run (#114); lint debug, assemble, and this unit
-      # lane are the editor's gates now. Instrumented E2E is F-75.
+      # The FULL :editor:core unit suite runs here: the Roborazzi PR gates
+      # rest (screenshots.yml is manual-dispatch only), so the screenshot
+      # classes ride along as no-op captures (the plugin skips
+      # captureRoboImage() outside the roborazzi task graph). Assemble,
+      # lint debug, and this unit lane are the editor's gates;
+      # instrumented E2E is F-75.
       - name: Run the full editor core unit suite
         run: ./gradlew :editor:core:testDebugUnitTest --no-daemon --stacktrace
 

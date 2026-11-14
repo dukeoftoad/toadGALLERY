@@ -9,12 +9,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r35 sticker layers on the ADR-0011 sidecar wire (the contract's
- * round-trip set, the `TextLayersRecipeTest` conventions): a pre-r35
- * sidecar loads clean (even one carrying r34 text layers), the full
- * round-trip is lossless, an unresolvable stickerId round-trips verbatim
- * + renders nothing, and the tolerant-read rules (clamps, skips,
- * defaults) hold --- a hand-edited sidecar never loses its whole session.
+ * Sticker layers on the sidecar wire: older sidecars load clean, the round-trip is lossless,
+ * unresolvable ids survive verbatim, and tolerant reads never lose a whole session.
  */
 class StickerLayersRecipeTest {
 
@@ -44,21 +40,20 @@ class StickerLayersRecipeTest {
         return JSONObject().put("schemaVersion", 1).put("stickerLayers", arr).toString()
     }
 
-    // ---- The absent key (every pre-r35 sidecar in the wild) ----
+    // ---- The absent key (older sidecars in the wild) ----
 
     @Test
     fun `a pre-r35 sidecar loads with no sticker layers`() {
         val restored = valid("{\"schemaVersion\":1,\"brightness\":10}")
         assertNull(restored.stickerLayers)
         assertTrue(restored.isStickerIdentity)
-        // brightness 10 rides through untouched --- the recipe is NOT
-        // identity (only its STICKER half is); the absent key corrupts nothing.
+        // brightness rides through: NOT identity overall (only its STICKER half is); the absent key corrupts nothing.
         assertFalse(restored.isIdentity)
     }
 
     @Test
     fun `a pre-r35 sidecar carrying r34 text layers keeps them intact`() {
-        // The stacking proof: r34's container is untouched by r35's key.
+        // The stacking proof: the text container is untouched by the sticker key.
         val json = JSONObject()
             .put("schemaVersion", 1)
             .put(
@@ -131,9 +126,8 @@ class StickerLayersRecipeTest {
     fun `an unresolvable stickerId round-trips verbatim and renders nothing`() {
         val restored = valid(recipeWithLayers(layerJson(stickerId = "ghost-import")))
         assertEquals("ghost-import", restored.stickerLayers?.layers?.get(0)?.stickerId)
-        // Render-time resolution: the registry has no such shape, the
-        // store has no such bitmap --- the compositor skips it. The id
-        // still survives the next round-trip untouched.
+        // Render-time resolution: no such shape in the registry, no such bitmap in the store ---
+        // the compositor skips it; the id still survives the next round-trip untouched.
         val again = valid(EditRecipeCodec.toJson(restored))
         assertEquals("ghost-import", again.stickerLayers?.layers?.get(0)?.stickerId)
     }

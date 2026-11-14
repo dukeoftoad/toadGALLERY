@@ -2,28 +2,8 @@ package com.toadgallery.editor
 
 import java.security.MessageDigest
 
-/**
- * The r41 inference seam (Phase 10 sub-scope A; the design contract
- * `docs/phase-10/edit-v3-ai.md`, decisions 2 + 10): a FACADE over ONNX
- * Runtime. Inference runs at COMMIT time only --- off the UI thread,
- * cancellable, with honest progress --- never in the render loop; what
- * it produces is a derived artifact persisted in `EditAiStore.kt`.
- *
- * The ORT classes are android-bound (the prebuilt
- * `com.microsoft.onnxruntime:onnxruntime-android` AAR), so the runtime
- * lives BEHIND this interface: the JVM tests drive the seam over FAKES
- * (`EditAiEngineTest`); the real implementation is `EditAiOrtRuntime.kt`
- * (NNAPI-first with CPU fallback; the honest note: the int8 depth
- * graph's DynamicQuantizeLinear/MatMulInteger ops largely resolve to
- * the CPU execution provider, so NNAPI is requested and the fallback is
- * expected there).
- *
- * Every degradation is a DEDICATED message naming the recovery (the
- * engine's FACE_MODELS_NOT_INSTALLED precedent): a missing or broken
- * runtime or model answers its own boundary message --- never a generic
- * inference failure, never a crash. The message strings live in
- * `strings_r41.xml`; the kinds are pinned here.
- */
+/** Facade over ONNX Runtime: commit-time inference only, off the UI thread, cancellable.
+ *  Impl `EditAiOrtRuntime.kt` is NNAPI-first with CPU fallback; JVM tests use fakes. */
 
 /** The honest boundary kinds (each maps to a dedicated message string). */
 enum class EditAiDegradation {
@@ -53,9 +33,8 @@ sealed interface AiRun<out T> {
 }
 
 /**
- * The per-model graph facts and preprocessing conventions --- FETCHED
- * AND CITED, never invented. Each fact names its upstream source; the
- * verification status of each is stated honestly.
+ * Per-model graph facts and preprocessing conventions, cited from upstream
+ * sources; each fact states its verification status.
  */
 object EditAiModels {
 
@@ -66,19 +45,15 @@ object EditAiModels {
     const val SALIENCY_INPUT_NAME: String = "input.1"
 
     /**
-     * The u2netp output slot: the LAST of the 7 outputs --- the fused
-     * d6 map [1,1,320,320] f32 (the on-host graph validation; the 7
-     * outputs are the six encoder scales plus the fused map).
+     * The u2netp output slot: the LAST of the 7 outputs (six encoder scales plus
+     * the fused d6 map), [1,1,320,320] f32, validated on-host.
      */
     const val SALIENCY_OUTPUT_INDEX: Int = 6
 
     /**
-     * The u2netp preprocessing, cited from the upstream demo
-     * (xuebinqin/U-2-Net, `data_loader.py` `ToTensorLab` flag 0, "with
-     * rgb color", fetched 2026-11-05): RGB in [0,1] (image/255), then
-     * per-channel (v - mean)/std with the ImageNet constants. The
-     * postprocess is `u2net_test.py`'s `normPRED` (min-max to 0..1)
-     * then *255 --- fetched from the same repo.
+     * u2netp preprocessing per the upstream U-2-Net demo (ToTensorLab flag 0):
+     * RGB in [0,1], then per-channel (v - mean)/std with the ImageNet constants;
+     * postprocess `normPRED` (min-max to 0..1) then *255.
      */
     const val IMAGENET_MEAN_R: Float = 0.485f
     const val IMAGENET_MEAN_G: Float = 0.456f
@@ -99,17 +74,9 @@ object EditAiModels {
     const val INPAINT_RESULT_NAME: String = "result"
 
     /**
-     * The migan mask polarity + input convention, cited from the
-     * upstream repo (Picsart-AI-Research/MI-GAN, README "For
-     * Developers", fetched 2026-11-05): the ONNX pipeline expects
-     * `image` as a uint8 RGB image and `mask` as a uint8 grayscale mask
-     * where 255 denotes the KNOWN region and 0 the MASKED (to-inpaint)
-     * region; the graph performs its own internal preprocessing
-     * (uint8->float32, crop around the mask, resize to 512, normalise)
-     * and postprocessing (resize back, blend, float32->uint8). The
-     * upstream README also warns the best results come from small,
-     * incremental strokes on large areas --- the honest product copy
-     * carries that bound.
+     * migan per upstream MI-GAN: uint8 RGB `image`, uint8 `mask` with
+     * 255 = KNOWN / 0 = to-inpaint; the graph does its own pre/postprocessing.
+     * Best results come from small, incremental strokes.
      */
     const val INPAINT_KEEP: Int = 255
     const val INPAINT_HOLE: Int = 0
@@ -122,18 +89,9 @@ object EditAiModels {
     const val DEPTH_OUTPUT_NAME: String = "predicted_depth"
 
     /**
-     * The dav2 preprocessing: RGB /255 + the ImageNet mean/std (the
-     * same constants the u2netp demo carries), at 518x518 --- the
-     * 518 default is cited from the official repo's README
-     * (DepthAnything/Depth-Anything-V2, "--input-size", "By default, we
-     * use input size 518 for model inference", fetched 2026-11-05). The
-     * exact preprocessor_config.json fetch was rate-limited at round
-     * time, so the per-file processor is recorded from the model card +
-     * the repo README, unverified against the processor source; the
-     * constants are pinned here either way. The resize is NEAREST
-     * (deterministic floor mapping), not the upstream bicubic --- the
-     * r37 integer-determinism discipline; recorded as the round's
-     * decision, quality judged on the device rows.
+     * dav2 preprocessing: RGB /255 + the ImageNet mean/std at 518x518 (the repo's
+     * default input size). Resize is NEAREST (deterministic floor mapping), not
+     * the upstream bicubic --- the integer-determinism discipline.
      */
     const val DEPTH_MAP_SIZE: Int = 518
 
@@ -144,32 +102,19 @@ object EditAiModels {
     const val FACES_INPUT_NAME: String = "input"
 
     /**
-     * The yunet input convention, cited from the OpenCV Zoo demo
-     * (opencv/opencv_zoo `models/face_detection_yunet/README.md` +
-     * `demo.py` + `yunet.py`, fetched 2026-11-05): the demo feeds BGR
-     * images through cv.FaceDetectorYN, which resizes to the input
-     * shape; the graph applies its own Sigmoid to the cls and obj heads
-     * (verified by the on-host graph dump --- the outputs are
-     * Sigmoid nodes). The per-tensor scaling (BGR order, float [0,255])
-     * is recorded from the model card + demo code, UNVERIFIED against
-     * the FaceDetectorYN C++ source (unreachable at round time); it is
-     * the device rows' first quality suspect.
+     * yunet input per the OpenCV Zoo demo: BGR, float [0,255] scale; the graph
+     * applies its own Sigmoid to the cls/obj heads (verified on-host). The BGR
+     * scaling is unverified against the FaceDetectorYN C++ source --- quality suspect.
      */
     const val FACES_CONF_THRESHOLD: Float = 0.6f
     const val FACES_NMS_THRESHOLD: Float = 0.3f
 
     /**
-     * The yunet decode (cls/obj/bbox/kps at strides 8/16/32): score =
-     * cls * obj (both post-Sigmoid in the graph); the anchor decode is
-     * the canonical YuNet arithmetic --- x = (col + dx) * stride, the
-     * box as centre + extents, the landmarks in the demo's order (right
-     * eye, left eye, nose tip, right mouth corner, left mouth corner).
-     * The conf threshold is the wrapper class's 0.6 (yunet.py's
-     * default, cited; the demo.py default is 0.9 --- the round takes
-     * the recall-friendlier one for retouch); NMS 0.3 (the demo's).
-     * The anchor arithmetic itself is recorded from the model card +
-     * the canonical libfacedetection convention, unverified against the
-     * C++ source --- flagged for the device rows.
+     * yunet decode (cls/obj/bbox/kps at strides 8/16/32): score = cls * obj (both
+     * post-Sigmoid in the graph); anchors x = (col + dx) * stride, box centre +
+     * extents, landmarks in demo order (right eye, left eye, nose tip, mouth
+     * corners). Conf 0.6 (recall-friendlier than the demo's 0.9), NMS 0.3; anchor
+     * arithmetic unverified against the C++ source.
      */
     const val FACES_STRIDE_8: Int = 8
     const val FACES_STRIDE_16: Int = 16
@@ -183,24 +128,20 @@ object EditAiModels {
 }
 
 /**
- * The inference facade. Every method takes the WORKING grid (the
- * session's fully-graded pixels, ARGB) and returns the model output in
- * the derived form; the implementations call the pure preprocessing
- * helpers in [EditAiPreprocess] and the pure decoders in [EditAiDerive].
+ * Every method takes the WORKING grid (fully-graded session pixels, ARGB) and
+ * returns the derived output; impls call [EditAiPreprocess] and [EditAiDerive].
  */
 interface EditAiInference {
 
     /**
-     * u2netp over the working grid: the fused d6 saliency, min-max
-     * normalised to 0..255 ints (upstream `normPRED` * 255, floor), at
-     * [EditAiModels.SALIENCY_SIZE] square.
+     * u2netp: fused d6 saliency min-max normalised to 0..255 (upstream
+     * `normPRED` * 255, floor), at [EditAiModels.SALIENCY_SIZE] square.
      */
     fun saliencyMap(working: IntArray, width: Int, height: Int, progress: AiProgress): AiRun<IntArray>
 
     /**
-     * migan over the working grid: [mask8] carries the upstream polarity
-     * (255 = keep, 0 = the hole to inpaint); the result is the
-     * inpainted grid at the working resolution, opaque.
+     * migan: [mask8] carries the upstream polarity (255 = keep, 0 = hole to inpaint);
+     * the result is the opaque inpainted grid at the working resolution.
      */
     fun inpaintFill(
         working: IntArray,
@@ -211,25 +152,22 @@ interface EditAiInference {
     ): AiRun<IntArray>
 
     /**
-     * dav2 over the working grid: the predicted depth, min-max
-     * normalised to 0..255 ints (LARGER = CLOSER), at
+     * dav2: predicted depth min-max normalised to 0..255 (LARGER = CLOSER), at
      * [EditAiModels.DEPTH_SIZE] square.
      */
     fun depthMap(working: IntArray, width: Int, height: Int, progress: AiProgress): AiRun<IntArray>
 
     /**
-     * yunet over the working grid: the decoded face boxes, fractions of
-     * the output canvas (the 640-space decode is scale-invariant), in
-     * score order after NMS.
+     * yunet: decoded face boxes as output-canvas fractions (the 640-space decode
+     * is scale-invariant), in score order after NMS.
      */
     fun faceBoxes(working: IntArray, width: Int, height: Int, progress: AiProgress): AiRun<List<FaceBoxes.Box>>
 }
 
 /**
- * The pure preprocessing helpers (integer-deterministic; the
- * implementations call these so the JVM tests pin the exact tensors).
- * Every resize is NEAREST (floor mapping) --- the r37 discipline, not
- * the upstream bicubic; recorded as the round's decision.
+ * Pure preprocessing helpers, integer-deterministic (impls call these so the JVM
+ * tests pin the exact tensors). Every resize is NEAREST (floor mapping), not the
+ * upstream bicubic.
  */
 object EditAiPreprocess {
 
@@ -246,11 +184,7 @@ object EditAiPreprocess {
         return out
     }
 
-    /**
-     * The u2netp tensor: CHW floats, RGB /255 + the ImageNet mean/std
-     * (the upstream ToTensorLab flag-0 convention, cited in
-     * [EditAiModels]).
-     */
+    /** The u2netp tensor: CHW floats, RGB /255 + ImageNet mean/std (see [EditAiModels]). */
     fun saliencyTensor(grid: IntArray): FloatArray {
         val n = grid.size
         val out = FloatArray(3 * n)
@@ -270,9 +204,8 @@ object EditAiPreprocess {
     fun depthTensor(grid: IntArray): FloatArray = saliencyTensor(grid)
 
     /**
-     * The yunet tensor: CHW floats in BGR channel order at RAW [0,255]
-     * scale (the cited demo convention; the honest note lives in
-     * [EditAiModels]) --- plane 0 is B, plane 1 is G, plane 2 is R.
+     * The yunet tensor: CHW floats, BGR order at raw [0,255] scale (plane 0 = B,
+     * 1 = G, 2 = R); see [EditAiModels].
      */
     fun facesTensor(grid: IntArray): FloatArray {
         val n = grid.size
@@ -286,10 +219,7 @@ object EditAiPreprocess {
         return out
     }
 
-    /**
-     * The migan mask tensor bytes: 255 = keep, 0 = the hole (the cited
-     * upstream polarity --- the PAINTED region is the hole).
-     */
+    /** The migan mask bytes: 255 = keep, 0 = the hole (the PAINTED region is the hole). */
     fun miganMask(hole: BooleanArray): ByteArray {
         val out = ByteArray(hole.size)
         for (i in hole.indices) {
@@ -300,17 +230,14 @@ object EditAiPreprocess {
 }
 
 /**
- * The pure derive + decode functions (the artifact assembly). The
- * commit coordinator below composes these over the inference facade;
- * the JVM tests pin them over hand maps.
+ * Pure derive + decode functions (artifact assembly); the commit coordinator
+ * composes these over the inference facade, JVM tests pin them over hand maps.
  */
 object EditAiDerive {
 
     /**
-     * The erase refined mask: the painted seed AND the saliency subject
-     * (both reconstructed on the working grid --- the saliency mask
-     * arrives at 320 and maps by the fraction convention), encoded as
-     * the fraction RLE at the working grid.
+     * The erase refined mask: painted seed AND saliency subject (the saliency
+     * arrives at 320 and maps by the fraction convention), as fraction RLE.
      */
     fun refinedEraseMask(
         seed: BooleanArray,
@@ -318,9 +245,8 @@ object EditAiDerive {
         workingHeight: Int,
         saliencyMap255: IntArray,
     ): FractionRleMask {
-        // The saliency mask at its own 320 grid, fraction-encoded, then
-        // reconstructed on the working grid (the exact-at-working-grid
-        // rule; approximate elsewhere, the r37 honesty).
+        // Saliency: fraction-encoded at its own 320 grid, then reconstructed on the
+        // working grid (exact at the working grid only, approximate elsewhere).
         val size = EditAiModels.SALIENCY_SIZE
         val saliencyBool = BooleanArray(size * size) { i ->
             saliencyMap255[i] >= EditAiModels.SALIENCY_THRESHOLD
@@ -335,11 +261,9 @@ object EditAiDerive {
     }
 
     /**
-     * The sky mask from the saliency map (the round's decision): the
-     * region above the subject's TOP edge, minus the subject itself ---
-     * sky(x, y) = y < globalSubjectTop AND NOT subject(x, y). A photo
-     * with no detected subject (an empty subject mask) refuses honestly
-     * ([EditAiDegradation.NO_SKY_FOUND]); so does an empty result.
+     * The sky mask: the region above the subject's TOP edge minus the subject ---
+     * sky(x, y) = y < globalSubjectTop AND NOT subject(x, y). No detected subject
+     * or an empty result refuses with [EditAiDegradation.NO_SKY_FOUND].
      */
     fun skyMask(
         workingWidth: Int,
@@ -387,11 +311,9 @@ object EditAiDerive {
     }
 
     /**
-     * The erase fill patch: the migan result cropped to the refined
-     * mask's bounding box, with the bbox's placement fractions. The
-     * patch is bounded by the session's working resolution --- the
-     * contract's honest limitation (a very large export is softer than
-     * its surroundings there).
+     * The erase fill patch: migan result cropped to the refined mask's bbox, with
+     * placement fractions; bounded by the working resolution (a very large export
+     * is softer than its surroundings).
      */
     fun fillPatch(
         refinedMask: FractionRleMask,
@@ -442,12 +364,10 @@ object EditAiDerive {
         DepthGrid.fromMap(depthMap255, EditAiModels.DEPTH_MAP_SIZE, EditAiModels.DEPTH_MAP_SIZE)
 
     /**
-     * The yunet decode over the 9 array outputs (cls/obj/bbox at strides
-     * 8/16/32, all [N] and [N, 4] shapes flattened row-major, cls/obj
-     * post-Sigmoid in the graph): score = cls * obj; the anchor decode
-     * x = (col + dx) * stride with the box as centre + extents; NMS at
-     * the demo's 0.3 after the score sort. The boxes return as
-     * fractions of the 640 canvas (scale-invariant).
+     * Yunet decode over the 9 array outputs (cls/obj/bbox at strides 8/16/32, all
+     * [N]/[N, 4] flattened row-major, cls/obj post-Sigmoid): score = cls * obj;
+     * anchor x = (col + dx) * stride, box centre + extents; NMS 0.3 after score
+     * sort. Boxes return as fractions of the 640 canvas (scale-invariant).
      */
     fun decodeFaces(
         cls8: FloatArray, cls16: FloatArray, cls32: FloatArray,
@@ -473,8 +393,7 @@ object EditAiDerive {
                     val y1 = cy - h / 2f
                     val x2 = cx + w / 2f
                     val y2 = cy + h / 2f
-                    // Double division (float division then toDouble would
-                    // round at float precision); clamped into the canvas.
+                    // Divide in double (float-then-double would round at float precision); clamped.
                     found.add(
                         FaceBoxes.Box(
                             left = (x1.toDouble() / size).coerceIn(0.0, 1.0),
@@ -490,8 +409,7 @@ object EditAiDerive {
         decodeLevel(cls8, obj8, bbox8, EditAiModels.FACES_STRIDE_8)
         decodeLevel(cls16, obj16, bbox16, EditAiModels.FACES_STRIDE_16)
         decodeLevel(cls32, obj32, bbox32, EditAiModels.FACES_STRIDE_32)
-        // Score order (ties keep the decode order), then NMS at the demo's
-        // threshold --- the earlier (higher-score) box keeps the slot.
+        // Score order (ties keep the decode order), then NMS: the higher-score box keeps the slot.
         val order = found.indices.sortedByDescending { scores[it] }
         fun iou(a: FaceBoxes.Box, b: FaceBoxes.Box): Float {
             val ix0 = maxOf(a.left, b.left)
@@ -517,17 +435,14 @@ object EditAiDerive {
             }
             if (!suppressed) kept.add(candidate)
         }
-        // Every kept box is a non-empty fraction span by construction (the
-        // decode clamps into the canvas and skips sub-pixel extents).
+        // Kept boxes are non-empty fraction spans (decode clamps into the canvas, skips sub-pixel extents).
         return kept
     }
 }
 
 /**
- * The commit coordinator: the compose point the activity calls OFF the
- * UI thread at commit time. Each function runs the inference ONCE, then
- * derives the artifact; the activity writes it to the store and commits
- * the recipe layer --- one snapshot per commit.
+ * The commit coordinator, called OFF the UI thread at commit time. Each function
+ * runs the inference ONCE and derives the artifact --- one snapshot per commit.
  */
 object EditAiCommit {
 
@@ -541,9 +456,7 @@ object EditAiCommit {
         progress: AiProgress,
     ): AiRun<Pair<FractionRleMask, FillPatch?>> {
         if (progress.isCancelled()) return AiRun.Unavailable(EditAiDegradation.CANCELLED)
-        // The seed mask through the EXISTING even-odd RegionMask plumbing
-        // (the contract's decision 5): the erase points are the family's
-        // own fraction type, mapped onto the region family's point shape.
+        // Seed mask via the even-odd RegionMask plumbing; erase points map onto region points.
         val seed = RegionMask.build(
             seedPoints.map { RegionLayer.Point(it.x, it.y) },
             width,
@@ -556,10 +469,8 @@ object EditAiCommit {
                 val refined = EditAiDerive.refinedEraseMask(seed, width, height, saliency.value)
                 val maskBool = refined.maskAt(width, height)
                 if (maskBool.none { it }) {
-                    // The seed survived, the refinement found no subject under
-                    // it --- the honest degrade is the SEED itself: the fill
-                    // covers what the user painted (the honest bound stated
-                    // in the round doc; on-device quality is bounded).
+                    // Refinement found no subject under the seed --- degrade to the
+                    // SEED itself: the fill covers what the user painted.
                     val seedRle = FractionRleMask.fromMaskAt(seed, width, height)
                     return fillFor(inference, working, width, height, seedRle, seed, progress)
                 }
@@ -634,10 +545,9 @@ object EditAiCommit {
     }
 
     /**
-     * The `inputs` string for an artifact key: the SHA-256 of the
-     * working pixels (+ any extra, e.g. the seed points for erase) --- a
-     * changed adjustment changes the inference input, so a re-apply
-     * derives a NEW key and never reuses the stale artifact.
+     * The `inputs` string for an artifact key: SHA-256 of the working pixels (+ any
+     * extra, e.g. the erase seed points), so changed pixels derive a NEW key and
+     * never reuse a stale artifact.
      */
     fun pixelInputs(working: IntArray, extra: String): String {
         val digest = MessageDigest.getInstance("SHA-256")

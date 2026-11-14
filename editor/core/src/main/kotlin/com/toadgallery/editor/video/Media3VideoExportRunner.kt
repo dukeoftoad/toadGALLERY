@@ -20,71 +20,18 @@ import androidx.media3.transformer.Effects
 import java.io.File
 
 /**
- * The media3 Transformer realization of the [VideoExportRunner] seam (r42,
- * contract decision 7 --- the ModelDownloader-seam precedent): the job in,
- * typed progress + result out. This is the ONLY file whose export path
- * touches media3's Transformer; the JVM suite drives the same jobs
- * against a fake runner (VideoExportRunnerTest), so the seam contract
- * itself is test-pinned without a device.
- *
- * How a job becomes a render (one realization, no drift with the pure
- * math; every API below verified against the media3 1.11.1 artifacts):
- *
- *  - r70: a [VideoExportJob] resolves to ONE flat list of
- *    [ClipExportItemSpec]s first ([resolvePlanJob] expands the v1 plan
- *    through [VideoEditMath.timelineRuns] --- the explicit speed segments
- *    plus the 1x gap runs, all over the one source; [resolveTimelineJob]
- *    projects the r70 [ClipExportRequest] through [ClipExportProjection]
- *    --- one spec per composition entry, each with its own source, trim,
- *    speed and per-entry strip decision; the ClipExportTest equivalence
- *    pin keeps the two resolvers from drifting). Each spec becomes ONE
- *    [EditedMediaItem]: [MediaItem.ClippingConfiguration] carries the
- *    spec's in/out points and [EditedMediaItem.Builder.setSpeed] its
- *    factor (a constant [SpeedProvider] per item --- media3 1.11.1 has no
- *    whole-item speed factor setter); the specs chain in one
- *    [EditedMediaItemSequence], so the render IS the job's timeline.
- *  - the nine adjustments ride as ONE [VideoAdjustEffect] per item (the
- *    same effect + shader the ExoPlayer preview consumes); a neutral
- *    parameter set attaches NO effect at all --- an exact identity, not a
- *    no-op shader pass.
- *  - audio: the strip decision is the SPEC's (the v1 plan-level decision
- *    realized per run; the r70 composition's per-entry resolution).
- *    [MuteDecision.STRIP_AUDIO] maps to [EditedMediaItem.Builder
- *    .setRemoveAudio]; a no-audio clip's recorded no-op maps to false
- *    (there is no track to strip; the job recorded the fact).
- *  - volume rides [GainProcessor] (media3 1.11.1's constant-capable gain
- *    AudioProcessor) in the effects chain's audio-processor slot --- the
- *    r52 CI catch is recorded here honestly: `EditedMediaItem.Builder
- *    .setVolume` does NOT exist at this pinned version (verified against
- *    the 1.11.1 artifacts, not guessed), so the gain is a
- *    [GainProcessor.GainProvider] returning the job's constant factor.
- *    It is skipped on every spec whose audio is stripped (mute wins by
- *    construction: no track is left to scale) and skipped at the exact 1f
- *    identity (the same neutral-adjustment rule as the effects: a no-op
- *    pass is never attached). The PREVIEW realizes the same gain as
- *    `player.volume` --- one model, two realizations, no drift.
- *  - progress: [Transformer.getProgress] polled on the main looper into
- *    the seam's hundredths-of-a-percent; honest stages (PREPARING before
- *    the start call, RENDERING while polling).
- *  - cancellation: media3 1.11.1 has NO ERROR_CODE_CANCELED --- a
- *    [Transformer.cancel] may surface the cancellation SYNCHRONOUSLY (a
- *    RuntimeException out of the cancel call itself) or through a later
- *    onError. The runner owns the mapping: [VideoExportRunner.cancel]
- *    swallows the synchronous throw, marks the cancel, and delivers
- *    [VideoExportResult.Canceled] exactly once (a late onError afterwards
- *    is dropped --- the coordinator's single-terminal-result rule).
- *
- * Everything runs on the app's main thread (Transformer requires its
- * building looper for every call); the heavy decode/encode is
- * media3-internal and off the UI thread by construction. The render lands
- * in the caller's working directory; the MediaStore insert (the
- * non-destructive policy) stays with the activity.
+ * The media3 Transformer realization of [VideoExportRunner]: job in, typed progress +
+ * result out; the only file whose export path touches Transformer. Each resolved spec
+ * becomes one EditedMediaItem (clipping = trim, constant SpeedProvider = speed) chained
+ * in one sequence; neutral adjustment/look/volume attach no effect/processor. Volume
+ * rides GainProcessor (no setVolume at the pinned media3), skipped for stripped audio or
+ * the 1f identity; progress polls on the main looper; cancel delivers Canceled exactly
+ * once, absorbing media3's synchronous throw and dropping any late onError. Main thread
+ * only; the render lands in the caller's working dir (the MediaStore insert stays with
+ * the activity).
  */
-// The media3 1.11.1 speed surface carries TWO separate opt-in markers:
-// UnstableApi (the bulk of media3's API surface) and ExperimentalApi
-// (EditedMediaItem.Builder.setSpeed(SpeedParameters, boolean) and the
-// SpeedParameters constructor it takes --- the merge-gate's fifth catch;
-// lint names the marker class, the fix adds it verbatim).
+// media3's speed surface needs both opt-in markers: UnstableApi for the bulk of the API,
+// ExperimentalApi for EditedMediaItem.Builder.setSpeed(SpeedParameters, boolean).
 @androidx.annotation.OptIn(
     androidx.media3.common.util.UnstableApi::class,
     androidx.media3.common.util.ExperimentalApi::class,
@@ -108,11 +55,8 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
             if (!resolved.adjustments.isNeutral) {
                 add(VideoAdjustEffect(resolved.adjustments))
             }
-            // r74: the shared look --- attached ONLY when it exists and is
-            // dialed in (intensity > 0), the neutral-adjustment rule the
-            // parameter set follows (a no-op pass is never attached). The
-            // effect carries the PARSED cube; the shader stage samples it
-            // (VideoAdjustProjection.fragmentShaderWithLookStage).
+            // Shared look: attached only when present with intensity > 0 (no-op passes are
+            // never attached). The effect carries the parsed cube; the shader samples it.
             if (resolved.look != null && resolved.look.intensity > 0) {
                 add(VideoLookEffect(resolved.look))
             }
@@ -128,14 +72,8 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
                         .build(),
                 )
                 .build()
-            // The r52 volume gain, realized per spec: attached only when it
-            // is neither moot (this spec's audio is stripped --- mute wins by
-            // construction) nor the exact 1f identity (the same
-            // neutral-adjustment rule the effects follow: a no-op pass is
-            // never attached). The constant provider answers the SAM pair
-            // directly (isUnityUntil returns the CURRENT time --- unity ends
-            // now, so the processor stays active for a non-unity gain; the
-            // provider itself is only ever attached at non-unity gains).
+            // Volume gain per spec: skipped when audio is stripped (mute wins) or gain is the
+            // 1f identity; isUnityUntil answers the current time, keeping the processor active.
             val applyVolumeGain = !spec.removeAudio && volumeGain != 1f
             val audioProcessors: List<AudioProcessor> = if (applyVolumeGain) {
                 listOf(
@@ -162,17 +100,8 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
                 .setEffects(Effects(audioProcessors, videoEffects))
                 .build()
         }
-        // r74, the transitions record, stated honestly: the crossfade
-        // MODEL + validation + duration math ship in the pure module
-        // (VideoCrossfade.kt), but media3 1.11.1's Composition.Builder
-        // has NO per-boundary transition API (verified against the
-        // 1.11.1 reference: setEffects / setHdrMode / setTransmuxAudio
-        // / setTransmuxVideo / setVideoCompositorSettings only ---
-        // transitions landed in later media3 versions). Realizing the
-        // dissolve therefore needs either the media3 upgrade or a
-        // custom VideoCompositorSettings compositor --- F-78's own
-        // follow-up, recorded in follow-up.md; a hard cut (today's
-        // behaviour) stays exactly what this runner renders.
+        // The crossfade model ships in VideoCrossfade.kt, but the pinned media3 has no
+        // per-boundary transition API; this runner renders hard cuts (dissolve is a tracked follow-up).
         val composition = Composition.Builder(
             EditedMediaItemSequence.Builder(items).build(),
         ).build()
@@ -215,9 +144,8 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
     }
 
     /**
-     * Honest progress without a busy loop: a handler tick every quarter
-     * second reads [Transformer.getProgress]; STATE_BUSY/UNAVAILABLE is
-     * reported as the last known value rather than a fake zero.
+     * Progress without a busy loop: a handler tick every 250 ms reads [Transformer.getProgress];
+     * BUSY/UNAVAILABLE reports the last known value rather than a fake zero.
      */
     private fun startPolling(listener: VideoExportListener) {
         val handler = Handler(Looper.getMainLooper())
@@ -248,10 +176,7 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
         progressHandler = null
     }
 
-    /**
-     * The exactly-once terminal delivery: the first of (onCompleted,
-     * onError, cancel) wins; the base-class stop bookkeeping rides along.
-     */
+    /** Exactly-once terminal delivery: the first of (onCompleted, onError, cancel) wins. */
     private fun deliverOnce(deliver: () -> Unit) {
         if (terminalDelivered) return
         terminalDelivered = true
@@ -264,13 +189,11 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
         if (terminalDelivered) return
         cancelRequested = true
         try {
-            // Blocking on this thread until media3 releases its pipeline
-            // (the 1.11.1 contract) --- the export's own decode/encode ran
-            // off this thread all along, so this is a bounded teardown.
+            // Blocks this thread until media3 releases its pipeline; decode/encode itself
+            // runs off-thread, so this is a bounded teardown.
             transformer?.cancel()
         } catch (_: RuntimeException) {
-            // media3 1.11.1 may surface the cancellation synchronously ---
-            // that IS the cancel path, not a failure.
+            // media3 may surface cancellation synchronously — that IS the cancel path.
         }
         deliverOnce { currentListener?.onResult(VideoExportResult.Canceled) }
     }
@@ -283,12 +206,9 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
     }
 
     /**
-     * A job resolved to the one flat shape the item builder consumes: the
-     * ordered specs, the shared treatment, the derived output duration.
-     * Both request types land here, so the builder below cannot favor
-     * either --- the ClipExportTest equivalence pin holds the v1 side.
-     * r74: the shared look and the crossfade list ride along (the
-     * composition path's own containers; the v1 path defaults them off).
+     * A job resolved to the flat shape the item builder consumes; both request types land
+     * here so the builder cannot favor either. The look and crossfades ride along
+     * (composition-path containers; the v1 path defaults them off).
      */
     private data class ResolvedJob(
         val specs: List<ClipExportItemSpec>,
@@ -299,7 +219,7 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
         val transitions: List<VideoCrossfade> = emptyList(),
     )
 
-    /** The v1 path: the plan's run expansion over the one source, byte-for-byte the r42-r66 shape. */
+    /** The v1 path: the plan's run expansion over the one source. */
     private fun resolvePlanJob(job: VideoExportRequest): ResolvedJob {
         val stripAudio = job.plan.muteDecision() == MuteDecision.STRIP_AUDIO
         return ResolvedJob(
@@ -318,16 +238,8 @@ class Media3VideoExportRunner(private val context: Context) : VideoExportRunner 
     }
 
     /**
-     * The r70 path: the composition's projection --- one spec per entry,
-     * each carrying its own source, trim, speed and per-entry strip
-     * decision. No caller yet (the picker is F-77's next link); the
-     * realization lands with its model so the surfaces arrive onto a
-     * working export, not a promise.
-     *
-     * r74: the request's shared look and crossfades ride the resolved
-     * job; the builder consumes them below (the look as the effect
-     * stack's final stage, the transitions as the composition's
-     * boundary transitions).
+     * The composition path: one spec per entry, each with its own source, trim, speed and
+     * per-entry strip decision. The request's look and crossfades ride the resolved job.
      */
     private fun resolveTimelineJob(job: ClipExportRequest): ResolvedJob = ResolvedJob(
         specs = ClipExportProjection.itemSpecs(job),

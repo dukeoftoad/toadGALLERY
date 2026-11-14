@@ -1,22 +1,16 @@
 package com.toadgallery.editor.video
 
 /**
- * ONE keyframe on a clip's speed curve (r74, the F-78 keyframe lane's
- * data half): a source-timeline instant and the speed factor IN FORCE
- * there. A sorted, non-overlapping keyframe list over a clip's trim is
- * the RAMP --- between two keyframes the factor interpolates linearly
- * (the simplest honest curve; smoother easings ride later rounds on
- * exactly this container, the module's additive rule).
+ * ONE keyframe on a clip's speed curve: a source-timeline instant and the speed factor IN
+ * FORCE there. A sorted, non-overlapping keyframe list over a clip's trim is the RAMP ---
+ * between two keyframes the factor interpolates linearly (smoother easings can ride later
+ * on exactly this container).
  *
- * WHY THIS IS NOT [SpeedSegment]: the v1 single-clip contract holds
- * STEP segments (a factor per range, gaps at 1x --- a flat plan); a
- * RAMP is keyframed (a factor per INSTANT, interpolated between ---
- * the plan doc's P2 rung "speed ramps", and the container the volume
- * envelopes of the same rung will copy). Both models stay: the plan
- * lane keeps [VideoEditPlan.speedSegments] frozen (byte-compatible,
- * the r42 contract), and this file carries the timeline lane's own
- * curve per [ClipTimelineEntry] --- `ClipTimelineEntry.ramp` rides as
- * an OPTIONAL field, absent = flat at the entry's whole-clip factor.
+ * NOT [SpeedSegment]: the v1 single-clip contract holds STEP segments (a factor per range,
+ * gaps at 1x --- a flat plan); a RAMP is keyframed (a factor per INSTANT, interpolated
+ * between). Both models stay: [VideoEditPlan.speedSegments] stays frozen (byte-compatible),
+ * and `ClipTimelineEntry.ramp` rides as an OPTIONAL field, absent = flat at the entry's
+ * whole-clip factor.
  */
 data class SpeedKeyframe(
     /** The keyframe's instant, in the CLIP's source timeline (ms). */
@@ -44,11 +38,9 @@ sealed interface SpeedRampValidation {
 }
 
 /**
- * The single validation gate for a keyframe list against an entry's trim
- * window (total and structured): sorted strictly increasing (two
- * keyframes at one instant is a step, and steps are [SpeedSegment]'s
- * grammar, not this one's), every instant inside the trim, and the
- * bounds the constructor already pinned re-stated by the gate.
+ * The single validation gate for a keyframe list against an entry's trim window: sorted
+ * strictly increasing (two keyframes at one instant is a step --- [SpeedSegment]'s grammar,
+ * not this one's), every instant inside the trim, bounds re-stated by the gate.
  */
 object SpeedRampValidator {
 
@@ -83,12 +75,10 @@ object SpeedRampValidator {
 }
 
 /**
- * The derived math over a VALIDATED ramp (pure; pinned by tests): the
- * factor at any source instant. BEFORE the first keyframe the first
- * factor holds; AFTER the last the last holds; BETWEEN two keyframes
- * the factor interpolates linearly in source time. An empty ramp
- * returns [fallback] --- the entry's whole-clip factor --- so the
- * caller treats ramp and flat plan through ONE function.
+ * Derived math over a VALIDATED ramp (pure; pinned by tests): the factor at any source
+ * instant. BEFORE the first keyframe the first factor holds; AFTER the last the last holds;
+ * BETWEEN two keyframes it interpolates linearly in source time. An empty ramp returns
+ * [fallback] --- so the caller treats ramp and flat plan through ONE function.
  */
 object SpeedRampMath {
 
@@ -109,13 +99,9 @@ object SpeedRampMath {
     }
 
     /**
-     * The ramped clip's output length: the integral of 1/factor over the
-     * trim window, computed by the midpoint rule over [STEPS] slices
-     * (a linear-in-factor curve has no closed form; 512 slices pin the
-     * test cases EXACTLY at the asserted precision, and the error
-     * against the true integral is bounded by the slice count, stated
-     * honestly rather than hidden). Rounded ONCE at the end --- the
-     * module's convention.
+     * The ramped clip's output length: the integral of 1/factor over the trim window via the
+     * midpoint rule over [STEPS] slices (no closed form; the error is bounded by the slice
+     * count). Rounded ONCE at the end --- the module's convention.
      */
     const val STEPS: Int = 512
 

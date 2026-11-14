@@ -3,20 +3,13 @@ package com.toadgallery.editor
 import java.io.File
 
 /**
- * The face-retouch consent machine (r41, Phase 10 sub-scope A; the
- * design contract `docs/phase-10/edit-v3-ai.md`, decision 8): retouch is
- * OPT-IN per ADR-0010 §5 --- the FIRST consent surface in the editor.
- *
- * The machine is a pure, JVM-testable slice (the
- * `SemanticContentPolicy` consent-off precedent): default-off, grant
- * (per-install persisted), deny (re-asks next use), permanent disable
- * (the Settings kill-switch). The STAGE refuses under consent-off even
- * with a restored sidecar --- the layer stays verbatim in the recipe,
- * the stage skips; disabling also hides the entry.
- *
- * The persisted form is one wire name in a single file under the
- * editor's app-private storage (absent = default-off); writes are
- * atomic tmp-then-rename, reads forgiving --- the store's discipline.
+ * The face-retouch consent machine: retouch is OPT-IN — the editor's first
+ * consent surface. Pure, JVM-testable: default-off, grant (per-install
+ * persisted), deny (re-asks next use), permanent disable (the Settings
+ * kill-switch). The stage refuses under consent-off even with a restored
+ * sidecar — the layer stays verbatim in the recipe, the stage skips; disabling
+ * also hides the entry. Persisted as one wire name in a single file (absent =
+ * default-off); atomic tmp-then-rename writes, forgiving reads.
  */
 enum class RetouchConsent(val wireName: String) {
     /** Default-off; the first-use dialog re-asks on the next use after a deny. */
@@ -38,18 +31,11 @@ object RetouchConsentMachine {
     /** Whether the first-use dialog should be shown for [state]. */
     fun shouldAsk(state: RetouchConsent): Boolean = state == RetouchConsent.NOT_GRANTED
 
-    /**
-     * The grant transition: NOT_GRANTED -> GRANTED. A permanently
-     * disabled install cannot be re-granted through the dialog (the
-     * kill-switch dominates --- the disable is permanent in v1).
-     */
+    /** The grant transition: NOT_GRANTED -> GRANTED; PERMANENTLY_DISABLED dominates (no dialog re-grant). */
     fun onGrant(state: RetouchConsent): RetouchConsent =
         if (state == RetouchConsent.PERMANENTLY_DISABLED) state else RetouchConsent.GRANTED
 
-    /**
-     * The deny transition: stays NOT_GRANTED, so the NEXT use re-asks
-     * (a deny is a not-now, not a never --- the never is the switch).
-     */
+    /** The deny transition: stays NOT_GRANTED so the NEXT use re-asks (deny = not-now, not never). */
     fun onDeny(state: RetouchConsent): RetouchConsent =
         if (state == RetouchConsent.PERMANENTLY_DISABLED) state else RetouchConsent.NOT_GRANTED
 
@@ -58,10 +44,9 @@ object RetouchConsentMachine {
 }
 
 /**
- * The per-install persistence: one wire name in `retouch-consent` under
- * the given directory; absent or corrupt reads as NOT_GRANTED (forgiving,
- * never thrown --- a broken file degrades to default-off, the honest
- * default for an opt-in feature).
+ * Per-install persistence: one wire name in `retouch-consent` under [dir];
+ * absent or corrupt reads as NOT_GRANTED — a broken file degrades to
+ * default-off, the honest default for an opt-in feature.
  */
 class RetouchConsentStore(private val dir: File) {
 

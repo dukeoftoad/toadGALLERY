@@ -6,10 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r34 text-layer model + the pure layout pass (the contract's
- * `TextLayoutTest`: anchor fractions x canvas -> pixel rect, rotation
- * about the center, clamping at the canvas edge, draw order, opacity ---
- * and the preview ≡ export identity at the layout level).
+ * Text-layer model + layout pass: anchor fractions to pixel rects, center rotation, clamping,
+ * draw order, opacity, and the preview == export identity.
  */
 class TextLayersTest {
 
@@ -131,8 +129,7 @@ class TextLayersTest {
     fun `the rotation is the layer's own angle, carried in the spec`() {
         val rotated = top.copy(rotationDeg = -45)
         val spec = TextLayout.place(listOf(rotated), 0f, 0f, 100f, 100f).single()
-        // The anchor is the rotation CENTER: the spec's center is the
-        // anchor regardless of the angle (rotation happens about it).
+        // The anchor is the rotation CENTER: the spec's center is the anchor regardless of the angle.
         assertEquals(50f, spec.centerX, 0f)
         assertEquals(50f, spec.centerY, 0f)
         assertEquals(-45, spec.layer.rotationDeg)
@@ -152,10 +149,8 @@ class TextLayersTest {
 
     @Test
     fun `a full-canvas crop makes the preview specs equal the export specs`() {
-        // Export: the output bitmap IS the crop (origin 0, dims = crop dims).
-        // Preview: the same crop region at offset (x0, y0) inside the frame.
-        // The spec centers must differ by exactly the offset --- the same
-        // physical point --- with identical size, alpha and font.
+        // Export's bitmap IS the crop (origin 0); preview renders the same crop at offset (x0, y0).
+        // Spec centers differ by exactly the offset (same physical point), with identical size, alpha, font.
         val layers = listOf(bottom, top, top.copy(centerX = 0.25, centerY = 0.75, opacity = 40))
         val export = TextLayout.place(layers, 0f, 0f, 800f, 400f)
         val preview = TextLayout.place(layers, 137f, 91f, 800f, 400f)

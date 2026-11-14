@@ -4,10 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The frame-extraction plan rules (r42, decision 5): the timestamp
- * validation and the honest format set.
- */
+/** The frame-extraction plan rules: timestamp validation and the honest format set. */
 class FrameExtractPlanTest {
 
     private fun validate(timestampMs: Long, durationMs: Long = 8_000): FrameExtractValidation =

@@ -36,75 +36,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 
-// ---------------------------------------------------------------------------
-// The r67 Lilypad ProSlider (the C1 card of the Lilypad foundation round,
-// docs/editor/lilypad-design.md): the photo editor's flagship adjustment
-// row, the surface that replaces BOTH of its ancestors --- the r56
-// LabeledSlider-on-tone rows (label + pill over a stock M3 Slider) and the
-// r63c TuneRail's ONE active slider. The design premise is Lilypad's: the
-// photo is the hero, the chrome is quiet, and the ember (primary) appears
-// only where it MEANS something.
-//
-// The C1 contract, top to bottom (the arithmetic lives in
-// LilypadSliderMath, JVM-pinned in LilypadSliderMathTest):
-//
-//  - DRAG ANYWHERE ON THE ROW: the gestures live on the ROOT column, not
-//    on a 20dp track strip --- the whole row (label line + track + the
-//    6dp breathing padding, >= 48dp of touch height) is draggable, and the
-//    scrub is POSITION-RELATIVE (the Snapseed lesson): the finger's DELTA
-//    over the row width maps to the range span and shifts the value the
-//    drag started from, so no thumb-sized target ever has to be hit. The
-//    interaction pattern is re-derived from behavior, not ported --- this
-//    repo is GPL-3.0 and every line here is original.
-//  - LONG-PRESS FINE MODE: press and hold, then drag --- the same finger
-//    motion moves the value at LilypadSliderMath.FINE_GAIN (10%), the
-//    surgical touch for exposure and temperature micro-edits.
-//  - DOUBLE-TAP TO NEUTRAL: the row's [neutral] (0 for bipolar rows, the
-//    low end for intensity-like rows) resets with the draft-write ->
-//    finish sequence the r56 kit established.
-//  - HAPTIC ZERO TICK: every emission rides ONE wrapper ([emit] below) ---
-//    when the drag moves the value from one side of the neutral to the
-//    other (or onto it), the light TextHandleMove haptic fires (the P0
-//    stand-in for the ZERO_TICK haptic id; the platform exposes no
-//    dedicated zero-crossing id).
-//  - EMBER-WHEN-LIVE PILL: the value pill burns (primary + onPrimary) the
-//    moment the value leaves its neutral, and rests as a quiet raised pad
-//    (surfaceVariant + reed text) at neutral. The number sets in
-//    LilypadValueStyle (mono 12sp/600) --- a tool readout, not prose.
-//
-// The contracts that ride unchanged from the controls it replaces:
-//  - r32 a11y: the row announces its NAME (contentDescription) and its
-//    formatted VALUE (stateDescription), PLUS progressBarRangeInfo so
-//    TalkBack keeps the adjustability the M3 Slider provided;
-//  - the commit-on-release draft contract: every drag tick calls
-//    [onChange] (the caller updates its draft, the preview re-renders
-//    live), and release/abort and the double-tap reset call [onFinish]
-//    (the caller commits and clears). The value is CALLER-OWNED, exactly
-//    like LabeledSlider/TuneRailSlider before it.
-//
-// Drawing (one Canvas, in order): the hairline full track (outlineVariant,
-// 4dp, round caps) -> the fill from NEUTRAL to thumb (onBackground) -> the
-// r66 center notch (2dp x 12dp, outline) only where the range is symmetric
-// around the neutral -> the 18dp onBackground thumb, with a 2dp ember ring
-// at 22dp diameter while a drag is live. Disabled rows drop to the M3
-// convention's 38% alpha and install no gesture detectors.
-//
-// (r67 recovery note: the r67 working tree was lost mid-round; this file
-// was restored verbatim from the round's read-back --- the lost-tree
-// recovery documented in the round's delivery report.)
-// ---------------------------------------------------------------------------
+// Lilypad ProSlider: adjustment row with drag-anywhere position-relative scrub,
+// long-press fine mode, double-tap-to-neutral and a zero-crossing haptic tick.
 
 /**
- * The Lilypad ProSlider: one adjustment row --- [label] and the
- * [valueText] pill on the first line, the hand-drawn track under them, and
- * the whole row as the gesture surface. All geometry and thresholds come
- * from [LilypadSliderMath]; all colors from the theme's color scheme
- * (quiet neutrals; primary only for the live pill and the drag ring).
- *
- * The drag anchors, the crossing tracker, and the drag-active flag are
- * UI-layer session state (the row dies with its panel); the VALUE itself
- * is caller-owned, per the r32 draft contract: every tick -> [onChange],
- * release/abort and the double-tap reset -> [onFinish].
+ * The Lilypad ProSlider: [label] + the [valueText] pill on the first line, the
+ * hand-drawn track under them, and the whole row as the gesture surface. All
+ * geometry and thresholds come from [LilypadSliderMath]; colors from the theme
+ * (primary only for the live pill and the drag ring). The value is caller-owned:
+ * every tick -> [onChange]; release/abort and the double-tap reset -> [onFinish].
  */
 @Composable
 internal fun ProSlider(
@@ -121,37 +61,27 @@ internal fun ProSlider(
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
-    // The gesture anchors (declared BEFORE the modifiers that capture
-    // them): where the drag started, in value space and in finger space,
-    // plus the drag-active flag that lights the thumb's ember ring.
+    // Gesture anchors (declared before the modifiers that capture them):
+    // drag start in value + finger space, plus the drag-active flag.
     var dragStartValue by remember { mutableStateOf(0f) }
     var dragStartX by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
-    // The ZERO_TICK tracker: the last value THIS row emitted (or synced
-    // from an external change), so the next emission can be compared
-    // against its immediate predecessor, not against a stale composition.
+    // Last value this row emitted or synced, so the haptic compares against the
+    // immediate predecessor, not a stale composition.
     var previousValue by remember { mutableStateOf(value) }
-    // The pointerInput coroutines below are keyed on (enabled,
-    // valueRange, neutral) --- deliberately NOT on `value`, which changes
-    // every drag tick --- so a directly captured parameter would read the
-    // composition the block launched in, not the latest one. The
-    // rememberUpdatedState indirection (the canonical pointerInput
-    // pattern) keeps the drag anchors, the finish callback and the
-    // emissions reading the CURRENT composition's values.
+    // pointerInput below is keyed on (enabled, valueRange, neutral) — NOT on
+    // `value`, which changes every tick — so rememberUpdatedState keeps the
+    // anchors, finish callback and emissions reading the current composition.
     val currentValue by rememberUpdatedState(value)
     val currentOnChange by rememberUpdatedState(onChange)
     val currentOnFinish by rememberUpdatedState(onFinish)
-    // External value changes (a tool Reset, a draft swap) never pass
-    // through this row's onChange; without this sync the crossing tracker
-    // would compare the next drag against a value that no longer exists
-    // and fire (or swallow) a dishonest tick.
+    // External value changes (tool Reset, draft swap) bypass this row's onChange;
+    // sync so the crossing tracker never compares against a value that no longer
+    // exists.
     LaunchedEffect(value) { previousValue = value }
 
-    // Every value emission rides the SAME wrapper (the C1 haptic rule):
-    // a change that moves the value from one side of the neutral to the
-    // other (or onto it) fires the light tick, then the value hands off
-    // to the caller. The double-tap reset is an emission too --- landing
-    // on the neutral from either side is the loudest ZERO_TICK of all.
+    // Every emission rides this wrapper: crossing the neutral (or landing on
+    // it) fires the light tick, then the value hands off to the caller.
     fun emit(next: Float) {
         if (LilypadSliderMath.crossedNeutral(previousValue, next, neutral)) {
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -160,8 +90,7 @@ internal fun ProSlider(
         currentOnChange(next)
     }
 
-    // The quiet chrome + the one ember role (hoisted out of the draw
-    // lambda, the TuneRing/NeutralNotch convention).
+    // Colors hoisted out of the draw lambda.
     val live = LilypadSliderMath.isLive(value, neutral)
     val pillColor =
         if (live) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -176,16 +105,14 @@ internal fun ProSlider(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            // The M3 disabled convention: present but dimmed, and (below)
-            // with no gesture detectors installed.
+            // M3 disabled convention: dimmed, and no gesture detectors below.
             .alpha(if (enabled) 1f else 0.38f)
             .semantics {
                 contentDescription = name
                 stateDescription = state
                 progressBarRangeInfo = ProgressBarRangeInfo(current = value, range = valueRange)
             }
-            // Double-tap: back to the row's neutral (the r56 reset
-            // sequence re-targeted: draft write -> finish).
+            // Double-tap: back to the row's neutral (emit + finish).
             .pointerInput(enabled, neutral) {
                 if (enabled) {
                     detectTapGestures(
@@ -196,9 +123,8 @@ internal fun ProSlider(
                     )
                 }
             }
-            // Relative scrub: a horizontal drag ANYWHERE on the row maps
-            // its delta over the row width to the range span, anchored at
-            // the value the drag started from.
+            // Relative scrub: a drag anywhere on the row maps its delta over
+            // the row width to the range span, anchored at the start value.
             .pointerInput(enabled, valueRange, neutral) {
                 if (enabled) {
                     detectHorizontalDragGestures(
@@ -229,8 +155,8 @@ internal fun ProSlider(
                     )
                 }
             }
-            // Fine mode: press and hold, then drag --- the same scrub at
-            // 10% gain (FINE_GAIN inside [LilypadSliderMath.scrub]).
+            // Fine mode: long-press then drag — the same scrub at 10% gain
+            // (FINE_GAIN inside [LilypadSliderMath.scrub]).
             .pointerInput(enabled, valueRange, neutral) {
                 if (enabled) {
                     detectDragGesturesAfterLongPress(
@@ -262,11 +188,9 @@ internal fun ProSlider(
                     )
                 }
             }
-            // The 48dp touch floor: the gestures above see the FULL row
-            // (label line ~20dp + track 20dp + this 12dp of breathing
-            // room = ~52dp), not a 20dp strip. The padding rides AFTER
-            // the gesture modifiers on purpose --- it shrinks the
-            // content, not the touch surface.
+            // 48dp touch floor: the gestures above see the full row (~52dp),
+            // not a 20dp strip. Padding rides AFTER the gesture modifiers —
+            // it shrinks the content, not the touch surface.
             .padding(vertical = 6.dp),
     ) {
         Row(
@@ -279,9 +203,8 @@ internal fun ProSlider(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.weight(1f),
             )
-            // THE EMBER-WHEN-LIVE RULE: the pill burns ember (primary +
-            // onPrimary) the moment the value leaves its neutral; at
-            // neutral it is a quiet raised pad (surfaceVariant + reed).
+            // Ember-when-live: the pill burns when off-neutral; quiet raised pad
+            // at neutral.
             Surface(
                 shape = RoundedCornerShape(LilypadTokens.CHIP_CORNER_DP.dp),
                 color = pillColor,
@@ -311,9 +234,7 @@ internal fun ProSlider(
             )
             val neutralX = LilypadSliderMath.fraction(neutral, valueRange) * size.width
             val thumbX = LilypadSliderMath.fraction(value, valueRange) * size.width
-            // 2. The fill: neutral -> thumb, in the ink role (a zero-length
-            // fill at neutral draws nothing --- the quiet state IS bare
-            // track plus thumb).
+            // 2. The fill: neutral -> thumb (zero-length at neutral draws nothing).
             if (thumbX != neutralX) {
                 drawLine(
                     color = fillTint,
@@ -323,10 +244,8 @@ internal fun ProSlider(
                     cap = StrokeCap.Round,
                 )
             }
-            // 3. The center notch: the r66 NeutralNotch language (2dp x
-            //    12dp hairline in the outline role), only where the neutral
-            //    is the range's geometric center --- the mark that makes the
-            //    double-tap target discoverable.
+            // 3. The center notch, only where the neutral is the range's
+            //    geometric center — the double-tap target's discovery mark.
             if (LilypadSliderMath.isSymmetric(valueRange, neutral)) {
                 val notchHalf = 6.dp.toPx()
                 drawLine(
@@ -336,9 +255,8 @@ internal fun ProSlider(
                     strokeWidth = 2.dp.toPx(),
                 )
             }
-            // 4. The thumb: an 18dp ink dot at the value's position,
-            //    with a 2dp ember ring at 22dp diameter while a drag (normal
-            //    or fine) is live --- the one moment the row burns.
+            // 4. The thumb: ink dot, with a 2dp ember ring at 22dp diameter
+            //    while a drag is live — the one moment the row burns.
             val thumbCenter = Offset(thumbX, centerY)
             drawCircle(color = thumbTint, radius = 9.dp.toPx(), center = thumbCenter)
             if (dragging) {

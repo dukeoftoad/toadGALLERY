@@ -5,11 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r70 composition-export pins: the projection's per-entry resolution
- * (order, trims, speeds, the per-clip mute), the validator's totals, and
- * the v1 equivalence --- a single-clip composition projects to exactly
- * the item specs the v1 plan's run expansion implies, so the runner's two
- * resolvers cannot drift.
+ * Composition-export pins: per-entry projection (order, trims, speeds, per-clip mute), validator
+ * totals, and the v1 equivalence (a single-clip composition projects to the v1 plan's run specs).
  */
 class ClipExportTest {
 
@@ -41,9 +38,7 @@ class ClipExportTest {
         workingDirPath = "/cache",
     )
 
-    // ------------------------------------------------------------------ //
-    // the projection
-    // ------------------------------------------------------------------ //
+    // ---- the projection ----
 
     @Test
     fun `the projection carries every entry's uri, trim and speed in order`() {
@@ -98,14 +93,11 @@ class ClipExportTest {
                 mute = true,
             ),
         )
-        // The mixed composition's honest resolution: strip, recorded no-op,
-        // strip --- per clip, never a plan-wide blanket.
+        // The mixed composition's honest resolution: strip, recorded no-op, strip --- per clip, never blanket.
         assertEquals(listOf(true, false, true), specs.map { it.removeAudio })
     }
 
-    // ------------------------------------------------------------------ //
-    // the v1 equivalence (the two resolvers cannot drift)
-    // ------------------------------------------------------------------ //
+    // ---- the v1 equivalence (the two resolvers cannot drift) ----
 
     @Test
     fun `a single-clip composition projects to the v1 plan's run specs`() {
@@ -152,9 +144,7 @@ class ClipExportTest {
         }
     }
 
-    // ------------------------------------------------------------------ //
-    // the validator
-    // ------------------------------------------------------------------ //
+    // ---- the validator ----
 
     @Test
     fun `a valid composition request passes`() {

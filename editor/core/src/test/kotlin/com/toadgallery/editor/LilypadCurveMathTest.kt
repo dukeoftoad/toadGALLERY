@@ -7,16 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The tone curve's JVM pins (r68, the photo pro round): the bake's exact
- * guarantees (identity, monotonicity, endpoint clamping, control points),
- * the tolerant sanitize, the recipe JSON round-trip, the
- * isAdjustmentIdentity integration, and the five-parameter LutBuilder
- * regression (a null curve is byte-identical to the frozen r30 table).
- *
- * Pure JVM, no compose/android (ADR-0011) --- this class is one of the
- * Lilypad-prefixed set the editor CI filter runs.
- */
+/** Pins the tone curve bake guarantees, sanitize, JSON round-trip, and the LutBuilder curve composition. */
 class LilypadCurveMathTest {
 
     private val identity = LilypadCurveMath.IDENTITY
@@ -89,9 +80,8 @@ class LilypadCurveMathTest {
 
     @Test
     fun `the interpolant never overshoots a segment's endpoints`() {
-        // A steep middle lift: between (0.25, 0.2) and (0.75, 0.9) the
-        // curve must stay inside [0.2, 0.9] at every sample --- the
-        // oscillation a natural spline would ring.
+        // A steep middle lift: between (0.25, 0.2) and (0.75, 0.9) the curve must stay inside
+        // [0.2, 0.9] at every sample (no natural-spline oscillation).
         val points = curve(0.0 to 0.0, 0.25 to 0.2, 0.75 to 0.9, 1.0 to 1.0)
         for (i in 0..100) {
             val x = 0.25 + (0.75 - 0.25) * i / 100.0
@@ -103,8 +93,7 @@ class LilypadCurveMathTest {
 
     @Test
     fun `a local extremum flattens the tangent there`() {
-        // Data that rises then plateaus then falls: the tangent at the
-        // turn is zero (the curve does not keep rising past the turn).
+        // Rises then plateaus then falls: the tangent at the turn is zero.
         val points = curve(0.0 to 0.0, 0.5 to 0.8, 1.0 to 0.4)
         val m = LilypadCurveMath.slopes(points)
         assertEquals(0.0, m[1], 1e-12)
@@ -117,8 +106,7 @@ class LilypadCurveMathTest {
         val lut = LilypadCurveMath.bakeLut(points)
         assertEquals(255, lut[0])
         assertEquals(0, lut[255])
-        // And it is monotone DECREASING --- the interpolant honors the
-        // drawn direction exactly.
+        // And it is monotone DECREASING: the interpolant honors the drawn direction.
         for (v in 0 until 255) assertTrue(lut[v] >= lut[v + 1])
     }
 
@@ -197,8 +185,7 @@ class LilypadCurveMathTest {
 
     @Test
     fun `the curve read is tolerant`() {
-        // Out-of-domain coordinates coerce; non-2-element entries drop; a
-        // degenerate master (under two surviving points) reads as absent.
+        // Out-of-domain coords coerce; non-2-element entries drop; a degenerate master reads as absent.
         val coerced = EditRecipeCodec.fromJson(
             "{\"schemaVersion\":1,\"toneCurves\":{\"master\":[[-0.5,0.0],[0.5,7.0],[1.0,1.0]]}}",
         )
@@ -223,12 +210,12 @@ class LilypadCurveMathTest {
         assertFalse(curved.isIdentity)
     }
 
-    // ---- the five-parameter regression (the frozen r30 table) ----
+    // ---- the five-parameter regression (the frozen reference table) ----
 
     @Test
     fun `a null curve is byte-identical to the five-parameter build`() {
         val pinned = LutBuilder.build(brightness = 50, contrast = 50, exposure = 0, highlights = 0, shadows = 0)
-        // The r29 pinned composed value: 156 for b=+50, c=+50 at v=10.
+        // The pinned composed value: 156 for b=+50, c=+50 at v=10.
         assertEquals(156, pinned[10])
         val withNull = LutBuilder.build(
             brightness = 50, contrast = 50, exposure = 0, highlights = 0, shadows = 0,

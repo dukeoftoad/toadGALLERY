@@ -9,35 +9,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 
-// ---------------------------------------------------------------------------
-// r68: the photo pro round (Phase 2 of the editor rebirth plan,
-// docs/editor/lilypad-design.md) --- the clipping ZEBRA: the canvas-level
-// overlay that paints the photo's clipped tones in deterministic diagonal
-// stripes while the Zebra chip is on.
-//
-// THE RENDER PATH is the histogram's, verbatim: a pure READER of state the
-// preview render already produces (the SAME pipelined pixels the canvas
-// shows, before the scene layers composite --- a sticker is not a tonal
-// state). [buildZebraOverlay] runs off the UI thread inside the preview's
-// render pass, only while the overlay is enabled --- the pass costs one
-// classification per 4x4 block of the bounded working grid (~200k cells),
-// cheap enough to follow a drag tick for tick.
-//
-// THE OVERLAY ITSELF paints nothing the preview did not: each clipped
-// block becomes a stripe cell from [LilypadZebraMath]'s pinned tiling (a
-// highlight block carries the chart's red tint, a shadow block its blue
-// --- semantic content, the same exemption the histogram's channel colors
-// carry). A fully unclipped photo returns NULL (no overlay at all, never
-// an all-transparent bitmap pretending to be one). The composable draws
-// with no pointer input --- it cannot intercept a touch, so the canvas's
-// compare hold, zoom and crop gestures ride untouched underneath it.
-// ---------------------------------------------------------------------------
+// The clipping zebra: a canvas overlay painting clipped tones in diagonal stripes; a pure
+// reader of preview pixels (pre-scene-composite), null when nothing clips, no pointer input.
 
 /**
- * The zebra raster: one overlay cell per [LilypadZebraMath.DOWNSAMPLE]^2
- * block of the [width] x [height] grid, point-sampled at the block's
- * corner, striped per the pinned tiling. Returns null when nothing clips
- * (the honest empty state --- no overlay, not a blank one).
+ * The zebra raster: one cell per [LilypadZebraMath.DOWNSAMPLE]^2 block, point-sampled at
+ * the block corner, striped per the pinned tiling. Null when nothing clips.
  */
 internal fun buildZebraOverlay(pixels: IntArray, width: Int, height: Int): Bitmap? {
     val step = LilypadZebraMath.DOWNSAMPLE
@@ -76,12 +53,9 @@ internal fun buildZebraOverlay(pixels: IntArray, width: Int, height: Int): Bitma
 }
 
 /**
- * The canvas overlay: [zebra] drawn bounds-fit over the preview (the same
- * ContentScale.Fit the preview Image uses, so the raster --- the same
- * aspect by construction --- lands exactly on the photo). A null [zebra]
- * (the overlay off, or an unclipped photo) draws nothing. The overlay
- * carries no semantics of its own and installs no pointer input: the Zebra
- * chip owns the toggle's a11y, and the canvas's gestures stay live.
+ * The canvas overlay: [zebra] drawn ContentScale.Fit over the preview (same aspect by
+ * construction, lands exactly on the photo). Null draws nothing; no semantics, no pointer
+ * input — the Zebra chip owns the toggle's a11y and canvas gestures stay live.
  */
 @Composable
 internal fun ZebraOverlay(zebra: ImageBitmap?, modifier: Modifier = Modifier) {

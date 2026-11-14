@@ -3,27 +3,17 @@ package com.toadgallery.editor
 import com.toadgallery.editor.contract.MetadataPolicy
 
 /**
- * The save-copy export plan (pure; the activity executes it against
- * MediaStore). Encodes the non-destructive policy as data so the JVM tests
- * pin every edge:
- *
- *  - the export is an INSERT of a NEW entry --- the source URI is never
- *    opened for write, never updated, never deleted (contract section 4.1;
- *    there is no replace-original path at all);
- *  - the insert carries IS_PENDING on API 29+ while the bytes are written,
- *    and a FAILED write must CANCEL the pending row --- no partial
- *    MediaStore entry survives (spec test matrix);
- *  - the display name derives from the source name, the extension follows
- *    the chosen export format;
- *  - quality applies to the lossy formats (JPEG, WebP);
- *    PNG is lossless and ignores it.
+ * The save-copy export plan (pure; the activity executes it against MediaStore). The
+ * export is an INSERT of a NEW entry (the source is never written, updated or deleted);
+ * IS_PENDING on API 29+, cancelled on a failed write. Name derives from the source with
+ * an "-edit" suffix; quality applies to lossy formats only.
  */
 object ExportPlan {
 
     /** The export sub-directory under Pictures (API 29+ RELATIVE_PATH). */
     const val RELATIVE_DIR: String = "Pictures/toadGALLERY Edit"
 
-    /** The v1 default (the r29 default carried forward): JPEG at quality 95. */
+    /** The default: JPEG at quality 95. */
     val DEFAULT_FORMAT: ExportFormat = ExportFormat.JPEG
     const val DEFAULT_QUALITY: Int = 95
 
@@ -32,10 +22,8 @@ object ExportPlan {
     const val IS_PENDING_FALSE: Int = 0
 
     /**
-     * Derives the saved-copy display name from the source display name and
-     * the chosen format: extension replaced, an "-edit" suffix added,
-     * path separators and control characters stripped. `null` source falls
-     * back to a stable generic name.
+     * Display name from the source name + format: extension replaced, "-edit" suffix,
+     * separators/control chars stripped; null source falls back to a generic name.
      */
     fun displayNameFor(sourceDisplayName: String?, format: ExportFormat): String {
         val base = (sourceDisplayName ?: "image")
@@ -48,9 +36,8 @@ object ExportPlan {
     }
 
     /**
-     * The initial INSERT values. `api29Plus` toggles the modern columns
-     * (RELATIVE_PATH + IS_PENDING); pre-Q devices insert with the display
-     * name only (the legacy write grant is requested at export time).
+     * The initial INSERT values: modern columns (RELATIVE_PATH + IS_PENDING) on API 29+;
+     * pre-Q inserts the display name only.
      */
     fun insertValues(
         displayName: String,
@@ -77,19 +64,13 @@ object ExportPlan {
         }
 
     /**
-     * Failure-recovery decision (pure): a failed export must cancel the
-     * pending row when one exists (API 29+), and must NOT attempt any
-     * cleanup on pre-Q (an insert there is visible immediately; deleting
-     * another app-visible row would need permissions the editor refuses
-     * to hold --- the row is the user's to remove).
+     * Failure-recovery decision: cancel the pending row on API 29+; no cleanup on pre-Q
+     * (an insert there is visible immediately and is the user's row to remove).
      */
     fun failureRecovery(api29Plus: Boolean): Recovery = if (api29Plus) Recovery.CANCEL_PENDING_ROW else Recovery.LEAVE_ROW
 
     enum class Recovery { CANCEL_PENDING_ROW, LEAVE_ROW }
 
-    /**
-     * The result payload decision: the output URI goes back to the gallery
-     * only on success, and the echoed metadata policy is the applied one.
-     */
+    /** The echoed metadata policy is the applied one; the URI goes back only on success. */
     fun resultPolicy(policy: MetadataPolicy): String = policy.wireName
 }

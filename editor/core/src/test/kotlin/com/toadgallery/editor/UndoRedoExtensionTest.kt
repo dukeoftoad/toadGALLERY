@@ -5,16 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The undo/redo extension capstone (r38; the roadmap's last Phase 7
- * line, made executable): "Undo/redo extended to cover the new layer
- * types." The mechanism is the r30 snapshot stack over WHOLE recipes;
- * every round pinned its per-commit granularity; this test walks a
- * realistic MIXED session --- one layer of each of the five families,
- * a commit sequence across every family's controls, undo all the way
- * back to the launch state, redo all the way forward --- asserting the
- * EXACT recipe at every step.
- */
+/** Mixed five-family undo/redo: one snapshot per commit across every family, exact recipe at every step. */
 class UndoRedoExtensionTest {
 
     private fun textLayer(id: String, size: Int = 20) =
@@ -37,8 +28,7 @@ class UndoRedoExtensionTest {
         val launch = EditRecipe()
         val session = EditSessionState(launch)
 
-        // 1. Add one layer of each family, in family order, one snapshot
-        //    per add (the per-commit granularity every round pinned).
+        // 1. Add one layer of each family, in family order: one snapshot per add.
         val withText = launch.copy(
             textLayers = TextLayers(listOf(textLayer("t1"))),
         )
@@ -95,8 +85,7 @@ class UndoRedoExtensionTest {
         )
         session.commit(frameEdited)
 
-        // 3. Undo ALL the way back to the launch state, asserting the
-        //    exact recipe at every step.
+        // 3. Undo ALL the way back to the launch state, asserting the exact recipe at every step.
         assertEquals(frameEdited, session.current)
         assertEquals(regionEdited, session.undo())
         assertEquals(strokeEdited, session.undo())
@@ -149,8 +138,7 @@ class UndoRedoExtensionTest {
 
     @Test
     fun `the sidecar round-trip preserves the mixed session for the next launch`() {
-        // The ADR-0011 promise: every committed change persists; the
-        // restored sidecar reproduces the exact mixed recipe.
+        // Every committed change persists; the restored sidecar reproduces the exact mixed recipe.
         val mixed = EditRecipe(
             textLayers = TextLayers(listOf(textLayer("t1"))),
             stickerLayers = StickerLayers(listOf(StickerLayer(id = "s1", stickerId = "heart", sizePct = 25))),

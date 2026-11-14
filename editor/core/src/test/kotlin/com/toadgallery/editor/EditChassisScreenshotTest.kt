@@ -20,41 +20,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The edit app's screenshot baselines (r56, docs/phase-11/roborazzi.md) ---
- * the photo editor's CHROME and the r56 control kit, the pieces the r56
- * extraction made composable in isolation. This is the module's first
- * visual coverage: until now the edit app shipped with zero pixel gates
- * (the gallery has had the Roborazzi pair since r47), which is exactly how
- * a chassis round could change every screen with nothing catching a
- * regression.
- *
- * Subject choice, determinism-first: the tab bar, the tool header and the
- * slider row are PARAM-LIGHT (no Activity, no ViewModel, no bitmap decode,
- * no indeterminate animation), so each capture depends only on the pinned
- * Robolectric SDK (34), the fixed w411dp-h891dp-420dpi viewport and the
- * r53 theme. The frame clock is frozen before setContent and advanced one
- * fixed 16ms frame (the gallery suite's convention) so the captures are
- * stable by construction. Every capture paints the theme's background
- * first --- the app renders the editor on the fixed dark surface, and a
- * transparent-root capture would gate near-white ink against white
- * (invisible ghosts), not the contrast the user actually sees.
- *
- * The PNG names are pinned by the module's
- * `roborazzi.record.namingStrategy = fullyQualifiedName` property:
- * `com.toadgallery.editor.EditChassisScreenshotTest.<method>.png`
- * under src/test/resources/roborazzi (the plugin outputDir). The plugin's
- * recordRoborazziDebug task records them; verifyRoborazziDebug gates
- * against the committed baselines once they exist.
- *
- * r58b (F-58b): the per-panel slider captures. The r57 panel seam made
- * each panel composable in isolation; this round converts every raw Slider
- * in the Draw/Region/AI/Crop panels to the r56 `LabeledSlider` and pins
- * the result. Three panels (Crop, Draw, Regions) compose standalone with
- * minimal `EditRecipe()` fixtures --- the `AiPanel` still takes `EditActivity`
- * as its first parameter, so its per-panel capture is deferred to F-58b-2
- * (the activity-dependency refactor). Each capture paints the theme's
- * background first (the r56 rule: transparent-root captures gate
- * near-white ink against white, not the contrast the user sees).
+ * Roborazzi baselines for the editor chrome and control kit, composables in isolation;
+ * captures paint the theme background first (a transparent root gates near-white ink on white).
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -137,8 +104,7 @@ class EditChassisScreenshotTest {
                         confirmA11y = "Done",
                         onBack = {},
                         onConfirm = {},
-                        // r63c: the promoted session Reset (the header's
-                        // one-consistent-shape contract) rides the capture.
+                        // The session Reset rides the capture (header's one-shape contract).
                         resetA11y = "Reset",
                         onReset = {},
                         resetEnabled = true,
@@ -194,13 +160,8 @@ class EditChassisScreenshotTest {
     }
 
     /**
-     * r68: the Crop panel's straighten DIAL (the r58b LabeledSlider row it
-     * replaced). Minimal fixture: `EditRecipe()` defaults (straightenDeg =
-     * 0.0 --- the quiet dial: bare track, no ember arc, ink readout). The
-     * capture pins the dial + the keystone rows (the r68 Perspective block,
-     * neutral at a null preview base --- the honest 0 read-back) + the
-     * geometry chip row + the crop aspect presets --- the r32 contract on
-     * the r68 instruments, the regression surface for the dial conversion.
+     * Crop panel baseline: quiet straighten dial, neutral keystone rows,
+     * geometry chips and aspect presets.
      */
     @Test
     fun cropPanelStraightenDialRecordsBaseline() {
@@ -231,11 +192,8 @@ class EditChassisScreenshotTest {
     }
 
     /**
-     * r58b: the Draw panel's three brush sliders (width/opacity/smoothing) on
-     * the crafted LabeledSlider. Minimal fixture: `drawMode = true` shows the
-     * brush controls (the r36 plain-state contract: every tick writes the
-     * chassis state, no draft). The capture pins the slider rows + the color
-     * swatch row + the draw-mode/layer chip row.
+     * Draw panel baseline in draw mode: brush sliders, color swatches and
+     * chip rows (plain-state contract: ticks write chassis state, no draft).
      */
     @Test
     fun drawPanelBrushSlidersRecordsBaseline() {
@@ -289,10 +247,8 @@ class EditChassisScreenshotTest {
     }
 
     /**
-     * r58b: the Regions panel's strength slider on the crafted LabeledSlider.
-     * Minimal fixture: `regionMode = true` shows the kind chips + the strength
-     * slider (the r37 plain-state contract). The capture pins the slider row +
-     * the mosaic/blur chip row + the region-mode/layer chip row.
+     * Regions panel baseline in region mode: kind chips, strength slider and
+     * region-mode/layer chip row (plain-state contract).
      */
     @Test
     fun regionsPanelStrengthSliderRecordsBaseline() {

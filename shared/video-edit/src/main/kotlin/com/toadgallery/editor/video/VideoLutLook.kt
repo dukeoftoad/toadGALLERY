@@ -1,40 +1,19 @@
 package com.toadgallery.editor.video
 
 /**
- * A look applied to a video, as DATA (r74, the plan doc's "one language"
- * promise realised on the video lane): the SAME bundled `.cube` LUT ids
- * the photo Looks deck ships, plus the intensity dial the photo lane
- * taught (r33's LutSelection grammar), carried on the video side so a
- * look applied to a photo and the same look on a clip ARE one fact.
- *
- * ONE PARSER, TWO REALIZATIONS: the photo pipeline bakes a `.cube` into
- * its 256-entry per-channel LUT at full intensity and scales by
- * intensity at apply time; the video REALIZATION cannot bake a 3D LUT
- * into the existing 1D-chain shader, so it samples the SAME parsed
- * table as a 3D texture. Both sides read ONE parsed structure ---
- * [VideoLutLook.table] is the parsed cube (R,G,B domain stops), and
- * [applyToPixel] below is the pure reference sampler the tests pin
- * against the photo lane's own bake: same input, same output, one look.
- *
- * WHY THE TABLE RIDES HERE (ADR-0011): parsing `.cube` text is pure
- * arithmetic; the photo side's parser stays the single source (the
- * editor core owns it), and THIS file holds the video-facing model,
- * validation and the reference sampler --- JVM-pinned, no Android, no
- * GL. The GL texture upload is the realization shell's job.
+ * A look applied to a video, as data: the photo Looks deck's bundled .cube ids plus the
+ * intensity dial — a look on a photo and on a clip are one fact. The photo side bakes the
+ * cube into its 1D LUT; the video side samples the parsed table as a 3D texture
+ * ([VideoLutSampler] is the pure reference the GL realization is tested against). Pure.
  */
 data class VideoLutLook(
     /** The bundled look id (the photo Looks registry's own key space). */
     val lutId: String,
-    /**
-     * The intensity, 0..100 (r33's grammar verbatim: 100 = the full
-     * look, 0 = dialed out --- no contribution, an identity).
-     */
+    /** The intensity, 0..100: 100 = the full look, 0 = dialed out (an identity). */
     val intensity: Int = 100,
     /**
-     * The PARSED cube (supplied by the caller from the shared parser):
-     * `size` stops per axis, `domainMin`/`domainMax` the cube's own
-     * bounds, `data` the size^3 samples in RED-major .cube order
-     * (r fastest, then g, then b --- the .cube spec's order).
+     * The parsed cube (caller-supplied): `size` stops per axis, `domainMin`/`domainMax`
+     * bounds, `data` the size^3 samples in RED-major .cube order (r fastest, then g, then b).
      */
     val size: Int,
     val domainMin: Double,
@@ -67,17 +46,12 @@ sealed interface VideoLutLookValidation {
     data class Invalid(val reason: String) : VideoLutLookValidation
 }
 
-/**
- * The validation gate and the pure sampler (the reference the GL upload
- * is pinned against; every rule JVM-pinned by [VideoLutLookTest]).
- */
+/** The validation gate and shared intensity projection; JVM-pinned. */
 object VideoLutLookValidator {
 
     fun validate(look: VideoLutLook?): VideoLutLookValidation {
         if (look == null) return VideoLutLookValidation.Valid(null)
-        // The constructor already pinned the table's own shape; the gate
-        // re-states the r33 grammar on the video side (one place, the
-        // same bounds the photo LutSelection rides).
+        // The constructor pins the table shape; this re-states the intensity grammar shared with the photo lane.
         if (look.intensity !in 0..100) {
             return VideoLutLookValidation.Invalid(
                 "video look intensity ${look.intensity} outside [0..100] --- the r33 grammar",
@@ -87,28 +61,21 @@ object VideoLutLookValidator {
     }
 
     /**
-     * The intensity projection, shared with the photo lane's semantics:
-     * the blended channel value is `lerp(original, lutOut, intensity/100)`
-     * --- 100 lands the exact cube output, 0 returns the original
-     * untouched, and there is no third behaviour. The shader's uniform
-     * is exactly this factor; the sampler below applies it the same way.
+     * The intensity projection shared with the photo lane: `lerp(original, lutOut,
+     * intensity/100)`; 100 = exact cube output, 0 = untouched. The shader uniform is this factor.
      */
     fun intensityFactor(look: VideoLutLook): Float = look.intensity / 100f
 }
 
 /**
- * The pure reference sampler (ADR-0011): trilinear interpolation over
- * the parsed cube, the identity for the intensity blend, and the exact
- * arithmetic the GL realization is tested against. Input and output are
- * CLAMPED [0,1] triples --- the shader's own space.
+ * The pure reference sampler: trilinear over the parsed cube plus the intensity blend —
+ * the exact arithmetic the GL realization is tested against. Clamped [0,1] in and out.
  */
 object VideoLutSampler {
 
     /**
-     * Samples the look at an RGB triple in [0,1]: the cube's output at
-     * the trilinear neighbourhood of the point, blended with the input
-     * by the intensity factor. A null look is the identity (the caller
-     * skips the stage entirely; this exists so the TEST can state it).
+     * Samples the look at an RGB triple in [0,1]: the trilinear cube output blended with
+     * the input by the intensity factor. A null look is the identity.
      */
     fun sample(look: VideoLutLook?, r: Double, g: Double, b: Double): Triple<Double, Double, Double> {
         if (look == null || look.intensity == 0) return Triple(r, g, b)

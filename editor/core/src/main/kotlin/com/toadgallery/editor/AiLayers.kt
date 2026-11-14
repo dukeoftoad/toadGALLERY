@@ -3,34 +3,14 @@ package com.toadgallery.editor
 import kotlin.math.ceil
 
 /**
- * The r41 AI recipe containers (Phase 10 sub-scope A; the design contract
- * is `docs/phase-10/edit-v3-ai.md`, decision 4) --- layer types 6-9, the
- * additive families after the r38 frame:
- *
- *  - `aiErase` (6): a LIST, the region family's shape (per-layer id +
- *    the painted seed points, the shared stride-thinning cap, the `newId`
- *    prefix convention);
- *  - `sky` (7): SINGLE, the `LutSelection`/`FrameSelection` shape;
- *  - `bokeh` (8): SINGLE;
- *  - `retouch` (9): SINGLE.
- *
- * All four are PIXEL STAGE families, not compositing passes: they run in
- * `EditPipeline`'s documented tail (erase -> sky -> bokeh -> retouch ->
- * the regions, which stay FINAL), over artifacts produced ONCE at commit
- * time by the inference seam (`EditAiEngine.kt`) and persisted in the
- * derived-artifact store (`EditAiStore.kt`). The recipe references
- * artifacts BY KEY; an unresolvable key round-trips verbatim and renders
- * NOTHING at render time --- the frame/sticker tolerance contract, never
- * a crash.
- *
- * Pure Kotlin, JVM-tested (the repo's ADR-0011 convention).
+ * The AI recipe containers (layer types 6-9): aiErase (a LIST of regions), sky, bokeh,
+ * retouch (SINGLE each) — pixel stages over commit-time artifacts referenced BY KEY;
+ * an unresolvable key round-trips verbatim and renders nothing. Pure, JVM-tested.
  */
 
 /**
- * The recipe's additive magic-erase container: absent (null) = a pre-r41
- * sidecar or a clean session; empty normalises BACK to absent (the family
- * rule). A LIST like the region family: multiple erase regions, list
- * order = render order.
+ * The magic-erase container: empty normalises back to absent (the family rule). A LIST like
+ * the region family — multiple erase regions, list order = render order.
  */
 data class AiEraseLayers(val layers: List<AiEraseLayer>) {
     init {
@@ -45,18 +25,16 @@ data class AiEraseLayers(val layers: List<AiEraseLayer>) {
 }
 
 /**
- * One erase layer: the painted seed (kept for re-edit and re-apply; the
- * inference at commit refines it) plus the artifact key the render
- * resolves. The `e` prefix keeps the families collision-free.
+ * One erase layer: the painted seed (kept for re-edit; commit-time inference refines it)
+ * plus the artifact key the render resolves. The `e` id prefix keeps families collision-free.
  */
 data class AiEraseLayer(
     val id: String,
     /** 3..MAX_POINTS seed points, fractions of the output canvas (the family anchor convention). */
     val points: List<Point>,
     /**
-     * The derived-artifact key (the store's `layerId + content hash`
-     * convention): the refined mask + the inpaint fill, written together.
-     * An unresolvable key renders nothing (the tolerance contract).
+     * The derived-artifact key (store's `layerId + content hash`): refined mask + inpaint
+     * fill, written together. An unresolvable key renders nothing.
      */
     val artifactRef: String = "",
 ) {
@@ -78,11 +56,7 @@ data class AiEraseLayer(
         const val MAX_ID_LENGTH = 64
         const val MAX_POINTS = 512
 
-        /**
-         * The next free session id over `existing` ("e1", "e2", ...): the
-         * family `newId` convention, the `e` prefix keeping the families
-         * collision-free by construction.
-         */
+        /** The next free session id ("e1", "e2", ...) over `existing`. */
         fun newId(existing: Collection<String>): String {
             var max = 0
             for (id in existing) {
@@ -92,11 +66,7 @@ data class AiEraseLayer(
             return "e${max + 1}"
         }
 
-        /**
-         * The commit-time thinning --- the stride rule the stroke family
-         * defined, duplicated per family (the stores' convention: the
-         * families stay independent, the algorithm documented in both).
-         */
+        /** Commit-time stride thinning to `cap` points (per-family, same rule as the stroke family). */
         fun thin(points: List<Point>, cap: Int): List<Point> {
             require(cap >= 1) { "the thinning cap must be >= 1" }
             val n = points.size
@@ -116,10 +86,8 @@ data class AiEraseLayer(
 }
 
 /**
- * The sky replacement selection (7), the `LutSelection`/`FrameSelection`
- * shape: ONE sky at a time (the mounting rule). The mask artifact comes
- * from the saliency detection at commit; the sky bitmap is the registry's
- * (bundled parametric OR user-imported through `ImportedSkyStore`).
+ * The sky replacement selection, SINGLE (one sky at a time). The mask artifact comes from
+ * commit-time saliency detection; the sky bitmap is the registry's (bundled or imported).
  */
 data class SkySelection(
     /** The sky-mask artifact key; unresolvable renders nothing (degrades to no replacement). */
@@ -147,14 +115,13 @@ data class SkySelection(
 }
 
 /**
- * The bokeh selection (8), SINGLE: the depth artifact comes from the
- * depth model at commit; strength + focal depth are pure re-renders over
- * it (no re-inference on any slider move).
+ * The bokeh selection, SINGLE: the depth artifact comes from commit-time depth inference;
+ * strength + focal depth are pure re-renders (no re-inference on slider moves).
  */
 data class BokehSelection(
     /** The depth-grid artifact key; unresolvable renders nothing. */
     val depthRef: String,
-    /** 1..100, the strength slider (the r37 kernels' formula at apply). */
+    /** 1..100, the strength slider. */
     val blurStrengthPct: Int = DEFAULT_BLUR_STRENGTH_PCT,
     /** 0..1, the focal depth in the artifact's normalised 0..255 space (larger = closer). */
     val focalDepthNorm: Double = DEFAULT_FOCAL_DEPTH_NORM,
@@ -172,12 +139,9 @@ data class BokehSelection(
 }
 
 /**
- * The face-retouch selection (9), SINGLE, OPT-IN per ADR-0010 §5: one
- * global selection over the detected faces. The three task-named
- * controls default 0 = no contribution; the boxes artifact comes from
- * the face localization at commit. The stage REFUSES under consent-off
- * even with a restored sidecar (the layer stays verbatim in the recipe,
- * the stage skips) --- `RetouchConsent.kt` owns that machine.
+ * The face-retouch selection, SINGLE, opt-in per ADR-0010 §5: one global selection over the
+ * detected faces; controls default 0 = no contribution. The stage refuses under consent-off
+ * (the layer stays verbatim in the recipe); `RetouchConsent.kt` owns that machine.
  */
 data class RetouchSelection(
     /** The face-boxes artifact key; unresolvable renders nothing. */

@@ -1,7 +1,7 @@
 name: Sensitive change approval
 
-# Guards sensitive paths (workflows, build scripts, engine, gradle)
-# against unaudited changes. For external-contributor PRs, requires at
+# Guards sensitive paths (workflows, build scripts, gradle) against
+# unaudited changes. For external-contributor PRs, requires at
 # least one non-author approval on the current head commit. For
 # owner-authored PRs the non-author-approval requirement is
 # unsatisfiable on a solo-maintainer repo, so the gate is skipped
@@ -59,7 +59,7 @@ jobs:
           sensitive=false
           while IFS= read -r path; do
             case "$path" in
-              .github/workflows/*|.github/actions/*|engine/*|gradle/*|build.gradle.kts|settings.gradle.kts|*/build.gradle.kts|gradle.properties|gradlew|gradlew.bat)
+              .github/workflows/*|.github/actions/*|gradle/*|build.gradle.kts|settings.gradle.kts|*/build.gradle.kts|gradle.properties|gradlew|gradlew.bat)
                 sensitive=true
                 break
                 ;;
@@ -67,7 +67,7 @@ jobs:
           done < "$RUNNER_TEMP/pr-files.txt"
 
           if [[ "$sensitive" != true ]]; then
-            echo "No sensitive build, engine, or workflow files changed."
+            echo "No sensitive build or workflow files changed."
             exit 0
           fi
 
@@ -88,7 +88,7 @@ jobs:
             {
               echo "### Approval required"
               echo ""
-              echo "This pull request changes a sensitive workflow, build, dependency, or engine path."
+              echo "This pull request changes a sensitive workflow, build, or dependency path."
               echo "At least one non-author approval on the **current head commit** is required."
               echo "A new commit invalidates earlier approvals for this check; submit a fresh review."
             } >> "$GITHUB_STEP_SUMMARY"

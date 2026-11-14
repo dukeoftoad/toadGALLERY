@@ -5,13 +5,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r38 frame model + the pure layout pass (the contract's
- * `FramesTest`): the selection validation, the tolerance clamps, the
- * thickness formula (the r37 kernels' integer rule), and the authored
- * geometry per bundled def on hand canvases (exact `PixelRect` lists,
- * including the film holes).
- */
+/** The frame model + layout pass: selection validation, thickness formula, authored per-frame geometry. */
 class FramesTest {
 
     // ---- Model validation ----
@@ -32,7 +26,7 @@ class FramesTest {
         assertThrows(IllegalArgumentException::class.java) { FrameSelection(frameId = "plain", colorArgb = -1L) }
     }
 
-    // ---- The thickness formula (the r37 kernels' rule) ----
+    // ---- The thickness formula ----
 
     @Test
     fun `thicknessPx is max of 1 and the integer floor`() {
@@ -47,11 +41,8 @@ class FramesTest {
 
     @Test
     fun `plain is a solid border on all four sides`() {
-        // t=4 over a 40x30 canvas: border rects 4 deep.
+        // 40x30 canvas: the min edge yields t=1; assert the border rects with it.
         val geo = FrameLayout.geometryFor(FrameSelection(frameId = "plain", widthPct = 20), 40, 30)!!
-        // thicknessPx(20, 30) = 20*30/1000 = 0 -> max(1, 0) = 1? No: 600/1000=0 -> 1.
-        // Use a min edge that yields 4: 20*x/1000 >= 4 -> x >= 200; 40x30 min edge 30
-        // gives 1. Assert with the actual t the layout computes.
         val t = FrameLayout.thicknessPx(20, 30)
         assertEquals(1, t) // 20*30/1000 = 0.6 -> floor 0 -> max 1
         assertEquals(
@@ -68,8 +59,7 @@ class FramesTest {
 
     @Test
     fun `innerLine is the hairline ring inset by t`() {
-        // Force t=8: widthPct 40 over a 200x200 canvas (min edge 200) -> 8;
-        // line = max(1, 8/4) = 2.
+        // widthPct 40 over 200x200 forces t=8; line = max(1, 8/4) = 2.
         val geo = FrameLayout.geometryFor(FrameSelection(frameId = "inner-line", widthPct = 40), 200, 200)!!
         val t = 8
         val line = 2
@@ -92,16 +82,13 @@ class FramesTest {
 
     @Test
     fun `film is the sprocket bands with punched holes`() {
-        // t=8 (widthPct 40 over a 200x200 canvas): hole = max(2, 8/2) = 4,
-        // first at x=4, every 8; bandOffset = (8-4)/2 = 2.
+        // t=8: hole = max(2, 8/2) = 4, first at x=4, every 8; bandOffset = 2.
         val geo = FrameLayout.geometryFor(FrameSelection(frameId = "film", widthPct = 40), 200, 200)!!
         assertEquals(
             listOf(PixelRect(0, 0, 200, 8), PixelRect(0, 192, 200, 200)),
             geo.rects,
         )
-        // Holes: x = 4, 12, 20, ... while x + 4 <= 196; x = 4+8k, so the
-        // last is x = 188 (188 + 4 = 192 <= 196; 196 + 4 = 200 > 196):
-        // 24 holes per band, 48 total.
+        // Holes at x=4+8k while x+4 <= 196: last at 188 -- 24 per band, 48 total.
         assertEquals(48, geo.holes.size)
         assertEquals(PixelRect(4, 2, 8, 6), geo.holes[0]) // first top hole
         assertEquals(PixelRect(188, 2, 192, 6), geo.holes[23]) // last top hole

@@ -4,18 +4,12 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
- * The mosaic/blur region system (r37, Phase 7 v2; the design contract is
- * `docs/phase-7/mosaic-regions.md`, decision set 1-6).
- *
- * Regions are a PIXEL stage, not a compositing pass: the user paints a
- * closed path, and the region under the path gets a mosaic (block
- * average) or a linear blur (horizontal box smear) at a strength, over
- * the FULLY graded pixels --- the stage runs AFTER sharpen, as the
- * pipeline's final pixel stage (`EditPipeline.apply`).
- *
- * Pure Kotlin, JVM-tested (the repo's ADR-0011 convention): the mask is
- * an even-odd scanline fill, the effects are integer-deterministic, and
- * both are pinned by exact hand-grids in `RegionLayersTest`.
+ * The mosaic/blur region system. Regions are a PIXEL stage, not a compositing
+ * pass: the user paints a closed path and the region under it gets a mosaic
+ * (block average) or a linear blur (horizontal box smear) at a strength, over
+ * the FULLY graded pixels — the pipeline's final pixel stage (after sharpen,
+ * `EditPipeline.apply`). Pure Kotlin, JVM-tested: even-odd scanline mask,
+ * integer-deterministic kernels, pinned by hand-grids in `RegionLayersTest`.
  */
 enum class RegionKind(val wireName: String) {
     MOSAIC("mosaic"),
@@ -50,11 +44,7 @@ data class RegionLayer(
         const val MAX_POINTS = 512
         const val DEFAULT_STRENGTH_PCT = 12
 
-        /**
-         * The next free session id over `existing` ("r1", "r2", ...): the
-         * family `newId` convention, the `r` prefix keeping the families
-         * collision-free by construction.
-         */
+        /** The next free session id ("r1", "r2", ...): the `r` prefix keeps families collision-free. */
         fun newId(existing: Collection<String>): String {
             var max = 0
             for (id in existing) {
@@ -65,10 +55,8 @@ data class RegionLayer(
         }
 
         /**
-         * The commit-time thinning --- the stride rule the stroke family
-         * defined (drawing-tool.md decision 3), duplicated here rather
-         * than coupled: the families stay independent, the algorithm is
-         * documented in both places (the stores' convention).
+         * Commit-time thinning: keep first + last, stride through the middle.
+         * The stroke family's stride rule, duplicated rather than coupled.
          */
         fun thin(points: List<Point>, cap: Int): List<Point> {
             require(cap >= 1) { "the thinning cap must be >= 1" }
@@ -89,9 +77,8 @@ data class RegionLayer(
 }
 
 /**
- * The recipe's additive region container: absent (null) = a pre-r37
- * sidecar or a clean session; empty is normalised BACK to absent by the
- * codec (the family rule).
+ * The recipe's additive region container: absent (null) = a clean session;
+ * empty is normalised back to absent by the codec.
  */
 data class RegionLayers(val layers: List<RegionLayer>) {
     init {
@@ -106,12 +93,10 @@ data class RegionLayers(val layers: List<RegionLayer>) {
 }
 
 /**
- * The pure mask builder: an even-odd scanline fill of the painted
- * polygon over the stage's grid. Pixel (x, y) is IN when its centre
- * (x + 0.5, y + 0.5) lies strictly inside the path. Edges crossing the
- * centre line produce a sorted crossing list; centres strictly between
- * crossing PAIRS are in. Exactly testable (pinned masks in
- * `RegionLayersTest`).
+ * The pure mask builder: an even-odd scanline fill of the painted polygon.
+ * Pixel (x, y) is IN when its centre (x + 0.5, y + 0.5) lies strictly inside
+ * the path: sorted edge crossings of the centre line; centres strictly between
+ * crossing pairs are in. Pinned by masks in `RegionLayersTest`.
  */
 object RegionMask {
 
@@ -133,9 +118,9 @@ object RegionMask {
                 val j = (i + 1) % points.size
                 val y0 = py[i]
                 val y1 = py[j]
-                // One-sided test: an edge counts when it strictly spans
-                // the centre line in exactly one direction --- vertices
-                // and horizontal edges never double-count.
+                // One-sided test: an edge counts when it strictly spans the
+                // centre line in one direction; vertices and horizontal edges
+                // never double-count.
                 if ((y0 <= yc && y1 > yc) || (y1 <= yc && y0 > yc)) {
                     val t = (yc - y0) / (y1 - y0)
                     crossings.add(px[i] + t * (px[j] - px[i]))
@@ -163,10 +148,9 @@ object RegionMask {
 }
 
 /**
- * The pure effect kernels (integer-deterministic, JVM-tested on hand
- * grids): the mosaic block average and the horizontal linear blur.
- * Multiple regions apply in list order; each pass reads a SNAPSHOT of
- * the grid it receives (its own writes never feed its own reads).
+ * The pure effect kernels: the mosaic block average and the horizontal linear
+ * blur. Multiple regions apply in list order; each pass reads a SNAPSHOT of the
+ * grid it receives (its own writes never feed its own reads).
  */
 object RegionEffects {
 
@@ -179,11 +163,9 @@ object RegionEffects {
         (strengthPct * minEdge / 1000).coerceAtLeast(1)
 
     /**
-     * The mosaic: cells of [cellPx] aligned to the grid origin; for each
-     * cell, the masked pixels average (integer floor division by the
-     * count) and the average writes back to exactly those pixels. Alpha
-     * untouched. Reads happen per cell BEFORE any write in that cell
-     * (a cell never feeds itself).
+     * The mosaic: cells of [cellPx] aligned to the grid origin; each cell's
+     * masked pixels average (integer floor) and write back to exactly those
+     * pixels; alpha untouched. Reads per cell happen BEFORE any write in it.
      */
     fun applyMosaic(pixels: IntArray, width: Int, height: Int, mask: BooleanArray, cellPx: Int) {
         require(cellPx >= 1) { "cellPx must be >= 1" }
@@ -224,10 +206,8 @@ object RegionEffects {
 
     /**
      * The linear blur: for each masked pixel, the integer average of its
-     * horizontal window [x-r, x+r] (clamped to the grid, divided by the
-     * clamped length) over a SNAPSHOT of the incoming state, written
-     * only to masked pixels. Sliding-window sums: O(row) per region
-     * regardless of r (pinned equivalent to the per-pixel loop).
+     * horizontal window [x-r, x+r] (clamped) over a SNAPSHOT, written only to
+     * masked pixels. Sliding-window sums: O(row) regardless of r.
      */
     fun applyLinearBlur(pixels: IntArray, width: Int, height: Int, mask: BooleanArray, radiusPx: Int) {
         require(radiusPx >= 1) { "radiusPx must be >= 1" }
@@ -290,8 +270,8 @@ object RegionEffects {
 }
 
 /**
- * The stage entry the pipeline calls: every region in list order over
- * the grid it receives (`EditPipeline.apply`, the final pixel stage).
+ * The stage entry the pipeline calls: every region in list order over the grid
+ * it receives (`EditPipeline.apply`, the final pixel stage).
  */
 object RegionPass {
 

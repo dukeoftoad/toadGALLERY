@@ -6,29 +6,8 @@ import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.compose.runtime.Composable
 import kotlinx.coroutines.CoroutineScope
 
-// ---------------------------------------------------------------------------
-// The r57 panel seam (F-58a): ONE host for the photo editor's ten tool
-// panels, the seam the r54 chassis wanted and the r56 ledger scheduled.
-//
-// Before this round the ten panels were ten `when` branches inside
-// `EditorContent` (a ~3,900-line composable), each reading ~4-23 closure
-// locals --- unrenderable in isolation, which is exactly why the edit app's
-// screenshot harness (r56) could pin only the chrome and the control kit.
-// This host is the seam: it receives the chassis state EXPLICITLY (value +
-// `on...Change` pairs --- the state-hoisting pattern; nothing is captured)
-// and dispatches to the ten extracted panel composables. The bodies moved
-// verbatim; the ONLY behavioral surface (which value each assignment lands
-// in) is preserved by construction, and the committed Roborazzi chassis
-// baselines gate the round to zero pixel drift.
-//
-// r66: `previewHistogram` rides the seam to the Adjust panel (the live
-// tonal chart's source, computed by the chassis's preview render).
-//
-// r68: the scope pair (`scopeMode`/`zebraActive`) and the curve deck's
-// entry pair (`curveDeckOpen`) ride the seam the same way --- the
-// chassis owns them because they steer chassis-level surfaces (the
-// zebra paints the canvas; the curve deck hosts the Full state).
-// ---------------------------------------------------------------------------
+// ONE host for the photo editor's tool panels: receives chassis state explicitly
+// (value + on...Change pairs, nothing captured) and dispatches to the panel composables.
 
 @Composable
 internal fun PhotoPanelHost(

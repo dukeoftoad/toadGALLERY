@@ -1,17 +1,13 @@
 package com.toadgallery.editor.contract
 
 /**
- * Editor identity + version negotiation (spec sections 1 and 2): the
- * gallery-side decision logic for "can I launch this editor?".
- *
- * Identity is matched EXACTLY on the contract application ID --- never
- * implicit resolution, so a spoofed editor cannot receive URI grants. The
- * one documented exception is the exact `.debug` suffix: the dogfood builds
- * of BOTH apps carry Gradle's standard `applicationIdSuffix = ".debug"`, and
- * the round-trip prototype must resolve on the same device where both debug
- * APKs are installed. A `.debug` package is still first-party-shaped; the
- * grant it receives is read-only and its result is a fresh copy, so the
- * widened match costs nothing the exact match did not already risk.
+ * Editor identity + version negotiation: the gallery-side decision logic for
+ * "can I launch this editor?". Identity matches EXACTLY on the contract
+ * application ID — never implicit resolution, so a spoofed editor cannot
+ * receive URI grants. The one exception is the exact `.debug` suffix (both
+ * apps' dogfood builds carry `applicationIdSuffix = ".debug"`); the grant is
+ * read-only and the result a fresh copy, so the widened match costs nothing the
+ * exact match did not already risk.
  */
 object EditorIdentity {
 
@@ -22,14 +18,11 @@ object EditorIdentity {
     fun matches(packageName: String?): Boolean = matches(packageName, ownPackage = null)
 
     /**
-     * r59 (the unified-app round): [ownPackage] extends the match to the
-     * CALLING app itself, so the unified build (`com.toadgallery.gallery.unified`,
-     * which embeds the editor's activities in-process) resolves its own
-     * contract surfaces. The grant security story is unchanged --- a
-     * self-grant to the caller's own package carries no risk the exact
-     * package match did not already carry (the result is still a fresh
-     * save-copy; the editor code is the same first-party source). Every
-     * other package keeps matching ONLY the contract id + `.debug`.
+     * [ownPackage] extends the match to the CALLING app itself (the unified
+     * build embeds the editor's activities in-process and resolves its own
+     * contract surfaces). A self-grant carries no risk the exact match did not
+     * (fresh save-copy, same first-party source); every other package still
+     * matches ONLY the contract id + `.debug`.
      */
     fun matches(packageName: String?, ownPackage: String?): Boolean =
         packageName != null && (
@@ -68,11 +61,10 @@ sealed interface LaunchDecision {
 object EditorVersionNegotiator {
 
     /**
-     * The additive-versioning rule (spec header): the gallery accepts any
-     * editor declaring `>= CONTRACT_VERSION_MIN` --- a NEWER editor may add
-     * optional fields but must still honour v1 requests, so its declared
-     * version is passed through verbatim as the negotiated version. A
-     * declared version below the minimum (including non-positive garbage)
+     * The additive-versioning rule: accept any editor declaring
+     * `>= CONTRACT_VERSION_MIN` — a newer editor may add optional fields but must
+     * still honour v1 requests, so its declared version passes through verbatim
+     * as the negotiated version. Anything below the minimum (including garbage)
      * is refused.
      */
     fun negotiate(declaredVersion: Int?): LaunchDecision = when {

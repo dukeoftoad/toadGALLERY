@@ -1,75 +1,27 @@
 name: APK builds (test artifacts)
 
-# toadGALLERY --- the CONSOLIDATED test-APK builder (r49, the workflow-
-# organization round). ONE file replaces FOUR near-duplicate pipelines:
+# toadGALLERY Edit --- the consolidated test-APK builder. ONE dispatch
+# surface covers every editor target in a fail-fast=false matrix:
+#   - edit-debug: the .debug dogfood APK, identity-gated
+#   - edit-release: the R8/compile gate, UNSIGNED by design (the editor
+#     declares no signing config and ADR-0018 keeps release signing in
+#     release.yml only)
+#   - contract: the :shared:editor-contract module + its JVM tests + the jar
+# Pure Android toolchain (no Rust/NDK --- the editor is pure Kotlin).
 #
-#   - apk-build-engine.yml  ("APK build with engine", the 2026-11-04
-#     workplan P4 generalized builder)  -> target: gallery-engine
-#   - engine-apk.yml        (the 2026-11-03 branch-scoped tg-engine-apk-*
-#     test-build pipeline)              -> trigger: push to tg-engine-apk-*
-#   - modelpack-apk.yml     (the ADR-0020 offline model-pack builder)
-#                                         -> target: gallery-modelpack
-#                                           (+ trigger: tg-modelpack-*)
-#   - editor-apk-build.yml  ("Editor APK build --- include all")
-#                                         -> target: editor
+# Version derivation: editor/app/build.gradle.kts is the single source; the
+# gates verify the derived values against the actual APK via aapt2.
 #
-# What the consolidation CHANGES (and what it deliberately does not):
-#   - The engine-enabled build chain (toad-setup rust:android ->
-#     assembleEngine<Variant> -PwithEngine -> the native-library gate ->
-#     the identity gate -> staging -> artifact) was previously written
-#     out three times with drift between the copies: modelpack-apk.yml
-#     staged under a HARDCODED r28 name (toadGALLERY-0.4.2-alpha-r28-...)
-#     and gated versionCode >= 32 while the checkout moved to 38+, and
-#     the branch-scoped file carried its own round-comment staging
-#     convention. All gallery targets now stage under the checkout's own
-#     derived versionName (toadGALLERY-<versionName>-engine-<variant>.apk
-#     for the engine target; toadGALLERY-<versionName>-modelpack-engine-
-#     <variant>.apk for the model pack --- r50 dropped the accidental
-#     "-engine-engine" doubling) and gate the EXACT derived versionCode
-#     --- one derivation rule, one identity gate, no hardcode to rot.
-#   - The branch-scoped push triggers survive (tg-engine-apk-* and
-#     tg-modelpack-*): the isolated-work-session convention --- a dogfood
-#     branch that touches no shared file still builds its artifact on
-#     push. The target is INFERRED from the branch name; anything else
-#     fail-fasts with the fix in the message.
-#   - The editor keeps its cheap pure-Android shape (no Rust/NDK --- the
-#     editor is pure Kotlin) in its own job; the gallery keeps the full
-#     engine-cross shape in its own job. One trigger surface, two
-#     toolchain budgets.
-#   - Least-privilege: `permissions: contents: read` at the top --- this
-#     workflow uploads artifacts and never touches releases (the ADR-0018
-#     contract: release.yml stays the ONLY signing/publishing path; no
-#     tag is cut and no GitHub Release is created here, ever).
-#
-# Version derivation (the documented split, mirrored from release.yml):
-# the GALLERY gradle keeps history as COMMENTED pairs with one live
-# assignment (first match is the live one); the EDITOR gradle appends
-# LIVE pairs per round and the LAST assignment wins (the r43 catch in
-# the editor leg below). Each derivation uses the rule its file needs;
-# the gates verify the derived values against the actual APK via aapt2.
+# Least-privilege: `permissions: contents: read` at the top --- this
+# workflow uploads artifacts and never touches releases (the ADR-0018
+# contract: release.yml stays the ONLY signing/publishing path; no tag is
+# cut and no GitHub Release is created here, ever).
 
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: 'What to build. gallery-engine = the engine-enabled gallery APK (the vendored Ente engine, -PwithEngine). gallery-modelpack = the same + the sha256-verified offline model pack, FACE + semantic CLIP (-PwithBundledModels, debug only). editor = all editor targets (debug APK / unsigned release gate / the shared contract module).'
-        type: choice
-        options:
-          - gallery-engine
-          - gallery-modelpack
-          - editor
-        default: gallery-engine
-        required: true
-      gallery_variant:
-        description: 'Gallery variant (gallery-engine target only): debug = debug-key artifact (default). release = signed via the ADR-0018 TG_* secrets (fail-fast if missing). The model-pack target forces debug (a dogfood build, not a release).'
-        type: choice
-        options:
-          - debug
-          - release
-        default: debug
-        required: false
       editor_variant:
-        description: 'Editor targets (editor target only): all = debug + release + contract (default). The contract leg always runs.'
+        description: 'Editor targets (editor only): all = debug + release + contract (default). The contract leg always runs.'
         type: choice
         options:
           - all
@@ -77,15 +29,6 @@ on:
           - release
         default: all
         required: false
-      engine_version:
-        description: 'Gallery targets only: keep "pinned" (the vendored pin in docs/phase-5/ente-pin.md). A commit sha matching the pin is also accepted; anything else fail-fasts (the engine is VENDORED, not swappable).'
-        type: string
-        default: pinned
-        required: false
-  push:
-    branches:
-      - 'tg-engine-apk-*'
-      - 'tg-modelpack-*'
 
 permissions:
   contents: read
@@ -96,439 +39,38 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Prepare: resolve ONE target + its variants from the event (dispatch inputs
-  # or the branch-scoped push convention), so the two build jobs below stay
-  # declarative. Everything unknown fail-fasts here, before any runner spends
-  # toolchain minutes.
+  # Prepare: resolve the editor target matrix from the dispatch input, so the
+  # build job below stays declarative. Anything unknown fail-fasts here,
+  # before a runner spends toolchain minutes.
   # ---------------------------------------------------------------------------
   prepare:
     name: Resolve the build target
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      target: ${{ steps.resolve.outputs.target }}
-      gallery_variant: ${{ steps.resolve.outputs.gallery_variant }}
       editor_variant: ${{ steps.resolve.outputs.editor_variant }}
-      gallery_run: ${{ steps.resolve.outputs.gallery_run }}
       editor_run: ${{ steps.resolve.outputs.editor_run }}
       editor_targets: ${{ steps.resolve.outputs.editor_targets }}
     steps:
-      - name: Resolve target + variants from the event
+      - name: Resolve the editor targets from the dispatch input
         id: resolve
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_TARGET: ${{ inputs.target }}
-          DISPATCH_GALLERY_VARIANT: ${{ inputs.gallery_variant }}
           DISPATCH_EDITOR_VARIANT: ${{ inputs.editor_variant }}
-          BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            # r50 fix: the dispatch CHOICES carry the gallery-* prefix
-            # (gallery-engine / gallery-modelpack) but the resolver speaks
-            # the SHORT target names (engine / modelpack). r49 passed the
-            # input through unmapped, so EVERY dispatch --- including the
-            # DEFAULT gallery-engine --- fell to the unknown-target error
-            # below; only the branch-push paths and the editor dispatch
-            # ever worked. Strip the prefix here, once, loudly.
-            TARGET="${DISPATCH_TARGET:?dispatch input target is required}"
-            TARGET="${TARGET#gallery-}"
-            GALLERY_VARIANT="${DISPATCH_GALLERY_VARIANT:-debug}"
-            EDITOR_VARIANT="${DISPATCH_EDITOR_VARIANT:-all}"
-          else
-            # The branch-scoped dogfood convention (2026-11-03): the branch
-            # name names the target; the artifact is always the debug variant.
-            case "$BRANCH" in
-              tg-engine-apk-*) TARGET="engine";        GALLERY_VARIANT="debug"; EDITOR_VARIANT="none" ;;
-              tg-modelpack-*)  TARGET="modelpack";     GALLERY_VARIANT="debug"; EDITOR_VARIANT="none" ;;
-              *) echo "::error::branch '$BRANCH' matched no branch-scoped trigger convention (tg-engine-apk-* / tg-modelpack-*). Dispatch this workflow and pick a target instead."; exit 1 ;;
-            esac
-          fi
-
-          # The model pack is an offline-provisioning DOGFOOD artifact (debug
-          # key, ADR-0020): a release dispatch is forced back to debug, loudly.
-          if [ "$TARGET" = "modelpack" ] && [ "$GALLERY_VARIANT" = "release" ]; then
-            echo "::notice::the model-pack build is a debug-key dogfood artifact (ADR-0020); forcing the debug variant"
-            GALLERY_VARIANT="debug"
-          fi
-
-          case "$TARGET" in
-            engine|modelpack)
-              GALLERY_RUN=true; EDITOR_RUN=false; EDITOR_TARGETS="[]" ;;
-            editor)
-              GALLERY_RUN=false; EDITOR_RUN=true
-              case "$EDITOR_VARIANT" in
-                all)     EDITOR_TARGETS='["edit-debug","edit-release","contract"]' ;;
-                debug)   EDITOR_TARGETS='["edit-debug","contract"]' ;;
-                release) EDITOR_TARGETS='["edit-release","contract"]' ;;
-                *) echo "::error::unknown editor_variant '$EDITOR_VARIANT' (expected all | debug | release)"; exit 1 ;;
-              esac ;;
-            *)
-              echo "::error::unknown target '$TARGET' (expected gallery-engine | gallery-modelpack | editor)"; exit 1 ;;
+          EDITOR_VARIANT="${DISPATCH_EDITOR_VARIANT:-all}"
+          case "$EDITOR_VARIANT" in
+            all)     EDITOR_TARGETS='["edit-debug","edit-release","contract"]' ;;
+            debug)   EDITOR_TARGETS='["edit-debug","contract"]' ;;
+            release) EDITOR_TARGETS='["edit-release","contract"]' ;;
+            *) echo "::error::unknown editor_variant '$EDITOR_VARIANT' (expected all | debug | release)"; exit 1 ;;
           esac
-
-          echo "target=$TARGET gallery_variant=$GALLERY_VARIANT editor_variant=$EDITOR_VARIANT"
+          echo "editor_variant=$EDITOR_VARIANT"
           {
-            echo "target=$TARGET"
-            echo "gallery_variant=$GALLERY_VARIANT"
             echo "editor_variant=$EDITOR_VARIANT"
-            echo "gallery_run=$GALLERY_RUN"
-            echo "editor_run=$EDITOR_RUN"
+            echo "editor_run=true"
             echo "editor_targets=$EDITOR_TARGETS"
           } >> "$GITHUB_OUTPUT"
-
-  # ---------------------------------------------------------------------------
-  # The gallery targets: the engine-enabled APK (target engine) and the
-  # same + the offline model pack, FACE + semantic CLIP (target
-  # modelpack). Full engine-cross
-  # toolchain (Rust + cargo-ndk + the NDK + the Android SDK) --- the same
-  # pins and cache keys everywhere, so main's warm caches restore unchanged.
-  # ---------------------------------------------------------------------------
-  gallery:
-    name: Gallery (${{ needs.prepare.outputs.target }}, ${{ needs.prepare.outputs.gallery_variant }}) + artifacts
-    needs: prepare
-    if: needs.prepare.outputs.gallery_run == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      GALLERY_TARGET: ${{ needs.prepare.outputs.target }}
-      GALLERY_VARIANT: ${{ needs.prepare.outputs.gallery_variant }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      # Fail fast: the vendored engine workspace must be present (both gallery
-      # targets package it).
-      - name: Fail fast --- the vendored engine workspace must be present
-        run: |
-          missing=0
-          for f in engine/Cargo.toml engine/scripts/build-android.sh docs/phase-5/ente-pin.md; do
-            if [ ! -f "$f" ]; then
-              echo "::error::required engine file '$f' is missing --- the vendored Ente engine workstream is not in this checkout. Restore it before dispatching a gallery target."
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then exit 1; fi
-
-      # Fail fast: validate the engine_version input against the vendored pin.
-      # The engine is vendored into this repo at the commit recorded in
-      # docs/phase-5/ente-pin.md and cannot be swapped by a dispatch input.
-      - name: Fail fast --- validate the engine_version input against the pin
-        env:
-          VERSION_INPUT: ${{ inputs.engine_version }}
-        run: |
-          if [ "$VERSION_INPUT" = "pinned" ] || [ -z "$VERSION_INPUT" ]; then
-            echo "engine_version: pinned (the vendored pin in docs/phase-5/ente-pin.md)"
-            exit 0
-          fi
-          PINNED="$(grep -m1 -oE '[0-9a-f]{40}' docs/phase-5/ente-pin.md || true)"
-          if [ -z "$PINNED" ]; then
-            echo "::error::could not read the pinned engine commit from docs/phase-5/ente-pin.md"
-            exit 1
-          fi
-          case "$VERSION_INPUT" in
-            "$PINNED"|"${PINNED:0:8}")
-              echo "engine_version matches the pin: $PINNED" ;;
-            *)
-              echo "::error::engine_version '$VERSION_INPUT' does not match the vendored pin ($PINNED). The engine is VENDORED into this repo at the pin recorded in docs/phase-5/ente-pin.md and cannot be swapped by a dispatch input --- move the pin via that document's regeneration procedure instead."
-              exit 1 ;;
-          esac
-
-      # Fail fast (release variant, engine target): the ADR-0018 signing
-      # secrets must exist BEFORE the toolchain setup spends minutes.
-      - name: Fail fast --- release variant requires the ADR-0018 signing secrets
-        if: env.GALLERY_VARIANT == 'release'
-        env:
-          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
-          TG_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
-          TG_RELEASE_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
-          TG_RELEASE_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
-        run: |
-          missing=0
-          for name in TG_RELEASE_KEYSTORE_BASE64 TG_RELEASE_KEYSTORE_PASSWORD TG_RELEASE_KEY_ALIAS TG_RELEASE_KEY_PASSWORD; do
-            if [ -z "$(eval "echo \$$name")" ]; then
-              echo "::error::required secret '$name' is not set --- release-variant builds sign with the ADR-0018 release key. Add it under Settings > Secrets and variables > Actions, or dispatch the debug variant instead."
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then exit 1; fi
-
-      # The canonical toolchain setup (.github/actions/toad-setup): the full
-      # engine-cross shape (Rust + aarch64 target + the android cargo cache +
-      # cargo-ndk + the NDK resolve + the whole Android side), same pins,
-      # same cache keys as ci.yml's engine-android job (warm caches apply).
-      - name: Set up the toolchain (Rust Android cross + Android)
-        uses: ./.github/actions/toad-setup
-        with:
-          rust: android
-
-      # THE model-pack step (target modelpack only): fetch the pinned
-      # model assets from the single allowlisted host and verify size +
-      # SHA-256 against the pin BEFORE anything packages them (the same
-      # discipline the in-app downloader + provisioner apply; here it
-      # keeps a tampered/moved upstream asset from ever riding into an
-      # APK). Staged into the build-dir assets srcDir that
-      # -PwithBundledModels wires (never src/main). Sizes + SHA-256 are
-      # transcribed from ModelManifest.kt (itself transcribed from the
-      # vendored ente-ml assets.rs at the pin).
-      #
-      # r50 (the engine-flavor audit): the pack is now the WHOLE pack ---
-      # FACE (detector + embedder) AND semantic CLIP (image + text +
-      # vocab). The r28-era step staged FACE only, but the assembled
-      # engine-flavor APK enables the SEMANTIC index too, so its CLIP
-      # assets fell through BundledModelSource to the NETWORK --- the
-      # "never opens a socket" claim was false for the semantic half of
-      # exactly the artifact built for offline dogfooding. The pack grows
-      # by ~213 MB (a debug dogfood artifact, not a release); Gate 2
-      # below verifies all five assets.
-      - name: Stage the pinned model pack (FACE + semantic CLIP)
-        if: env.GALLERY_TARGET == 'modelpack'
-        run: |
-          set -euo pipefail
-          DEST="apps/gallery/build/bundled-models/models"
-          mkdir -p "$DEST"
-          fetch_model() {
-            local name="$1" size="$2" sha="$3"
-            echo "fetching $name ($size bytes) from models.ente.com"
-            curl -fSL --retry 3 --max-time 900 -o "$DEST/$name" "https://models.ente.com/$name"
-            local got_size got_sha
-            got_size="$(wc -c < "$DEST/$name" | tr -d ' ')"
-            got_sha="$(sha256sum "$DEST/$name" | cut -d' ' -f1)"
-            [ "$got_size" = "$size" ] || { echo "::error::$name: size $got_size != pinned $size"; exit 1; }
-            [ "$got_sha" = "$sha" ]  || { echo "::error::$name: sha256 $got_sha != pinned $sha"; exit 1; }
-            echo "  verified: $name ($got_size bytes, $got_sha)"
-          }
-          fetch_model "yolov5s_face_640_640_static_b1.onnx" \
-            "32355091" \
-            "e047647409403d52696035ecd445792173e50d7fbdcccac97b958a585db9aa3d"
-          fetch_model "mobilefacenet_portable_static_b1.onnx" \
-            "5278803" \
-            "0763fc33f54e138476194da95987e133b3e976075a6b1d3e1b2caedb251b1a36"
-          fetch_model "mobileclip_s2_image_gelu_opset20.onnx" \
-            "143057352" \
-            "205a430af825e501c5138e5bb9abea942482a7a4fd4a680e98e47cf0830dce7e"
-          fetch_model "mobileclip_s2_text_opset18_quant.onnx" \
-            "67144712" \
-            "d92f33dfcff83077fc2e0d3414250710efbb51795dfd89767bdbefb5fdc47322"
-          fetch_model "bpe_simple_vocab_16e6.txt" \
-            "3194984" \
-            "67603cfda2e032ad77b5f8808af37789d590db664b26df8705d2bf8b3c553fc8"
-          ls -la "$DEST"
-          sha256sum "$DEST"/*
-
-      # ADR-0018 contract (release variant, engine target), mirrored from
-      # release.yml: the Gradle signingConfig reads exactly these four
-      # TG_* env vars. Debug dispatches skip the decode step entirely (debug
-      # key, like every other test build). F-2 (r51): the keystore secret
-      # reaches the decode step through a step-level env var (never
-      # interpolated into the script body), and the three credential
-      # secrets reach the ONE step that consumes them --- the assemble
-      # below --- the same way: no GITHUB_ENV write, no heredoc, so they
-      # never appear in command lines or command logs and never persist
-      # beyond the step that uses them (GitHub masks them in logs
-      # regardless; this keeps it clean --- and now also minimal).
-      - name: Decode release keystore (release variant only)
-        if: env.GALLERY_VARIANT == 'release'
-        env:
-          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          printf '%s' "$TG_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
-          chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
-          if [ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]; then
-            echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
-            exit 1
-          fi
-
-      # The assemble. -PwithEngine registers the buildRustEngine Exec task
-      # (preBuild dependency runs engine/scripts/build-android.sh, idempotent):
-      # cargo-ndk builds libtoad_ml_jni.so + stages the sha256-pinned
-      # libonnxruntime.so (ORT 1.31.0) for arm64-v8a into
-      # apps/gallery/build/rust-jniLibs/, which the jniLibs srcDir packages.
-      # -PwithBundledModels (modelpack target) adds the staged models as an
-      # assets srcDir. tee + pipefail keeps the exit code while persisting
-      # the full log for the on-failure upload below. r46: the ENGINE flavor
-      # (applicationIdSuffix .engine, the full BuildShape) --- the output
-      # paths are flavor-qualified (apk/engine/<variant>/).
-      # The signing env (F-2): the TG_* quartet rides this step's env for
-      # the release variant (the signingConfig wires only when
-      # TG_KEYSTORE_FILE is present); debug dispatches set them too but
-      # nothing consumes them --- the debug build type never reads the
-      # release signingConfig, so the debug APK stays debug-keyed exactly
-      # as before.
-      - name: Assemble the engine-enabled (${{ needs.prepare.outputs.gallery_variant }}) APK
-        env:
-          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
-          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
-          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
-          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
-        run: |
-          set -o pipefail
-          # Array form so each -P flag is a distinct argv element
-          # (avoids SC2086 word-splitting on a space-joined string).
-          PROPS=(-PwithEngine)
-          if [ "$GALLERY_TARGET" = "modelpack" ]; then
-            PROPS+=(-PwithBundledModels)
-          fi
-          if [ "$GALLERY_VARIANT" = "release" ]; then
-            TASK=":apps:gallery:assembleEngineRelease"
-          else
-            TASK=":apps:gallery:assembleEngineDebug"
-          fi
-          echo "task: $TASK ${PROPS[*]}"
-          ./gradlew "$TASK" "${PROPS[@]}" --no-daemon --stacktrace 2>&1 | tee build-output.log
-
-      # Gate 1 (every gallery target): the engine-enabled APK must carry BOTH
-      # native libraries (a silently broken jniLibs wiring would otherwise
-      # pass the assemble step).
-      - name: Verify the native libraries are packaged
-        run: |
-          APK="$(ls "apps/gallery/build/outputs/apk/engine/$GALLERY_VARIANT/"*.apk)"
-          echo "APK: $APK"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"
-
-      # Gate 2 (modelpack target only): the APK must carry ALL FIVE staged
-      # model assets under assets/models/ --- a silently broken assets
-      # srcDir wiring would otherwise pass the assemble step, and the
-      # build would ship as "offline-provisioned" while provisioning from
-      # the network after all. r50: the CLIP pair + vocab joined the FACE
-      # pair (the semantic half of the engine flavor needs them).
-      - name: Verify the model pack is packaged under assets
-        if: env.GALLERY_TARGET == 'modelpack'
-        run: |
-          APK="$(ls "apps/gallery/build/outputs/apk/engine/$GALLERY_VARIANT/"*.apk)"
-          unzip -l "$APK" | grep "assets/models/yolov5s_face_640_640_static_b1.onnx"
-          unzip -l "$APK" | grep "assets/models/mobilefacenet_portable_static_b1.onnx"
-          unzip -l "$APK" | grep "assets/models/mobileclip_s2_image_gelu_opset20.onnx"
-          unzip -l "$APK" | grep "assets/models/mobileclip_s2_text_opset18_quant.onnx"
-          unzip -l "$APK" | grep "assets/models/bpe_simple_vocab_16e6.txt"
-
-      # Gate 3 (every gallery target): the APK identity --- the variant-correct
-      # application id and the versionCode/versionName DERIVED from the
-      # checkout's own build.gradle.kts. The derivation rule: the gallery
-      # gradle keeps history as COMMENTED pairs with ONE live assignment
-      # (first match is the live one --- the same rule release.yml applies);
-      # the EDITOR leg below uses tail -1 because that file appends LIVE
-      # pairs (last wins, the r43 catch). The old modelpack workflow's
-      # hardcoded >= 32 baseline and r28 artifact name are retired by this
-      # derivation --- nothing to rot when the version moves.
-      - name: Verify APK identity (package + the checkout's version)
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          # F-14: resolve aapt2 from the exact pinned build-tools dir first
-          # (the same 36.0.0 toad-setup installs), glob fallback only if the
-          # runner layout differs --- the signature gate in release.yml
-          # resolves apksigner the same way. Newest-wins made the gate read
-          # whatever the runner image shipped that day (silent toolchain
-          # drift).
-          AAPT2="$SDK_ROOT/build-tools/36.0.0/aapt2"
-          if [ ! -x "$AAPT2" ]; then
-            AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
-          fi
-          if [ -z "$AAPT2" ] || [ ! -x "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
-          APK="$(ls "apps/gallery/build/outputs/apk/engine/$GALLERY_VARIANT/"*.apk)"
-          EXPECTED_VC="$(grep -m1 -oE 'versionCode = [0-9]+' apps/gallery/build.gradle.kts | grep -oE '[0-9]+' | head -1)"
-          if [ -z "$EXPECTED_VC" ]; then echo "::error::could not derive versionCode from apps/gallery/build.gradle.kts"; exit 1; fi
-          # r46: the ENGINE flavor's applicationIdSuffix composes with the
-          # buildType's: .engine.release -> io.github.dukeoftoad.gallery.engine,
-          # .engine.debug -> io.github.dukeoftoad.gallery.engine.debug.
-          if [ "$GALLERY_VARIANT" = "release" ]; then
-            EXPECTED_ID="io.github.dukeoftoad.gallery.engine"
-          else
-            EXPECTED_ID="io.github.dukeoftoad.gallery.engine.debug"
-          fi
-          BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
-          echo "badging: $BADGE"
-          echo "derived expected versionCode: $EXPECTED_VC / expected id: $EXPECTED_ID"
-          echo "$BADGE" | grep -q "name='$EXPECTED_ID'" \
-            || { echo "::error::unexpected application id (expected $EXPECTED_ID for the $GALLERY_VARIANT variant)"; exit 1; }
-          echo "$BADGE" | grep -q "versionCode='$EXPECTED_VC'" \
-            || { echo "::error::unexpected versionCode (expected $EXPECTED_VC, derived from the checkout)"; exit 1; }
-
-      # Stage under the unified convention: the checkout's own versionName,
-      # the target, the variant --- plus the .sha256 sidecar and the R8
-      # mapping.txt when present (debug builds are not minified --- expected
-      # warning; release builds MUST produce one).
-      - name: Stage the APK + R8 mapping
-        run: |
-          APK="$(ls "apps/gallery/build/outputs/apk/engine/$GALLERY_VARIANT/"*.apk)"
-          VERSION_NAME="$(grep -m1 -oE 'versionName = "[^"]+"' apps/gallery/build.gradle.kts | sed -e 's/versionName = //' -e 's/"//g')"
-          if [ -z "$VERSION_NAME" ]; then echo '::error::could not derive versionName'; exit 1; fi
-          STAGE="$RUNNER_TEMP/apk-staging"
-          mkdir -p "$STAGE"
-          # r50: no more "-engine-engine" doubling on the engine target
-          # --- the engine target IS the engine build; the modelpack
-          # target keeps its explicit modelpack-engine shape.
-          if [ "$GALLERY_TARGET" = "engine" ]; then
-            APK_NAME="toadGALLERY-${VERSION_NAME}-engine-${GALLERY_VARIANT}.apk"
-          else
-            APK_NAME="toadGALLERY-${VERSION_NAME}-${GALLERY_TARGET}-engine-${GALLERY_VARIANT}.apk"
-          fi
-          cp "$APK" "$STAGE/$APK_NAME"
-          ( cd "$STAGE" && sha256sum "$APK_NAME" > "$APK_NAME.sha256" )
-          if [ "$GALLERY_VARIANT" = "release" ]; then
-            MAPPING="apps/gallery/build/outputs/mapping/engineRelease/mapping.txt"
-          else
-            MAPPING="apps/gallery/build/outputs/mapping/engineDebug/mapping.txt"
-          fi
-          if [ -f "$MAPPING" ]; then
-            cp "$MAPPING" "$STAGE/"
-          else
-            echo "::warning::no R8 mapping at $MAPPING (debug builds are not minified --- expected; release builds MUST produce one)"
-          fi
-          ls -la "$STAGE"
-          {
-            echo "VERSION_NAME=$VERSION_NAME"
-            echo "APK_NAME=$APK_NAME"
-            echo "ARTIFACT_NAME=${APK_NAME%.apk}"
-          } >> "$GITHUB_ENV"
-
-      - name: Upload APK + mapping artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: ${{ runner.temp }}/apk-staging/*
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: apk-build-gallery-${{ env.GALLERY_TARGET }}-logs-${{ github.run_id }}
-          path: build-output.log
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Job summary
-        if: always()
-        run: |
-          SIGNING="debug key (test build, not a release)"
-          if [ "${GALLERY_VARIANT:-debug}" = "release" ]; then
-            SIGNING="ADR-0018 release key (TG_* secrets)"
-          fi
-          {
-            echo "## APK build --- gallery (${{ env.GALLERY_TARGET }})"
-            echo ""
-            echo "| | |"
-            echo "|---|---|"
-            echo "| Result | ${{ job.status }} |"
-            echo "| Target | \`${GALLERY_TARGET:-unknown}\` |"
-            echo "| Variant | \`${GALLERY_VARIANT:-unknown}\` |"
-            echo "| Engine | vendored pin (docs/phase-5/ente-pin.md) |"
-            if [ "${GALLERY_TARGET:-}" = "modelpack" ]; then
-              echo "| Model pack | FACE pack, staged + sha256-verified at build time (ADR-0020) |"
-            fi
-            echo "| versionName | \`${VERSION_NAME:-not reached}\` |"
-            echo "| APK artifact | \`toadGALLERY-${VERSION_NAME:-?}-${GALLERY_TARGET:-?}-engine-${GALLERY_VARIANT:-?}\` |"
-            echo "| Signing | $SIGNING |"
-            echo ""
-            echo "Engine chain: cargo-ndk arm64-v8a -> libtoad_ml_jni.so + sha256-pinned libonnxruntime.so (ORT 1.31.0) -> -PwithEngine packaging; both .so files verified inside the APK."
-            echo ""
-            echo "NOT a release: no tag was cut and no GitHub Release was created (release.yml stays the only signing release path, ADR-0018)."
-          } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
   # The editor target: ALL editor surfaces in ONE fail-fast=false matrix ---
@@ -558,7 +100,7 @@ jobs:
 
       # The canonical toolchain setup (.github/actions/toad-setup): the
       # pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 + the
-      # Gradle cache + gradlew chmod; no Rust).
+      # Gradle cache + gradlew chmod).
       - name: Set up the toolchain (Android)
         uses: ./.github/actions/toad-setup
 
@@ -567,32 +109,27 @@ jobs:
         if: matrix.editor_target == 'edit-debug'
         run: |
           set -o pipefail
-          ./gradlew :apps:edit:assembleDebug --no-daemon --stacktrace 2>&1 | tee build-output.log
+          ./gradlew :editor:app:assembleDebug --no-daemon --stacktrace 2>&1 | tee build-output.log
 
       - name: Verify editor APK identity (edit-debug)
         if: matrix.editor_target == 'edit-debug'
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          # F-14: same pinned-first aapt2 resolve as the gallery identity
-          # gate above (build-tools/36.0.0 first, glob fallback).
+          # Resolve aapt2 from the exact pinned build-tools dir first
+          # (the same 36.0.0 toad-setup installs), glob fallback only if the
+          # runner layout differs.
           AAPT2="$SDK_ROOT/build-tools/36.0.0/aapt2"
           if [ ! -x "$AAPT2" ]; then
             AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
           fi
           if [ -z "$AAPT2" ] || [ ! -x "$AAPT2" ]; then echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; fi
-          APK="$(ls apps/edit/build/outputs/apk/debug/*.apk)"
-          # The EDITOR gradle appends LIVE versionCode/versionName pairs per
-          # round --- the LAST pair is the effective one (last-wins, the
-          # file's own convention; the r43 catch from the failed run 41991485246
-          # at f610860: grep -m1 grabbed the OLDEST pair, so the gate compared
-          # the APK's real versionCode against a stale expectation). tail -1
-          # reads the effective pair.
-          EXPECTED_VC="$(grep -oE 'versionCode = [0-9]+' apps/edit/build.gradle.kts | grep -oE '[0-9]+' | tail -1)"
-          if [ -z "$EXPECTED_VC" ]; then echo "::error::could not derive versionCode from apps/edit/build.gradle.kts"; exit 1; fi
+          APK="$(ls editor/app/build/outputs/apk/debug/*.apk)"
+          EXPECTED_VC="$(grep -oE 'versionCode = [0-9]+' editor/app/build.gradle.kts | grep -oE '[0-9]+' | tail -1)"
+          if [ -z "$EXPECTED_VC" ]; then echo "::error::could not derive versionCode from editor/app/build.gradle.kts"; exit 1; fi
           BADGE="$("$AAPT2" dump badging "$APK" | head -1)"
           echo "badging: $BADGE"
           echo "derived expected versionCode: $EXPECTED_VC"
-          echo "$BADGE" | grep -q "name='io.github.dukeoftoad.gallery.edit.debug'" \
+          echo "$BADGE" | grep -q "name='com.toadgallery.editor.debug'" \
             || { echo "::error::unexpected application id (expected the .debug variant)"; exit 1; }
           echo "$BADGE" | grep -q "versionCode='$EXPECTED_VC'" \
             || { echo "::error::unexpected versionCode (expected $EXPECTED_VC, derived from the checkout)"; exit 1; }
@@ -600,9 +137,9 @@ jobs:
       - name: Stage the editor debug APK (edit-debug)
         if: matrix.editor_target == 'edit-debug'
         run: |
-          APK="$(ls apps/edit/build/outputs/apk/debug/*.apk)"
-          VERSION_NAME="$(grep -oE 'versionName = "[^"]+"' apps/edit/build.gradle.kts | tail -1 | sed -e 's/versionName = //' -e 's/"//g')"
-          if [ -z "$VERSION_NAME" ]; then echo '::error::could not derive versionName from apps/edit/build.gradle.kts'; exit 1; fi
+          APK="$(ls editor/app/build/outputs/apk/debug/*.apk)"
+          VERSION_NAME="$(grep -oE 'versionName = "[^"]+"' editor/app/build.gradle.kts | tail -1 | sed -e 's/versionName = //' -e 's/"//g')"
+          if [ -z "$VERSION_NAME" ]; then echo '::error::could not derive versionName from editor/app/build.gradle.kts'; exit 1; fi
           STAGE="$RUNNER_TEMP/edit-apk-staging"
           mkdir -p "$STAGE"
           APK_NAME="toadGALLERY-Edit-${VERSION_NAME}-debug.apk"
@@ -628,20 +165,20 @@ jobs:
         run: |
           set -o pipefail
           # The editor's release build type declares no signing config
-          # (apps/edit/build.gradle.kts) and ADR-0018 keeps release signing in
-          # release.yml only --- this leg is the R8/compile gate; the artifact
-          # below is an UNSIGNED QA build, never for publishing.
-          ./gradlew :apps:edit:assembleRelease --no-daemon --stacktrace 2>&1 | tee build-output.log
+          # (editor/app/build.gradle.kts) and ADR-0018 keeps release signing
+          # in release.yml only --- this leg is the R8/compile gate; the
+          # artifact below is an UNSIGNED QA build, never for publishing.
+          ./gradlew :editor:app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build-output.log
 
       - name: Stage the unsigned editor release APK (edit-release)
         if: matrix.editor_target == 'edit-release'
         run: |
-          APK="$(ls apps/edit/build/outputs/apk/release/*.apk)"
+          APK="$(ls editor/app/build/outputs/apk/release/*.apk)"
           case "$APK" in
             *unsigned*) : ;; # the expected unsigned output
-            *) echo "::warning::release APK does not carry the -unsigned suffix ($APK) --- verify no signing config leaked into :apps:edit" ;;
+            *) echo "::warning::release APK does not carry the -unsigned suffix ($APK) --- verify no signing config leaked into :editor:app" ;;
           esac
-          VERSION_NAME="$(grep -oE 'versionName = "[^"]+"' apps/edit/build.gradle.kts | tail -1 | sed -e 's/versionName = //' -e 's/"//g')"
+          VERSION_NAME="$(grep -oE 'versionName = "[^"]+"' editor/app/build.gradle.kts | tail -1 | sed -e 's/versionName = //' -e 's/"//g')"
           STAGE="$RUNNER_TEMP/edit-apk-staging"
           mkdir -p "$STAGE"
           APK_NAME="toadGALLERY-Edit-${VERSION_NAME}-release-UNSIGNED.apk"
@@ -660,7 +197,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      # --- leg: contract (the shared module both apps must agree on) ---------
+      # --- leg: contract (the shared module both shells agree on) ------------
       - name: Build + test the shared editor contract module
         if: matrix.editor_target == 'contract'
         run: |

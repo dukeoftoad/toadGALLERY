@@ -5,10 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The LUT filter engine (r33, Phase 7 v2): the `.cube` parser, the
- * trilinear sampler and the intensity blend. Every interpolation value
- * below is hand-computed (the repo has no local toolchain --- ADR-0013
- * --- so the assertions carry their arithmetic in the comments).
+ * The .cube LUT engine: parser, trilinear sampler, intensity blend.
+ * All interpolation values are hand-computed (assertions carry their arithmetic).
  */
 class CubeLutTest {
 
@@ -175,8 +173,7 @@ class CubeLutTest {
 
     @Test
     fun `the R index increments fastest in the table order`() {
-        // Line 2 of the table (index 1 = grid (1,0,0)) is pure red; a
-        // green-fastest table would put a different colour there.
+        // Table index 1 = grid (1,0,0) is pure red; a green-fastest table would differ there.
         val text = "LUT_3D_SIZE 2\n" +
             "0 0 0\n" + // (0,0,0)
             "1 0 0\n" + // (1,0,0) <- R moved first
@@ -190,9 +187,7 @@ class CubeLutTest {
 
     @Test
     fun `a size-3 midpoint is the average of its neighbours`() {
-        // A size-3 table whose R channel ramps 0, 0.5, 1 along R: the
-        // grid point (1,0,0) must hold 0.5 and sample(0.5, 0, 0) lands
-        // exactly on it.
+        // Size-3 table, R ramping 0/0.5/1: grid (1,0,0) holds 0.5 and sample(0.5,0,0) lands exactly on it.
         val text = buildString {
             appendLine("LUT_3D_SIZE 3")
             for (b in 0..2) for (g in 0..2) for (r in 0..2) {
@@ -208,9 +203,8 @@ class CubeLutTest {
 
     @Test
     fun `trilinear blends all three axes at an off-grid point`() {
-        // Size-2 table: the (0,0,0) corner is black, EVERY other corner
-        // is white. sample(0.5, 0.5, 0.5) = 1 - 0.5*0.5*0.5 = 0.875 per
-        // channel (the corner weight decomposition).
+        // Size-2 table: the (0,0,0) corner is black, every other corner is white.
+        // sample(0.5, 0.5, 0.5) = 1 - 0.5*0.5*0.5 = 0.875 per channel (corner weight decomposition).
         val text = "LUT_3D_SIZE 2\n" +
             "0 0 0\n1 1 1\n1 1 1\n1 1 1\n1 1 1\n1 1 1\n1 1 1\n1 1 1\n"
         val lut = parseOk(text)
@@ -222,8 +216,7 @@ class CubeLutTest {
 
     @Test
     fun `a custom domain positions inputs inside the grid`() {
-        // DOMAIN 0.25..0.75 on R: input 0.5 sits at the R grid centre.
-        // The identity table then returns 0.5 there.
+        // DOMAIN 0.25..0.75 on R: input 0.5 sits at the R grid centre; the identity table returns 0.5.
         val text = buildString {
             appendLine("LUT_3D_SIZE 2")
             appendLine("DOMAIN_MIN 0.25 0.0 0.0")
@@ -240,8 +233,7 @@ class CubeLutTest {
 
     @Test
     fun `out-of-range table values clamp at sample time`() {
-        // Extended-range tables are author data; the OUTPUT range is
-        // engine policy: [-0.5, 1.5] table entries clamp to [0, 1].
+        // Extended-range tables are author data; the output clamps to [0, 1] (engine policy).
         val text = "LUT_3D_SIZE 2\n" +
             "-0.5 -0.5 -0.5\n1.5 1.5 1.5\n1.5 1.5 1.5\n1.5 1.5 1.5\n" +
             "1.5 1.5 1.5\n1.5 1.5 1.5\n1.5 1.5 1.5\n1.5 1.5 1.5\n"

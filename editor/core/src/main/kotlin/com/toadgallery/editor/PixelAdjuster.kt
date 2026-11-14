@@ -1,23 +1,15 @@
 package com.toadgallery.editor
 
 /**
- * The prototype's real "modify" step (Issue #14 gate): a per-channel LUT
- * (256-entry lookup table) applying brightness + contrast, plus a
- * whole-image left-rotation count. Pure Kotlin, exercised on the JVM ---
- * the activity feeds decoded pixel IntArrays through [applyTo] and gets
- * the adjusted pixels back.
+ * The prototype's real "modify" step: a per-channel 256-entry LUT applying brightness +
+ * contrast, plus a whole-image quarter-turn rotation. Pure Kotlin, exercised on the JVM.
  *
- * The math (canonical image-editor semantics, both parameters in
- * [-100, 100]):
- *  - brightness b: `out = clamp(v + b * 2.55)` --- the scale maps the
- *    slider to the full 8-bit headroom, so +100 is exactly white-clipping.
- *  - contrast c: pivot at mid-grey 128, `out = clamp((v - 128) * f + 128)`
- *    where `f = (259 * (c * 2.55 + 255)) / (255 * (259 - c * 2.55))` --- the
- *    standard 8-bit contrast factor (f -> 1 as c -> 0, f -> ~2.0 at +100,
- *    f -> ~0.008 at -100).
- * The LUT composes brightness FIRST then contrast (the conventional
- * order), and identical parameters always produce identical tables, so the
- * preview and the export bytes agree by construction.
+ * The math (parameters in [-100, 100]):
+ *  - brightness b: `out = clamp(v + b * 2.55)` (+100 is exactly white-clipping);
+ *  - contrast c: mid-grey 128 pivot, `out = clamp((v - 128) * f + 128)` where
+ *    `f = (259 * (c * 2.55 + 255)) / (255 * (259 - c * 2.55))` (f ~2.0 at +100,
+ *    f ~0.008 at -100). Brightness composes FIRST then contrast; identical
+ *    parameters always produce identical tables (preview and export bytes agree).
  */
 object PixelAdjuster {
 
@@ -46,8 +38,8 @@ object PixelAdjuster {
     }
 
     /**
-     * Applies the adjustment to ARGB pixels in place (returns the same
-     * array for fluent use). Alpha is never touched.
+     * Applies the adjustment to ARGB pixels in place (returns the same array for
+     * fluent use). Alpha is never touched.
      */
     fun applyTo(pixels: IntArray, lut: IntArray): IntArray {
         require(lut.size == 256) { "LUT must have 256 entries" }
@@ -64,13 +56,8 @@ object PixelAdjuster {
 
     /**
      * The rotation transform for the export stage: [quarterTurns] 90-degree
-     * counter-clockwise turns of an [width] x [height] pixel grid, returned
-     * as a new array plus the swapped output dimensions. Pure grid math ---
-     * the activity maps Bitmap pixels through the identical helper.
-     *
-     * r30 review fix: the turn-1/turn-3 mappings were swapped versus the
-     * documented CCW semantics (caught in the r30 pipeline cross-check;
-     * the r29 editor tests had not yet run on CI when r29 landed).
+     * counter-clockwise turns of an [width] x [height] grid, returned as a new array
+     * plus the swapped output dimensions. Pure grid math.
      */
     fun rotateQuarterTurns(
         pixels: IntArray,

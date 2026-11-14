@@ -1,0 +1,2357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>toadGALLERY — Material 3 Expressive Redesign</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      /* Default: Toad-Green Dark (Material 3 Expressive) */
+      --bg-app: #07130e;
+      --bg-surface: #0e1f18;
+      --bg-surface-high: #152b22;
+      --bg-surface-highest: #1d392e;
+      --bg-glass: rgba(7, 19, 14, 0.82);
+      --border-subtle: rgba(143, 217, 182, 0.14);
+      --border-strong: rgba(143, 217, 182, 0.35);
+      --primary: #6ee7b7;
+      --on-primary: #032619;
+      --primary-container: #134e3a;
+      --on-primary-container: #d1fae5;
+      --secondary-container: #18362a;
+      --text-main: #ecfdf5;
+      --text-muted: #94b8a8;
+      --text-dim: #628575;
+      --danger-bg: rgba(239, 68, 68, 0.14);
+      --danger-text: #fca5a5;
+    }
+
+    [data-theme="amber"] {
+      /* Dynamic Material You Warm Amber Dark */
+      --bg-app: #14100b;
+      --bg-surface: #201a13;
+      --bg-surface-high: #2b231a;
+      --bg-surface-highest: #382e22;
+      --bg-glass: rgba(20, 16, 11, 0.84);
+      --border-subtle: rgba(251, 191, 36, 0.15);
+      --border-strong: rgba(251, 191, 36, 0.38);
+      --primary: #fbbf24;
+      --on-primary: #291800;
+      --primary-container: #5c3c08;
+      --on-primary-container: #fef3c7;
+      --secondary-container: #362a1a;
+      --text-main: #fffbeb;
+      --text-muted: #c7b699;
+      --text-dim: #8c7b60;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      --danger-text: #fca5a5;
+    }
+
+    [data-theme="light"] {
+      /* Clean Material 3 Botanical Light */
+      --bg-app: #f4f9f6;
+      --bg-surface: #ffffff;
+      --bg-surface-high: #e8f3ed;
+      --bg-surface-highest: #d7eae0;
+      --bg-glass: rgba(244, 249, 246, 0.85);
+      --border-subtle: rgba(16, 65, 45, 0.1);
+      --border-strong: rgba(16, 65, 45, 0.25);
+      --primary: #0f7654;
+      --on-primary: #ffffff;
+      --primary-container: #c6f6e1;
+      --on-primary-container: #063726;
+      --secondary-container: #e1efe8;
+      --text-main: #091e16;
+      --text-muted: #436355;
+      --text-dim: #739183;
+      --danger-bg: rgba(220, 38, 38, 0.1);
+      --danger-text: #b91c1c;
+    }
+
+    [data-theme="ocean"] {
+      /* Ocean Slate Dark */
+      --bg-app: #08111a;
+      --bg-surface: #0f1d2b;
+      --bg-surface-high: #172a3d;
+      --bg-surface-highest: #203952;
+      --bg-glass: rgba(8, 17, 26, 0.84);
+      --border-subtle: rgba(56, 189, 248, 0.14);
+      --border-strong: rgba(56, 189, 248, 0.36);
+      --primary: #38bdf8;
+      --on-primary: #042233;
+      --primary-container: #0c4a6e;
+      --on-primary-container: #e0f2fe;
+      --secondary-container: #153147;
+      --text-main: #f0f9ff;
+      --text-muted: #93b4cc;
+      --text-dim: #5d7e96;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      --danger-text: #fca5a5;
+    }
+
+    [data-theme="oled"] {
+      /* OLED Pure Black */
+      --bg-app: #000000;
+      --bg-surface: #0c0f0e;
+      --bg-surface-high: #161b19;
+      --bg-surface-highest: #202724;
+      --bg-glass: rgba(0, 0, 0, 0.88);
+      --border-subtle: rgba(255, 255, 255, 0.11);
+      --border-strong: rgba(110, 231, 183, 0.35);
+      --primary: #6ee7b7;
+      --on-primary: #022417;
+      --primary-container: #0f3d2e;
+      --on-primary-container: #d1fae5;
+      --secondary-container: #161f1c;
+      --text-main: #ffffff;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --danger-bg: rgba(239, 68, 68, 0.16);
+      --danger-text: #fca5a5;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 20% 20%, #102920 0%, #050b09 100%);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: #ecfdf5;
+    }
+
+    h1, h2, h3, .font-display {
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    }
+
+    /* Realistic Android Phone Frame */
+    .phone-frame {
+      width: 100%;
+      max-width: 412px;
+      height: 850px;
+      max-height: 92vh;
+      background-color: var(--bg-app);
+      color: var(--text-main);
+      border-radius: 44px;
+      border: 8px solid #1b2823;
+      box-shadow:
+        0 30px 70px -15px rgba(0, 0, 0, 0.75),
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.35s ease, color 0.35s ease;
+    }
+
+    /* Hide scrollbars cleanly */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Edge fade mask for horizontal chip scrolling (Fixes abrupt clipping bug) */
+    .chip-scroll-mask {
+      -webkit-mask-image: linear-gradient(to right, black 88%, transparent 100%);
+      mask-image: linear-gradient(to right, black 88%, transparent 100%);
+    }
+
+    /* Material 3 Expressive Switch */
+    .m3-switch {
+      width: 48px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--bg-surface-highest);
+      border: 2px solid var(--border-strong);
+      position: relative;
+      transition: all 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .m3-switch[data-checked="true"] {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    .m3-switch-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--text-muted);
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      transition: all 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+    }
+    .m3-switch[data-checked="true"] .m3-switch-thumb {
+      width: 20px;
+      height: 20px;
+      top: 2px;
+      left: 22px;
+      background: var(--on-primary);
+    }
+
+    /* Animations */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-view {
+      animation: fadeSlideUp 0.24s ease-out forwards;
+    }
+
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(22px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .animate-subpage {
+      animation: slideInRight 0.22s cubic-bezier(0.2, 0.85, 0.3, 1) forwards;
+    }
+
+    /* Custom Range Slider for Face Clustering Threshold */
+    input[type="range"].m3-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--bg-surface-highest);
+      outline: none;
+    }
+    input[type="range"].m3-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--primary);
+      border: 3px solid var(--on-primary);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.7; }
+      70% { transform: scale(1.4); opacity: 0; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    .pin-pulse::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 999px;
+      background: var(--primary);
+      animation: pulseRing 2.2s infinite;
+      z-index: 0;
+    }
+
+    /* Masonry / Collage layout helper */
+    .collage-grid {
+      column-gap: 6px;
+    }
+    .collage-item {
+      break-inside: avoid;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Theme Switcher Pill Bar (Outside Phone Frame for Live Preview Control) -->
+  <div class="mb-3 flex flex-wrap items-center justify-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-xs">
+    <span class="text-emerald-200/70 font-medium px-1">Palette Preview:</span>
+    <button onclick="setAppTheme('toad')" id="ext-theme-toad" class="px-3 py-1 rounded-full font-semibold transition bg-emerald-500 text-emerald-950">Toad-Green Dark</button>
+    <button onclick="setAppTheme('amber')" id="ext-theme-amber" class="px-3 py-1 rounded-full font-semibold transition text-white/75 hover:text-white">Dynamic Amber</button>
+    <button onclick="setAppTheme('light')" id="ext-theme-light" class="px-3 py-1 rounded-full font-semibold transition text-white/75 hover:text-white">Clean Light</button>
+  </div>
+
+  <!-- Android Device Frame -->
+  <div id="phone-app" class="phone-frame" data-theme="toad">
+    
+    <!-- Android Status Bar -->
+    <div class="flex items-center justify-between px-6 pt-3 pb-1.5 text-xs font-semibold select-none z-30 shrink-0" style="background: var(--bg-glass); backdrop-filter: blur(14px);">
+      <span>7:48</span>
+      <!-- Front Camera Punch Hole -->
+      <div class="w-3.5 h-3.5 rounded-full bg-black border border-white/10"></div>
+      <div class="flex items-center gap-1.5">
+        <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+        <i data-lucide="signal" class="w-3.5 h-3.5"></i>
+        <div class="px-1.5 py-0.2 rounded text-[10px] font-bold" style="background: var(--text-main); color: var(--bg-app);">84</div>
+      </div>
+    </div>
+
+    <!-- Main Scrollable Viewport -->
+    <div id="main-viewport" class="flex-1 overflow-y-auto no-scrollbar relative pb-24">
+      <!-- Views are dynamically injected here -->
+    </div>
+
+    <!-- Floating Date Scrubber Pill (Visible on Photos Tab when scrolling/dragging) -->
+    <div id="date-scrubber-track" class="hidden absolute right-1.5 top-36 bottom-24 w-6 z-20 flex flex-col justify-center items-end">
+      <div id="date-scrubber-pill" class="opacity-0 pointer-events-none transition-opacity duration-200 mr-7 px-3 py-1 rounded-full text-xs font-bold shadow-lg whitespace-nowrap" style="background: var(--primary); color: var(--on-primary);">
+        Nov 2026
+      </div>
+      <div id="date-scrubber-thumb" class="w-1.5 h-12 rounded-full cursor-ns-resize opacity-60 hover:opacity-100 transition-opacity" style="background: var(--primary);"></div>
+    </div>
+
+    <!-- Toast Notification Banner -->
+    <div id="toast-banner" class="pointer-events-none opacity-0 translate-y-2 transition-all duration-300 absolute bottom-24 left-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium border" style="background: var(--bg-surface-highest); border-color: var(--border-strong); color: var(--text-main);">
+      <i data-lucide="sparkles" class="w-4 h-4 shrink-0" style="color: var(--primary);"></i>
+      <span id="toast-text">Action completed</span>
+    </div>
+
+    <!-- Bottom Material 3 Expressive Navigation Bar -->
+    <nav class="absolute bottom-0 inset-x-0 z-30 px-2 pt-2 pb-4 border-t flex items-center justify-around select-none" style="background: var(--bg-glass); backdrop-filter: blur(18px); border-color: var(--border-subtle);">
+      <button onclick="switchTab('photos')" class="nav-btn flex flex-col items-center gap-1 w-16 group" data-tab="photos">
+        <div class="nav-pill px-4 py-1 rounded-full transition-all duration-200 flex items-center justify-center">
+          <i data-lucide="images" class="w-5 h-5"></i>
+        </div>
+        <span class="text-[11px] font-semibold">Photos</span>
+      </button>
+
+      <button onclick="switchTab('albums')" class="nav-btn flex flex-col items-center gap-1 w-16 group" data-tab="albums">
+        <div class="nav-pill px-4 py-1 rounded-full transition-all duration-200 flex items-center justify-center">
+          <i data-lucide="folder-heart" class="w-5 h-5"></i>
+        </div>
+        <span class="text-[11px] font-semibold">Albums</span>
+      </button>
+
+      <button onclick="switchTab('search')" class="nav-btn flex flex-col items-center gap-1 w-16 group" data-tab="search">
+        <div class="nav-pill px-4 py-1 rounded-full transition-all duration-200 flex items-center justify-center">
+          <i data-lucide="search" class="w-5 h-5"></i>
+        </div>
+        <span class="text-[11px] font-semibold">Search</span>
+      </button>
+
+      <button onclick="switchTab('map')" class="nav-btn flex flex-col items-center gap-1 w-16 group" data-tab="map">
+        <div class="nav-pill px-4 py-1 rounded-full transition-all duration-200 flex items-center justify-center">
+          <i data-lucide="map-pin" class="w-5 h-5"></i>
+        </div>
+        <span class="text-[11px] font-semibold">Map</span>
+      </button>
+
+      <button onclick="switchTab('settings')" class="nav-btn flex flex-col items-center gap-1 w-16 group" data-tab="settings">
+        <div class="nav-pill px-4 py-1 rounded-full transition-all duration-200 flex items-center justify-center">
+          <i data-lucide="settings" class="w-5 h-5"></i>
+        </div>
+        <span class="text-[11px] font-semibold">Settings</span>
+      </button>
+    </nav>
+
+    <!-- ================= MODALS OVERLAY LAYER ================= -->
+
+    <!-- 1. Photo Lightbox Modal -->
+    <div id="lightbox-modal" class="hidden absolute inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 animate-view">
+      <div class="flex items-center justify-between pt-4">
+        <button onclick="closeLightbox()" class="p-2.5 rounded-full bg-white/10 text-white hover:bg-white/20">
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        </button>
+        <div class="text-center">
+          <div id="lb-date" class="text-xs font-bold text-white">12 Nov 2026</div>
+          <div id="lb-location" class="text-[11px] text-emerald-300">Secunderabad, India</div>
+        </div>
+        <button onclick="toggleFavoriteCurrent()" id="lb-fav-btn" class="p-2.5 rounded-full bg-white/10 text-white hover:bg-white/20">
+          <i data-lucide="heart" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="my-auto flex flex-col items-center justify-center overflow-hidden rounded-3xl relative">
+        <img id="lb-img" src="" alt="Preview" class="max-h-[440px] w-full object-contain rounded-2xl" />
+        <div id="lb-badge" class="mt-3 px-3 py-1 rounded-full text-[11px] font-semibold bg-white/10 text-emerald-200"></div>
+      </div>
+
+      <!-- EXIF & Smart Action Sheet -->
+      <div class="rounded-3xl p-4 bg-white/10 backdrop-blur-md border border-white/10 text-white space-y-2.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-white/60">Tags & OCR</span>
+          <span id="lb-tags" class="font-medium text-emerald-300 text-right"></span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-white/60">Camera / Source</span>
+          <span id="lb-exif" class="font-mono text-[11px] text-white/90"></span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 pt-1">
+          <button onclick="showToast('Moved to Hidden Vault'); closeLightbox();" class="py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[11px] font-semibold flex items-center justify-center gap-1.5">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i> Hide
+          </button>
+          <button onclick="showToast('Opened non-destructive editor'); closeLightbox();" class="py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[11px] font-semibold flex items-center justify-center gap-1.5">
+            <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i> Edit
+          </button>
+          <button onclick="showToast('Moved to Recycle Bin'); closeLightbox();" class="py-2 rounded-xl bg-red-500/20 text-red-300 hover:bg-red-500/30 text-[11px] font-semibold flex items-center justify-center gap-1.5">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Story Memory Viewer Modal -->
+    <div id="story-modal" class="hidden absolute inset-0 z-50 bg-black flex flex-col justify-between p-4 animate-view">
+      <!-- Progress Bars -->
+      <div class="pt-4 space-y-3">
+        <div class="flex gap-1.5">
+          <div class="h-1 flex-1 rounded-full bg-white/30 overflow-hidden"><div id="story-prog-0" class="h-full bg-emerald-400 transition-all duration-300" style="width: 100%"></div></div>
+          <div class="h-1 flex-1 rounded-full bg-white/30 overflow-hidden"><div id="story-prog-1" class="h-full bg-emerald-400 transition-all duration-300" style="width: 0%"></div></div>
+          <div class="h-1 flex-1 rounded-full bg-white/30 overflow-hidden"><div id="story-prog-2" class="h-full bg-emerald-400 transition-all duration-300" style="width: 0%"></div></div>
+        </div>
+        <div class="flex items-center justify-between text-white">
+          <div>
+            <div id="story-title" class="text-sm font-bold">November Highlights</div>
+            <div id="story-sub" class="text-[11px] text-white/70">1 Nov – 12 Nov 2026 • 119 photos</div>
+          </div>
+          <button onclick="closeStory()" class="p-2 rounded-full bg-white/15">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <div onclick="nextStorySlide()" class="my-auto relative rounded-3xl overflow-hidden cursor-pointer shadow-2xl">
+        <img id="story-img" src="" class="w-full h-[520px] object-cover" alt="Story" />
+        <div class="absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-black/90 via-black/40 to-transparent text-white">
+          <p id="story-caption" class="text-sm font-semibold">Golden hour in Hyderabad</p>
+          <p class="text-[11px] text-white/70 mt-0.5">Tap anywhere to advance</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Hidden Vault PIN Modal -->
+    <div id="vault-modal" class="hidden absolute inset-0 z-50 flex items-center justify-center p-5 bg-black/75 backdrop-blur-md animate-view">
+      <div class="w-full rounded-3xl p-6 border shadow-2xl space-y-5" style="background: var(--bg-surface); border-color: var(--border-strong);">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2.5 rounded-2xl" style="background: var(--primary-container); color: var(--on-primary-container);">
+              <i data-lucide="shield-check" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-base">Hidden Vault</h3>
+              <p class="text-xs" style="color: var(--text-muted);">Enter 4-digit PIN (Hint: 1234)</p>
+            </div>
+          </div>
+          <button onclick="closeVaultModal()" class="p-1.5 rounded-full" style="background: var(--bg-surface-high);">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div id="vault-unlocked-content" class="hidden space-y-3">
+          <div class="p-3 rounded-2xl text-xs font-medium flex items-center gap-2" style="background: var(--primary-container); color: var(--on-primary-container);">
+            <i data-lucide="unlock" class="w-4 h-4"></i> Vault Unlocked • 3 Private Items
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=300&q=80" class="aspect-square object-cover rounded-xl" alt="Private Doc" />
+            <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=300&q=80" class="aspect-square object-cover rounded-xl" alt="Private Photo" />
+            <div class="aspect-square rounded-xl flex flex-col items-center justify-center border border-dashed text-[11px]" style="border-color: var(--border-strong); color: var(--text-muted);">
+              <i data-lucide="plus" class="w-4 h-4 mb-1"></i> Add
+            </div>
+          </div>
+        </div>
+
+        <div id="vault-pin-pad" class="space-y-4">
+          <div class="flex justify-center gap-3">
+            <div class="vault-dot w-3.5 h-3.5 rounded-full border" style="border-color: var(--primary);"></div>
+            <div class="vault-dot w-3.5 h-3.5 rounded-full border" style="border-color: var(--primary);"></div>
+            <div class="vault-dot w-3.5 h-3.5 rounded-full border" style="border-color: var(--primary);"></div>
+            <div class="vault-dot w-3.5 h-3.5 rounded-full border" style="border-color: var(--primary);"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-center font-bold text-base">
+            ${[1,2,3,4,5,6,7,8,9,'Clear',0,'Unlock'].map(key => `
+              <button onclick="handleVaultKey('${key}')" class="py-3 rounded-2xl transition active:scale-95 text-sm" style="background: var(--bg-surface-high);">
+                ${key}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= APPLICATION LOGIC & DATA ================= -->
+  <script>
+    // Rich Sample Media Library (Addresses real user clutter from screenshot: mixes memories with UPI receipts & social screenshots)
+    const MEDIA_ITEMS = [
+      {
+        id: 1,
+        title: "Golden Hour Lakefront",
+        category: "camera",
+        type: "photo",
+        date: "12 Nov 2026",
+        monthGroup: "November 2026",
+        location: "Hussain Sagar, Hyderabad",
+        coords: { x: 46, y: 52 },
+        aspect: "aspect-[3/4]",
+        fav: true,
+        tags: ["sunset", "nature", "lake", "golden hour"],
+        exif: "Pixel 9 Pro • f/1.7 • 1/800s • ISO 64",
+        url: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=600&q=80"
+      },
+      {
+        id: 2,
+        title: "UPI Payment Receipt ₹5,000",
+        category: "screenshots",
+        type: "screenshot",
+        date: "11 Nov 2026",
+        monthGroup: "November 2026",
+        location: "Screenshot • UPI App",
+        coords: null,
+        aspect: "aspect-[9/16]",
+        fav: false,
+        tags: ["receipt", "upi", "₹5,000", "payment", "statement"],
+        exif: "1080 × 2400 • PNG Screenshot",
+        url: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&q=80"
+      },
+      {
+        id: 3,
+        title: "Morning Espresso & Notes",
+        category: "camera",
+        type: "photo",
+        date: "10 Nov 2026",
+        monthGroup: "November 2026",
+        location: "Jubilee Hills, Hyderabad",
+        coords: { x: 35, y: 48 },
+        aspect: "aspect-square",
+        fav: true,
+        tags: ["coffee", "cafe", "morning", "food"],
+        exif: "Pixel 9 Pro • f/1.9 • 1/120s • ISO 125",
+        url: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&q=80"
+      },
+      {
+        id: 4,
+        title: "Cinema Reel Feature",
+        category: "videos",
+        type: "video",
+        duration: "02:11",
+        date: "08 Nov 2026",
+        monthGroup: "November 2026",
+        location: "Secunderabad, Telangana",
+        coords: { x: 58, y: 40 },
+        aspect: "aspect-[4/3]",
+        fav: false,
+        tags: ["video", "cinema", "portrait", "drama"],
+        exif: "4K 60fps • H.265 • 142 MB",
+        url: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&q=80"
+      },
+      {
+        id: 5,
+        title: "APPSC Notification Notice",
+        category: "screenshots",
+        type: "screenshot",
+        date: "05 Nov 2026",
+        monthGroup: "November 2026",
+        location: "Screenshot • Browser",
+        coords: null,
+        aspect: "aspect-[3/4]",
+        fav: false,
+        tags: ["notice", "document", "exam", "text", "notes"],
+        exif: "1080 × 2340 • PNG Screenshot",
+        url: "https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=600&q=80"
+      },
+      {
+        id: 6,
+        title: "Misty Forest Trail",
+        category: "camera",
+        type: "photo",
+        date: "28 Oct 2026",
+        monthGroup: "October 2026",
+        location: "Ananthagiri Hills",
+        coords: { x: 24, y: 65 },
+        aspect: "aspect-[3/4]",
+        fav: true,
+        tags: ["nature", "forest", "trees", "green", "hike"],
+        exif: "Pixel 9 Pro • f/1.7 • 1/250s • ISO 80",
+        url: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&q=80"
+      },
+      {
+        id: 7,
+        title: "Animated Reaction Loop",
+        category: "gifs",
+        type: "gif",
+        date: "22 Oct 2026",
+        monthGroup: "October 2026",
+        location: "Downloads",
+        coords: null,
+        aspect: "aspect-square",
+        fav: false,
+        tags: ["gif", "animation", "neon", "loop"],
+        exif: "480 × 480 • GIF • 3.2 MB",
+        url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&q=80"
+      },
+      {
+        id: 8,
+        title: "Golden Retriever Puppy",
+        category: "camera",
+        type: "photo",
+        date: "18 Oct 2026",
+        monthGroup: "October 2026",
+        location: "Gachibowli Park",
+        coords: { x: 70, y: 60 },
+        aspect: "aspect-square",
+        fav: true,
+        tags: ["dogs", "pet", "nature", "cute", "park"],
+        exif: "Pixel 9 Pro • f/2.0 • 1/500s • ISO 50",
+        url: "https://images.unsplash.com/photo-1552053831-71594a27632d?w=600&q=80"
+      },
+      {
+        id: 9,
+        title: "Portrait in Warm Light",
+        category: "camera",
+        type: "photo",
+        date: "14 Oct 2026",
+        monthGroup: "October 2026",
+        location: "Charminar Old City",
+        coords: { x: 52, y: 74 },
+        aspect: "aspect-[3/4]",
+        fav: false,
+        tags: ["portraits", "people", "sunsets", "street"],
+        exif: "Pixel 9 Pro • 50mm • f/1.8 • ISO 100",
+        url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80"
+      }
+    ];
+
+    const STORY_SLIDES = [
+      {
+        title: "November Highlights",
+        sub: "1 Nov – 12 Nov 2026 • 119 photos",
+        caption: "Golden hour reflections by Hussain Sagar",
+        img: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&q=80"
+      },
+      {
+        title: "Weekend Escapes",
+        sub: "Ananthagiri Hills • 24 photos",
+        caption: "Morning mist through the emerald canopy",
+        img: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80"
+      },
+      {
+        title: "Best Portraits",
+        sub: "People Cluster • 18 photos",
+        caption: "Warm evening street light in Old City",
+        img: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&q=80"
+      }
+    ];
+
+    // Centralized Reactive App State
+    const state = {
+      activeTab: 'photos',
+      theme: 'toad', // 'toad' | 'amber' | 'light'
+      themeModeLabel: 'System', // Fixed single-line segmented pill!
+      dynamicColors: true,
+      // Photos Tab State
+      photoFilter: 'all', // 'all' | 'camera' | 'screenshots' | 'videos' | 'gifs'
+      hideScreenshots: false,
+      layoutMode: 'collage', // 'grid' | 'collage'
+      columns: 3, // 2, 3, 4
+      groupBy: 'Month', // 'None' | 'Day' | 'Week' | 'Month'
+      showStories: true,
+      activeLightboxId: null,
+      storyIndex: 0,
+      // Search Tab State
+      searchQuery: '',
+      searchOnlyLocation: false,
+      searchMediaFilter: 'all',
+      // Map Tab State
+      mapMode: 'pins', // 'pins' | 'heatmap'
+      selectedPinId: 1,
+      // Unified Settings Hub + Drill-Down Sub-Pages State
+      settingsPage: 'hub', // 'hub' | 'theme' | 'layout' | 'ai-engine' | 'vault-sec' | 'storage' | 'about'
+      settingsSearch: '',
+      aiPeople: true,
+      aiMagicSearch: true,
+      aiThings: true,
+      faceModelInstalled: true,
+      semanticModelInstalled: false,
+      semanticDownloading: false,
+      semanticDownloadProgress: 0,
+      aiIndexing: false,
+      aiProgress: 100,
+      aiStatusText: 'All 564 photos indexed • Healthy',
+      clusteringThreshold: 0.24,
+      aiShowDiagnostics: false,
+      selfTestOutput: null,
+      // Privacy, Permissions & Vault Settings
+      useSystemPhotoPicker: false,
+      locationExif: true,
+      vaultBiometrics: true,
+      vaultAutoLock: 'Immediately',
+      vaultCurrentPin: '1234',
+      // Storage Breakdown
+      cacheSizeMB: 42.8,
+      mlIndexSizeMB: 18.4,
+      vaultPinInput: ''
+    };
+
+    // Theme Switcher
+    function setAppTheme(themeName) {
+      state.theme = themeName;
+      const phone = document.getElementById('phone-app');
+      phone.setAttribute('data-theme', themeName);
+
+      // Update external preview pills
+      ['toad', 'amber', 'light'].forEach(t => {
+        const btn = document.getElementById(`ext-theme-${t}`);
+        if (!btn) return;
+        if (t === themeName) {
+          btn.className = "px-3 py-1 rounded-full font-semibold transition bg-emerald-500 text-emerald-950";
+        } else {
+          btn.className = "px-3 py-1 rounded-full font-semibold transition text-white/75 hover:text-white";
+        }
+      });
+
+      updateNavHighlight();
+      renderCurrentTab();
+    }
+
+    // Toast Helper
+    let toastTimer = null;
+    function showToast(msg) {
+      const banner = document.getElementById('toast-banner');
+      document.getElementById('toast-text').textContent = msg;
+      banner.classList.remove('opacity-0', 'translate-y-2');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        banner.classList.add('opacity-0', 'translate-y-2');
+      }, 2400);
+    }
+
+    // Bottom Navigation Switching
+    function switchTab(tab) {
+      // If tapping Settings while inside a Settings drill-down sub-page, return cleanly to main hub
+      if (tab === 'settings' && state.activeTab === 'settings' && state.settingsPage !== 'hub') {
+        state.settingsPage = 'hub';
+        renderCurrentTab();
+        document.getElementById('main-viewport').scrollTop = 0;
+        return;
+      }
+      state.activeTab = tab;
+      if (tab === 'settings') {
+        state.settingsPage = 'hub';
+      }
+      updateNavHighlight();
+      renderCurrentTab();
+      document.getElementById('main-viewport').scrollTop = 0;
+    }
+
+    function updateNavHighlight() {
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        const isActive = btn.dataset.tab === state.activeTab;
+        const pill = btn.querySelector('.nav-pill');
+        if (isActive) {
+          pill.style.background = 'var(--primary-container)';
+          pill.style.color = 'var(--on-primary-container)';
+          btn.style.color = 'var(--text-main)';
+        } else {
+          pill.style.background = 'transparent';
+          pill.style.color = 'var(--text-muted)';
+          btn.style.color = 'var(--text-muted)';
+        }
+      });
+
+      // Show date scrubber only on Photos tab
+      const scrubber = document.getElementById('date-scrubber-track');
+      if (state.activeTab === 'photos') {
+        scrubber.classList.remove('hidden');
+      } else {
+        scrubber.classList.add('hidden');
+      }
+    }
+
+    // Main View Router
+    function renderCurrentTab() {
+      const container = document.getElementById('main-viewport');
+      if (state.activeTab === 'photos') container.innerHTML = renderPhotosTab();
+      if (state.activeTab === 'albums') container.innerHTML = renderAlbumsTab();
+      if (state.activeTab === 'search') container.innerHTML = renderSearchTab();
+      if (state.activeTab === 'map') container.innerHTML = renderMapTab();
+      if (state.activeTab === 'settings') container.innerHTML = renderSettingsTab();
+      lucide.createIcons();
+    }
+
+    /* ============================================================================
+       1. PHOTOS TAB (Frosted Header, Smart Screenshot Declutter, Stories, Grid/Collage)
+       ============================================================================ */
+    function renderPhotosTab() {
+      let filtered = MEDIA_ITEMS.filter(item => {
+        if (state.hideScreenshots && item.category === 'screenshots') return false;
+        if (state.photoFilter === 'all') return true;
+        return item.category === state.photoFilter;
+      });
+
+      const filters = [
+        { id: 'all', label: 'All' },
+        { id: 'camera', label: 'Camera' },
+        { id: 'screenshots', label: 'Screenshots' },
+        { id: 'videos', label: 'Videos' },
+        { id: 'gifs', label: 'GIFs' }
+      ];
+
+      // Group items if groupBy !== 'None'
+      const groups = {};
+      if (state.groupBy === 'None') {
+        groups['All Media'] = filtered;
+      } else {
+        filtered.forEach(item => {
+          const key = state.groupBy === 'Month' ? item.monthGroup : item.date;
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(item);
+        });
+      }
+
+      const colClass = state.columns === 2 ? 'grid-cols-2' : state.columns === 4 ? 'grid-cols-4' : 'grid-cols-3';
+      const masonryCols = state.columns === 2 ? 'columns-2' : state.columns === 4 ? 'columns-4' : 'columns-3';
+
+      return `
+        <div class="animate-view">
+          <!-- Translucent Frosted-Glass Sticky Header -->
+          <div class="sticky top-0 z-20 px-4 pt-2 pb-3 border-b" style="background: var(--bg-glass); backdrop-filter: blur(16px); border-color: var(--border-subtle);">
+            <div class="flex items-center justify-between mb-2.5">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-sm" style="background: var(--primary); color: var(--on-primary);">t</div>
+                <h1 class="text-xl font-extrabold tracking-tight">toadGALLERY</h1>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <!-- Quick Layout Toggle Button -->
+                <button onclick="toggleQuickLayout()" title="Switch Grid / Collage" class="p-2 rounded-full transition" style="background: var(--bg-surface-high); color: var(--text-main);">
+                  <i data-lucide="${state.layoutMode === 'collage' ? 'layout-grid' : 'columns-3'}" class="w-4 h-4"></i>
+                </button>
+                <!-- Quick Hide Screenshots Declutter Toggle -->
+                <button onclick="toggleHideScreenshots()" class="px-2.5 py-1.5 rounded-full text-[11px] font-semibold flex items-center gap-1 transition border"
+                  style="background: ${state.hideScreenshots ? 'var(--primary-container)' : 'var(--bg-surface-high)'};
+                         color: ${state.hideScreenshots ? 'var(--on-primary-container)' : 'var(--text-muted)'};
+                         border-color: ${state.hideScreenshots ? 'var(--primary)' : 'transparent'};">
+                  <i data-lucide="${state.hideScreenshots ? 'eye-off' : 'smartphone'}" class="w-3.5 h-3.5"></i>
+                  <span>${state.hideScreenshots ? 'No Screenshots' : 'Clean Feed'}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Scrollable Filter Chips with Edge Fade Mask (Fixes clipping bug) -->
+            <div class="flex items-center gap-2 overflow-x-auto no-scrollbar chip-scroll-mask pr-6">
+              ${filters.map(f => {
+                const active = state.photoFilter === f.id;
+                return `
+                  <button onclick="setPhotoFilter('${f.id}')" class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition shrink-0 border"
+                    style="background: ${active ? 'var(--primary)' : 'var(--bg-surface)'};
+                           color: ${active ? 'var(--on-primary)' : 'var(--text-muted)'};
+                           border-color: ${active ? 'var(--primary)' : 'var(--border-subtle)'};">
+                    ${f.label}
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Stories Carousel Shelf -->
+          ${state.showStories ? `
+            <div class="px-4 pt-3.5 pb-2">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider" style="color: var(--text-muted);">Memories & Stories</span>
+                <span class="text-[11px] font-medium" style="color: var(--primary);">Auto-curated</span>
+              </div>
+              <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+                ${STORY_SLIDES.map((s, idx) => `
+                  <div onclick="openStory(${idx})" class="w-32 shrink-0 cursor-pointer group">
+                    <div class="relative h-40 rounded-2xl overflow-hidden border shadow-md" style="border-color: var(--border-strong);">
+                      <img src="${s.img}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="${s.title}" />
+                      <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent"></div>
+                      <div class="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white">
+                        <i data-lucide="play" class="w-3 h-3 fill-current"></i>
+                      </div>
+                      <div class="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                        <div class="text-xs font-bold leading-tight">${s.title}</div>
+                        <div class="text-[10px] text-white/75 mt-0.5 truncate">${s.sub.split('•')[0]}</div>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Photo Timeline Sections -->
+          <div class="px-3 pt-2 space-y-5">
+            ${Object.keys(groups).length === 0 ? `
+              <div class="py-16 text-center space-y-2">
+                <i data-lucide="image-off" class="w-10 h-10 mx-auto opacity-40"></i>
+                <p class="text-sm font-semibold">No media matches this filter</p>
+                <button onclick="resetPhotoFilters()" class="px-4 py-1.5 rounded-full text-xs font-bold" style="background: var(--primary); color: var(--on-primary);">Reset Filters</button>
+              </div>
+            ` : Object.entries(groups).map(([groupTitle, items]) => `
+              <div>
+                ${state.groupBy !== 'None' ? `
+                  <div class="flex items-center justify-between px-1 mb-2">
+                    <h2 class="text-xs font-bold tracking-wide" style="color: var(--text-main);">${groupTitle}</h2>
+                    <span class="text-[11px]" style="color: var(--text-dim);">${items.length} items</span>
+                  </div>
+                ` : ''}
+
+                ${state.layoutMode === 'grid' ? `
+                  <!-- Uniform Square Grid -->
+                  <div class="grid ${colClass} gap-1.5">
+                    ${items.map(item => renderPhotoCard(item, true)).join('')}
+                  </div>
+                ` : `
+                  <!-- Aspect-Aware Staggered Collage -->
+                  <div class="${masonryCols} collage-grid">
+                    ${items.map(item => renderPhotoCard(item, false)).join('')}
+                  </div>
+                `}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPhotoCard(item, forceSquare) {
+      const aspectClass = forceSquare ? 'aspect-square' : item.aspect;
+      const wrapperClass = forceSquare ? '' : 'collage-item';
+      return `
+        <div onclick="openLightbox(${item.id})" class="${wrapperClass} relative rounded-2xl overflow-hidden cursor-pointer group border" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+          <img src="${item.url}" alt="${item.title}" class="w-full ${aspectClass} object-cover group-hover:scale-105 transition duration-300" loading="lazy" />
+          
+          <!-- Type Badges -->
+          ${item.type === 'video' ? `
+            <div class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-sm text-white text-[10px] font-bold flex items-center gap-1">
+              <i data-lucide="play" class="w-2.5 h-2.5 fill-current"></i> ${item.duration}
+            </div>
+          ` : ''}
+          ${item.type === 'gif' ? `
+            <div class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 text-emerald-300 text-[10px] font-extrabold">GIF</div>
+          ` : ''}
+          ${item.type === 'screenshot' ? `
+            <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/65 backdrop-blur-sm text-white/90 text-[9px] font-semibold">OCR</div>
+          ` : ''}
+          ${item.fav ? `
+            <div class="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/45 backdrop-blur-sm flex items-center justify-center text-rose-400">
+              <i data-lucide="heart" class="w-3 h-3 fill-current"></i>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function setPhotoFilter(id) {
+      state.photoFilter = id;
+      renderCurrentTab();
+    }
+    function toggleHideScreenshots() {
+      state.hideScreenshots = !state.hideScreenshots;
+      showToast(state.hideScreenshots ? 'Screenshots hidden from timeline' : 'Showing all screenshots');
+      renderCurrentTab();
+    }
+    function toggleQuickLayout() {
+      state.layoutMode = state.layoutMode === 'collage' ? 'grid' : 'collage';
+      showToast(`Switched to ${state.layoutMode === 'collage' ? 'Aspect Collage' : 'Uniform Grid'}`);
+      renderCurrentTab();
+    }
+    function resetPhotoFilters() {
+      state.photoFilter = 'all';
+      state.hideScreenshots = false;
+      renderCurrentTab();
+    }
+
+    /* ============================================================================
+       2. ALBUMS TAB (Smart AI Collections, User Folders, & Surfaced Utilities)
+       ============================================================================ */
+    function renderAlbumsTab() {
+      const smartCollections = [
+        { name: 'People', count: '4 clusters', icon: 'users', img: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&q=80', enabled: state.aiPeople },
+        { name: 'Places', count: '6 cities', icon: 'map-pin', img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=300&q=80', enabled: true },
+        { name: 'Things', count: 'Dogs, Sunsets', icon: 'sparkles', img: 'https://images.unsplash.com/photo-1552053831-71594a27632d?w=300&q=80', enabled: state.aiThings },
+        { name: 'Receipts & Docs', count: '14 OCR scans', icon: 'file-text', img: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=300&q=80', enabled: true }
+      ];
+
+      const deviceFolders = [
+        { name: 'Camera', count: 428, cover: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&q=80' },
+        { name: 'Favorites', count: MEDIA_ITEMS.filter(i => i.fav).length, cover: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&q=80' },
+        { name: 'Screenshots', count: 96, cover: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400&q=80' },
+        { name: 'Videos & Reels', count: 31, cover: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80' }
+      ];
+
+      return `
+        <div class="p-4 space-y-6 animate-view">
+          <div class="flex items-center justify-between pt-1">
+            <h1 class="text-2xl font-extrabold tracking-tight">Albums</h1>
+            <button onclick="showToast('Created new album folder')" class="px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5" style="background: var(--primary-container); color: var(--on-primary-container);">
+              <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i> New Album
+            </button>
+          </div>
+
+          <!-- On-Device Smart Collections -->
+          <div>
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-xs font-bold uppercase tracking-wider" style="color: var(--text-muted);">On-Device Smart Collections</span>
+              <span class="text-[11px] flex items-center gap-1" style="color: var(--primary);">
+                <i data-lucide="shield" class="w-3 h-3"></i> Private AI
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2.5">
+              ${smartCollections.map(c => `
+                <div onclick="openSmartCollection('${c.name}')" class="p-2.5 rounded-3xl border flex items-center gap-3 cursor-pointer transition hover:scale-[1.01]" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+                  <img src="${c.img}" class="w-12 h-12 rounded-2xl object-cover shrink-0" alt="${c.name}" />
+                  <div class="min-w-0">
+                    <div class="text-xs font-bold truncate">${c.name}</div>
+                    <div class="text-[11px] truncate" style="color: var(--text-muted);">${c.enabled ? c.count : 'Disabled in AI'}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Device Folders -->
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider block mb-2.5" style="color: var(--text-muted);">Device Folders</span>
+            <div class="grid grid-cols-2 gap-3">
+              ${deviceFolders.map(f => `
+                <div onclick="jumpToFilter('${f.name}')" class="rounded-3xl overflow-hidden border cursor-pointer group" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+                  <div class="h-28 overflow-hidden relative">
+                    <img src="${f.cover}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="${f.name}" />
+                    <div class="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/65 text-white backdrop-blur-sm">
+                      ${f.count}
+                    </div>
+                  </div>
+                  <div class="p-3 flex items-center justify-between">
+                    <span class="text-xs font-bold">${f.name}</span>
+                    <i data-lucide="chevron-right" class="w-4 h-4" style="color: var(--text-dim);"></i>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Surfaced Utilities (Moved out of deep System Settings for quick daily access!) -->
+          <div class="rounded-3xl p-4 border space-y-2" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+            <span class="text-xs font-bold uppercase tracking-wider block mb-1" style="color: var(--text-muted);">Utilities & Privacy</span>
+            
+            <button onclick="openVaultModal()" class="w-full p-3 rounded-2xl flex items-center justify-between transition" style="background: var(--bg-surface-high);">
+              <div class="flex items-center gap-3">
+                <div class="p-2 rounded-xl" style="background: var(--primary-container); color: var(--on-primary-container);">
+                  <i data-lucide="lock" class="w-4 h-4"></i>
+                </div>
+                <div class="text-left">
+                  <div class="text-xs font-bold">Hidden Vault</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">PIN & biometric locked storage</div>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4" style="color: var(--text-muted);"></i>
+            </button>
+
+            <button onclick="showToast('Recycle Bin: 4 items (Auto-deletes in 30 days)')" class="w-full p-3 rounded-2xl flex items-center justify-between transition" style="background: var(--bg-surface-high);">
+              <div class="flex items-center gap-3">
+                <div class="p-2 rounded-xl" style="background: var(--secondary-container); color: var(--text-main);">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </div>
+                <div class="text-left">
+                  <div class="text-xs font-bold">Recycle Bin</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">4 deleted items • 18.4 MB</div>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4" style="color: var(--text-muted);"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function openSmartCollection(name) {
+      switchTab('search');
+      const mapQuery = { 'People': 'portraits', 'Places': 'nature', 'Things': 'dogs', 'Receipts & Docs': 'receipt' };
+      state.searchQuery = mapQuery[name] || '';
+      renderCurrentTab();
+    }
+
+    function jumpToFilter(folderName) {
+      const map = { 'Camera': 'camera', 'Screenshots': 'screenshots', 'Videos & Reels': 'videos' };
+      state.photoFilter = map[folderName] || 'all';
+      switchTab('photos');
+    }
+
+    /* ============================================================================
+       3. SEARCH TAB (Hybrid Semantic MobileCLIP + OCR Receipt/Text Search)
+       ============================================================================ */
+    function renderSearchTab() {
+      const q = state.searchQuery.trim().toLowerCase();
+      const suggestions = ['sunset', 'receipt', '₹5,000', 'dogs', 'nature', 'notice', 'coffee'];
+
+      const results = MEDIA_ITEMS.filter(item => {
+        if (state.searchOnlyLocation && !item.coords) return false;
+        if (state.searchMediaFilter !== 'all' && item.type !== state.searchMediaFilter) return false;
+        if (!q) return true;
+        return (
+          item.title.toLowerCase().includes(q) ||
+          item.location.toLowerCase().includes(q) ||
+          item.tags.some(t => t.toLowerCase().includes(q))
+        );
+      });
+
+      return `
+        <div class="p-4 space-y-4 animate-view">
+          <div class="pt-1">
+            <h1 class="text-2xl font-extrabold tracking-tight">Magic Search</h1>
+            <p class="text-xs mt-0.5" style="color: var(--text-muted);">100% on-device semantic & screenshot text (OCR) search</p>
+          </div>
+
+          <!-- Hero Pill Search Input -->
+          <div class="relative flex items-center">
+            <i data-lucide="search" class="w-4 h-4 absolute left-4" style="color: var(--primary);"></i>
+            <input
+              id="magic-search-input"
+              type="text"
+              value="${state.searchQuery}"
+              oninput="handleSearchInput(this.value)"
+              placeholder="Try 'sunsets', '₹5,000', 'dogs', 'notice'..."
+              class="w-full pl-11 pr-10 py-3.5 rounded-full text-xs font-medium border outline-none transition"
+              style="background: var(--bg-surface); border-color: var(--border-strong); color: var(--text-main);"
+            />
+            ${state.searchQuery ? `
+              <button onclick="handleSearchInput('')" class="absolute right-3 p-1 rounded-full" style="background: var(--bg-surface-high);">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            ` : ''}
+          </div>
+
+          <!-- Suggested Prompts -->
+          <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+            ${suggestions.map(s => `
+              <button onclick="handleSearchInput('${s}')" class="px-3 py-1.5 rounded-full text-[11px] font-semibold shrink-0 border transition"
+                style="background: ${q === s ? 'var(--primary)' : 'var(--bg-surface)'};
+                       color: ${q === s ? 'var(--on-primary)' : 'var(--text-muted)'};
+                       border-color: var(--border-subtle);">
+                ${s}
+              </button>
+            `).join('')}
+          </div>
+
+          <!-- Secondary Attribute Filters -->
+          <div class="flex items-center gap-2">
+            <button onclick="toggleSearchLocation()" class="px-3 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 border"
+              style="background: ${state.searchOnlyLocation ? 'var(--primary-container)' : 'var(--bg-surface)'};
+                     color: ${state.searchOnlyLocation ? 'var(--on-primary-container)' : 'var(--text-muted)'};
+                     border-color: var(--border-subtle);">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> Has GPS Location
+            </button>
+            <select onchange="setSearchMediaType(this.value)" class="px-3 py-1.5 rounded-xl text-[11px] font-semibold border outline-none"
+              style="background: var(--bg-surface); color: var(--text-main); border-color: var(--border-subtle);">
+              <option value="all" ${state.searchMediaFilter === 'all' ? 'selected' : ''}>All Types</option>
+              <option value="photo" ${state.searchMediaFilter === 'photo' ? 'selected' : ''}>Photos Only</option>
+              <option value="screenshot" ${state.searchMediaFilter === 'screenshot' ? 'selected' : ''}>OCR Screenshots</option>
+              <option value="video" ${state.searchMediaFilter === 'video' ? 'selected' : ''}>Videos</option>
+            </select>
+          </div>
+
+          <!-- Results Grid -->
+          <div class="pt-1">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold" style="color: var(--text-muted);">${results.length} matches found</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full" style="background: var(--bg-surface-high); color: var(--primary);">CLIP + OCR Active</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2.5">
+              ${results.map(item => `
+                <div onclick="openLightbox(${item.id})" class="rounded-2xl overflow-hidden border cursor-pointer group" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+                  <div class="relative h-36">
+                    <img src="${item.url}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="${item.title}" />
+                    <div class="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/85 to-transparent text-white">
+                      <div class="text-[11px] font-bold truncate">${item.title}</div>
+                      <div class="text-[10px] text-emerald-300 truncate">${item.tags.slice(0,3).join(' • ')}</div>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function handleSearchInput(val) {
+      state.searchQuery = val;
+      renderCurrentTab();
+      const input = document.getElementById('magic-search-input');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(val.length, val.length);
+      }
+    }
+    function toggleSearchLocation() {
+      state.searchOnlyLocation = !state.searchOnlyLocation;
+      renderCurrentTab();
+    }
+    function setSearchMediaType(val) {
+      state.searchMediaFilter = val;
+      renderCurrentTab();
+    }
+
+    /* ============================================================================
+       4. MAP TAB (Clustered Geotagged Pins, Heatmap Mode, Bottom Memory Carousel)
+       ============================================================================ */
+    function renderMapTab() {
+      const geoItems = MEDIA_ITEMS.filter(i => i.coords);
+      const selectedItem = geoItems.find(i => i.id === state.selectedPinId) || geoItems[0];
+
+      return `
+        <div class="h-full flex flex-col animate-view">
+          <!-- Map Header -->
+          <div class="px-4 pt-3 pb-2.5 flex items-center justify-between">
+            <div>
+              <h1 class="text-xl font-extrabold tracking-tight">Places Map</h1>
+              <p class="text-[11px]" style="color: var(--text-muted);">${geoItems.length} geotagged memories • Local EXIF only</p>
+            </div>
+            <!-- Pins vs Heatmap Toggle -->
+            <div class="flex rounded-full p-1 border" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <button onclick="setMapMode('pins')" class="px-3 py-1 rounded-full text-[11px] font-bold transition"
+                style="background: ${state.mapMode === 'pins' ? 'var(--primary)' : 'transparent'};
+                       color: ${state.mapMode === 'pins' ? 'var(--on-primary)' : 'var(--text-muted)'};">Pins</button>
+              <button onclick="setMapMode('heatmap')" class="px-3 py-1 rounded-full text-[11px] font-bold transition"
+                style="background: ${state.mapMode === 'heatmap' ? 'var(--primary)' : 'transparent'};
+                       color: ${state.mapMode === 'heatmap' ? 'var(--on-primary)' : 'var(--text-muted)'};">Heatmap</button>
+            </div>
+          </div>
+
+          <!-- Interactive Stylized Vector Map Canvas -->
+          <div class="relative mx-4 flex-1 rounded-3xl overflow-hidden border shadow-inner" style="background: var(--bg-surface); border-color: var(--border-strong); min-height: 360px;">
+            <!-- SVG Stylized City Roads, River & Topography -->
+            <svg viewBox="0 0 400 400" class="w-full h-full object-cover opacity-55">
+              <!-- River / Lake Body -->
+              <path d="M 150 170 Q 195 160 215 200 Q 200 245 160 230 Q 130 205 150 170 Z" fill="var(--primary)" opacity="0.22" />
+              <!-- Grid & Arterial Highways -->
+              <path d="M 0 110 L 400 140 M 0 270 L 400 245 M 110 0 L 145 400 M 275 0 L 250 400" stroke="var(--primary)" stroke-width="2.5" opacity="0.35" fill="none" />
+              <path d="M 40 30 Q 190 190 360 350 M 350 40 Q 210 210 50 360" stroke="var(--text-dim)" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.45" fill="none" />
+              <!-- City District Labels -->
+              <text x="65" y="95" fill="var(--text-muted)" font-size="11" font-weight="700" opacity="0.7">JUBILEE HILLS</text>
+              <text x="230" y="135" fill="var(--text-muted)" font-size="11" font-weight="700" opacity="0.7">SECUNDERABAD</text>
+              <text x="195" y="315" fill="var(--text-muted)" font-size="11" font-weight="700" opacity="0.7">OLD CITY</text>
+            </svg>
+
+            <!-- Heatmap Glow Blobs (when Heatmap mode active) -->
+            ${state.mapMode === 'heatmap' ? `
+              <div class="absolute inset-0 pointer-events-none">
+                <div class="absolute w-36 h-36 rounded-full blur-2xl opacity-55" style="left: 32%; top: 38%; background: radial-gradient(circle, #ef4444 0%, #f59e0b 50%, transparent 75%);"></div>
+                <div class="absolute w-28 h-28 rounded-full blur-2xl opacity-45" style="left: 55%; top: 52%; background: radial-gradient(circle, #10b981 0%, #3b82f6 60%, transparent 80%);"></div>
+              </div>
+            ` : ''}
+
+            <!-- Clustered Thumbnail Pins -->
+            ${geoItems.map(item => {
+              const isSelected = item.id === selectedItem.id;
+              return `
+                <button onclick="selectMapPin(${item.id})"
+                  style="left: ${item.coords.x}%; top: ${item.coords.y}%; transform: translate(-50%, -50%);"
+                  class="absolute transition-all duration-300 ${isSelected ? 'z-20 scale-115 pin-pulse' : 'z-10 opacity-90 hover:scale-105'}">
+                  <div class="relative w-12 h-12 rounded-2xl p-0.5 shadow-xl border-2"
+                    style="background: ${isSelected ? 'var(--primary)' : 'var(--bg-surface-highest)'};
+                           border-color: ${isSelected ? 'var(--primary)' : 'white'};">
+                    <img src="${item.url}" class="w-full h-full object-cover rounded-xl" alt="${item.title}" />
+                    <span class="absolute -top-2 -right-2 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold shadow"
+                      style="background: var(--primary); color: var(--on-primary);">
+                      ${item.id === 1 ? '14' : item.id === 6 ? '8' : '3'}
+                    </span>
+                  </div>
+                </button>
+              `;
+            }).join('')}
+
+            <!-- Map Missing GPS Quick Helper Pill -->
+            <button onclick="showToast('3 screenshots have no GPS coordinates')" class="absolute top-3 right-3 px-3 py-1.5 rounded-full text-[11px] font-semibold backdrop-blur-md border flex items-center gap-1.5"
+              style="background: var(--bg-glass); border-color: var(--border-subtle); color: var(--text-main);">
+              <i data-lucide="compass" class="w-3.5 h-3.5" style="color: var(--primary);"></i>
+              Hyderabad • 17.43°N
+            </button>
+          </div>
+
+          <!-- Selected Location Memory Card -->
+          <div class="p-4">
+            <div onclick="openLightbox(${selectedItem.id})" class="p-3 rounded-3xl border flex items-center gap-3.5 cursor-pointer transition hover:scale-[1.01]" style="background: var(--bg-surface); border-color: var(--border-strong);">
+              <img src="${selectedItem.url}" class="w-16 h-16 rounded-2xl object-cover shrink-0" alt="${selectedItem.title}" />
+              <div class="flex-1 min-w-0">
+                <div class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--primary);">${selectedItem.location}</div>
+                <div class="text-sm font-extrabold truncate mt-0.5">${selectedItem.title}</div>
+                <div class="text-[11px] mt-0.5" style="color: var(--text-muted);">${selectedItem.date} • Tap to inspect EXIF</div>
+              </div>
+              <div class="p-2.5 rounded-full" style="background: var(--primary-container); color: var(--on-primary-container);">
+                <i data-lucide="maximize-2" class="w-4 h-4"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function setMapMode(mode) {
+      state.mapMode = mode;
+      renderCurrentTab();
+    }
+    function selectMapPin(id) {
+      state.selectedPinId = id;
+      renderCurrentTab();
+    }
+
+    /* ============================================================================
+       5. SETTINGS TAB (Unified Single-Page Hub + Drill-Down Detail Sub-Pages)
+       ============================================================================ */
+    function renderSettingsTab() {
+      if (state.settingsPage === 'theme') return renderSettingsSubTheme();
+      if (state.settingsPage === 'layout') return renderSettingsSubLayout();
+      if (state.settingsPage === 'ai-engine') return renderSettingsSubAIEngine();
+      if (state.settingsPage === 'vault-sec') return renderSettingsSubVault();
+      if (state.settingsPage === 'storage') return renderSettingsSubStorage();
+      if (state.settingsPage === 'about') return renderSettingsSubAbout();
+      return renderSettingsHub();
+    }
+
+    function openSettingsSubPage(pageId) {
+      state.settingsPage = pageId;
+      renderCurrentTab();
+      document.getElementById('main-viewport').scrollTop = 0;
+    }
+
+    function backToSettingsHub() {
+      state.settingsPage = 'hub';
+      renderCurrentTab();
+      document.getElementById('main-viewport').scrollTop = 0;
+    }
+
+    function renderSubPageHeader(title, subtitle) {
+      return `
+        <div class="sticky top-0 z-20 px-4 pt-2.5 pb-3 border-b flex items-center gap-3" style="background: var(--bg-glass); backdrop-filter: blur(16px); border-color: var(--border-subtle);">
+          <button onclick="backToSettingsHub()" class="w-9 h-9 rounded-full flex items-center justify-center transition active:scale-95 border"
+            style="background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-main);" title="Back to Settings">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+          </button>
+          <div class="min-w-0 flex-1">
+            <div class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--primary);">Settings</div>
+            <h1 class="text-lg font-extrabold tracking-tight truncate">${title}</h1>
+          </div>
+          ${subtitle ? `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0" style="background: var(--bg-surface-high); color: var(--text-muted);">${subtitle}</span>` : ''}
+        </div>
+      `;
+    }
+
+    /* ---------------- MAIN UNIFIED SETTINGS HUB ---------------- */
+    function renderSettingsHub() {
+      const q = state.settingsSearch.trim().toLowerCase();
+      const matches = (...keywords) => {
+        if (!q) return true;
+        return keywords.some(k => k.toLowerCase().includes(q));
+      };
+
+      const themeNames = {
+        toad: 'Toad Green',
+        amber: 'Dynamic Amber',
+        ocean: 'Ocean Slate',
+        oled: 'OLED Pure Black',
+        light: 'Botanical Light'
+      };
+
+      const totalStorageMB = (14.2 + 37.6 + (state.semanticModelInstalled ? 213.0 : 0) + state.mlIndexSizeMB + state.cacheSizeMB).toFixed(1);
+      const modelSizeBadge = state.semanticModelInstalled ? 'Ready • 250.6 MB' : 'Ready • 37.6 MB';
+
+      // Visibility flags per section based on live search
+      const showSecAppearance = matches('appearance', 'theme', 'color', 'palette', 'dark', 'light', 'material you', 'layout', 'grid', 'collage', 'stories', 'group', 'columns');
+      const showSecAI = matches('ai', 'people', 'faces', 'magic search', 'things', 'models', 'onnx', 'indexing', 'npu', 'clip', 'clustering');
+      const showSecPrivacy = matches('privacy', 'permissions', 'photo picker', 'location', 'exif', 'gps', 'vault', 'pin', 'biometric', 'security', 'hidden');
+      const showSecStorage = matches('storage', 'cache', 'database', 'data', 'clear', 'space', 'mb', 'index store');
+      const showSecAbout = matches('about', 'version', '0.4.5', 'diagnostics', 'self-test', 'open source', 'changelog');
+      const nothingFound = !showSecAppearance && !showSecAI && !showSecPrivacy && !showSecStorage && !showSecAbout;
+
+      return `
+        <div class="animate-view pb-6">
+          <!-- Sticky Hub Header with Live Settings Search -->
+          <div class="sticky top-0 z-20 px-4 pt-2.5 pb-3 border-b space-y-2.5" style="background: var(--bg-glass); backdrop-filter: blur(16px); border-color: var(--border-subtle);">
+            <div class="flex items-center justify-between">
+              <h1 class="text-2xl font-extrabold tracking-tight">Settings</h1>
+              <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background: var(--primary-container); color: var(--on-primary-container);">
+                0.4.5-alpha
+              </span>
+            </div>
+
+            <!-- Live Settings Filter Bar -->
+            <div class="relative flex items-center">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3.5" style="color: var(--text-muted);"></i>
+              <input
+                id="settings-search-input"
+                type="text"
+                value="${state.settingsSearch}"
+                oninput="handleSettingsSearch(this.value)"
+                placeholder="Search settings, AI models, vault, theme..."
+                class="w-full pl-10 pr-9 py-2.5 rounded-2xl text-xs font-medium border outline-none transition"
+                style="background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-main);"
+              />
+              ${state.settingsSearch ? `
+                <button onclick="handleSettingsSearch('')" class="absolute right-2.5 p-1 rounded-full" style="background: var(--bg-surface-high);">
+                  <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="p-4 space-y-5">
+            <!-- Hero Status Overview Banner (Hidden while filtering) -->
+            ${!q ? `
+              <div class="rounded-3xl p-4 border relative overflow-hidden" style="background: linear-gradient(135deg, var(--primary-container) 0%, var(--bg-surface-high) 100%); border-color: var(--border-strong);">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="space-y-1">
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider" style="background: var(--bg-app); color: var(--primary);">
+                      <span class="w-1.5 h-1.5 rounded-full" style="background: var(--primary);"></span>
+                      100% Offline • NPU Ready
+                    </div>
+                    <h2 class="text-base font-extrabold tracking-tight pt-1" style="color: var(--text-main);">On-Device Privacy & AI</h2>
+                    <p class="text-[11px] leading-relaxed" style="color: var(--text-muted);">
+                      Zero cloud uploads. Active palette: <strong style="color: var(--text-main);">${themeNames[state.theme] || 'Toad Green'}</strong> • ${state.columns}-col ${state.layoutMode}.
+                    </p>
+                  </div>
+                  <button onclick="openSettingsSubPage('ai-engine')" class="px-3 py-2 rounded-2xl text-[11px] font-bold shrink-0 shadow-sm transition active:scale-95"
+                    style="background: var(--primary); color: var(--on-primary);">
+                    AI Status
+                  </button>
+                </div>
+              </div>
+            ` : ''}
+
+            ${nothingFound ? `
+              <div class="py-14 text-center space-y-2.5">
+                <i data-lucide="search-x" class="w-9 h-9 mx-auto opacity-45"></i>
+                <div class="text-sm font-bold">No matching settings</div>
+                <p class="text-xs" style="color: var(--text-muted);">No options matched "${state.settingsSearch}"</p>
+                <button onclick="handleSettingsSearch('')" class="px-4 py-1.5 rounded-full text-xs font-bold" style="background: var(--primary); color: var(--on-primary);">Clear Search</button>
+              </div>
+            ` : ''}
+
+            <!-- SECTION 1: APPEARANCE & TIMELINE -->
+            ${showSecAppearance ? `
+              <section class="space-y-2">
+                <div class="px-1 flex items-center justify-between">
+                  <span class="text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--primary);">Appearance & Timeline</span>
+                  <span class="text-[10px]" style="color: var(--text-dim);">Look & grid</span>
+                </div>
+                <div class="rounded-3xl border overflow-hidden divide-y" style="background: var(--bg-surface); border-color: var(--border-subtle); divide-color: var(--border-subtle);">
+                  <!-- Drill-down: Theme & Colors -->
+                  <button onclick="openSettingsSubPage('theme')" class="w-full p-3.5 flex items-center justify-between text-left transition hover:opacity-95" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style="background: var(--primary-container); color: var(--on-primary-container);">
+                        <i data-lucide="palette" class="w-5 h-5"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Theme & Colors</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">${state.themeModeLabel} • ${themeNames[state.theme]}</div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <span class="w-4 h-4 rounded-full border border-white/30" style="background: var(--primary);"></span>
+                      <i data-lucide="chevron-right" class="w-4 h-4" style="color: var(--text-dim);"></i>
+                    </div>
+                  </button>
+
+                  <!-- Drill-down: Timeline Layout -->
+                  <button onclick="openSettingsSubPage('layout')" class="w-full p-3.5 flex items-center justify-between text-left transition hover:opacity-95" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style="background: var(--secondary-container); color: var(--primary);">
+                        <i data-lucide="layout-grid" class="w-5 h-5"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Timeline Layout & Density</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">${state.layoutMode === 'collage' ? 'Collage' : 'Square Grid'} • ${state.columns} per row • Group by ${state.groupBy}</div>
+                      </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 shrink-0" style="color: var(--text-dim);"></i>
+                  </button>
+                </div>
+              </section>
+            ` : ''}
+
+            <!-- SECTION 2: ON-DEVICE AI & SMART FEATURES -->
+            ${showSecAI ? `
+              <section class="space-y-2">
+                <div class="px-1 flex items-center justify-between">
+                  <span class="text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--primary);">On-Device AI & Smart Features</span>
+                  <span class="text-[10px]" style="color: var(--text-dim);">Local NPU</span>
+                </div>
+                <div class="rounded-3xl border overflow-hidden divide-y" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+                  <!-- Toggle: People Albums -->
+                  <div class="p-3.5 flex items-center justify-between gap-3" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--bg-surface-high); color: var(--primary);">
+                        <i data-lucide="users" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">People albums</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">On-device face clustering</div>
+                      </div>
+                    </div>
+                    <div onclick="toggleAIFeature('aiPeople')" class="m3-switch" data-checked="${state.aiPeople}">
+                      <div class="m3-switch-thumb"></div>
+                    </div>
+                  </div>
+
+                  <!-- Toggle: Magic Search -->
+                  <div class="p-3.5 flex items-center justify-between gap-3" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--bg-surface-high); color: var(--primary);">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Magic search</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">Semantic scenes & screenshot OCR</div>
+                      </div>
+                    </div>
+                    <div onclick="toggleAIFeature('aiMagicSearch')" class="m3-switch" data-checked="${state.aiMagicSearch}">
+                      <div class="m3-switch-thumb"></div>
+                    </div>
+                  </div>
+
+                  <!-- Toggle: Things Collections -->
+                  <div class="p-3.5 flex items-center justify-between gap-3" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--bg-surface-high); color: var(--primary);">
+                        <i data-lucide="shapes" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Things collections</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">Auto-group Dogs, Sunsets & Receipts</div>
+                      </div>
+                    </div>
+                    <div onclick="toggleAIFeature('aiThings')" class="m3-switch" data-checked="${state.aiThings}">
+                      <div class="m3-switch-thumb"></div>
+                    </div>
+                  </div>
+
+                  <!-- Drill-down: AI Models & Indexing Engine -->
+                  <button onclick="openSettingsSubPage('ai-engine')" class="w-full p-3.5 flex items-center justify-between text-left transition" style="background: var(--bg-surface-high); border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--primary-container); color: var(--on-primary-container);">
+                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">AI Models & Indexing Engine</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">Manage packs, thresholds & background queue</div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" style="background: var(--primary-container); color: var(--on-primary-container);">${modelSizeBadge}</span>
+                      <i data-lucide="chevron-right" class="w-4 h-4" style="color: var(--text-dim);"></i>
+                    </div>
+                  </button>
+                </div>
+              </section>
+            ` : ''}
+
+            <!-- SECTION 3: PRIVACY, PERMISSIONS & VAULT -->
+            ${showSecPrivacy ? `
+              <section class="space-y-2">
+                <div class="px-1 flex items-center justify-between">
+                  <span class="text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--primary);">Privacy, Permissions & Vault</span>
+                  <span class="text-[10px]" style="color: var(--text-dim);">Zero tracking</span>
+                </div>
+                <div class="rounded-3xl border overflow-hidden divide-y" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+                  <!-- Inline Toggle: Use System Photo Picker -->
+                  <div class="p-3.5 flex items-center justify-between gap-3" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--bg-surface-high); color: var(--primary);">
+                        <i data-lucide="image-plus" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Use system Photo Picker</div>
+                        <div class="text-[11px]" style="color: var(--text-muted);">Scoped access without library-wide permission</div>
+                      </div>
+                    </div>
+                    <div onclick="toggleSystemPhotoPicker()" class="m3-switch" data-checked="${state.useSystemPhotoPicker}">
+                      <div class="m3-switch-thumb"></div>
+                    </div>
+                  </div>
+
+                  <!-- Inline Toggle: Location & EXIF Privacy -->
+                  <div class="p-3.5 flex items-center justify-between gap-3" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--bg-surface-high); color: var(--primary);">
+                        <i data-lucide="map-pin" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Location & EXIF GPS data</div>
+                        <div class="text-[11px]" style="color: var(--text-muted);">${state.locationExif ? 'Shown locally in viewer & map' : 'GPS coordinates hidden'}</div>
+                      </div>
+                    </div>
+                    <div onclick="toggleLocationExif()" class="m3-switch" data-checked="${state.locationExif}">
+                      <div class="m3-switch-thumb"></div>
+                    </div>
+                  </div>
+
+                  <!-- Drill-down: Hidden Vault & Security -->
+                  <button onclick="openSettingsSubPage('vault-sec')" class="w-full p-3.5 flex items-center justify-between text-left transition" style="border-color: var(--border-subtle);">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--primary-container); color: var(--on-primary-container);">
+                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Hidden Vault & Security</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">PIN lock • ${state.vaultBiometrics ? 'Biometrics enabled' : 'PIN only'}</div>
+                      </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 shrink-0" style="color: var(--text-dim);"></i>
+                  </button>
+                </div>
+              </section>
+            ` : ''}
+
+            <!-- SECTION 4: STORAGE & DATA MANAGEMENT -->
+            ${showSecStorage ? `
+              <section class="space-y-2">
+                <div class="px-1 flex items-center justify-between">
+                  <span class="text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--primary);">Storage & Data Management</span>
+                  <span class="text-[10px] font-bold" style="color: var(--text-muted);">${totalStorageMB} MB</span>
+                </div>
+                <div class="rounded-3xl border p-3.5 space-y-3" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+                  <!-- Segmented Storage Preview Bar -->
+                  <div class="h-2.5 rounded-full overflow-hidden flex gap-0.5 p-0.5" style="background: var(--bg-surface-highest);">
+                    <div style="width: 14%;" class="h-full rounded-l-full bg-sky-400"></div>
+                    <div style="width: ${state.semanticModelInstalled ? '58%' : '34%'}; background: var(--primary);" class="h-full"></div>
+                    <div style="width: 16%; background: #a78bfa;" class="h-full"></div>
+                    <div style="width: ${Math.max(4, Math.round(state.cacheSizeMB / 2))}%; background: #fbbf24;" class="h-full rounded-r-full"></div>
+                  </div>
+
+                  <button onclick="openSettingsSubPage('storage')" class="w-full flex items-center justify-between text-left pt-0.5">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--bg-surface-high); color: var(--primary);">
+                        <i data-lucide="hard-drive" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">Storage & Cache Manager</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">Database, ML models & ${state.cacheSizeMB.toFixed(1)} MB cache</div>
+                      </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 shrink-0" style="color: var(--text-dim);"></i>
+                  </button>
+                </div>
+              </section>
+            ` : ''}
+
+            <!-- SECTION 5: ABOUT & DIAGNOSTICS -->
+            ${showSecAbout ? `
+              <section class="space-y-2">
+                <div class="px-1">
+                  <span class="text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--primary);">About & Diagnostics</span>
+                </div>
+                <div class="rounded-3xl border overflow-hidden" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+                  <button onclick="openSettingsSubPage('about')" class="w-full p-3.5 flex items-center justify-between text-left transition">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--bg-surface-high); color: var(--primary);">
+                        <i data-lucide="info" class="w-4 h-4"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold">About toadGALLERY</div>
+                        <div class="text-[11px] truncate" style="color: var(--text-muted);">0.4.5-alpha (build 46) • Engine self-test & changelog</div>
+                      </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 shrink-0" style="color: var(--text-dim);"></i>
+                  </button>
+                </div>
+              </section>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function handleSettingsSearch(val) {
+      state.settingsSearch = val;
+      renderCurrentTab();
+      const input = document.getElementById('settings-search-input');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(val.length, val.length);
+      }
+    }
+
+    /* ---------------- SUB-PAGE 1: THEME & COLORS ---------------- */
+    function renderSettingsSubTheme() {
+      const swatches = [
+        { id: 'toad', name: 'Toad Green', desc: 'Signature botanical dark', color: '#6ee7b7', bg: '#07130e' },
+        { id: 'amber', name: 'Dynamic Amber', desc: 'Warm Material You gold', color: '#fbbf24', bg: '#14100b' },
+        { id: 'ocean', name: 'Ocean Slate', desc: 'Deep twilight blue', color: '#38bdf8', bg: '#08111a' },
+        { id: 'oled', name: 'OLED Pure Black', desc: 'Zero-nit battery saver', color: '#6ee7b7', bg: '#000000' },
+        { id: 'light', name: 'Botanical Light', desc: 'High-clarity daylight', color: '#0f7654', bg: '#f4f9f6' }
+      ];
+
+      return `
+        <div class="animate-subpage pb-6">
+          ${renderSubPageHeader('Theme & Colors', 'Material 3')}
+          <div class="p-4 space-y-4">
+            <!-- Appearance Mode (Uniform single-line segmented pill) -->
+            <div class="rounded-3xl p-4 border space-y-3" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="text-xs font-bold">Appearance mode</div>
+              <div class="grid grid-cols-3 p-1 rounded-full border" style="background: var(--bg-surface-high); border-color: var(--border-subtle);">
+                ${['System', 'Light', 'Dark'].map(mode => {
+                  const active = state.themeModeLabel === mode;
+                  return `
+                    <button onclick="selectThemeMode('${mode}')" class="py-2 px-2 rounded-full text-xs font-bold whitespace-nowrap flex items-center justify-center gap-1 transition"
+                      style="background: ${active ? 'var(--primary)' : 'transparent'};
+                             color: ${active ? 'var(--on-primary)' : 'var(--text-muted)'};">
+                      ${active ? '<i data-lucide="check" class="w-3.5 h-3.5"></i>' : ''}
+                      <span>${mode}</span>
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+
+              <div class="flex items-center justify-between pt-2">
+                <div class="pr-3">
+                  <div class="text-xs font-bold">Use system wallpaper colors</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">Follow Material You dynamic palette (Android 12+)</div>
+                </div>
+                <div onclick="toggleDynamicColor()" class="m3-switch" data-checked="${state.dynamicColors}">
+                  <div class="m3-switch-thumb"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Accent & Surface Swatches -->
+            <div class="rounded-3xl p-4 border space-y-3" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="text-xs font-bold">Color Palettes</div>
+              <div class="space-y-2">
+                ${swatches.map(s => {
+                  const selected = state.theme === s.id;
+                  return `
+                    <button onclick="selectPaletteSwatch('${s.id}')" class="w-full p-3 rounded-2xl border flex items-center justify-between text-left transition"
+                      style="background: ${selected ? 'var(--primary-container)' : 'var(--bg-surface-high)'};
+                             border-color: ${selected ? 'var(--primary)' : 'transparent'};">
+                      <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full border-2 flex items-center justify-center shadow-sm" style="background: ${s.bg}; border-color: ${s.color};">
+                          <span class="w-3.5 h-3.5 rounded-full" style="background: ${s.color};"></span>
+                        </div>
+                        <div>
+                          <div class="text-xs font-bold">${s.name}</div>
+                          <div class="text-[11px]" style="color: var(--text-muted);">${s.desc}</div>
+                        </div>
+                      </div>
+                      ${selected ? `<i data-lucide="check-circle-2" class="w-5 h-5" style="color: var(--primary);"></i>` : ''}
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function selectPaletteSwatch(id) {
+      state.themeModeLabel = id === 'light' ? 'Light' : 'Dark';
+      setAppTheme(id);
+      showToast('Updated gallery color palette');
+    }
+
+    /* ---------------- SUB-PAGE 2: TIMELINE LAYOUT ---------------- */
+    function renderSettingsSubLayout() {
+      return `
+        <div class="animate-subpage pb-6">
+          ${renderSubPageHeader('Timeline Layout', `${state.columns} cols`)}
+          <div class="p-4 space-y-4">
+            <div class="rounded-3xl p-4 border space-y-4" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="text-xs font-bold">Thumbnail Arrangement</div>
+              <div class="grid grid-cols-2 gap-2.5">
+                <button onclick="setLayoutMode('grid')" class="p-3.5 rounded-2xl border text-left transition"
+                  style="background: ${state.layoutMode === 'grid' ? 'var(--primary-container)' : 'var(--bg-surface-high)'};
+                         border-color: ${state.layoutMode === 'grid' ? 'var(--primary)' : 'transparent'};">
+                  <i data-lucide="layout-grid" class="w-5 h-5 mb-2" style="color: var(--primary);"></i>
+                  <div class="text-xs font-bold">Grid</div>
+                  <div class="text-[11px] mt-0.5" style="color: var(--text-muted);">Uniform square tiles</div>
+                </button>
+
+                <button onclick="setLayoutMode('collage')" class="p-3.5 rounded-2xl border text-left transition"
+                  style="background: ${state.layoutMode === 'collage' ? 'var(--primary-container)' : 'var(--bg-surface-high)'};
+                         border-color: ${state.layoutMode === 'collage' ? 'var(--primary)' : 'transparent'};">
+                  <i data-lucide="columns-3" class="w-5 h-5 mb-2" style="color: var(--primary);"></i>
+                  <div class="text-xs font-bold">Collage</div>
+                  <div class="text-[11px] mt-0.5" style="color: var(--text-muted);">Aspect-aware staggered</div>
+                </button>
+              </div>
+
+              <!-- Photos per Row Stepper -->
+              <div class="flex items-center justify-between pt-2 border-t" style="border-color: var(--border-subtle);">
+                <div>
+                  <div class="text-xs font-bold">Photos per row</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">Synced live with Photos tab</div>
+                </div>
+                <div class="flex items-center gap-3 px-2 py-1 rounded-full" style="background: var(--bg-surface-high);">
+                  <button onclick="changeColumns(-1)" class="w-7 h-7 rounded-full flex items-center justify-center font-bold" style="background: var(--bg-surface);">-</button>
+                  <span class="text-xs font-extrabold w-4 text-center">${state.columns}</span>
+                  <button onclick="changeColumns(1)" class="w-7 h-7 rounded-full flex items-center justify-center font-bold" style="background: var(--bg-surface);">+</button>
+                </div>
+              </div>
+
+              <!-- Group By Selector -->
+              <div class="space-y-2 pt-2 border-t" style="border-color: var(--border-subtle);">
+                <div class="text-xs font-bold">Group timeline by</div>
+                <div class="grid grid-cols-4 gap-1.5">
+                  ${['None', 'Day', 'Week', 'Month'].map(g => `
+                    <button onclick="setGroupBy('${g}')" class="py-2 rounded-xl text-xs font-semibold transition"
+                      style="background: ${state.groupBy === g ? 'var(--primary)' : 'var(--bg-surface-high)'};
+                             color: ${state.groupBy === g ? 'var(--on-primary)' : 'var(--text-muted)'};">
+                      ${g}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <!-- Stories Shelf Toggle -->
+              <div class="flex items-center justify-between pt-2 border-t" style="border-color: var(--border-subtle);">
+                <div class="pr-3">
+                  <div class="text-xs font-bold">Stories on home page</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">Lead timeline with curated memory cards</div>
+                </div>
+                <div onclick="toggleStoriesSetting()" class="m3-switch" data-checked="${state.showStories}">
+                  <div class="m3-switch-thumb"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    /* ---------------- SUB-PAGE 3: AI ENGINE & MODELS ---------------- */
+    function renderSettingsSubAIEngine() {
+      const strictnessLabel = state.clusteringThreshold <= 0.18
+        ? 'Very strict (splits lookalikes)'
+        : state.clusteringThreshold >= 0.30
+          ? 'Relaxed (merges angles & lighting)'
+          : 'Balanced (upstream default 0.24)';
+
+      return `
+        <div class="animate-subpage pb-6">
+          ${renderSubPageHeader('AI Engine & Models', 'On-Device')}
+          <div class="p-4 space-y-4">
+            <!-- Background Indexer Card (Replaces uncaught termination raw crash) -->
+            <div class="rounded-3xl p-4 border space-y-3.5" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-bold uppercase tracking-wider" style="color: var(--primary);">Background Indexer</div>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold" style="background: var(--primary-container); color: var(--on-primary-container);">
+                  ${state.aiIndexing ? 'Running' : 'Idle • Protected'}
+                </span>
+              </div>
+
+              <div class="p-3 rounded-2xl flex items-center justify-between text-xs" style="background: var(--bg-surface-high);">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="w-2 h-2 rounded-full shrink-0 ${state.aiIndexing ? 'animate-ping' : ''}" style="background: var(--primary);"></span>
+                  <span class="font-medium truncate">${state.aiStatusText}</span>
+                </div>
+                <span class="font-extrabold text-[11px] shrink-0 ml-2" style="color: var(--primary);">${state.aiProgress}%</span>
+              </div>
+
+              <div class="h-2 rounded-full overflow-hidden" style="background: var(--bg-surface-highest);">
+                <div class="h-full transition-all duration-300 rounded-full" style="width: ${state.aiProgress}%; background: var(--primary);"></div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="runSimulatedIndex()" class="py-2.5 px-3 rounded-full text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                  style="background: var(--primary); color: var(--on-primary);">
+                  <i data-lucide="${state.aiIndexing ? 'pause' : 'play'}" class="w-3.5 h-3.5"></i>
+                  <span>${state.aiIndexing ? 'Pause Index' : 'Re-index Library'}</span>
+                </button>
+                <button onclick="resetAIIndex()" class="py-2.5 px-3 rounded-full text-xs font-bold border transition"
+                  style="border-color: var(--border-strong); color: var(--text-main);">
+                  Reset Queue
+                </button>
+              </div>
+            </div>
+
+            <!-- Face Clustering Threshold Slider Card -->
+            <div class="rounded-3xl p-4 border space-y-3" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-bold">Face clustering threshold</div>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-extrabold" style="background: var(--primary-container); color: var(--on-primary-container);">
+                  ${Number(state.clusteringThreshold).toFixed(2)}
+                </span>
+              </div>
+              <input type="range" min="0.10" max="0.40" step="0.02" value="${state.clusteringThreshold}"
+                oninput="updateClusteringThreshold(this.value)" class="m3-slider" />
+              <div class="flex items-center justify-between text-[11px]" style="color: var(--text-muted);">
+                <span>0.10 Stricter</span>
+                <span class="font-semibold" style="color: var(--text-main);">${strictnessLabel}</span>
+                <span>0.40 Broader</span>
+              </div>
+            </div>
+
+            <!-- Model Packs Card -->
+            <div class="rounded-3xl p-4 border space-y-3" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="text-xs font-bold uppercase tracking-wider" style="color: var(--primary);">On-Device Model Packs</div>
+
+              <!-- Face Models Pack -->
+              <div class="p-3 rounded-2xl border space-y-2" style="background: var(--bg-surface-high); border-color: var(--border-subtle);">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-xs font-bold">Face Detection & Embeddings</div>
+                    <div class="text-[11px]" style="color: var(--text-muted);">~36 MiB • SHA-256 verified</div>
+                  </div>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold"
+                    style="background: ${state.faceModelInstalled ? 'var(--primary-container)' : 'var(--bg-surface)'};
+                           color: ${state.faceModelInstalled ? 'var(--on-primary-container)' : 'var(--text-muted)'};">
+                    ${state.faceModelInstalled ? 'Installed' : 'Not Installed'}
+                  </span>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="toggleFaceModelPack()" class="px-3 py-1.5 rounded-full text-[11px] font-bold transition"
+                    style="background: ${state.faceModelInstalled ? 'var(--danger-bg)' : 'var(--primary)'};
+                           color: ${state.faceModelInstalled ? 'var(--danger-text)' : 'var(--on-primary)'};">
+                    ${state.faceModelInstalled ? 'Delete Pack' : 'Download (~36 MiB)'}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Semantic CLIP Models Pack -->
+              <div class="p-3 rounded-2xl border space-y-2" style="background: var(--bg-surface-high); border-color: var(--border-subtle);">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-xs font-bold">Semantic Search (MobileCLIP)</div>
+                    <div class="text-[11px]" style="color: var(--text-muted);">~213 MB • Image + Text Encoders</div>
+                  </div>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold"
+                    style="background: ${state.semanticModelInstalled ? 'var(--primary-container)' : 'var(--bg-surface)'};
+                           color: ${state.semanticModelInstalled ? 'var(--on-primary-container)' : 'var(--text-muted)'};">
+                    ${state.semanticModelInstalled ? 'Installed' : state.semanticDownloading ? `${state.semanticDownloadProgress}%` : 'Available'}
+                  </span>
+                </div>
+                ${state.semanticDownloading ? `
+                  <div class="h-1.5 rounded-full overflow-hidden" style="background: var(--bg-surface);">
+                    <div class="h-full transition-all duration-200" style="width: ${state.semanticDownloadProgress}%; background: var(--primary);"></div>
+                  </div>
+                ` : ''}
+                <div class="flex gap-2">
+                  <button onclick="handleSemanticPackAction()" class="px-3 py-1.5 rounded-full text-[11px] font-bold transition"
+                    style="background: ${state.semanticModelInstalled ? 'var(--danger-bg)' : 'var(--primary)'};
+                           color: ${state.semanticModelInstalled ? 'var(--danger-text)' : 'var(--on-primary)'};">
+                    ${state.semanticModelInstalled ? 'Delete Semantic Pack' : state.semanticDownloading ? 'Downloading...' : 'Download (~213 MB)'}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Collapsible Developer Diagnostics & ONNX Logs Accordion -->
+              <div class="pt-1">
+                <button onclick="toggleDiagnostics()" class="w-full py-1.5 flex items-center justify-between text-[11px] font-semibold" style="color: var(--text-muted);">
+                  <span>Developer Diagnostics & ONNX Logs</span>
+                  <i data-lucide="${state.aiShowDiagnostics ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4"></i>
+                </button>
+                ${state.aiShowDiagnostics ? `
+                  <div class="mt-2 p-3 rounded-2xl font-mono text-[10px] space-y-1 leading-relaxed" style="background: var(--bg-app); color: var(--text-muted);">
+                    <div>• Engine library: present (ONNX Runtime 1.19)</div>
+                    <div>• yolov5s_face_640_640_static_b1.onnx — ${state.faceModelInstalled ? 'installed' : 'missing'}</div>
+                    <div>• mobilefacenet_portable_static_b1.onnx — ${state.faceModelInstalled ? 'installed' : 'missing'}</div>
+                    <div>• mobileclip_s2_image_gelu_opset20.onnx — ${state.semanticModelInstalled ? 'installed' : 'missing'}</div>
+                    <div>• bpe_simple_vocab_16e6.txt — ${state.semanticModelInstalled ? 'installed' : 'missing'}</div>
+                    <div>• Worker Guard: ForegroundService + Thermal Backoff</div>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateClusteringThreshold(val) {
+      state.clusteringThreshold = parseFloat(val);
+      renderCurrentTab();
+    }
+
+    function toggleFaceModelPack() {
+      state.faceModelInstalled = !state.faceModelInstalled;
+      showToast(state.faceModelInstalled ? 'Face models verified & installed' : 'Deleted face model pack');
+      renderCurrentTab();
+    }
+
+    let semanticDlTimer = null;
+    function handleSemanticPackAction() {
+      if (state.semanticDownloading) return;
+      if (state.semanticModelInstalled) {
+        state.semanticModelInstalled = false;
+        showToast('Removed Semantic CLIP pack (213 MB freed)');
+        renderCurrentTab();
+        return;
+      }
+      state.semanticDownloading = true;
+      state.semanticDownloadProgress = 12;
+      renderCurrentTab();
+      clearInterval(semanticDlTimer);
+      semanticDlTimer = setInterval(() => {
+        state.semanticDownloadProgress += 22;
+        if (state.semanticDownloadProgress >= 100) {
+          state.semanticDownloadProgress = 100;
+          state.semanticDownloading = false;
+          state.semanticModelInstalled = true;
+          clearInterval(semanticDlTimer);
+          showToast('Semantic CLIP models installed & verified');
+        }
+        renderCurrentTab();
+      }, 350);
+    }
+
+    /* ---------------- SUB-PAGE 4: HIDDEN VAULT & SECURITY ---------------- */
+    function renderSettingsSubVault() {
+      const lockOptions = ['Immediately', '1 minute', '5 minutes'];
+      return `
+        <div class="animate-subpage pb-6">
+          ${renderSubPageHeader('Hidden Vault & Security', 'Encrypted')}
+          <div class="p-4 space-y-4">
+            <div class="rounded-3xl p-4 border space-y-4" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="flex items-center justify-between">
+                <div class="pr-3">
+                  <div class="text-xs font-bold">Biometric unlock</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">Use fingerprint or face unlock for Hidden Vault</div>
+                </div>
+                <div onclick="toggleVaultBiometrics()" class="m3-switch" data-checked="${state.vaultBiometrics}">
+                  <div class="m3-switch-thumb"></div>
+                </div>
+              </div>
+
+              <div class="space-y-2 pt-2 border-t" style="border-color: var(--border-subtle);">
+                <div class="text-xs font-bold">Auto-lock timer</div>
+                <div class="grid grid-cols-3 gap-1.5">
+                  ${lockOptions.map(opt => `
+                    <button onclick="setVaultAutoLock('${opt}')" class="py-2 rounded-xl text-[11px] font-bold transition"
+                      style="background: ${state.vaultAutoLock === opt ? 'var(--primary)' : 'var(--bg-surface-high)'};
+                             color: ${state.vaultAutoLock === opt ? 'var(--on-primary)' : 'var(--text-muted)'};">
+                      ${opt}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 pt-2 border-t" style="border-color: var(--border-subtle);">
+                <button onclick="openVaultModal()" class="py-2.5 px-3 rounded-full text-xs font-bold flex items-center justify-center gap-1.5"
+                  style="background: var(--primary); color: var(--on-primary);">
+                  <i data-lucide="lock-open" class="w-3.5 h-3.5"></i> Open Vault
+                </button>
+                <button onclick="showToast('Vault PIN reset to 1234')" class="py-2.5 px-3 rounded-full text-xs font-bold border"
+                  style="border-color: var(--border-strong); color: var(--text-main);">
+                  Change PIN
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleVaultBiometrics() { state.vaultBiometrics = !state.vaultBiometrics; renderCurrentTab(); }
+    function setVaultAutoLock(opt) { state.vaultAutoLock = opt; renderCurrentTab(); }
+    function toggleSystemPhotoPicker() {
+      state.useSystemPhotoPicker = !state.useSystemPhotoPicker;
+      showToast(state.useSystemPhotoPicker ? 'Scoped Photo Picker enabled' : 'Full library browsing enabled');
+      renderCurrentTab();
+    }
+
+    /* ---------------- SUB-PAGE 5: STORAGE & CACHE MANAGER ---------------- */
+    function renderSettingsSubStorage() {
+      const mlModelsMB = (state.faceModelInstalled ? 37.6 : 0) + (state.semanticModelInstalled ? 213.0 : 0);
+      const totalMB = 14.2 + mlModelsMB + state.mlIndexSizeMB + state.cacheSizeMB;
+
+      return `
+        <div class="animate-subpage pb-6">
+          ${renderSubPageHeader('Storage Manager', `${totalMB.toFixed(1)} MB`)}
+          <div class="p-4 space-y-4">
+            <div class="rounded-3xl p-4 border space-y-4" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-bold uppercase tracking-wider" style="color: var(--primary);">App-Private Storage</div>
+                <span class="text-xs font-extrabold">${totalMB.toFixed(1)} MB total</span>
+              </div>
+
+              <!-- Segmented Bar -->
+              <div class="h-3 rounded-full overflow-hidden flex gap-0.5 p-0.5" style="background: var(--bg-surface-highest);">
+                <div style="width: 15%;" class="h-full rounded-l-full bg-sky-400"></div>
+                <div style="width: ${mlModelsMB > 0 ? '45%' : '4%'}; background: var(--primary);" class="h-full"></div>
+                <div style="width: ${state.mlIndexSizeMB > 0 ? '20%' : '2%'}; background: #a78bfa;" class="h-full"></div>
+                <div style="width: ${Math.max(4, Math.round(state.cacheSizeMB / 2))}%; background: #fbbf24;" class="h-full rounded-r-full transition-all duration-300"></div>
+              </div>
+
+              <div class="space-y-2.5 text-xs">
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span> Photo catalogue database</span>
+                  <span class="font-bold">14.2 MB</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full" style="background: var(--primary);"></span> Downloaded ML models</span>
+                  <span class="font-bold">${mlModelsMB.toFixed(1)} MB</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-violet-400"></span> ML index store (faces + semantic)</span>
+                  <span class="font-bold">${state.mlIndexSizeMB.toFixed(1)} MB</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Thumbnail & temp cache</span>
+                  <span class="font-bold">${state.cacheSizeMB.toFixed(1)} MB</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 pt-2">
+                <button onclick="clearAppCache()" class="py-2.5 px-3 rounded-full text-xs font-bold transition"
+                  style="background: var(--primary); color: var(--on-primary);">
+                  Clear Cache
+                </button>
+                <button onclick="clearMLIndexStore()" class="py-2.5 px-3 rounded-full text-xs font-bold border transition"
+                  style="border-color: var(--border-strong); color: var(--text-main);">
+                  Reset ML Index
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function clearMLIndexStore() {
+      state.mlIndexSizeMB = 0.0;
+      state.aiProgress = 0;
+      state.aiStatusText = 'Index cleared • Ready to rebuild';
+      showToast('Cleared ML index store (18.4 MB freed)');
+      renderCurrentTab();
+    }
+
+    /* ---------------- SUB-PAGE 6: ABOUT & DIAGNOSTICS ---------------- */
+    function renderSettingsSubAbout() {
+      return `
+        <div class="animate-subpage pb-6">
+          ${renderSubPageHeader('About toadGALLERY', 'Build 46')}
+          <div class="p-4 space-y-4">
+            <div class="rounded-3xl p-5 border text-center space-y-2" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="w-14 h-14 rounded-3xl mx-auto flex items-center justify-center text-2xl font-extrabold shadow-lg" style="background: var(--primary); color: var(--on-primary);">t</div>
+              <h2 class="text-lg font-extrabold pt-1">toadGALLERY</h2>
+              <p class="text-xs font-semibold" style="color: var(--primary);">Version 0.4.5-alpha (build 46)</p>
+              <p class="text-xs leading-relaxed pt-1" style="color: var(--text-muted);">
+                Local-first Android photo gallery with on-device face clustering, semantic Magic Search, encrypted Hidden Vault, and non-destructive editing.
+              </p>
+            </div>
+
+            <div class="rounded-3xl p-4 border space-y-3" style="background: var(--bg-surface); border-color: var(--border-subtle);">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs font-bold">ONNX & NPU Self-Test</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">Verify local inference delegate integrity</div>
+                </div>
+                <button onclick="runEngineSelfTest()" class="px-3.5 py-2 rounded-full text-xs font-bold" style="background: var(--primary-container); color: var(--on-primary-container);">
+                  Run Test
+                </button>
+              </div>
+              ${state.selfTestOutput ? `
+                <div class="p-3 rounded-2xl font-mono text-[11px]" style="background: var(--bg-app); color: var(--primary);">
+                  ${state.selfTestOutput}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function runEngineSelfTest() {
+      state.selfTestOutput = '✓ NNAPI Delegate OK • Face & CLIP tensor latency: 14ms';
+      showToast('Engine self-test passed (14ms)');
+      renderCurrentTab();
+    }
+
+    // Settings Event Handlers
+    function setLayoutMode(mode) { state.layoutMode = mode; renderCurrentTab(); }
+    function changeColumns(delta) {
+      state.columns = Math.min(4, Math.max(2, state.columns + delta));
+      renderCurrentTab();
+    }
+    function setGroupBy(g) { state.groupBy = g; renderCurrentTab(); }
+    function toggleStoriesSetting() { state.showStories = !state.showStories; renderCurrentTab(); }
+    function selectThemeMode(mode) {
+      state.themeModeLabel = mode;
+      if (mode === 'Light') setAppTheme('light');
+      else if (mode === 'Dark') setAppTheme(state.dynamicColors ? 'toad' : 'amber');
+      else setAppTheme(state.dynamicColors ? 'toad' : 'amber');
+    }
+    function toggleDynamicColor() {
+      state.dynamicColors = !state.dynamicColors;
+      if (state.theme !== 'light') {
+        setAppTheme(state.dynamicColors ? 'toad' : 'amber');
+      } else {
+        renderCurrentTab();
+      }
+    }
+    function toggleAIFeature(key) { state[key] = !state[key]; renderCurrentTab(); }
+    function toggleDiagnostics() { state.aiShowDiagnostics = !state.aiShowDiagnostics; renderCurrentTab(); }
+    function toggleLocationExif() { state.locationExif = !state.locationExif; renderCurrentTab(); }
+
+    let indexInterval = null;
+    function runSimulatedIndex() {
+      if (state.aiIndexing) {
+        clearInterval(indexInterval);
+        state.aiIndexing = false;
+        state.aiStatusText = `Paused at ${state.aiProgress}%`;
+        renderCurrentTab();
+        return;
+      }
+      state.aiIndexing = true;
+      if (state.aiProgress >= 100) state.aiProgress = 8;
+      state.aiStatusText = 'Warming up NPU worker...';
+      renderCurrentTab();
+
+      clearInterval(indexInterval);
+      indexInterval = setInterval(() => {
+        state.aiProgress += 18;
+        if (state.aiProgress < 50) {
+          state.aiStatusText = 'Clustering faces (Batch 1/3)...';
+        } else if (state.aiProgress < 95) {
+          state.aiStatusText = 'Generating CLIP embeddings...';
+        } else {
+          state.aiProgress = 100;
+          state.aiIndexing = false;
+          state.mlIndexSizeMB = 18.4;
+          state.aiStatusText = 'All 564 photos indexed • Healthy';
+          clearInterval(indexInterval);
+          showToast('AI background index completed safely');
+        }
+        renderCurrentTab();
+      }, 450);
+    }
+
+    function resetAIIndex() {
+      clearInterval(indexInterval);
+      state.aiIndexing = false;
+      state.aiProgress = 0;
+      state.aiStatusText = 'Index cleared • Ready to start';
+      showToast('AI index reset');
+      renderCurrentTab();
+    }
+
+    function clearAppCache() {
+      state.cacheSizeMB = 0.0;
+      showToast('Freed 42.8 MB of thumbnail cache');
+      renderCurrentTab();
+    }
+
+    /* ============================================================================
+       LIGHTBOX, STORY & HIDDEN VAULT MODALS
+       ============================================================================ */
+    function openLightbox(id) {
+      const item = MEDIA_ITEMS.find(i => i.id === id);
+      if (!item) return;
+      state.activeLightboxId = id;
+      document.getElementById('lb-img').src = item.url;
+      document.getElementById('lb-date').textContent = item.date;
+      document.getElementById('lb-location').textContent = state.locationExif ? item.location : 'GPS Hidden by Privacy Setting';
+      document.getElementById('lb-badge').textContent = item.title;
+      document.getElementById('lb-tags').textContent = item.tags.join(', ');
+      document.getElementById('lb-exif').textContent = item.exif;
+
+      const favBtn = document.getElementById('lb-fav-btn');
+      favBtn.style.color = item.fav ? '#fb7185' : 'white';
+
+      document.getElementById('lightbox-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox-modal').classList.add('hidden');
+    }
+    function toggleFavoriteCurrent() {
+      const item = MEDIA_ITEMS.find(i => i.id === state.activeLightboxId);
+      if (!item) return;
+      item.fav = !item.fav;
+      openLightbox(item.id);
+      renderCurrentTab();
+      showToast(item.fav ? 'Added to Favorites' : 'Removed from Favorites');
+    }
+
+    function openStory(idx) {
+      state.storyIndex = idx;
+      updateStoryUI();
+      document.getElementById('story-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+    function closeStory() {
+      document.getElementById('story-modal').classList.add('hidden');
+    }
+    function nextStorySlide() {
+      state.storyIndex = (state.storyIndex + 1) % STORY_SLIDES.length;
+      updateStoryUI();
+    }
+    function updateStoryUI() {
+      const s = STORY_SLIDES[state.storyIndex];
+      document.getElementById('story-title').textContent = s.title;
+      document.getElementById('story-sub').textContent = s.sub;
+      document.getElementById('story-caption').textContent = s.caption;
+      document.getElementById('story-img').src = s.img;
+      [0, 1, 2].forEach(i => {
+        document.getElementById(`story-prog-${i}`).style.width = i <= state.storyIndex ? '100%' : '0%';
+      });
+    }
+
+    function openVaultModal() {
+      state.vaultPinInput = '';
+      updateVaultDots();
+      document.getElementById('vault-unlocked-content').classList.add('hidden');
+      document.getElementById('vault-pin-pad').classList.remove('hidden');
+      document.getElementById('vault-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+    function closeVaultModal() {
+      document.getElementById('vault-modal').classList.add('hidden');
+    }
+    function handleVaultKey(key) {
+      if (key === 'Clear') {
+        state.vaultPinInput = '';
+      } else if (key === 'Unlock') {
+        if (state.vaultPinInput === '1234' || state.vaultPinInput.length === 4) {
+          document.getElementById('vault-pin-pad').classList.add('hidden');
+          document.getElementById('vault-unlocked-content').classList.remove('hidden');
+          showToast('Hidden Vault unlocked');
+          return;
+        } else {
+          showToast('Enter 4 digits (e.g. 1234)');
+        }
+      } else if (state.vaultPinInput.length < 4) {
+        state.vaultPinInput += key;
+        if (state.vaultPinInput.length === 4) {
+          setTimeout(() => {
+            document.getElementById('vault-pin-pad').classList.add('hidden');
+            document.getElementById('vault-unlocked-content').classList.remove('hidden');
+            showToast('Hidden Vault unlocked');
+          }, 180);
+        }
+      }
+      updateVaultDots();
+    }
+    function updateVaultDots() {
+      document.querySelectorAll('.vault-dot').forEach((dot, i) => {
+        dot.style.background = i < state.vaultPinInput.length ? 'var(--primary)' : 'transparent';
+      });
+    }
+
+    // Floating Date Scrubber Interaction
+    const viewport = document.getElementById('main-viewport');
+    const scrubberPill = document.getElementById('date-scrubber-pill');
+    let scrollTimeout = null;
+    viewport.addEventListener('scroll', () => {
+      if (state.activeTab !== 'photos') return;
+      scrubberPill.classList.remove('opacity-0');
+      const ratio = viewport.scrollTop / Math.max(1, viewport.scrollHeight - viewport.clientHeight);
+      scrubberPill.textContent = ratio > 0.45 ? 'October 2026' : 'November 2026';
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        scrubberPill.classList.add('opacity-0');
+      }, 900);
+    });
+
+    // Boot App
+    window.addEventListener('DOMContentLoaded', () => {
+      updateNavHighlight();
+      renderCurrentTab();
+    });
+  </script>
+</body>
+</html>

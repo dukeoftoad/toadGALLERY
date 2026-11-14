@@ -71,6 +71,7 @@ import com.toadgallery.gallery.R
 import com.toadgallery.gallery.buildshape.BuildShape
 import com.toadgallery.gallery.data.MediaItem
 import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.components.ToadPillButton
 import com.toadgallery.gallery.ui.components.ToadToastBanner
 import com.toadgallery.gallery.ui.components.ToadToastState
 import com.toadgallery.gallery.ui.components.rememberToadToast
@@ -848,6 +849,13 @@ fun ToadGalleryApp() {
  * Reusable screen-state composable (roadmap Phase 2: empty / loading / denied /
  * unsupported / error system --- issue #13). Renders empty-state copy today; the
  * permission state becomes live in Phase 3 when media access lands.
+ *
+ * r77.9: the optional [pillAction] chrome --- the prototype's state surfaces
+ * close with a primary pill CTA (`rounded-full` over `var(--primary)`;
+ * the photos filtered-empty state's "Reset Filters"), not a bare text
+ * button. Default stays the M3 [TextButton] so the existing error/retry
+ * states keep their chrome; [pillAction] renders the house
+ * [ToadPillButton] (the same token pill the prototype draws).
  */
 @Composable
 fun StateScreen(
@@ -856,6 +864,7 @@ fun StateScreen(
     @StringRes bodyRes: Int,
     @StringRes actionRes: Int? = null,
     onAction: (() -> Unit)? = null,
+    pillAction: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -887,11 +896,22 @@ fun StateScreen(
                 .padding(top = 8.dp),
         )
         if (actionRes != null && onAction != null) {
-            TextButton(
-                onClick = onAction,
-                modifier = Modifier.padding(top = 24.dp),
-            ) {
-                Text(stringResource(actionRes))
+            if (pillAction) {
+                // r77.9: the prototype's primary pill CTA (the house
+                // ToadPillButton --- `primary`/`onPrimary`, `rounded-full`,
+                // `text-xs font-bold`, Role.Button carried inside).
+                ToadPillButton(
+                    text = stringResource(actionRes),
+                    onClick = onAction,
+                    modifier = Modifier.padding(top = 24.dp),
+                )
+            } else {
+                TextButton(
+                    onClick = onAction,
+                    modifier = Modifier.padding(top = 24.dp),
+                ) {
+                    Text(stringResource(actionRes))
+                }
             }
         }
         // r50 ux fix: the "Phase 3 --- on-device timeline" milestone badge is

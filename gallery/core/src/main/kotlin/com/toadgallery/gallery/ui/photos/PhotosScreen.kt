@@ -428,6 +428,18 @@ fun PhotosScreen(
                                     iconRes = R.drawable.ic_nav_photos,
                                     titleRes = R.string.state_photos_filtered_empty_title,
                                     bodyRes = R.string.state_photos_filtered_empty_body,
+                                    // r77.9: the prototype's empty state closes with a
+                                    // primary pill CTA --- "Reset Filters"
+                                    // (`resetPhotoFilters`, the empty-state markup's
+                                    // own button). The chips row above stays reachable,
+                                    // and the pill runs the SAME reset the trailing
+                                    // Clear chip runs --- the ViewModel's
+                                    // onFilterChange(TimelineFilter()) UI-state reset,
+                                    // nothing else --- rendered in the prototype's pill
+                                    // chrome (ToadPillButton via StateScreen).
+                                    actionRes = R.string.state_photos_filtered_empty_action,
+                                    onAction = { viewModel.onFilterChange(TimelineFilter()) },
+                                    pillAction = true,
                                 )
                             }
                         }

@@ -237,28 +237,17 @@ fun SearchScreen(
             },
         )
         Spacer(Modifier.height(10.dp))
-        // r76: the results-count row's trailing badge --- only where the
-        // semantic surface could have contributed (the same gate as the
-        // mode row below).
-        if (BuildShape.semanticIndex) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = "Matches",
-                    color = ToadTheme.palette.textMuted,
-                    style = TextStyle(
-                        fontFamily = ToadBodyFont,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                    ),
-                )
-                ToadClipOcrBadge()
-            }
-            Spacer(Modifier.height(8.dp))
-        }
+        // r77.9: the results-count row's trailing badge moved DOWN to the
+        // results header slot (the prototype's order). The static
+        // "Matches" + badge row used to sit ABOVE the mode/type chip rows
+        // --- a slot the prototype never draws, showing a hardcoded label
+        // even with zero results. In the prototype the "CLIP + OCR Active"
+        // badge is the results header's TRAILING edge, beside the live
+        // "N matches found" count, immediately above the grid (below the
+        // secondary attribute filters). The badge now rides the shared
+        // [SearchResultsCountText] header (still gated on
+        // BuildShape.semanticIndex --- without the semantic index CLIP+OCR
+        // never ran, and the badge would lie).
         // The r26 "Search by" mode row: Name (the issue #62 filename
         // pipeline, untouched) vs Content (Magic Search). Switching the
         // mode flips BOTH pipelines' engagement through their own gates
@@ -426,10 +415,16 @@ fun SearchScreen(
 }
 
 /**
- * The results-count header line (r77.8 --- the prototype's results header,
- * "9 matches found"): the LIVE count in the prototype's exact chrome ---
- * `text-xs font-bold` over `var(--text-muted)` --- as [ToadBodyFont] bold
- * at 12sp in the palette's [ToadThemePalette.textMuted] tone.
+ * The results-count header ROW (r77.8/r77.9 --- the prototype's results
+ * header, `flex items-center justify-between mb-2`): the LIVE count in
+ * the prototype's exact chrome --- `text-xs font-bold` over
+ * `var(--text-muted)` --- as [ToadBodyFont] bold at 12sp in the palette's
+ * [ToadThemePalette.textMuted] tone on the leading edge, the "CLIP + OCR
+ * Active" badge ([ToadClipOcrBadge]) on the trailing edge, the row sitting
+ * immediately above the results grid and BELOW the mode/type chip rows
+ * (the prototype's order; r77.9 retired the pre-header slot above the
+ * chips, which also showed a hardcoded "Matches" label with zero
+ * results).
  *
  * ONE composable for BOTH pipelines: the Name results and the Content
  * results previously rendered the count as stock `bodyMedium`/
@@ -438,24 +433,37 @@ fun SearchScreen(
  * prototype's single header. The plurals themselves now share the
  * prototype's "N matches found" wording, so the two pipelines read as one
  * surface; the shared function keeps them from drifting apart again.
+ *
+ * The badge renders only where [BuildShape.semanticIndex] holds (the
+ * r46 build-shape gate the pre-move row already used): without the
+ * semantic index the CLIP/OCR pipelines never ran and the badge would
+ * lie.
  */
 @Composable
 private fun SearchResultsCountText(
     @PluralsRes pluralRes: Int,
     count: Int,
 ) {
-    Text(
-        text = pluralStringResource(pluralRes, count, count),
-        style = TextStyle(
-            fontFamily = ToadBodyFont,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-        ),
-        color = ToadTheme.palette.textMuted,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = ToadSpacing.sm),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = pluralStringResource(pluralRes, count, count),
+            style = TextStyle(
+                fontFamily = ToadBodyFont,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+            ),
+            color = ToadTheme.palette.textMuted,
+        )
+        if (BuildShape.semanticIndex) {
+            ToadClipOcrBadge()
+        }
+    }
 }
 
 /**

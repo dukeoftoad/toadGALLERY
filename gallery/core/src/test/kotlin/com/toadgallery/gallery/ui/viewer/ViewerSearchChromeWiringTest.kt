@@ -197,4 +197,44 @@ class ViewerSearchChromeWiringTest {
                 magicPlurals.contains("%1\$d match found"),
         )
     }
+
+    // ---- The results header SLOT (r77.9) ----
+
+    @Test
+    fun `the CLIP badge rides the shared results header below the chip rows`() {
+        val source = sourceOf(GALLERY_SRC + "ui/search/SearchScreen.kt")
+
+        // r77.9 slot move: the prototype renders the "CLIP + OCR Active"
+        // badge as the results header's TRAILING edge --- beside the live
+        // count, immediately above the grid, BELOW the secondary attribute
+        // filters. The badge must therefore render INSIDE the shared
+        // results-header composable (never back above the chip rows).
+        val fn = blockOf(
+            source,
+            "private fun SearchResultsCountText(",
+            "private fun MagicSearchStates(",
+        )
+        assertTrue(
+            "The shared results header must render the CLIP badge on its " +
+                "trailing edge (the prototype's header row).",
+            fn.contains("ToadClipOcrBadge()"),
+        )
+        assertTrue(
+            "The badge inside the results header must keep the r46 " +
+                "build-shape gate (no semantic index -> no CLIP/OCR badge).",
+            Regex(
+                "if \\(BuildShape\\.semanticIndex\\) \\{\\s*\\n\\s*ToadClipOcrBadge\\(\\)",
+            ).containsMatchIn(fn),
+        )
+
+        // The pre-move static header ("Matches" + badge above the mode/
+        // type chip rows) must stay retired: the prototype never draws a
+        // slot there, and the hardcoded label showed even with zero
+        // results.
+        assertFalse(
+            "The static 'Matches' label row above the chip rows must stay " +
+                "retired (r77.9: the badge lives in the results header).",
+            source.contains("text = \"Matches\""),
+        )
+    }
 }

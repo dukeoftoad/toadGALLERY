@@ -56,6 +56,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -566,6 +569,11 @@ fun ToadPulsingHalo(modifier: Modifier = Modifier) {
 /**
  * A pill-shaped action button (the prototype's `rounded-full` CTAs):
  * filled (`primary`/`onPrimary`) or outlined (`borderStrong`/`textMain`).
+ *
+ * r77.9 a11y: the button role on the clickable Box --- the prototype's
+ * markup is a real `<button>`, and a bare clickable Box announces as
+ * plain text with no affordance (the r77.8 convention on the search
+ * chrome's controls).
  */
 @Composable
 fun ToadPillButton(
@@ -604,6 +612,8 @@ fun ToadPillButton(
                     Modifier
                 },
             )
+            // r77.9 a11y: Role.Button so TalkBack announces the affordance.
+            .semantics { role = Role.Button }
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = contentPadding, vertical = 10.dp),
         contentAlignment = Alignment.Center,

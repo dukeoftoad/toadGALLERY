@@ -57,10 +57,21 @@ import java.io.File
  */
 class EgressSolePathTest {
 
-    /** Unit-test working dir is the module dir (apps/gallery); be tolerant either way. */
+    /** Unit-test working dir is the module dir (gallery/core); be tolerant of the
+     * pre-push harness's repo-root cwd too (the r77.8 AccessibilityWiringTest
+     * convention --- the pre-#163 `apps/gallery/` fallback named no live dir). */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(File(cwd, relative), File(cwd.parentFile, "apps/gallery/$relative"))
+        // r77.9: the pre-#163 `apps/gallery/` fallback named a module dir that
+        // no longer exists; the candidates now follow the r77.8
+        // AccessibilityWiringTest convention --- the Gradle module dir
+        // (gallery/core) first, then the repo-root-relative path for the
+        // pre-push harness.
+        return sequenceOf(
+            File(cwd, relative),
+            File(cwd, "gallery/core/$relative"),
+            File(cwd.parentFile, "gallery/core/$relative"),
+        )
             .firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
@@ -101,7 +112,7 @@ class EgressSolePathTest {
                 "else is an untested network surface; route fetches through HttpModelDownloader " +
                 "(ADR-0020). Found: $found",
             mapOf(
-                "io/github/dukeoftoad/gallery/ui/settings/AboutScreen.kt" to "\"https://github.com/dukeoftoad/toadGALLERY\"",
+                "com/toadgallery/gallery/ui/settings/AboutScreen.kt" to "\"https://github.com/dukeoftoad/toadGALLERY\"",
             ),
             found,
         )
@@ -121,7 +132,7 @@ class EgressSolePathTest {
         assertEquals(
             "java.net types are the network surface: only HttpModelDownloader.kt --- the ADR-0020 " +
                 "single-host, fail-closed transport --- may import them. Found importers: $importers",
-            listOf("io/github/dukeoftoad/gallery/ml/engine/HttpModelDownloader.kt"),
+            listOf("com/toadgallery/gallery/ml/engine/HttpModelDownloader.kt"),
             importers,
         )
     }
@@ -239,7 +250,10 @@ class EgressSolePathTest {
      */
     @Test
     fun `the build-time INTERNET gates stay wired with their allowlist input and anchors`() {
-        val buildScript = moduleFile("build.gradle.kts").readText()
+        // r77.9: the gate is wired in the gallery APP module's script since
+        // the #163 module split --- the module-relative "build.gradle.kts"
+        // read the core library's script, which carries no gate.
+        val buildScript = moduleFile("../app/build.gradle.kts").readText()
         // The per-variant task registration (generates gateDebugInternetPermission
         // and gateReleaseInternetPermission for the debug/release variants):
         assertTrue(
@@ -282,7 +296,7 @@ class EgressSolePathTest {
      */
     @Test
     fun `the transport source keeps redirects disabled and the https production root`() {
-        val source = moduleFile("src/main/kotlin/io/github/dukeoftoad/gallery/ml/engine/HttpModelDownloader.kt")
+        val source = moduleFile("src/main/kotlin/com/toadgallery/gallery/ml/engine/HttpModelDownloader.kt")
             .readText()
         assertTrue(
             "HttpModelDownloader must disable connection-level redirects " +

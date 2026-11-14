@@ -2,7 +2,7 @@ package com.toadgallery.editor.contract
 
 /**
  * The versioned Gallery <-> Edit integration contract (ADR-0002 / ADR-0007;
- * spec: `docs/architecture/editor-contract.md`). Every constant is FROZEN for v1: the
+ * spec: `docs/ARCHITECTURE.md`). Every constant is FROZEN for v1: the
  * gallery and editor ship independently, so a rename breaks the other at the user's
  * tap; v2 may only ADD optional fields or bump [CONTRACT_VERSION_MIN] explicitly. Pure
  * JVM (no Android types). Absolute filesystem paths MUST NOT appear --- `content://`

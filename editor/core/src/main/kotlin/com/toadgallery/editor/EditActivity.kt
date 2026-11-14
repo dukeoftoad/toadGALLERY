@@ -129,7 +129,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * toadGALLERY Edit --- the contract launch activity (spec
- * `docs/architecture/editor-contract.md`). Round trip: validate the launch
+ * `docs/ARCHITECTURE.md`). Round trip: validate the launch
  * extras (invalid calls answer before any UI); restore the ADR-0011 sidecar
  * session (non-destructive, survives process death); edit as ONE
  * [EditRecipe] snapshot stack over a bounded decode; Save copy re-decodes

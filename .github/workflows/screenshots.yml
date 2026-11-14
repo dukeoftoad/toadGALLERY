@@ -1,6 +1,6 @@
 name: Screenshots (Roborazzi)
 
-# Phase 11 screenshot testing (docs/phase-11/roborazzi.md), editor module.
+# Screenshot testing (docs/DEVELOPMENT.md, testing), editor module.
 #
 # The Roborazzi gradle plugin (io.github.takahirom.roborazzi 1.77.0) is
 # applied to editor/core, so this workflow drives the plugin's task pair:

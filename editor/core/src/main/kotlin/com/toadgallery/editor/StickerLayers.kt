@@ -70,7 +70,7 @@ data class StickerLayers(val layers: List<StickerLayer>) {
 
 /**
  * One authored sticker: filled subpaths in the 0..100 design box (y down, screen convention).
- * Project-authored code; the authorship/licensing record is `docs/phase-7/bundled-stickers.md`.
+ * Project-authored code; the shapes and their provenance are recorded in `docs/ARCHITECTURE.md`.
  */
 data class StickerShape(val parts: List<Part>) {
     init {
@@ -198,7 +198,7 @@ object BundledStickers {
         "crown" to crown(),
     )
 
-    // ---- The authorship layer (the formulas ARE the shapes; docs/phase-7/bundled-stickers.md) ----
+    // ---- The authorship layer (the formulas ARE the shapes; see docs/ARCHITECTURE.md) ----
 
     private const val RED = 0xFFE53935L
     private const val YELLOW = 0xFFFDD835L

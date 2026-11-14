@@ -3,7 +3,7 @@
 #
 # Prepared for submission to fdroiddata as a new-app merge request (the
 # conventions are recorded in MaintainerNotes below and in
-# docs/phase-11/fdroid-metadata.md, the submission-package doc).
+# docs/DEVELOPMENT.md, the F-Droid section).
 Categories:
   - Multimedia
 License: GPL-3.0
@@ -92,7 +92,7 @@ MaintainerNotes: |-
     reproducibility: the repo's reproducible-build workflow double-builds
     the unsigned release APK on every v* tag push and compares it
     (byte-level with a content-level fallback) --- see
-    docs/phase-11/reproducible-builds.md. F-Droid builds unsigned from
+    docs/DEVELOPMENT.md (releases). F-Droid builds unsigned from
     source; the pinned signing key only governs the project's own GitHub
     pre-releases (ADR-0018 --- F-Droid builds its own binaries and re-signs
     them), which is why Binaries is empty.

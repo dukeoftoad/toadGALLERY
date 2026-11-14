@@ -1,44 +1,20 @@
 name: CI
 
-# toadGALLERY CI --- ADR-0013
-# Canonical build, lint, and test workflow. JDK 17 + Android SDK + Gradle.
-# No Flutter (ADR-0008). A green CI check is required to merge any PR.
-# Since r21 the workflow also gates the vendored Ente ML engine (engine/)
-# with cargo check + fmt + clippy (ADR-0020 context; see engine/NOTICE.md).
-# Since r22 the engine-android job additionally builds the engine for the
-# Android ABI (cargo-ndk) and assembles an engine-enabled APK (-PwithEngine;
-# zero-release directive: that job uploads nothing). Since r23 the engine job
-# also runs the vendored photos-side crates' test suites explicitly (the
-# workspace check/clippy gates cover them automatically --- no crate lists
-# anywhere --- but no workspace test step existed before).
-# Since r46 the gallery is a FOUR-FLAVOR matrix (one "engine" dimension:
-# basic / engine / semantic / face --- docs/phase-11/apk-matrix.md), so the
-# unflavored assembleDebug/lintDebug/testDebugUnitTest task names no longer
-# exist for :gallery:app: the canonical gate builds+lints+tests the BASIC
-# flavor, and additionally runs the ENGINE flavor's JVM unit tests (no
-# -PwithEngine needed --- unit tests compile no native code) so the
-# engine-shaped BuildConfig suite stays compiled and green on every PR.
-# r49 (the workflow-organization round): the four opt-in APK test builders
-# (apk-build-engine.yml, engine-apk.yml, modelpack-apk.yml,
-# editor-apk-build.yml) consolidated into ONE dispatch surface ---
-# .github/workflows/apk-build.yml; this file stays the canonical gate and
-# gains the repo-wide least-privilege baseline (explicit contents: read ---
-# every non-release workflow now declares its permissions).
+# toadGALLERY Edit CI --- ADR-0013. The canonical build, lint, and test
+# workflow for the editor-only repo (editor/app, editor/core,
+# shared/editor-contract, shared/video-edit). JDK 17 + Android SDK + Gradle.
+# A green CI check is required to merge any PR. Push-to-main triggers
+# nothing here: release.yml is the post-merge release build, so this
+# workflow stays the canonical PR gate (pull_request on main + manual
+# dispatch for on-demand verification).
 
 on:
-  # Phase 2: push-to-main removed --- main-release.yml is the post-merge
-  # 5-APK release build now. This workflow stays the canonical PR gate
-  # (pull_request on main + manual dispatch for on-demand verification).
   pull_request:
     branches: [ main ]
-  # 2026-11-03 (orchestrator): dispatch added after pull_request event
-  # delivery stalled (~04:03Z) while workflow_dispatch kept working ---
-  # every PR head stays verifiable on demand: dispatch this workflow at
-  # the head's ref, then gate the merge on that run's conclusion.
   workflow_dispatch:
 
-# Least-privilege (r49): the canonical gate only reads the checkout and
-# uploads artifacts --- no release, no publish, no admin surfaces.
+# Least-privilege: the canonical gate only reads the checkout and uploads
+# artifacts --- no release, no publish, no admin surfaces.
 permissions:
   contents: read
 
@@ -47,54 +23,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  engine:
-    name: Vendored engine (cargo check + fmt + clippy)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      # F-2 (follow-up 2026-11-04): the canonical toolchain setup now lives
-      # in .github/actions/toad-setup --- the host-gates Rust shape (stable
-      # + rustfmt/clippy + the host cargo cache), no Android side.
-      - name: Set up the toolchain (Rust host gates)
-        uses: ./.github/actions/toad-setup
-        with:
-          rust: host
-          android: false
-
-      # Host-target gate for the vendored Ente crates: any rot (dependency
-      # drift, accidental edits breaking the workspace) fails the PR. Clippy
-      # mirrors UPSTREAM's own gate (workspace lints on lib/bins, no
-      # --all-targets: the vendored tests are byte-identical upstream code and
-      # must not be re-linted under stricter flags than Ente itself uses). The
-      # Android ABI build via cargo-ndk is the engine-android job below
-      # (landed r22); ORT native resolution happens at real build/link time,
-      # not check time.
-      - name: cargo check
-        working-directory: engine
-        run: cargo check --workspace --all-targets
-
-      - name: cargo fmt
-        working-directory: engine
-        run: cargo fmt --all -- --check
-
-      - name: cargo clippy
-        working-directory: engine
-        run: cargo clippy --workspace
-
-      # r23 added the photos-side crates (ente-vecdb + ente-photos-ml). The
-      # check/clippy/fmt gates above cover them automatically (workspace
-      # selectors, no crate lists) but no step ran the vendored tests; this
-      # runs the two new crates' suites only (the older ente crates' tests
-      # would pull heavy ML inference --- the profile.dev opt-level=3 note in
-      # engine/Cargo.toml --- for little gate value).
-      - name: cargo test (r23 photos-side crates)
-        working-directory: engine
-        run: cargo test -p ente-vecdb -p ente-photos-ml
-
   build:
     name: Build + lint + test
     runs-on: ubuntu-latest
@@ -104,69 +32,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # F-2: the canonical toolchain setup (.github/actions/toad-setup) ---
-      # the pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 +
-      # the Gradle cache + gradlew chmod; no Rust).
+      # The canonical toolchain setup (.github/actions/toad-setup): the
+      # pure-Android shape (JDK 17 + SDK platform 36/build-tools 36 + the
+      # Gradle cache + gradlew chmod).
       - name: Set up the toolchain (Android)
         uses: ./.github/actions/toad-setup
 
-      # r46: the gallery tasks are flavor-qualified (the four-way APK
-      # matrix over the single "engine" dimension) --- the canonical gate
-      # rides the BASIC flavor (the canonical applicationId, no engine
-      # library, no engine UI). The APK lands in apk/basic/debug/.
-      - name: Build debug APK
-        run: ./gradlew :gallery:app:assembleBasicDebug --no-daemon --stacktrace
-
-      - name: Run lint
-        run: ./gradlew :gallery:app:lintBasicDebug --no-daemon --stacktrace
-        # Hard gate since the NewApi cleanup (PR #52): lint errors fail CI.
-
-      # r46: unit tests run under BOTH the basic flavor (the default
-      # matrix shape: BuildShape all-off) AND the engine flavor (the full
-      # engine BuildConfig) --- the same JVM sources, two shapes, and the
-      # flavor algebra (BuildShapeTest) is exercised in both. No
-      # -PwithEngine anywhere: unit tests compile no native code.
-      - name: Run unit tests (basic + engine flavors)
-        run: ./gradlew :gallery:app:testBasicDebugUnitTest :gallery:app:testEngineDebugUnitTest --no-daemon --stacktrace
-
-      # r59 (the unified-app round): the canonical gate ALSO compiles the
-      # unified flavor's Kotlin --- the editor app's sources compiled
-      # in-process into the gallery module (sourceSets at apps/edit
-      # verbatim). compileDebugKotlin proves the whole unified source
-      # graph (gallery + editor + both shared modules) resolves and
-      # compiles on EVERY PR, without packaging the heavy APK here (the
-      # unified-apk.yml dispatch workflow assembles it on demand).
-      - name: Compile the unified flavor (editor-in-gallery source graph)
-        run: ./gradlew :unified:app:compileDebugKotlin -PwithEngine --no-daemon --stacktrace
-        # Binding since the issue #20 privacy policy tests landed; lint stays
-        # non-binding until the Phase 2 cleanup pass.
-
-      # --- r29 (Issue #14 gate): the toadGALLERY Edit app + the shared
-      # contract module join the canonical gate. The editor's assemble ALSO
-      # runs its own stricter merged-manifest INTERNET gate (no allowlist
-      # mechanism at all); the contract module is pure JVM.
-      # r48: the label drops the "prototype" qualifier the step carried
-      # since r29 --- the editor shipped as a RELEASE deliverable in
-      # v0.4.5-alpha-r45/r46 (both-APK close-out), so the gate builds the
-      # editor app, not a Phase 6 prototype. The step's command and scope
-      # are unchanged; only the stale label is.
       - name: Build editor debug APK
         run: ./gradlew :editor:app:assembleDebug --no-daemon --stacktrace
 
       - name: Run editor lint
         run: ./gradlew :editor:app:lintDebug --no-daemon --stacktrace
+        # Hard gate: lint errors fail CI.
 
       - name: Run editor + contract unit tests
         run: ./gradlew :editor:app:testDebugUnitTest :shared:editor-contract:test --no-daemon --stacktrace
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: gallery-debug-apk
-          path: gallery/app/build/outputs/apk/basic/debug/*.apk
-          if-no-files-found: warn
-          retention-days: 14
 
       - name: Upload editor APK artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -182,7 +62,7 @@ jobs:
         if: always()
         with:
           name: lint-reports
-          path: gallery/app/build/reports/lint-results-*.html
+          path: editor/app/build/reports/lint-results-*.html
           if-no-files-found: warn
           retention-days: 14
 
@@ -191,46 +71,8 @@ jobs:
         if: always()
         with:
           name: test-reports
-          path: gallery/app/build/reports/tests/
+          path: |
+            editor/app/build/reports/tests/
+            shared/editor-contract/build/reports/tests/
           if-no-files-found: warn
           retention-days: 14
-
-  engine-android:
-    name: Vendored engine (Android ABI + engine-enabled assemble)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      # F-2: the canonical toolchain setup (.github/actions/toad-setup) ---
-      # the full engine-cross shape (Rust + aarch64 target + the android
-      # cargo cache + cargo-ndk + the NDK resolve + the whole Android side).
-      - name: Set up the toolchain (Rust Android cross + Android)
-        uses: ./.github/actions/toad-setup
-        with:
-          rust: android
-
-      # -PwithEngine registers the buildRustEngine Exec task; its preBuild
-      # dependency runs engine/scripts/build-android.sh (idempotent):
-      # cargo-ndk builds libtoad_ml_jni.so + libonnxruntime.so (the vendored
-      # ente-ml uses ort load-dynamic + copy-dylibs) for arm64-v8a into
-      # gallery/app/build/rust-jniLibs/, which the jniLibs srcDir packages.
-      # Lint and unit tests stay in the build job (property-less; r46: the
-      # ENGINE-flavor unit tests ride there too).
-      # r46: the engine-enabled assemble is flavor-qualified --- the ENGINE
-      # flavor (applicationIdSuffix .engine, the full BuildShape), not the
-      # unflavored task that no longer exists.
-      - name: Engine-enabled debug assemble (arm64-v8a)
-        run: ./gradlew :gallery:app:assembleEngineDebug -PwithEngine --no-daemon --stacktrace
-
-      # Gate, not an upload: the engine-enabled APK must actually carry BOTH
-      # native libraries (a silently broken jniLibs wiring would otherwise
-      # pass the assemble step).
-      - name: Verify the native libraries are packaged
-        run: |
-          APK="$(ls gallery/app/build/outputs/apk/engine/debug/*.apk)"
-          echo "APK: $APK"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libtoad_ml_jni.so"
-          unzip -l "$APK" | grep "lib/arm64-v8a/libonnxruntime.so"

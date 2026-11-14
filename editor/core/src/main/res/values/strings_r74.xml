@@ -20,4 +20,11 @@
     <string name="editor_paste_edits_done">Edits pasted</string>
     <string name="editor_copy_edits_done">Edits copied</string>
     <string name="editor_paste_edits_empty">Nothing copied yet</string>
+    <!-- The on-demand model download strings (the models are no longer
+         bundled; the downloader is the editor's only network use). -->
+    <string name="editor_ai_download_text">This tool needs an AI model (%1$d MB) downloaded once over the network. Continue?</string>
+    <string name="editor_ai_download_yes">Download</string>
+    <string name="editor_ai_no">Not now</string>
+    <string name="editor_ai_download_progress">Downloading AI model: %1$d%%</string>
+    <string name="editor_ai_download_failed">The model download failed. Check your connection and try again.</string>
 </resources>

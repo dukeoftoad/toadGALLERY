@@ -151,7 +151,12 @@ Error codes: `ERROR_VERSION`, `ERROR_UNSUPPORTED`, `ERROR_IO` (incl. low storage
    confirmation with undo affordance via trash).
 4. **Metadata policy respected exactly** — GPS removal is opt-in, explicit, and reported
    in the result so Gallery can show "location removed" honesty UI.
-5. Editor never requires network; no analytics; same offline-first rules as Gallery.
+5. One disclosed network use: the AI models download on demand from the pinned
+   release URLs after an explicit user confirmation, are SHA-256-verified, and
+   touch no other host; no analytics, no telemetry. (Amendment 2026-11: the
+   original "never requires network" guarantee predates the on-demand model
+   delivery — the merged manifest may declare exactly `INTERNET` and nothing
+   else, enforced by the build gate and re-checked at release time.)
 
 ## 6. Prototype requirement (roadmap §7 sprint item 6)
 

@@ -119,6 +119,8 @@ import com.toadgallery.editor.contract.RawExtras
 import com.toadgallery.editor.contract.RequestValidation
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -282,19 +284,16 @@ class EditActivity : ComponentActivity() {
         return java.util.LinkedHashMap(reloaded)
     }
 
+    /** The on-device model store: app-private files, download-on-demand (see EditAiModelStore). */
+    internal val aiModelStore: EditAiModelStore by lazy { EditAiModelStore(this) }
+
     /**
      * The inference seam: the ORT facade, NNAPI-first with CPU fallback.
      * Lazy --- the runtime loads on the first AI commit, never at launch; a
      * missing/broken runtime degrades the affected feature, never a crash.
      */
     internal val aiInference: EditAiInference by lazy {
-        OrtEditAiInference { path ->
-            try {
-                assets.open(path)
-            } catch (_: RuntimeException) {
-                null
-            }
-        }
+        OrtEditAiInference { path -> aiModelStore.openRelative(path) }
     }
 
     /** The face-retouch consent store (ADR-0010 section 5; default-off). */
@@ -1071,6 +1070,14 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     var aiProgressPct by remember { mutableStateOf(0) }
     var aiCancelRequested by remember { mutableStateOf(false) }
     var aiNotice by remember { mutableStateOf<Int?>(null) }
+    // The on-demand model gate: the models are not bundled in the APK; each AI
+    // commit first ensures its models are on the device, asking for ONE explicit
+    // consent per batch to download from the pinned release URLs (the editor's
+    // only network use). The gate is a fresh CompletableDeferred per prompt.
+    var aiDownloadPrompt by remember { mutableStateOf<List<EditAiManifest.ModelFile>?>(null) }
+    var aiDownloadPct by remember { mutableStateOf(-1) }
+    var aiDownloadTotalMb by remember { mutableStateOf(1) }
+    val aiDownloadGate = remember { mutableStateOf(CompletableDeferred<Boolean>()) }
     var importedSkies by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     var skiesVersion by remember { mutableStateOf(0) }
     var skyImportError by remember { mutableStateOf<String?>(null) }
@@ -1547,6 +1554,47 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     val uiScope = rememberCoroutineScope()
 
     /**
+     * The on-demand model gate: answers true only when every listed model is on the
+     * device, downloading the missing ones after an explicit user confirmation.
+     * Refusal, cancellation, or a failed download answers false and leaves the
+     * notice behind.
+     */
+    suspend fun ensureAiModels(models: List<EditAiManifest.ModelFile>): Boolean {
+        val missing = models.filter { !activity.aiModelStore.present(it) }
+        if (missing.isEmpty()) return true
+        aiDownloadTotalMb =
+            ((missing.sumOf { it.bytes } + (1024L * 1024L) - 1) / (1024L * 1024L)).toInt()
+        aiDownloadGate.value = CompletableDeferred()
+        aiDownloadPrompt = missing
+        val confirmed = aiDownloadGate.value.await()
+        aiDownloadPrompt = null
+        if (!confirmed) return false
+        aiCancelRequested = false
+        aiDownloadPct = 0
+        val totalBytes = missing.sumOf { it.bytes }.coerceAtLeast(1L)
+        var received = 0L
+        return try {
+            for (model in missing) {
+                activity.aiModelStore.download(model) { chunk ->
+                    if (aiCancelRequested) throw IOException("the model download was cancelled")
+                    received += chunk
+                    aiDownloadPct = ((received * 100L) / totalBytes).toInt().coerceIn(0, 99)
+                }
+            }
+            aiDownloadPct = -1
+            missing.all { activity.aiModelStore.present(it) }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            aiDownloadPct = -1
+            aiNotice =
+                if (aiCancelRequested) R.string.editor_ai_cancelled else R.string.editor_ai_download_failed
+            aiCancelRequested = false
+            false
+        }
+    }
+
+    /**
      * ONE runner for the four AI commits: off the UI thread, cancellable
      * through [aiProgress], one snapshot when the artifact lands. Refuses
      * while a commit is already running or an export is in flight.
@@ -1579,6 +1627,9 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         if (pending.size < 3 || aiBusy || exporting) return
         val thinned = AiEraseLayer.thin(pending, AiEraseLayer.MAX_POINTS)
         runAiCommit {
+            if (!ensureAiModels(listOf(EditAiManifest.ERASE_SEGMENTATION, EditAiManifest.ERASE_INPAINT))) {
+                return@runAiCommit
+            }
             val grid = aiWorkingGrid()
             if (grid == null) {
                 aiNotice = R.string.editor_ai_runtime_broken
@@ -1621,6 +1672,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
 
     /** Runs the sky detection against the CURRENT working grid and persists the mask artifact. */
     suspend fun detectSkyMaskKey(): String? {
+        if (!ensureAiModels(listOf(EditAiManifest.ERASE_SEGMENTATION))) return null
         val grid = aiWorkingGrid() ?: run {
             aiNotice = R.string.editor_ai_runtime_broken
             return null
@@ -1686,6 +1738,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     /** Runs the depth estimation once and commits the bokeh selection over the artifact. */
     fun runBokehEstimate() {
         runAiCommit {
+            if (!ensureAiModels(listOf(EditAiManifest.BOKEH_DEPTH))) return@runAiCommit
             val grid = aiWorkingGrid()
             if (grid == null) {
                 aiNotice = R.string.editor_ai_runtime_broken
@@ -1725,6 +1778,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
     fun runRetouchDetect() {
         if (retouchConsent != RetouchConsent.GRANTED) return
         runAiCommit {
+            if (!ensureAiModels(listOf(EditAiManifest.RETOUCH_FACES))) return@runAiCommit
             val grid = aiWorkingGrid()
             if (grid == null) {
                 aiNotice = R.string.editor_ai_runtime_broken
@@ -2956,7 +3010,7 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
         // Every AI commit runs ONCE, off the UI thread; the models never run
         // during a render or an export. Compact on-device models, bounded
         // results (ADR-0010).
-        if (aiBusy) {
+        if (aiBusy && aiDownloadPct < 0) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
@@ -2973,6 +3027,43 @@ private fun EditorContent(activity: EditActivity, initialRecipe: EditRecipe) {
                     enabled = !exporting,
                 ) {
                     Text(stringResource(R.string.editor_ai_cancel))
+                }
+            }
+        }
+        if (aiDownloadPct >= 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = stringResource(R.string.editor_ai_download_progress, aiDownloadPct),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                TextButton(
+                    onClick = { aiCancelRequested = true },
+                    enabled = !exporting,
+                ) {
+                    Text(stringResource(R.string.editor_ai_cancel))
+                }
+            }
+        }
+        aiDownloadPrompt?.let {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                Text(
+                    text = stringResource(R.string.editor_ai_download_text, aiDownloadTotalMb),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Row {
+                    TextButton(onClick = { aiDownloadGate.value.complete(true) }) {
+                        Text(stringResource(R.string.editor_ai_download_yes))
+                    }
+                    TextButton(onClick = { aiDownloadGate.value.complete(false) }) {
+                        Text(stringResource(R.string.editor_ai_no))
+                    }
                 }
             }
         }

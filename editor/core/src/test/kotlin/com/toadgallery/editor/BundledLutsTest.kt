@@ -36,7 +36,6 @@ class BundledLutsTest {
     private fun assetsDir(): File {
         val candidates = listOf(
             File("src/main/assets/luts"), // working dir = the module (Gradle unit tests)
-            File("apps/edit/src/main/assets/luts"), // working dir = the repo root
         )
         return candidates.firstOrNull { it.isDirectory }
             ?: error("bundled-LUT assets not found; tried ${candidates.map { it.path }}")

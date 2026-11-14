@@ -1,16 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The standalone editor APP shell. Contract activities arrive from the :editor:core
      library manifest; this shell carries only the application attributes, the
-     application-level contract marker, and the INTERNET hard-strip (the library
-     manifest stays strip-free: the unified build keeps the gallery's model-download
-     grant). -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+     application-level contract marker, and the single network grant. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- HARD STRIP: the onnxruntime AAR manifest declares INTERNET; never an allowlist. -->
-    <uses-permission
-        android:name="android.permission.INTERNET"
-        tools:node="remove" />
+    <!-- The ONE network permission: the on-demand AI model downloads from the
+         pinned GitHub release URLs. No analytics, no telemetry, no other host. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="false"

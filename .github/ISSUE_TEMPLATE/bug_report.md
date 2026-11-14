@@ -14,13 +14,10 @@ you hit is already on that honest list.
 
 **Which app?**
 
-- [ ] toadGALLERY (the gallery app)
-- [ ] toadGALLERY Edit (the editor app)
-- [ ] Both / the hand-off between them
+toadGALLERY Edit (the editor app).
 
 **Version**
 
-- Gallery: Settings → About shows it as `<versionName> (build <versionCode>)` --- please paste it.
 - Editor: Android Settings → Apps → toadGALLERY Edit → the version line.
 - Or: the release you downloaded (e.g. `v0.4.5-alpha-r45`).
 
@@ -54,8 +51,6 @@ your trace against the exact release you installed. If you can, also say
 which release you're on.
 
 A note on privacy (why nothing was reported automatically): toadGALLERY
-collects **nothing** --- no analytics, no crash reporting, no telemetry.
-The gallery's only network use is downloading AI models you explicitly
-enable, from a single pinned host; the editor has no network capability
-at all. So the bug can't phone home --- you are the reporting mechanism,
-and we'd rather keep it that way.
+Edit collects **nothing** --- no analytics, no crash reporting, no
+telemetry. So the bug can't phone home --- you are the reporting
+mechanism, and we'd rather keep it that way.

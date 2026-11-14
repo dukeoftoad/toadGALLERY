@@ -12,7 +12,6 @@ Every release ships each APK beside its `.sha256` checksum. Verify the
 download before installing:
 
 ```bash
-sha256sum -c toadGALLERY-0.4.5-alpha-r45.apk.sha256
 sha256sum -c toadGALLERY-edit-0.4.10-edit-alpha-r45.apk.sha256
 ```
 
@@ -21,7 +20,7 @@ To check that the APK really came from this project's release key
 sideloading):
 
 ```bash
-apksigner verify --print-certs toadGALLERY-0.4.5-alpha-r45.apk
+apksigner verify --print-certs toadGALLERY-edit-0.4.10-edit-alpha-r45.apk
 ```
 
 The `Signer #1 certificate SHA-256 digest` line must read exactly:
@@ -30,29 +29,15 @@ The `Signer #1 certificate SHA-256 digest` line must read exactly:
 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494
 ```
 
-The same digest covers both APKs --- one release key, two apps. (On some
+One release key covers the editor's releases. (On some
 setups `apksigner` lives under the Android SDK's `build-tools/<version>/`
 directory.)
 
 ## Install notes
 
 - **Android 8.0 or newer.**
-- The gallery and the editor are **two separate apps** with separate app
-  IDs --- you can install either alone, but the full experience (Edit
-  button in the gallery, image and video editing) needs **both** APKs.
-- Gallery updates install in place over earlier toadGALLERY
-  pre-releases. The editor is a new app ID as of its first release ---
-  that one is a first install.
-
-## The vault, honestly
-
-The hidden vault is **device-bound by design**: its key lives in the
-hardware-backed Android Keystore and is wrapped by your PIN (and, if
-enrolled, your biometrics). **If the PIN is lost, the vault stays locked
---- there is no recovery, no reset path, and that is the product's
-privacy guarantee, not an oversight.** There is no cloud copy to restore
-from, on purpose. The same applies after a factory reset. Please keep
-the PIN somewhere safe.
+- toadGALLERY Edit is a standalone app --- updates install in place over
+  earlier toadGALLERY Edit pre-releases (same signing identity).
 
 ## Where the docs live
 
@@ -71,5 +56,5 @@ the PIN somewhere safe.
 
 **Your question**
 
-<!-- What do you need help with? Include the app (gallery/editor), the
-     version, your device, and what you've already tried. -->
+<!-- What do you need help with? Include the version, your device, and
+     what you've already tried. -->

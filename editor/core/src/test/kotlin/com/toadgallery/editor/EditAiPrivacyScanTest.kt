@@ -11,14 +11,10 @@ import java.io.File
  */
 class EditAiPrivacyScanTest {
 
-    /** Tolerates both the Gradle module-dir and the repo-root working directories. */
+    /** Resolves against the Gradle module-dir working directory. */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(
-            File(cwd, relative), // the Gradle module cwd (apps/edit)
-            File(cwd, "apps/edit/$relative"), // the repo/worktree-root cwd
-            File(cwd.parentFile, "apps/edit/$relative"), // any direct child of the root
-        ).firstOrNull { it.exists() }
+        return File(cwd, relative).takeIf { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
 

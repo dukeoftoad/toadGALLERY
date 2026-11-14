@@ -2,12 +2,12 @@ name: Repository workflow lint
 
 on:
   pull_request:
-    branches: [main]
+    branches: [editor]
     paths:
       - ".github/workflows/**"
       - ".github/actions/**"
   push:
-    branches: [main]
+    branches: [editor]
     paths:
       - ".github/workflows/**"
       - ".github/actions/**"
@@ -30,9 +30,9 @@ jobs:
       - name: Check whitespace errors
         run: git diff --check
 
-      # F-1 (r51): digest-pinned by content digest from Docker Hub (the
-      # tag/1.7.7 API endpoint's digest field) --- a re-pushed 1.7.7 tag can
-      # no longer swap the binary.
+      # Digest-pinned by content digest from Docker Hub (the tag/1.7.7 API
+      # endpoint's digest field) --- a re-pushed 1.7.7 tag can no longer
+      # swap the binary.
       - name: Lint workflow YAML and expressions
         uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # 1.7.7
         with:

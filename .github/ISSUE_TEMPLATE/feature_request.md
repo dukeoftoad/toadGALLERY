@@ -31,6 +31,6 @@ Also worth a look: the
 [known-limitations doc](
 https://github.com/dukeoftoad/toadGALLERY/blob/main/docs/phase-11/known-limitations.md)
 --- it lists the already-recorded follow-ups (per-face retouch tuning,
-feathered mask edges, the Things browse screen, video geometry, ...),
+feathered mask edges, video geometry, ...),
 so if your request is already tracked there, adding a +1 with your use
 case to that thread helps prioritize it.

@@ -1,143 +1,27 @@
 name: toad-setup
 description: >-
-  The canonical toadGALLERY CI toolchain setup (F-2, follow-up
-  2026-11-04): Rust (host gates / Android cross) + JDK 17 + Android SDK
-  (platform 36, build-tools 36) + the Gradle/cargo caches. The setup
-  blocks that ci.yml, engine-apk.yml, modelpack-apk.yml,
-  apk-build-engine.yml and editor-apk-build.yml previously replicated
+  The canonical toadGALLERY CI toolchain setup: JDK 17 + Android SDK
+  (platform 36, build-tools 36) + the Gradle cache + the gradlew chmod.
+  The setup blocks that ci.yml and editor-ci.yml previously replicated
   verbatim; this action is their single source now. The CHECKOUT step
   stays in each workflow (fail-fast guards must run around it, and
   checkout is not setup).
-
-inputs:
-  rust:
-    description: >-
-      Rust mode: '' (default) = no Rust toolchain at all (the pure
-      Android jobs); 'host' = stable + rustfmt + clippy + the HOST cargo
-      cache (the engine cargo check/fmt/clippy gates); 'android' =
-      stable + the aarch64-linux-android target + the ANDROID cargo
-      cache + cargo-ndk (pinned 3.5.4) + the preinstalled-NDK resolve
-      (the engine-enabled cross builds).
-    default: ''
-  android:
-    description: >-
-      Whether to set up the Android side: JDK 17 (temurin, gradle cache),
-      the pinned SDK packages, the Gradle cache and the gradlew chmod.
-      A string input ('true'/'false') --- composite-action inputs are
-      strings on every runner version; pass android: false to skip.
-    default: 'true'
 
 runs:
   using: composite
   steps:
 
-    # ---- Rust, host mode: the engine's cargo check/fmt/clippy/test gates ----
-    # F-1 (r51): the toolchain is pinned to a concrete version (1.99.1)
-    # instead of the floating @stable --- docs/phase-11/reproducible-
-    # builds.md §2's pinned-toolchain claim now covers the Rust side too
-    # (the audit: @stable "weakens the pinned-toolchain claim"). The
-    # version ref implies the toolchain; the with: inputs are unchanged.
-    - name: Set up Rust (1.99.1, rustfmt + clippy)
-      if: ${{ inputs.rust == 'host' }}
-      uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
-      with:
-        components: rustfmt, clippy
-
-    - name: Cache cargo (host)
-      if: ${{ inputs.rust == 'host' }}
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          engine/target
-        key: cargo-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
-        restore-keys: cargo-${{ runner.os }}-
-
-    # ---- Rust, android mode: the engine-enabled cross builds ----
-    # F-1 (r51): same concrete-version pin as the host mode above
-    # (1.99.1, no more @stable float); the target list is unchanged.
-    - name: Set up Rust (1.99.1, aarch64-linux-android)
-      if: ${{ inputs.rust == 'android' }}
-      uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
-      with:
-        targets: aarch64-linux-android
-
-    - name: Cache cargo (android)
-      if: ${{ inputs.rust == 'android' }}
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          engine/target
-        key: cargo-android-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
-        restore-keys: cargo-android-${{ runner.os }}-
-
-    # Cache the cargo-ndk BINARY alone so `cargo install` is skipped
-    # entirely on hit (the command -v guard below makes the install a
-    # no-op, so no ~/.cargo/.crates* metadata needs caching).
-    - name: Cache cargo-ndk
-      if: ${{ inputs.rust == 'android' }}
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-      with:
-        path: ~/.cargo/bin/cargo-ndk
-        key: cargo-ndk-${{ runner.os }}-3.5.4
-
-    - name: Install cargo-ndk (pinned)
-      if: ${{ inputs.rust == 'android' }}
-      shell: bash
-      run: command -v cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --version 3.5.4 --locked
-
-    # GH ubuntu runners ship preinstalled NDKs under $ANDROID_HOME/ndk/.
-    # F-12 (r51 residual): resolve the PINNED version first --- the same
-    # 28.1.13356709 engine/scripts/build-android.sh pins (PINNED_NDK_VERSION).
-    # toad-setup does not sdkmanager-install an NDK (it installs only
-    # platforms + build-tools below); the pinned dir exists whenever the
-    # runner image carries it, and the build script's sdkmanager fallback
-    # installs exactly this version when the image ever drops it. The old
-    # newest-wins resolve made ANDROID_NDK_HOME runner-dependent (whatever
-    # the image shipped that day won, silently overriding the script's
-    # pin --- F-12's unreproducible cross builds); the pinned-first resolve
-    # keeps every engine cross build on one NDK. Newest-wins survives only
-    # as the fallback when the pinned dir is absent, and the log says which
-    # one won either way.
-    - name: Resolve the Android NDK (pinned 28.1.13356709 first)
-      if: ${{ inputs.rust == 'android' }}
-      shell: bash
-      run: |
-        SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-        NDK_VERSION="28.1.13356709"
-        NDK_HOME=""
-        if [ -d "$SDK_ROOT/ndk/$NDK_VERSION" ]; then
-          NDK_HOME="$SDK_ROOT/ndk/$NDK_VERSION"
-          echo "Using the pinned NDK $NDK_VERSION: $NDK_HOME"
-        else
-          NDK_HOME="$(ls -d "$SDK_ROOT"/ndk/* 2>/dev/null | sort -V | tail -1)"
-          if [ -n "$NDK_HOME" ]; then
-            echo "::warning::pinned NDK $NDK_VERSION not under $SDK_ROOT/ndk --- falling back to the newest preinstalled NDK: $NDK_HOME"
-          fi
-        fi
-        if [ -z "$NDK_HOME" ]; then
-          echo "No preinstalled NDK under $SDK_ROOT/ndk --- the build script's sdkmanager fallback will install one."
-        else
-          echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
-        fi
-
-    # ---- Android: JDK + the pinned SDK packages + the Gradle cache ----
-    # F-3 (r51): validate the committed wrapper BEFORE any gradle use in
-    # the job --- gradle/wrapper-validation-action fails the build unless
-    # every gradle-wrapper.jar is the genuine artifact of a Gradle
-    # distribution. Together with distributionSha256Sum in the wrapper
-    # properties (the distribution zip is checksum-verified at download
-    # time), a tampered wrapper now fails closed in every build, including
-    # the release pipeline that holds the signing secrets.
+    # Validate the committed wrapper BEFORE any gradle use in the job:
+    # gradle/wrapper-validation-action fails the build unless every
+    # gradle-wrapper.jar is the genuine artifact of a Gradle distribution.
+    # Together with distributionSha256Sum in the wrapper properties (the
+    # distribution zip is checksum-verified at download time), a tampered
+    # wrapper fails closed in every build, including the release pipeline
+    # that holds the signing secrets.
     - name: Validate the Gradle wrapper
-      if: ${{ inputs.android == 'true' }}
       uses: gradle/wrapper-validation-action@f9c9c575b8b21b6485636a91ffecd10e558c62f6 # v3.5.0
 
     - name: Set up JDK 17
-      if: ${{ inputs.android == 'true' }}
       uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
       with:
         distribution: temurin
@@ -150,7 +34,6 @@ runs:
     # legacy `sdkmanager tools` package, which no longer exists). Resolve the
     # binary directly and install only what the project pins.
     - name: Install Android SDK packages (platform 36, build-tools 36)
-      if: ${{ inputs.android == 'true' }}
       shell: bash
       run: |
         SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -165,7 +48,6 @@ runs:
         "$SDK_MGR" --list_installed | grep -E "platforms;android-36|build-tools;36" || true
 
     - name: Cache Gradle
-      if: ${{ inputs.android == 'true' }}
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
@@ -175,6 +57,5 @@ runs:
         restore-keys: gradle-${{ runner.os }}-
 
     - name: Grant execute permission for gradlew
-      if: ${{ inputs.android == 'true' }}
       shell: bash
       run: chmod +x ./gradlew

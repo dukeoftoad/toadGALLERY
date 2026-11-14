@@ -18,7 +18,7 @@ import java.nio.FloatBuffer
  * [EditAiDegradation.RUNTIME_BROKEN].
  */
 class OrtEditAiInference(
-    private val openAsset: (String) -> InputStream?,
+    private val openModel: (String) -> InputStream?,
 ) : EditAiInference {
 
     private val env: OrtEnvironment by lazy { OrtEnvironment.getEnvironment() }
@@ -38,7 +38,7 @@ class OrtEditAiInference(
     private fun saliencySessionOrNull(): OrtSession? {
         if (saliencyChecked) return saliencySession
         saliencyChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.ERASE_SEGMENTATION)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.ERASE_SEGMENTATION)) return null
         saliencySession = openSession(EditAiManifest.ERASE_SEGMENTATION)
         return saliencySession
     }
@@ -46,7 +46,7 @@ class OrtEditAiInference(
     private fun inpaintSessionOrNull(): OrtSession? {
         if (inpaintChecked) return inpaintSession
         inpaintChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.ERASE_INPAINT)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.ERASE_INPAINT)) return null
         inpaintSession = openSession(EditAiManifest.ERASE_INPAINT)
         return inpaintSession
     }
@@ -54,7 +54,7 @@ class OrtEditAiInference(
     private fun depthSessionOrNull(): OrtSession? {
         if (depthChecked) return depthSession
         depthChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.BOKEH_DEPTH)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.BOKEH_DEPTH)) return null
         depthSession = openSession(EditAiManifest.BOKEH_DEPTH)
         return depthSession
     }
@@ -62,14 +62,14 @@ class OrtEditAiInference(
     private fun facesSessionOrNull(): OrtSession? {
         if (facesChecked) return facesSession
         facesChecked = true
-        if (!EditAiManifest.presentAndSized(openAsset, EditAiManifest.RETOUCH_FACES)) return null
+        if (!EditAiManifest.presentAndSized(openModel, EditAiManifest.RETOUCH_FACES)) return null
         facesSession = openSession(EditAiManifest.RETOUCH_FACES)
         return facesSession
     }
 
     private fun openSession(model: EditAiManifest.ModelFile): OrtSession? {
         return try {
-            val bytes = openAsset(model.assetPath)?.use { it.readBytes() } ?: return null
+            val bytes = openModel(model.storePath)?.use { it.readBytes() } ?: return null
             if (bytes.size.toLong() != model.bytes) return null
             val session = createSessionNnapiFirst(bytes)
             session

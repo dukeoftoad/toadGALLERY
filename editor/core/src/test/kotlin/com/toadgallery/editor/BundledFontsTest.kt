@@ -58,7 +58,6 @@ class BundledFontsTest {
     private fun assetsDir(): File {
         val candidates = listOf(
             File("src/main/assets/fonts"), // working dir = the module (Gradle unit tests)
-            File("apps/edit/src/main/assets/fonts"), // working dir = the repo root
         )
         return candidates.firstOrNull { it.isDirectory }
             ?: error("bundled-font assets not found; tried ${candidates.map { it.path }}")

@@ -7,8 +7,9 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.TaskAction
 
 // :editor:app — the standalone editor APK shell over :editor:core. Owns the
-// applicationId, versioning, signing, and the stricter privacy gate: the
-// standalone editor never requires network (contract 4.5, no allowlist).
+// applicationId, versioning, signing, and the permission gate: the merged
+// manifest may declare exactly android.permission.INTERNET (the on-demand
+// AI model downloads); any other permission fails the build.
 
 plugins {
     alias(libs.plugins.android)
@@ -75,8 +76,9 @@ android {
     }
 }
 
-// Editor privacy gate: ANY INTERNET permission in the merged manifest fails the build.
-abstract class EditInternetPermissionGateTask : DefaultTask() {
+// Editor privacy gate: the merged manifest may declare exactly ONE permission ---
+// android.permission.INTERNET, the on-demand AI model downloads. Anything else fails.
+abstract class EditPermissionGateTask : DefaultTask() {
 
     @get:InputFile
     abstract val mergedManifest: RegularFileProperty
@@ -87,41 +89,54 @@ abstract class EditInternetPermissionGateTask : DefaultTask() {
     @TaskAction
     fun enforce() {
         val manifestText = mergedManifest.get().asFile.readText()
-        val internetPermission = Regex(
-            """<(uses-permission|uses-permission-sdk-\d+)[^>]*android:name\s*=\s*"android\.permission\.INTERNET""""
-        )
-        if (!internetPermission.containsMatchIn(manifestText)) {
+        val declared = Regex(
+            "<(uses-permission|uses-permission-sdk-\\d+)[^>]*android:name\\s*=\\s*\"([^\"]+)\""
+        ).findAll(manifestText).map { it.groupValues[2] }.toSortedSet()
+        val unexpected = declared.subtract(ALLOWED_PERMISSIONS)
+        val missingInternet = "android.permission.INTERNET" !in declared
+        if (unexpected.isEmpty() && !missingInternet) {
             logger.lifecycle(
-                "Editor privacy gate (${variantName.get()}): merged manifest declares no INTERNET permission --- OK"
+                "Editor permission gate (${variantName.get()}): exactly the model-download INTERNET grant --- OK"
             )
             return
         }
+        val problems = buildList {
+            if (missingInternet) {
+                add("android.permission.INTERNET is missing (the on-demand AI model downloads need it)")
+            }
+            unexpected.forEach { add("unexpected permission '$it' (not in the gate allowlist)") }
+        }.joinToString("\n") { "* $it" }
         throw GradleException(
             """
             |
             |**************************************************************************
             |* EDITOR PRIVACY GATE FAILED (variant '${variantName.get()}')
             |*
-            |* The toadGALLERY Edit merged AndroidManifest declares
-            |* android.permission.INTERNET. The editor contract (section 4.5 of
-            |* docs/architecture/editor-contract.md) forbids network access in this
-            |* app unconditionally: no model downloads, no analytics, no telemetry.
-            |* There is NO allowlist mechanism --- find the dependency injecting it:
+            |$problems
+            |*
+            |* The toadGALLERY Edit merged AndroidManifest may declare exactly
+            |* android.permission.INTERNET --- the single grant the on-demand AI
+            |* model downloads need (pinned GitHub release URLs; no analytics,
+            |* no telemetry, no other host). Find the dependency injecting the
+            |* extra permission and remove it:
             |*   ./gradlew :editor:app:dependencies
-            |* and remove it, or land an ADR that amends the contract first.
             |**************************************************************************
             """.trimMargin()
         )
+    }
+
+    private companion object {
+        val ALLOWED_PERMISSIONS = setOf("android.permission.INTERNET")
     }
 }
 
 androidComponents {
     onVariants { variant ->
         val variantTitle = variant.name.replaceFirstChar { it.uppercase() }
-        val gate = tasks.register<EditInternetPermissionGateTask>("gate${variantTitle}InternetPermission") {
+        val gate = tasks.register<EditPermissionGateTask>("gate${variantTitle}PermissionSet") {
             group = "verification"
-            description = "Fails the build if the merged ${variant.name} manifest declares " +
-                "android.permission.INTERNET (the editor never requires network; contract 4.5)."
+            description = "Fails the build unless the merged ${variant.name} manifest declares " +
+                "exactly android.permission.INTERNET (the on-demand model downloads)."
             this.variantName.set(variant.name)
             mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
         }

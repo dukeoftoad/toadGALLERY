@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.toadgallery.gallery.R
@@ -358,8 +359,15 @@ fun ToadSubPageTopBar(
 }
 
 /**
- * The trailing status pill (`bgSurfaceHigh`, `10sp` bold, `textMuted`) ---
- * the sub-page headers' "Material 3" / "Encrypted" chips.
+ * A tiny rounded status pill (`bgSurfaceHigh` fill, `textMuted` 10sp Bold
+ * label) --- the prototype's `renderSubPageHeader` subtitle badge and the
+ * status pills scattered through its chrome.
+ *
+ * r77.10: the pill is now SIZE-parameterizable (`fontSize`, default 10sp
+ * keeps every existing call site byte-identical) because the Settings hub
+ * header's version badge is the prototype's `text-[11px] font-bold`
+ * `primary-container` pill --- a step larger than the sub-page badges, in
+ * the emphasized container colors (see the hub call site).
  */
 @Composable
 fun ToadStatusPill(
@@ -367,6 +375,7 @@ fun ToadStatusPill(
     modifier: Modifier = Modifier,
     background: Color? = null,
     textColor: Color? = null,
+    fontSize: TextUnit = 10.sp,
 ) {
     val palette = ToadTheme.palette
     Text(
@@ -375,7 +384,7 @@ fun ToadStatusPill(
         style = TextStyle(
             fontFamily = ToadBodyFont,
             fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
+            fontSize = fontSize,
         ),
         maxLines = 1,
         modifier = modifier

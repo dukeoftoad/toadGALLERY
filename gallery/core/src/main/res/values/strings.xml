@@ -359,6 +359,13 @@
          byte-identical) and the About sub-screen with the vault diagnostics
          and the diagnostics ring. -->
     <string name="settings_section_appearance">Appearance</string>
+    <!-- r77.10: the hub section headers' trailing hints (the prototype's
+         `text-[10px]` right-edge labels: "Look & grid" on Appearance &
+         Timeline, "Local NPU" on On-Device AI & Smart Features, "Zero
+         tracking" on Privacy, Permissions & Vault). -->
+    <string name="settings_section_hint_appearance">Look &amp; grid</string>
+    <string name="settings_section_hint_ai">Local NPU</string>
+    <string name="settings_section_hint_access">Zero tracking</string>
     <string name="settings_layout_title">Layout</string>
     <string name="settings_layout_grid">Grid</string>
     <string name="settings_layout_collage">Collage</string>

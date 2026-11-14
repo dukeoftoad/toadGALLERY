@@ -6,13 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The bundled-frame conformance suite (r38; the `BundledStickersTest`
- * pattern for parametric code): the registry's self-consistency and the
- * authored geometry's exactness (the functions ARE the specification;
- * `FramesTest` pins their outputs on hand canvases, this suite pins the
- * registry shape).
- */
+/** Bundled-frame registry conformance: unique ordered ids, resolvable geometry, film-only holes. */
 class BundledFramesTest {
 
     @Test

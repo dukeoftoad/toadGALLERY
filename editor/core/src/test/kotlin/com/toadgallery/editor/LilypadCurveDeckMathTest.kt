@@ -5,14 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The curve deck's JVM pins (r68, the photo pro round): the channel
- * accessors, the commit normalization, and the three rules the plot
- * surface's gestures obey (hit-testing, insertion, the drag clamp).
- *
- * Pure JVM, no compose/android (ADR-0011) --- this class is one of the
- * Lilypad-prefixed set the editor CI filter runs.
- */
+/** Curve deck pins: channel accessors, commit normalization, gesture rules (hit-test, insert, drag). */
 class LilypadCurveDeckMathTest {
 
     private val identity = LilypadCurveMath.IDENTITY
@@ -95,9 +88,8 @@ class LilypadCurveDeckMathTest {
 
     @Test
     fun `normalize reads an empty master as the identity diagonal`() {
-        // The codec's tolerant shape: a degenerate master (under two
-        // surviving points) reads as absent, and the deck's own commit
-        // never writes one --- but the normalization is total anyway.
+        // The codec reads a degenerate master (under two surviving points) as absent, and the
+        // deck's own commit never writes one --- but the normalization is total anyway.
         val normalized = LilypadCurveDeckMath.normalize(ToneCurves(emptyList()))!!
         assertEquals(identity, normalized.master)
         assertNull(LilypadCurveDeckMath.normalize(normalized))
@@ -105,8 +97,7 @@ class LilypadCurveDeckMathTest {
 
     @Test
     fun `a channel-only curve survives normalization`() {
-        // The forward-state contract: a red curve with an identity
-        // master is NOT the identity --- the wire keeps it.
+        // A red curve with an identity master is NOT the identity; the wire keeps it.
         val curves = ToneCurves(identity, red = curve(0.0 to 0.0, 1.0 to 0.9))
         assertEquals(curves, LilypadCurveDeckMath.normalize(curves))
     }
@@ -153,8 +144,7 @@ class LilypadCurveDeckMathTest {
         assertNull(LilypadCurveDeckMath.insertPoint(identity, 1.0, 0.5))
         assertNull(LilypadCurveDeckMath.insertPoint(identity, -0.1, 0.5))
         assertNull(LilypadCurveDeckMath.insertPoint(identity, 1.2, 0.5))
-        // A curve that does not span the domain refuses taps outside its
-        // reach: the ends are the user's to drag.
+        // A curve that does not span the domain refuses taps outside its reach.
         val short = curve(0.2 to 0.1, 0.8 to 0.9)
         assertNull(LilypadCurveDeckMath.insertPoint(short, 0.1, 0.5))
         assertNull(LilypadCurveDeckMath.insertPoint(short, 0.9, 0.5))

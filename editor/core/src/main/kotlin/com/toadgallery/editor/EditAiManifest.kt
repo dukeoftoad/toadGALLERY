@@ -1,26 +1,13 @@
 package com.toadgallery.editor
 
 /**
- * The r41 AI model manifest (Phase 10 sub-scope A; the design contract is
- * `docs/phase-10/edit-v3-ai.md`, decision 9): the four ONNX graphs ship
- * IN THE APK under `assets/models/` (the `assets/luts` + `assets/fonts`
- * precedent), pinned by JVM literals --- name + byte size + SHA-256 ---
- * the `ModelManifest` shape MINUS the downloader: there is no fetch path
- * to verify, because there is no fetch path (the editor's zero-network
- * posture is unconditional; ADR-0010's revision keeps the editor's
- * ship-in-APK bundling rule).
- *
- * Verification split (contract decision 9): on-device, PRESENCE + SIZE
- * are checked before every inference; the full SHA-256 digest is a
- * release/dogfood gate, not a per-launch cost. The JVM test
- * (`EditAiManifestTest`) pins all three literals against the committed
- * files at build/test time, so an absence or a tampered asset means a
- * broken build, not bad data.
- *
- * The per-model graph facts and preprocessing conventions are recorded
- * in `EditAiEngine.kt` beside the inference seam; the provenance table
- * (source + license + conversion chain) is `docs/phase-10/edit-v3-ai.md`
- * and the licensing ledger rows in `docs/licensing-and-attribution.md`.
+ * The AI model manifest: the four ONNX graphs ship IN THE APK under `assets/models/`, pinned
+ * by JVM literals --- name + byte size + SHA-256 --- with no downloader (the editor's
+ * zero-network posture). Verification split: on-device, PRESENCE + SIZE are checked before
+ * every inference; the full SHA-256 digest is a release/dogfood gate, not a per-launch cost.
+ * The JVM test (`EditAiManifestTest`) pins all three literals against the committed files at
+ * build time, so a missing or tampered asset is a broken build, not bad data. Per-model graph
+ * facts live in `EditAiEngine.kt`; provenance/licensing in the docs.
  */
 object EditAiManifest {
 
@@ -41,10 +28,9 @@ object EditAiManifest {
     }
 
     /**
-     * The erase segmentation + the sky saliency input (u2netp, Apache-2.0;
-     * xuebinqin/U-2-Net, ONNX conversion huggingface.co/BritishWerewolf/
-     * U-2-Netp). One graph serves both features (the round's budget table:
-     * sky 0 dedicated bytes --- it shares this graph).
+     * The erase segmentation + the sky saliency input (u2netp, Apache-2.0; xuebinqin/U-2-Net,
+     * ONNX conversion BritishWerewolf/U-2-Netp). One graph serves both features (sky carries
+     * 0 dedicated bytes --- it shares this graph).
      */
     val ERASE_SEGMENTATION = ModelFile(
         committedName = "erase-segmentation-u2netp.onnx",
@@ -77,23 +63,18 @@ object EditAiManifest {
     val ORDERED: List<ModelFile> = listOf(ERASE_SEGMENTATION, ERASE_INPAINT, BOKEH_DEPTH, RETOUCH_FACES)
 
     /**
-     * The whole-set byte budget, pinned so the APK-size story is a literal
-     * (61,613,133 bytes; erase 34,121,743 / bokeh 27,258,801 / retouch
-     * 232,589 / sky 0 --- the skies are project-authored parametric code,
-     * not bitmaps, so they carry no model bytes). The provenance sheet's
-     * stated total 61,612,633 carried a 500-byte arithmetic slip; the
-     * pinned literal is the TRUE sum of the four pinned sizes below
-     * (`EditAiManifestTest` asserts sum == literal, so a slip like that
-     * can never ride again).
+     * The whole-set byte budget, pinned as a literal (61,613,133 bytes; erase 34,121,743 /
+     * bokeh 27,258,801 / retouch 232,589 / sky 0 --- the skies are project-authored parametric
+     * code, not bitmaps). `EditAiManifestTest` asserts sum == literal, so the pinned total
+     * can never drift from the four sizes below.
      */
     const val TOTAL_COMMITTED_BYTES: Long = 61_613_133L
 
     /**
-     * The presence + size check the device runs before any inference
-     * (contract decision 9: the digest is a release gate, not a
-     * per-launch cost). Forgiving by design: a missing or wrong-sized
-     * file answers false for THAT model, and the caller degrades that
-     * feature with its dedicated message --- never a crash.
+     * The presence + size check the device runs before any inference (the digest is a
+     * release gate, not a per-launch cost). Forgiving by design: a missing or wrong-sized
+     * file answers false for THAT model, and the caller degrades that feature --- never
+     * a crash.
      */
     fun presentAndSized(open: (String) -> java.io.InputStream?, file: ModelFile): Boolean {
         return try {

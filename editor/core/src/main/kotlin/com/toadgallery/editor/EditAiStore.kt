@@ -6,52 +6,31 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * The r41 derived-artifact store (Phase 10 sub-scope A; the design
- * contract `docs/phase-10/edit-v3-ai.md`, decision 3): `edit-ai/` in the
- * editor's app-private storage, BESIDE the sidecar directory, one
- * subdirectory per source (keyed by the SHA-256 of the source URI --- no
- * filesystem path or URI text ever becomes a filename).
+ * Derived-artifact store: `edit-ai/src-<sha256-of-source-uri-16>/` beside the
+ * sidecar directory; no URI text or filesystem path ever becomes a filename.
+ * Inference persists derived artifacts here; every render/export replays
+ * deterministically from the artifact + layer parameters — no model ever runs
+ * during render or export.
  *
- * What inference produces is a DERIVED ARTIFACT persisted here; every
- * render --- preview and export --- replays deterministically from the
- * stored artifact plus the layer's parameters. NO model ever runs during
- * render or export.
+ * Sidecar discipline: atomic tmp-then-rename writes; forgiving reads (missing
+ * or corrupt artifact renders as absent — the stage renders nothing, the UI
+ * says degraded, never a crash); keys = layer id + content hash of (source,
+ * inputs, model) so re-inference writes a NEW artifact and never mutates one
+ * in place (the undo stack stays coherent); append-only per session, swept
+ * together with the sidecar on export/clear.
  *
- * The store's discipline, the sidecar's verbatim:
- *  - atomic tmp-then-rename writes, forgiving reads (a missing or corrupt
- *    artifact reads as absent --- the stage renders NOTHING, never a
- *    crash; the UI says the layer degraded);
- *  - keys = layer id + content hash of (source hash, inputs, model
- *    identity) --- re-inference writes a NEW artifact and never mutates
- *    one in place, so the undo stack stays coherent (undoing a re-apply
- *    restores the recipe that references the PREVIOUS key, which is still
- *    present);
- *  - append-only for the session; swept together with the sidecar on
- *    export/clear.
- *
- * Artifact encodings (the contract's):
- *  - masks: RLE rows over output-canvas FRACTIONS (the RegionMask
- *    convention --- exact at any grid where the grid IS the working grid;
- *    approximate otherwise, the r37 grid-relative honesty);
- *  - depth: quantised 8-bit single-channel grids at a bounded working
- *    resolution (larger = closer);
- *  - face boxes: normalised rects;
- *  - the inpaint fill: a working-resolution patch (the migan result
- *    cropped to the refined mask's bounding box, with its placement
- *    fractions).
- *
- * Pure Kotlin (JVM-testable; the codecs are deterministic integer math).
+ * Encodings: masks = RLE rows over output-canvas fractions (exact at the
+ * working grid, nearest-row elsewhere); depth = 8-bit grids, larger = closer;
+ * face boxes = normalised rects; fill = working-resolution patch + placement
+ * fractions. Pure Kotlin: deterministic integer math, JVM-testable.
  */
 
 /**
- * A mask artifact: one row per working-grid row (EMPTY ROWS INCLUDED ---
- * what makes the reconstruction exact at the working grid itself), each
- * row's in-spans as PIXEL-EDGE fractions of the output canvas: a span
- * covers the columns [start, endExclusive), so a target column is IN when
- * its centre fraction (x + 0.5) / w lies strictly inside a span --- the
- * RegionMask "pixel centre strictly inside" convention. Exact at the
- * working grid (each row round-trips to itself); a nearest-row
- * reconstruction at any other grid (ties keep the lower row).
+ * A mask artifact: one row per working-grid row (empty rows included — this
+ * makes reconstruction exact at the working grid), in-spans as pixel-edge
+ * fractions of the output canvas. A column is IN when its centre fraction
+ * (x + 0.5) / w lies strictly inside a span. Exact at the working grid;
+ * nearest-row elsewhere (ties keep the lower row).
  */
 class FractionRleMask(
     val workingWidth: Int,
@@ -75,8 +54,7 @@ class FractionRleMask(
         if (rows.isEmpty()) return out
         for (y in 0 until h) {
             val yF = (y + 0.5) / h
-            // The nearest stored row (ties keep the LOWER row: strictly
-            // less-than when scanning in y order keeps the first).
+            // Nearest stored row; ties keep the lower row (strict < keeps the first in y order).
             var best = rows[0]
             var bestDist = kotlin.math.abs(yF - best.yFrac)
             for (r in rows) {
@@ -142,10 +120,6 @@ class FractionRleMask(
     companion object {
         /** Encodes a mask computed at its working grid into the fraction form. */
         fun fromMaskAt(mask: BooleanArray, workingWidth: Int, workingHeight: Int): FractionRleMask {
-            // Every working row is stored --- the empty rows too: a target
-            // row at the working grid then maps to ITSELF (the nearest row
-            // is the exact one), so the reconstruction is exact at the
-            // working grid and nearest-row elsewhere.
             val rowsOut = ArrayList<MaskRow>(workingHeight)
             for (y in 0 until workingHeight) {
                 val yF = (y + 0.5) / workingHeight
@@ -158,10 +132,8 @@ class FractionRleMask(
                     }
                     val start = x
                     while (x < workingWidth && mask[y * workingWidth + x]) x++
-                    // PIXEL-EDGE fractions: the span covers the columns
-                    // [start, x) --- the strict-inside reconstruction then
-                    // includes exactly those columns' centres at the working
-                    // grid (the first and last in-pixels included).
+                    // Pixel-edge fractions: the span covers [start, x) so the
+                    // strict-inside reconstruction includes exactly those columns.
                     spans.add(start / workingWidth.toDouble() to x / workingWidth.toDouble())
                 }
                 rowsOut.add(MaskRow(yF, spans))
@@ -195,10 +167,9 @@ class FractionRleMask(
 }
 
 /**
- * The inpaint-fill artifact: the migan result cropped to the refined
- * mask's bounding box, at the session's working resolution, with its
- * placement fractions (the paste maps the patch over its placement at
- * any target grid).
+ * The inpaint-fill artifact: the migan result cropped to the refined mask's
+ * bounding box at the working resolution, with placement fractions (paste maps
+ * the patch over its placement at any target grid).
  */
 class FillPatch(
     val pixels: IntArray,
@@ -216,11 +187,7 @@ class FillPatch(
         require(top in 0.0..1.0 && bottom in 0.0..1.0 && top < bottom) { "the patch's y placement must be a non-empty fraction span" }
     }
 
-    /**
-     * The patch sample for a pixel whose centre fraction is ([fx], [fy])
-     * of the output canvas: nearest over the placement (deterministic
-     * floor mapping, clamped into the patch).
-     */
+    /** Patch sample for an output-canvas centre fraction ([fx], [fy]): nearest, floor mapping, clamped. */
     fun sampleAt(fx: Double, fy: Double): Int {
         val u = ((fx - left) / (right - left)).coerceIn(0.0, 1.0)
         val v = ((fy - top) / (bottom - top)).coerceIn(0.0, 1.0)
@@ -266,10 +233,9 @@ class FillPatch(
 }
 
 /**
- * The depth artifact: a quantised 8-bit single-channel grid at a bounded
- * working resolution (the long edge caps at [MAX_LONG_EDGE]); 0..255,
- * LARGER = CLOSER (the min-max normalised predicted depth). Sampled
- * nearest at any target grid (deterministic floor mapping).
+ * The depth artifact: quantised 8-bit single-channel grid at a bounded working
+ * resolution (long edge caps at [MAX_LONG_EDGE]); LARGER = CLOSER (min-max
+ * normalised depth). Sampled nearest at any target grid (floor mapping).
  */
 class DepthGrid(
     val values: ByteArray,
@@ -300,16 +266,14 @@ class DepthGrid(
     }
 
     companion object {
-        /** The bounded working resolution's long-edge cap (the round's budget decision). */
+        /** The bounded working resolution's long-edge cap. */
         const val MAX_LONG_EDGE: Int = 256
 
         /**
-         * Downsamples a full-resolution depth map (0..255 ints, larger =
-         * closer) to a grid whose long edge caps at [MAX_LONG_EDGE], by
-         * deterministic floor-division nearest sampling. The divisor is
-         * the CEILING of the long-edge ratio, so the result can never
-         * exceed the cap (a floor divisor would --- 518 floor/256 = 2,
-         * and 518/2 = 259 > 256).
+         * Downsamples a full-resolution depth map (0..255, larger = closer) to
+         * a grid capped at [MAX_LONG_EDGE] by floor-division nearest sampling.
+         * The divisor is the CEILING of the long-edge ratio so the result can
+         * never exceed the cap (a floor divisor would: 518/2 = 259 > 256).
          */
         fun fromMap(map: IntArray, mapW: Int, mapH: Int): DepthGrid {
             val longEdge = maxOf(mapW, mapH)
@@ -344,8 +308,8 @@ class DepthGrid(
 }
 
 /**
- * The face-boxes artifact: normalised rects, one per detected face, in
- * detection order. The retouch kernels apply per box in list order.
+ * The face-boxes artifact: normalised rects, one per face, in detection order;
+ * retouch kernels apply per box in list order.
  */
 class FaceBoxes(val boxes: List<Box>) {
     init {
@@ -396,9 +360,9 @@ class FaceBoxes(val boxes: List<Box>) {
 }
 
 /**
- * The store itself: `edit-ai/src-<source-hash-16>/` under the given root,
- * the sidecar discipline's shape. One store instance per session (per
- * source); the artifact keys embed the layer id and the content hash.
+ * The store: `edit-ai/src-<source-hash-16>/` under the given root, following
+ * the sidecar discipline. One instance per session (per source); artifact
+ * keys embed the layer id and content hash.
  */
 class EditAiStore(private val root: File, sourceUri: String) {
 
@@ -411,11 +375,10 @@ class EditAiStore(private val root: File, sourceUri: String) {
     }
 
     /**
-     * The artifact key: layer id + `-` + the first 8 hex of the SHA-256
-     * over (source hash + NUL + inputs + NUL + model identity). A
-     * re-apply with different inputs derives a DIFFERENT key, so a write
-     * never mutates an existing artifact in place (append-only per
-     * session; the undo stack stays coherent).
+     * Artifact key: layer id + `-` + first 8 hex of SHA-256 over (source hash
+     * + NUL + inputs + NUL + model identity). Different inputs derive a
+     * different key, so writes never mutate an artifact in place (undo stays
+     * coherent).
      */
     fun keyFor(layerId: String, inputs: String, modelIdentity: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -428,10 +391,7 @@ class EditAiStore(private val root: File, sourceUri: String) {
     /** Whether an artifact file exists for [key] of this [kind] (presence check, never a read). */
     fun contains(kind: ArtifactKind, key: String): Boolean = fileFor(kind, key)?.isFile == true
 
-    /**
-     * Writes the refined erase mask + the fill together under one key
-     * (ONE artifact per erase layer; the pair lands or neither does).
-     */
+    /** Writes the refined erase mask + fill under one key: the pair lands or neither does. */
     fun writeEraseArtifact(key: String, mask: FractionRleMask, patch: FillPatch): Boolean =
         write(fileFor(ArtifactKind.MASK, key), mask.toBytes()) &&
             write(fileFor(ArtifactKind.FILL, key), patch.toBytes())
@@ -461,10 +421,7 @@ class EditAiStore(private val root: File, sourceUri: String) {
     fun readBoxes(key: String): FaceBoxes? =
         FaceBoxes.fromBytes(read(fileFor(ArtifactKind.BOXES, key)) ?: return null)
 
-    /**
-     * Sweeps this source's artifacts with the sidecar on export/clear
-     * (append-only UNTIL the edit resolves; a sweep is the only delete).
-     */
+    /** Sweeps this source's artifacts on export/clear (append-only until then; the only delete). */
     fun sweep() {
         val files = sourceDir.listFiles() ?: return
         for (file in files) {
@@ -485,10 +442,9 @@ class EditAiStore(private val root: File, sourceUri: String) {
     enum class ArtifactKind(val extension: String) { MASK("mask"), FILL("fill"), DEPTH("depth"), BOXES("boxes") }
 
     /**
-     * The file for [key]: null when the key is HOSTILE (it would not
-     * survive the name sanitisation unchanged --- path separators, dot
-     * walks, over-length). A hostile key writes nothing and reads as
-     * absent: the honest refusal, never a filesystem escape.
+     * The file for [key]: null when hostile (would not survive sanitisation —
+     * path separators, dot walks, over-length). A hostile key writes nothing
+     * and reads as absent: never a filesystem escape.
      */
     private fun fileFor(kind: ArtifactKind, key: String): File? {
         val safe = key.filter { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' }.take(96)

@@ -10,11 +10,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * The user-imported sticker store (r35; the `ImportedLutStoreTest`
- * conventions): PNG/WebP magic-before-write, verbatim bytes, derived
- * collision-suffixed ids that can never shadow the bundled set, the
- * listing-as-index, idempotent delete --- and a rejection leaving the
- * store byte-identical.
+ * The user-imported sticker store: magic-before-write, verbatim bytes, collision-suffixed
+ * ids that never shadow the bundled set, listing-as-index, idempotent delete.
  */
 class ImportedStickerStoreTest {
 
@@ -177,9 +174,8 @@ class ImportedStickerStoreTest {
         assertTrue(store.delete("two"))
         assertFalse(store.delete("one")) // idempotent: absent deletes false
         assertEquals(0, store.list().size)
-        // A sidecar still naming the deleted sticker is SAFE: the recipe
-        // keeps the id, the compositor renders nothing (the tolerance
-        // contract); isImported now honestly reports false.
+        // A sidecar still naming the deleted sticker is safe: the recipe keeps the id,
+        // the compositor renders nothing (tolerance contract).
         assertFalse(store.isImported("one"))
     }
 
@@ -197,8 +193,7 @@ class ImportedStickerStoreTest {
     fun `a rejected import leaves the store byte-identical`() {
         val store = store()
         store.import(png(), "keep.png")
-        // Byte arrays compare by identity under equals(); map to List<Byte>
-        // for content comparison (the TemporaryFolder tree, nothing else).
+        // equals() on ByteArray is identity; map to List<Byte> for content comparison.
         val snapshot: (File) -> List<Pair<String, List<Byte>>> = { dir ->
             dir.listFiles()!!.map { it.name to it.readBytes().toList() }
         }
@@ -210,8 +205,7 @@ class ImportedStickerStoreTest {
     }
 
     private fun storeDir(store: ImportedStickerStore): File {
-        // The store's directory is the folder it was constructed with;
-        // recorded by store() at creation (one store per test).
+        // The store's directory is the folder it was constructed with (recorded by store()).
         return lastDir!!
     }
 }

@@ -6,18 +6,9 @@ import android.graphics.Paint
 import android.graphics.Path
 
 /**
- * The stroke compositing pass (r36, Phase 7 v2) --- the ONLY place a
- * freehand stroke is rendered, shared by the live preview and the export
- * (the contract's "same code path, no second renderer"): both callers
- * hand the SAME function their target bitmap, the recipe's layers and
- * their output-canvas rectangle, exactly as the family compositors take
- * them.
- *
- * Pipeline placement (`drawing-tool.md` decision 5): a compositing pass
- * AFTER the whole pixel pipeline, BETWEEN the sticker pass and the text
- * pass --- annotation paints over the scene objects, captions float
- * above the annotation. Within the family, layers draw in list order,
- * top LAST.
+ * The stroke compositing pass — the ONLY place a freehand stroke renders, shared by preview
+ * and export. Runs after the pixel pipeline, between the sticker pass and the text pass;
+ * layers draw in list order, top LAST.
  */
 object DrawCompositor {
 
@@ -44,8 +35,7 @@ object DrawCompositor {
             paint.color = spec.layer.colorArgb.toInt()
             paint.alpha = spec.alpha
             if (pts.size == 1) {
-                // A tap is a dot: the brush width as a filled circle at
-                // the mapped point (a zero-length path draws nothing).
+                // A tap is a dot: filled circle at the mapped point (a zero-length path draws nothing).
                 paint.style = Paint.Style.FILL
                 canvas.drawCircle(pts[0].first, pts[0].second, spec.widthPx / 2f, paint)
                 continue

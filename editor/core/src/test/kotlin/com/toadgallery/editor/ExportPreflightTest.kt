@@ -5,10 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The export preflight (r31): the large-file decode guard, the storage
- * preflight's byte model + 1.5x-headroom decision, and the process-death
- * policy --- the code-side half of the on-device robustness matrix (the
- * physical execution rides the device checklist §19 extension).
+ * Export preflight: the large-file decode guard, the storage byte model + 1.5x-headroom decision,
+ * and the process-death policy.
  */
 class ExportPreflightTest {
 
@@ -44,8 +42,7 @@ class ExportPreflightTest {
 
     @Test
     fun `the default-quality jpeg estimate is conservative (equals the raw size)`() {
-        // At q95 the model says one megapixel costs as much as its raw
-        // ARGB_8888 footprint --- an over-estimate of any real encode.
+        // At q95 one megapixel costs its raw ARGB_8888 footprint --- an over-estimate of any real encode.
         assertEquals(4L * 1_000_000L, ExportPreflight.estimateBytes(1_000_000L, ExportFormat.JPEG, 95))
     }
 
@@ -105,8 +102,7 @@ class ExportPreflightTest {
 
     @Test
     fun `the assumed-pixel fallback sits well under the cap`() {
-        // The storage estimate's fallback source size must never trip the
-        // decode guard it shares the preflight with.
+        // The storage estimate's fallback size must never trip the decode guard it shares the preflight with.
         assertTrue(ExportPreflight.ASSUMED_PIXELS < ExportPreflight.MAX_EXPORT_PIXELS)
         assertEquals(48_000_000L, ExportPreflight.MAX_EXPORT_PIXELS)
         assertEquals(12_000_000L, ExportPreflight.ASSUMED_PIXELS)

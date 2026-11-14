@@ -3,19 +3,11 @@ package com.toadgallery.editor
 import kotlin.math.ceil
 
 /**
- * The freehand stroke-layer system (r36, Phase 7 v2; the design contract
- * is `docs/phase-7/drawing-tool.md`, decision set 1-6).
- *
- * Pure Kotlin, JVM-tested (the repo's ADR-0011 convention: the model and
- * the layout are pure; only the Paint/Canvas pass lives on the Android
- * side, in `DrawRender.kt`, and shares THIS object's layout math for the
- * preview and the export --- one code path, no second renderer).
- *
- * One gesture = one layer = one undo snapshot; per-layer re-editing
- * until export (the four scalar controls; the points are not editable
- * in v1). The recipe container is additive like the family contract:
- * a pre-r36 sidecar (or a clean session) has no `drawLayers` key and
- * loads byte-clean; empty normalises back to absent.
+ * The freehand stroke-layer system. Pure Kotlin, JVM-tested (ADR-0011): only the
+ * Paint/Canvas pass lives in `DrawRender.kt`, sharing this layout math for preview and
+ * export --- one code path. One gesture = one layer = one undo snapshot; points are not
+ * editable in v1. The recipe container is additive: a missing `drawLayers` key loads
+ * byte-clean; empty normalises back to absent.
  */
 data class DrawLayer(
     val id: String,
@@ -56,9 +48,8 @@ data class DrawLayer(
         const val DEFAULT_SMOOTHING_PCT = 50
 
         /**
-         * The next free session id over `existing` ("d1", "d2", ...): the
-         * family `newId` convention, the `d` prefix keeping the families
-         * collision-free by construction.
+         * The next free session id over `existing` ("d1", "d2", ...): the family
+         * `newId` convention, the `d` prefix keeping the families collision-free.
          */
         fun newId(existing: Collection<String>): String {
             var max = 0
@@ -70,11 +61,9 @@ data class DrawLayer(
         }
 
         /**
-         * The commit-time thinning: a live gesture can sample at frame
-         * rate, so the COMMIT stores a stride-thinned list --- index 0,
-         * every `stride`-th index below `n-1`, then index `n-1`; the
-         * result is <= cap+1 points, deterministic, endpoints always kept
-         * (drawing-tool.md decision 3).
+         * The commit-time thinning: a live gesture can sample at frame rate, so the
+         * COMMIT stores a stride-thinned list --- index 0, every `stride`-th index below
+         * `n-1`, then `n-1`; <= cap+1 points, deterministic, endpoints always kept.
          */
         fun thin(points: List<Point>, cap: Int): List<Point> {
             require(cap >= 1) { "the thinning cap must be >= 1" }
@@ -95,9 +84,8 @@ data class DrawLayer(
 }
 
 /**
- * The recipe's additive stroke container: absent (null) = a pre-r36
- * sidecar or a clean session; empty is normalised BACK to absent by the
- * codec (the family rule).
+ * The recipe's additive stroke container: absent (null) = a clean or pre-stroke
+ * session; empty is normalised BACK to absent by the codec.
  */
 data class DrawLayers(val layers: List<DrawLayer>) {
     init {
@@ -112,13 +100,10 @@ data class DrawLayers(val layers: List<DrawLayer>) {
 }
 
 /**
- * The pure layout pass (JVM-tested): turns the recipe's fraction-space
- * strokes into pixel-space draw specs IN LIST ORDER (the draw order:
- * layers render in list order, top LAST --- the family rule). Smoothing
- * runs HERE, in pixel space, as Chaikin corner-cutting (the pass count
- * from the smoothing slider); the compositor draws the smoothed
- * polyline with round caps and joins, and a single-point layer as a
- * dot of the brush width (a tap is a dot, not nothing).
+ * The pure layout pass (JVM-tested): turns the recipe's fraction-space strokes into
+ * pixel-space draw specs IN LIST ORDER (layers render in list order, top LAST).
+ * Smoothing runs HERE in pixel space as Chaikin corner-cutting (pass count from the
+ * smoothing slider); a single-point layer draws as a dot of the brush width.
  */
 object DrawLayout {
 
@@ -127,11 +112,11 @@ object DrawLayout {
         val layer: DrawLayer,
         /** The brush width in output pixels. */
         val widthPx: Float,
-        /** 0..255 paint alpha: the color's alpha byte x the opacity slider (the r34 text math). */
+        /** 0..255 paint alpha: the color's alpha byte x the opacity slider. */
         val alpha: Int,
         /**
-         * The SMOOTHED polyline in pixel space (or the single mapped
-         * point for a dot). The compositor executes this verbatim.
+         * The SMOOTHED polyline in pixel space (or the single mapped point for a dot);
+         * the compositor executes this verbatim.
          */
         val pointsPx: List<Pair<Float, Float>>,
     )
@@ -140,9 +125,8 @@ object DrawLayout {
     fun widthPxFor(widthPct: Int, canvasMinEdge: Float): Float = widthPct / 100f * canvasMinEdge
 
     /**
-     * The paint alpha: the color's OWN alpha byte scaled by the opacity
-     * slider, rounded half-up ((a*opacity + 50) / 100 --- the r34 text
-     * math, identical here by decision).
+     * The paint alpha: the color's OWN alpha byte scaled by the opacity slider,
+     * rounded half-up ((a*opacity + 50) / 100, the text family's math).
      */
     fun alphaFor(layer: DrawLayer): Int {
         val colorAlpha = ((layer.colorArgb ushr 24) and 0xFFL).toInt()
@@ -154,11 +138,9 @@ object DrawLayout {
         kotlin.math.round(smoothingPct / 25.0).toInt().coerceIn(0, 4)
 
     /**
-     * Chaikin corner-cutting on an OPEN polyline, endpoints preserved:
-     * each edge (a, b) emits 0.75a + 0.25b then 0.25a + 0.75b; the
-     * output is [P0, Q0, R0, Q1, R1, ..., Plast]. Exactly testable; the
-     * affine fraction->pixel map commutes with it, so running it in
-     * pixel space (place time) is exact.
+     * Chaikin corner-cutting on an OPEN polyline, endpoints preserved: each edge
+     * (a, b) emits 0.75a + 0.25b then 0.25a + 0.75b; output is [P0, Q0, R0, ..., Plast].
+     * The affine fraction->pixel map commutes with it, so pixel-space smoothing is exact.
      */
     fun smoothPolyline(points: List<Pair<Float, Float>>, passes: Int): List<Pair<Float, Float>> {
         if (passes <= 0 || points.size < 3) return points

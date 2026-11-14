@@ -8,30 +8,17 @@ import java.io.FileInputStream
 import java.security.MessageDigest
 
 /**
- * The r41 model-manifest pin test (the contract's "the model manifest pin
- * test (name + size + SHA-256 literals over the committed `assets/models/`
- * files)"): reads the four committed ONNX files from the SOURCE TREE under
- * BOTH plausible unit-test cwds (the `EditManifestConformanceTest`
- * `moduleFile` pattern from r40 --- the Gradle module dir and the repo
- * root), and asserts name + bytes + SHA-256 against the JVM literals in
- * [EditAiManifest]. The local harness pins the worktree root as the cwd;
- * Gradle runs from `apps/edit`. An absent or tampered asset fails HERE,
- * at build/test time --- the device checks only presence + size per
- * launch (the digest is a release gate, not a per-launch cost).
+ * Model-manifest pin test: asserts name + bytes + SHA-256 of the committed ONNX files against
+ * the JVM literals in [EditAiManifest] (fails at test time; the device checks presence+size only).
  */
 class EditAiManifestTest {
 
-    /**
-     * Unit-test working dir is the module dir (apps/edit) under Gradle; the
-     * local harness pins the WORKTREE ROOT as the cwd --- be tolerant of
-     * both (the `EditManifestConformanceTest` pattern, the repo-root
-     * candidate added for the r41 harness).
-     */
+    /** Tolerates both the Gradle module-dir and the repo-root working directories. */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         return sequenceOf(
             File(cwd, relative), // the Gradle module cwd (apps/edit)
-            File(cwd, "apps/edit/$relative"), // the repo/worktree-root cwd (the local harness)
+            File(cwd, "apps/edit/$relative"), // the repo/worktree-root cwd
             File(cwd.parentFile, "apps/edit/$relative"), // any direct child of the root
         ).firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
@@ -81,9 +68,8 @@ class EditAiManifestTest {
         var sum = 0L
         for (file in EditAiManifest.ORDERED) sum += file.bytes
         assertEquals(EditAiManifest.TOTAL_COMMITTED_BYTES, sum)
-        // The TRUE sum of the four pinned sizes (the provenance sheet's
-        // stated total 61,612,633 carried a 500-byte arithmetic slip; the
-        // literal is the sum, and this assertion keeps it that way).
+        // The literal must stay the TRUE sum of the four pinned sizes (the earlier stated total
+        // 61,612,633 carried a 500-byte arithmetic slip).
         assertEquals(61_613_133L, EditAiManifest.TOTAL_COMMITTED_BYTES)
     }
 
@@ -99,10 +85,8 @@ class EditAiManifestTest {
                 ),
             )
         }
-        // A wrong-sized stand-in (one byte short) must be refused for that
-        // model --- the per-launch check is honest, never optimistic. The
-        // opener serves the STAND-IN for the retouch model's path, so the
-        // check measures the wrong bytes, not the committed file again.
+        // A wrong-sized stand-in (one byte short) must be refused --- the per-launch check is honest.
+        // The opener serves the STAND-IN for the retouch path, so the check measures the wrong bytes.
         val onDisk = File(assetsDir(), EditAiManifest.RETOUCH_FACES.committedName)
         val bytes = onDisk.readBytes()
         val short = File(assetsDir(), "short.onnx")

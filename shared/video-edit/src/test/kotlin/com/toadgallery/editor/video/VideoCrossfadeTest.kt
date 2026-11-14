@@ -4,10 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r74 crossfade model's JVM pins: the boundary rules, the
- * neighbour-length honesty, and the transition-applied duration math.
- */
+/** The crossfade model: boundary rules, neighbour-length honesty, transition-applied duration math. */
 class VideoCrossfadeTest {
 
     private fun twoClips(first: Long = 10_000, second: Long = 8_000): ClipTimeline {

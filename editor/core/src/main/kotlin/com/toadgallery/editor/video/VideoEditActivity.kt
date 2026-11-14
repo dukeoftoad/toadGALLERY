@@ -35,55 +35,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * toadGALLERY Edit --- the r42 VIDEO surface (the Phase 10 sub-scope B
- * lightweight editor; ADR-0012; docs/phase-10/video-editor.md). The
- * additive contract v2 launch activity: the same contract action filtered
- * on VIDEO mimes, reached through the gallery's video-capable resolution
- * (a v1-era gallery never resolves it, a v2 gallery only sends it video).
- *
- * The session model is the PURE :shared:video-edit module: the UI bounds
- * its own inputs, builds [VideoEditPlan] / [FrameExtractPlan] /
- * [AnimationExportPlan] values, validates them through the shared
- * validators and this activity merely EXECUTES a validated plan ---
- * the ExportPlan precedent, video-shaped:
- *
- *  1. LAUNCH: the contract request validates (the r42 media-kind extra
- *     included; anything but VIDEO on this surface is ERROR_UNSUPPORTED).
- *     The clip FACTS (duration, audio presence, frame rate, pixel size)
- *     come from MediaMetadataRetriever and fail fast to ERROR_UNSUPPORTED
- *     when the clip is unreadable.
- *  2. PREVIEW: ExoPlayer + the SAME [VideoAdjustEffect] the export
- *     consumes (ExoPlayer.setVideoEffects) --- one model, two
- *     realizations, so preview and export agree by construction. Trim is
- *     previewed via the clipping configuration, mute via player volume,
- *     the whole-clip speed factor via playback speed; the optional region
- *     speed is honestly noted as export-applied (decision 3).
- *  3. EXPORT (video): the plan rides the [VideoExportCoordinator] seam
- *     into [Media3VideoExportRunner]; typed progress + cancellation, the
- *     render lands in the cache dir, then the bytes are copied into a NEW
- *     MediaStore row (IS_PENDING on Q+; a failed write cancels the row).
- *  4. EXPORT (frame / animation): pure plans again --- the frame count
- *     and the byte budget are decided BEFORE any decode by
- *     [AnimationPreflight] (the ExportPreflight shape); frames ride the
- *     MediaMetadataRetriever path (getFrameAtTime, OPTION_CLOSEST), the
- *     GIF encoder and the animated-WebP muxer are the shared module's
- *     project-authored code.
- *  5. NON-DESTRUCTIVE, ALWAYS: the source URI is only ever READ; every
- *     export is an INSERT of a new "-edit" named entry (VideoOutputPlan);
- *     no replace-original path exists anywhere.
- *  6. TERMINAL STATES: RESULT_OK (+ OUTPUT_URI; the metadata policy
- *     honestly echoes STRIP_ALL --- the re-encode writes a fresh
- *     container, no source metadata survives) / RESULT_CANCELED (back) /
- *     RESULT_ERROR (structured code).
- *
- * r52: the SURFACE was redesigned to the maintainer-approved Image-2 base
- * (dark+violet palette, preview top, transport row, filmstrip, bottom tab
- * bar, per-tab screens) and now lives in VideoEditorScreen.kt with its own
- * VideoEditTheme; this activity keeps every behavior/plan semantics and the
- * plumbing unchanged, adds the thumbnail-decode hook the new filmstrip
- * needs, and gained the volume dimension (the committed session state
- * carries a 0..200 percent realized as VideoEditPlan.volume at export and
- * as player.volume in the preview).
+ * toadGALLERY Edit video surface: executes validated shared-module plans for ExoPlayer
+ * preview and video/frame/animation export; always inserts a new "-edit" row, never overwrites.
  */
 class VideoEditActivity : ComponentActivity() {
 
@@ -120,10 +73,8 @@ class VideoEditActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // r47 ux fix: the photo surface's edge-to-edge posture verbatim ---
-        // targetSdk 36 enforces it on API 35+; the dark SystemBarStyle
-        // forces light icons over the always-black canvas (the auto style
-        // rendered dark-on-black in light mode).
+        // Edge-to-edge like the photo surface: the dark SystemBarStyle keeps light icons
+        // over the always-black canvas (auto style renders dark-on-black in light mode).
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -184,9 +135,7 @@ class VideoEditActivity : ComponentActivity() {
         renderedHeightPx = facts.heightPx
 
         setContent {
-            // r52 redesign: the video surface brings its OWN fixed dark
-            // violet theme (VideoEditTheme, local to VideoEditorScreen.kt)
-            // --- the r47 EditorTheme stays with the photo editor.
+            // Fixed dark violet theme local to this surface; EditorTheme stays with the photo editor.
             VideoEditTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = VideoEditBg) {
                     VideoEditorScreen(activity = this@VideoEditActivity)
@@ -195,7 +144,7 @@ class VideoEditActivity : ComponentActivity() {
         }
     }
 
-    // ---- The clip facts via MediaMetadataRetriever (the r42 frame path's front door) ----
+    // ---- Clip facts via MediaMetadataRetriever ----
 
     private class ClipFacts(
         val durationMs: Long,
@@ -206,11 +155,8 @@ class VideoEditActivity : ComponentActivity() {
     )
 
     /**
-     * One cheap metadata pass (the photo surface's decodeBounds precedent):
-     * duration, audio presence, frame rate (the video track's format, read
-     * through MediaExtractor; best-effort) and the rotation-corrected pixel
-     * size. Null on any failure --- the caller answers ERROR_UNSUPPORTED
-     * honestly.
+     * One cheap metadata pass: duration, audio presence, best-effort frame rate, and the
+     * rotation-corrected pixel size. Null on any failure (caller answers ERROR_UNSUPPORTED).
      */
     private fun readClipFacts(sourceUri: String): ClipFacts? = try {
         val retriever = MediaMetadataRetriever()
@@ -252,14 +198,8 @@ class VideoEditActivity : ComponentActivity() {
     }
 
     /**
-     * The frame-rate fact (the r42 CI catch): MediaMetadataRetriever has NO
-     * frame-rate key at ANY API level --- the constant does not exist; the
-     * honest source is the video track's MediaFormat, read through
-     * MediaExtractor over the source's asset file descriptor (MediaExtractor
-     * has no Context/Uri overload; the content resolver opens the
-     * read-only source). Best-effort: null when the track format does not
-     * carry it, and the animation plan's effectiveFps then rides the honest
-     * unknown (the requested fps stands; the plan module's null fallback).
+     * MediaMetadataRetriever has no frame-rate key at any API level; the honest source is the
+     * video track's MediaFormat via MediaExtractor (no Uri overload, hence the resolver AFD).
      */
     private fun readTrackFrameRate(sourceUri: String): Double? = try {
         contentResolver.openAssetFileDescriptor(Uri.parse(sourceUri), "r")?.use { afd ->
@@ -302,12 +242,8 @@ class VideoEditActivity : ComponentActivity() {
     }
 
     /**
-     * Decodes [count] evenly spaced thumbnails over the SOURCE clip (the
-     * new filmstrip's real frames): one retriever, one frame per
-     * clip-duration/count slice at the slice midpoint, OPTION_CLOSEST_SYNC
-     * (keyframe-cheap). Runs on [exportScope]; delivers on the main thread.
-     * An honest empty list on ANY failure (or a non-positive count) --- the
-     * UI shows placeholders instead of pretending.
+     * Decodes [count] evenly spaced source-clip thumbnails (slice midpoints, OPTION_CLOSEST_SYNC).
+     * Empty list on any failure or non-positive count; callbacks arrive on the main thread.
      */
     internal fun decodeThumbnails(count: Int, onDone: (List<Bitmap>) -> Unit) {
         if (count <= 0) {
@@ -366,10 +302,8 @@ class VideoEditActivity : ComponentActivity() {
     }
 
     /**
-     * RESULT_OK with the saved-copy URI, then finish. The applied policy is
-     * honestly STRIP_ALL: the media3 re-encode writes a fresh container and
-     * no source metadata survives it (the r31 honesty narration --- never a
-     * bare "saved" when the copy's metadata was reduced).
+     * RESULT_OK with the saved-copy URI, then finish. Policy is STRIP_ALL: the re-encode
+     * writes a fresh container, so no source metadata survives.
      */
     internal fun finishWithSavedCopy(outputUri: Uri) {
         val result = Intent().apply {
@@ -404,9 +338,8 @@ class VideoEditActivity : ComponentActivity() {
     // ---- The video export (the coordinator seam + the MediaStore publish) ----
 
     /**
-     * Submits a validated plan through the seam. Must run on the main
-     * thread (the media3 runner requires its building looper); progress
-     * and the terminal outcome arrive on the main thread too.
+     * Submits a validated plan through the seam; must run on the main thread (media3 requires
+     * its building looper). Progress and the terminal outcome arrive on the main thread.
      */
     internal fun submitVideoExport(
         plan: VideoEditPlan,
@@ -445,9 +378,8 @@ class VideoEditActivity : ComponentActivity() {
     }
 
     /**
-     * Copies the rendered file into a NEW MediaStore row (IS_PENDING on Q+,
-     * finalized after the bytes land; a failed write cancels the pending
-     * row) and answers the gallery. The temp render is deleted either way.
+     * Copies the render into a NEW MediaStore row (IS_PENDING on Q+, cancelled on a failed
+     * write) and answers the gallery; the temp render is deleted either way.
      */
     private suspend fun publishVideoExport(
         result: VideoExportResult.Success,
@@ -499,10 +431,7 @@ class VideoEditActivity : ComponentActivity() {
 
     // ---- The frame + animation exports (the retriever path) ----
 
-    /**
-     * Extracts ONE source frame (no colour adjustments --- the honest note
-     * says so in the sheet) and inserts it as a new JPEG/PNG entry.
-     */
+    /** Extracts ONE source frame (no colour adjustments) and inserts it as a new JPEG/PNG entry. */
     internal fun submitFrameExtract(
         plan: FrameExtractPlan,
         onFinished: (StillExportOutcome) -> Unit,
@@ -547,12 +476,8 @@ class VideoEditActivity : ComponentActivity() {
     }
 
     /**
-     * The animation export: the preflight has already agreed (the UI ran it
-     * BEFORE calling, showing any refusal honestly), so this walks the
-     * derived timestamps, decodes + scales each frame, encodes through the
-     * shared GIF encoder or the platform lossless-WebP + shared muxer, and
-     * inserts the result as ONE new entry. Cancellation is polled between
-     * frames; a cancelled run cancels its pending row.
+     * Animation export: decode + scale each derived timestamp, encode via the shared GIF encoder
+     * or platform WebP + shared muxer, insert ONE entry; cancellation polled between frames.
      */
     internal fun submitAnimationExport(
         plan: AnimationExportPlan,
@@ -629,10 +554,7 @@ class VideoEditActivity : ComponentActivity() {
                                     "cannot decode the frame at " + timestampMs + " ms",
                                 )
                             val encoded = ByteArrayOutputStream()
-                            // The r42 lint catch: WEBP_LOSSLESS is API 30;
-                            // below R the frame rides lossy WebP at quality
-                            // 100 --- the honest degradation mirroring the
-                            // preflight's webpLosslessSupported fact.
+                            // WEBP_LOSSLESS is API 30; below R use lossy WebP at quality 100.
                             val webpFormat = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 Bitmap.CompressFormat.WEBP_LOSSLESS
                             } else {
@@ -693,11 +615,8 @@ class VideoEditActivity : ComponentActivity() {
     }
 
     /**
-     * The shared still-export spine: the insert/finalize helpers plus the
-     * pending-row recovery, so the frame and animation paths share ONE
-     * non-destructive publish discipline. A body that RETURNS a non-Saved
-     * outcome (or throws) gets its pending row cancelled --- nothing
-     * partial survives.
+     * Shared still-export spine: insert/finalize helpers plus pending-row recovery. A non-Saved
+     * return (or throw) cancels the pending row, so nothing partial survives.
      */
     private suspend fun runStillExport(
         body: suspend (
@@ -707,9 +626,7 @@ class VideoEditActivity : ComponentActivity() {
     ): StillExportOutcome {
         val api29Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         var outputUri: Uri? = null
-        // The spine's two callbacks (positional: a function-type value takes
-        // no named arguments). insertRow keys the row to its collection;
-        // finalize clears IS_PENDING.
+        // Positional (function-type values take no named args); insertRow keys the row, finalize clears IS_PENDING.
         val insertRow: (VideoOutputKind, String) -> Uri = { kind, displayName ->
             val collection = if (kind.store == VideoOutputStore.VIDEO) {
                 if (api29Plus) {

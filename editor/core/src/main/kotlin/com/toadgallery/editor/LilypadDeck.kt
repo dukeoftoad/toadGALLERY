@@ -39,59 +39,20 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-// ---------------------------------------------------------------------------
-// The r67 Lilypad foundation round (Phase 1 of the editor rebirth plan,
-// docs/editor/lilypad-design.md): the Deck --- the three-state bottom sheet
-// that retires the r54 chassis's fixed panel window (the `heightIn(max =
-// 300.dp)` scroll column in EditActivity; LilypadFlags.decksEnabled is the
-// revert seam that swaps this in as the default).
-//
-// THE CHASSIS CONTRACT. One sheet, three states, the state CALLER-OWNED
-// (EditorContent remembers it; this composable is otherwise stateless):
-//
-//   Collapsed --- a 64dp peek: the drag handle plus a sliver of the first
-//                row, the photo unobstructed;
-//   Half       --- the working surface, 45% of the available height;
-//   Full       --- the immersive surface, 78% (Phase 2's curve deck; no
-//                call site references it in Phase 1).
-//
-// The heights are pure arithmetic in LilypadDeckMath (JVM-pinned in
-// LilypadDeckMathTest) and animate through ONE spring (damping 0.85,
-// stiffness 380 --- LilypadTokens' sheet motion): there is no live
-// finger-following this round, the spring carries the feel.
-//
-// THE SURFACE. The Pad color (colorScheme.background under the Lilypad
-// palette) with 16dp top corners (LilypadTokens.SHEET_CORNER_DP) and a
-// hairline top border in outlineVariant --- depth comes from lightness
-// steps and hairlines, never shadows. The content scrolls vertically
-// inside, so panels of any height work; the r54 column's 16/8dp padding
-// and 4dp spacing ride verbatim (the panels' rhythm is unchanged).
-//
-// THE HANDLE. Tap toggles (LilypadDeckMath.tapToggle); a vertical drag
-// accumulates and snaps ONE step past 48dp scaled to px on release
-// (LilypadDeckMath.snapAfterDrag). The r32 a11y contract: the handle
-// announces its NAME through a state-DEPENDENT contentDescription
-// ("Expand tools" when collapsed, "Collapse tools" when half/full --- the
-// label IS the state announcement, per strings_r67.xml) and carries its
-// action through clickable's Role.Button.
-// ---------------------------------------------------------------------------
+// Lilypad Deck: the caller-owned three-state bottom sheet (peek/half/full)
+// replacing the fixed panel window; math in LilypadDeckMath, one spring.
 
 /**
- * The height used when the chassis hands the Deck an unbounded height
- * constraint (a finite maxHeight is the norm in this chassis; the fallback
- * keeps the sheet sane inside, say, an unmeasured scroll host instead of
- * letting NaN arithmetic eat the spring.
+ * Height used when the chassis hands the Deck an unbounded height constraint
+ * (keeps the sheet sane instead of NaN arithmetic eating the spring).
  */
 private const val DECK_UNBOUNDED_FALLBACK_HEIGHT_DP = 640
 
 /**
- * The three-state bottom sheet (see the file header). [state] is caller-
- * owned --- every interaction reports through [onStateChange] --- and
- * [content] is hosted in the sheet's scrolling column (the r54 panel
- * rhythm: 16/8dp padding, 4dp spacing), so panels of any height work. The
- * sheet springs to [LilypadDeckMath]'s target for [state] with the
- * Lilypad sheet motion; the drag handle carries the tap/drag interactions
- * and the r32 a11y contract.
+ * The three-state bottom sheet. [state] is caller-owned — every interaction
+ * reports through [onStateChange]; [content] hosts in the sheet's scrolling
+ * column (16/8dp padding, 4dp spacing), so panels of any height work. Springs
+ * to [LilypadDeckMath]'s target for [state]; the handle carries tap/drag + a11y.
  */
 @Composable
 internal fun LilypadDeck(
@@ -102,20 +63,14 @@ internal fun LilypadDeck(
 ) {
     val density = LocalDensity.current
     val densityScale = density.density
-    // Fresh-at-read refs for the drag-end decision: the filmstrip
-    // precedent (rememberUpdatedState over a stable pointerInput) --- the
-    // snap must judge the CURRENT state without restarting the gesture
-    // detector mid-drag, and a parent's newer lambda must be the one
-    // called.
+    // Fresh-at-read refs: the snap judges the CURRENT state without restarting
+    // the gesture detector mid-drag.
     val currentState by rememberUpdatedState(state)
     val currentOnStateChange by rememberUpdatedState(onStateChange)
-    // The handle drag accumulator: session-local UI state, reset at every
-    // drag end/cancel (never recipe state, never caller-visible).
+    // Handle drag accumulator: session-local, reset at every drag end/cancel.
     var dragAccumulated by remember { mutableStateOf(0f) }
-    // The handle's a11y NAME, resolved OUTSIDE any semantics{} lambda
-    // (stringResource is composable; semantics{} is not): collapsed reads
-    // expand, expanded reads collapse --- the label itself announces the
-    // state (strings_r67.xml's contract).
+    // Handle a11y name, resolved outside semantics{} (stringResource is
+    // composable): the label itself announces the state.
     val handleA11y = stringResource(
         if (state == LilypadDeckState.Collapsed) {
             R.string.editor_r67_deck_handle_expand
@@ -128,9 +83,7 @@ internal fun LilypadDeck(
     val pillColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
 
     BoxWithConstraints {
-        // The available height this sheet may occupy. The chassis gives a
-        // finite height constraint; an unbounded one falls back to a sane
-        // 640dp rather than NaN arithmetic.
+        // Unbounded height falls back to 640dp (DECK_UNBOUNDED_FALLBACK_HEIGHT_DP).
         val maxHeightPx = with(density) {
             if (constraints.hasBoundedHeight) {
                 maxHeight.toPx()
@@ -159,12 +112,9 @@ internal fun LilypadDeck(
                 topEnd = LilypadTokens.SHEET_CORNER_DP.dp,
             ),
         ) {
-            // The sheet's own column: the hairline top border, the handle,
-            // and the scrolling content. The hairline draws here --- INSIDE
-            // the Surface, over its background, clipped by the 16dp
-            // corners --- because a drawBehind on the Surface's own
-            // modifier chain would paint UNDER the surface background and
-            // vanish.
+            // Hairline draws INSIDE the Surface (clipped by the corners): a
+            // drawBehind on the Surface's modifier chain would paint under the
+            // background and vanish.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -177,11 +127,8 @@ internal fun LilypadDeck(
                         )
                     },
             ) {
-                // 1. THE HANDLE: full-width, 48dp tall (the WCAG 2.5.5
-                // touch-target floor, the r47 swatch precedent --- the
-                // visual is still the quiet 32x4dp pill centered in the
-                // band), tap toggles the working toggle; a vertical drag
-                // accumulates and snaps one step on release.
+                // 1. The handle: full-width 48dp touch-target band (visual is
+                // the 32x4dp pill); tap toggles, drag snaps one step on release.
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -193,11 +140,8 @@ internal fun LilypadDeck(
                                 currentOnStateChange(LilypadDeckMath.tapToggle(currentState))
                             },
                         )
-                        // Keyed on the density scale alone: the snap
-                        // threshold is density-scaled, so a configuration
-                        // change must restart the detector with the fresh
-                        // scale --- while state changes flow through
-                        // currentState above without breaking a gesture.
+                        // Keyed on density scale alone: state changes flow
+                        // through currentState without breaking a gesture.
                         .pointerInput(densityScale) {
                             detectVerticalDragGestures(
                                 onVerticalDrag = { _, dragAmount ->
@@ -216,9 +160,7 @@ internal fun LilypadDeck(
                                 onDragCancel = { dragAccumulated = 0f },
                             )
                         }
-                        // r32 a11y: the NAME (state-dependent --- see the
-                        // file header); the button role and toggle action
-                        // ride on the clickable above it.
+                        // a11y name (state-dependent); role + action ride on the clickable above.
                         .semantics { contentDescription = handleA11y },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -229,11 +171,9 @@ internal fun LilypadDeck(
                             .background(pillColor),
                     )
                 }
-                // 2. THE CONTENT: the scrolling panel surface --- the r54
-                // column's padding and spacing, verbatim. In the Collapsed
-                // peek only the handle plus a sliver of the first row show
-                // (the intended peek, not a bug): weight(1f) hands the
-                // scroll whatever height the sheet's current state leaves.
+                // 2. The content: scrolling panel surface. In the Collapsed peek
+                // only the handle + a sliver show (intended); weight(1f) hands
+                // the scroll whatever height the current state leaves.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

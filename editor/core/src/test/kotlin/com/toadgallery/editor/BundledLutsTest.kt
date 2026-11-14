@@ -9,13 +9,8 @@ import java.io.File
 import java.io.InputStream
 
 /**
- * The bundled-look conformance suite (r33, Phase 7 v2): the registry's
- * self-consistency, and --- reading the COMMITTED asset files from the
- * module tree --- that every bundled `.cube` parses under its registry
- * id and carries the exact hand-verified look values (probes sit on
- * grid-exact coordinates, multiples of 1/16, so the trilinear sampler
- * returns table values with no interpolation error; deltas are 1e-5,
- * the files carry 6 decimals).
+ * Bundled-look conformance: registry self-consistency plus the committed .cube assets
+ * parsing under their ids with exact hand-verified values (grid-exact probes, 1e-5 tolerance).
  */
 class BundledLutsTest {
 
@@ -76,7 +71,7 @@ class BundledLutsTest {
         assertTrue(BundledLuts.loadAll(throwing).isEmpty())
     }
 
-    // ---- The looks themselves (hand-verified probes; see docs/phase-7/bundled-luts.md) ----
+    // ---- The looks themselves (hand-verified probes) ----
 
     private fun look(id: String): CubeLut {
         val entry = BundledLuts.byId(id) ?: error("unknown look $id")

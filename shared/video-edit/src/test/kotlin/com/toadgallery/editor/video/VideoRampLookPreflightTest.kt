@@ -4,12 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r74 pins: the speed-ramp model, the shared look's sampler and
- * grammar, the 4K/HDR preflight, and the composition-lane speed bounds
- * (the plan doc's 0.25x..4x --- the v1 plan's own frozen 0.25x..2x is
- * untouched, pinned by its own test file).
- */
+/** Speed-ramp model, shared look sampler/grammar, 4K/HDR preflight, and composition-lane speed bounds. */
 class VideoRampLookPreflightTest {
 
     // ---- the speed ramp ----
@@ -68,9 +63,8 @@ class VideoRampLookPreflightTest {
             SpeedKeyframe(0, 1.0),
             SpeedKeyframe(10_000, 2.0),
         )
-        // Integral of 1/factor over 10s where factor goes 1 -> 2:
-        // ln(2) * 10s ~ 6.93s. The midpoint rule at 512 slices is within
-        // 10ms of the true value; assert the honest window.
+        // Integral of 1/factor (1 -> 2 over 10s) = ln(2)*10s ~ 6.93s; the
+        // midpoint rule at 512 slices lands within 10ms of the true value.
         val out = SpeedRampMath.outputDurationMs(ramp, TimeRange(0, 10_000), 1.0)
         assertTrue("expected ~6931ms, was $out", out in 6_920..6_940)
     }
@@ -87,7 +81,7 @@ class VideoRampLookPreflightTest {
         } catch (expected: IllegalArgumentException) {
             assertTrue(expected.message!!.contains("outside"))
         }
-        // The v1 plan lane stays frozen at 2.0 (the r42 contract).
+        // The v1 plan lane stays frozen at 2.0.
         assertEquals(2.0, VideoEditPlanValidator.MAX_SPEED_FACTOR, 0.0)
     }
 

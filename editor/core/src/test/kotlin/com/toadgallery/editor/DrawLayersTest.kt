@@ -5,13 +5,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r36 stroke-layer model + the pure layout pass (the contract's
- * `DrawLayersTest`): the brush width, the r34 text alpha math, the
- * origin-offset identity, list order, single-point placement --- and
- * the two pure algorithms the round owns: the commit-time stride
- * thinning and the Chaikin corner-cutting (exact outputs).
- */
+/** Stroke-layer model + layout pass: validation, stride thinning, Chaikin smoothing, placement. */
 class DrawLayersTest {
 
     // ---- Model validation ----

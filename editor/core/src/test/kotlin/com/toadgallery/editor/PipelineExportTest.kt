@@ -7,10 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The pipeline + export control (r30): the recipe-based [EditPipeline]
- * stage order, the [EditGeometryPlan]/pipeline frame agreement, and the
- * export format surface (JPEG/PNG/WebP --- the honest set the platform
- * Bitmap can actually encode; HEIC is decode-only, so it is not offered).
+ * Pipeline + export control: the recipe-based stage order, the [EditGeometryPlan]
+ * agreement, and the export format surface (the honestly-encodable set; HEIC is decode-only).
  */
 class PipelineExportTest {
 
@@ -48,8 +46,7 @@ class PipelineExportTest {
 
     @Test
     fun `straighten matches the standalone op`() {
-        // 30 degrees: within the straighten contract (the +/-45 fine
-        // adjustment; 90-degree turns belong to quarterTurns).
+        // 30 degrees: within the straighten contract (+/-45 fine adjustment; 90-degree turns are quarterTurns).
         val grid = intArrayOf(1, 2, 3, 4, 5, 6)
         val pipelined = EditPipeline.apply(grid.copyOf(), 3, 2, EditRecipe(straightenDeg = 30.0))
         val standalone = straightenPixels(grid, 3, 2, 30.0)
@@ -59,9 +56,8 @@ class PipelineExportTest {
 
     @Test
     fun `crop is applied over the post-turn frame (the documented order)`() {
-        // 4x3 grid [1..12]; turn once CCW -> 3x4 [4 8 12 / 3 7 11 / 2 6 10 /
-        // 1 5 9]; then crop the right half of the TURNED frame -> the right
-        // column: [12, 11, 10, 9] as a 1x4 grid.
+        // 4x3 grid [1..12]; turn once CCW -> 3x4 [4 8 12 / 3 7 11 / 2 6 10 / 1 5 9]; then crop the
+        // right half of the TURNED frame -> the right column: [12, 11, 10, 9] as a 1x4 grid.
         val grid = intArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
         val pipelined = EditPipeline.apply(
             grid, 4, 3,
@@ -76,8 +72,7 @@ class PipelineExportTest {
     fun `a tone-only recipe matches the composed lut path`() {
         val base = intArrayOf(0xFF0A64C8.toInt(), 0xFF808080.toInt(), 0xFFFA053C.toInt())
         val recipe = EditRecipe(brightness = 50)
-        // The pipeline mutates its input in place --- the expected array is
-        // snapshotted BEFORE the call, then driven by the standalone path.
+        // The pipeline mutates its input in place: snapshot expected BEFORE the call, then drive standalone.
         val expected = base.copyOf()
         val pipelined = EditPipeline.apply(base, 3, 1, recipe)
         PixelAdjuster.applyTo(expected, LutBuilder.build(brightness = 50, contrast = 0, exposure = 0, highlights = 0, shadows = 0))
@@ -102,8 +97,7 @@ class PipelineExportTest {
         val recipe = EditRecipe(quarterTurns = 1, crop = CropRect(0.5, 0.0, 1.0, 1.0))
         val pipelined = EditPipeline.apply(grid, 4, 3, recipe)
         val plan = EditGeometryPlan.plan(recipe, 4, 3)
-        // The plan's post-geometry frame is the pipeline's frame BEFORE the
-        // crop; the crop rect over that frame is what the pipeline cut.
+        // The plan's post-geometry frame is the pipeline's frame BEFORE the crop; the crop rect is what it cut.
         assertEquals(3, plan.postGeometryWidth)
         assertEquals(4, plan.postGeometryHeight)
         assertEquals(2, plan.cropPixelRect.x0) // 0.5 * 3 rounds to 2 (of 3 wide)
@@ -127,8 +121,7 @@ class PipelineExportTest {
 
     @Test
     fun `the export format surface is the honest encodable set`() {
-        // JPEG, PNG, WebP. HEIC is decode-only in the platform Bitmap ---
-        // offering it would be a lie, so it is absent.
+        // HEIC is decode-only in the platform Bitmap: offering it would be a lie, so it is absent.
         assertEquals(3, ExportFormat.entries.size)
         assertEquals("image/jpeg", ExportFormat.JPEG.mimeType)
         assertEquals("image/png", ExportFormat.PNG.mimeType)
@@ -171,7 +164,7 @@ class PipelineExportTest {
         assertEquals("image-edit.jpg", ExportPlan.displayNameFor(null, ExportFormat.JPEG))
     }
 
-    // ---- EditPipeline: the r33 LUT filter stage ----
+    // ---- EditPipeline: the LUT filter stage ----
 
     /** A size-2 all-red look: any input maps to (1, 0, 0). */
     private fun redLook(id: String): CubeLut =
@@ -208,8 +201,7 @@ class PipelineExportTest {
 
     @Test
     fun `a dialed-out look takes the identity fast path`() {
-        // Intensity 0 with everything else identity: the exact-input
-        // fast path --- the same array instance comes back.
+        // Intensity 0 with everything else identity: the exact-input fast path (same array instance).
         val grid = intArrayOf(0xFF112233.toInt(), 0xFF445566.toInt())
         val recipe = EditRecipe(lut = LutSelection(lutId = "test-red", intensity = 0))
         val result = EditPipeline.apply(grid, 2, 1, recipe, filter = redLook("test-red"))
@@ -218,12 +210,8 @@ class PipelineExportTest {
 
     @Test
     fun `the look applies after the HSL stage and before vignette`() {
-        // Stage-order pin (the documented 12-stage order): the look
-        // grades the GRADED pixels. A half-intensity look over a pure
-        // green input through a look whose table is all-red: the colour
-        // stages leave (0,255,0) untouched (all zero), so the result is
-        // the straight half-lerp (128, 128, 0) --- proving the look ran
-        // at its own stage with the pre-look colour as its input.
+        // Stage-order pin: the look grades the GRADED pixels. Colour stages leave (0,255,0) untouched,
+        // so a half-intensity all-red look over pure green yields the half-lerp (128,128,0) at the look's stage.
         val green = 0xFF00FF00.toInt()
         val grid = intArrayOf(green)
         val recipe = EditRecipe(lut = LutSelection(lutId = "test-red", intensity = 50))

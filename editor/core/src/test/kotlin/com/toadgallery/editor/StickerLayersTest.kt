@@ -5,12 +5,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r35 sticker-layer model + the pure layout pass (the contract's
- * `StickerLayersTest`): the size box, the centre anchor, the origin
- * offset, the list order, the opacity-only alpha --- and the
- * preview ≡ export identity at the layout level (the r34 convention).
- */
+/** Sticker-layer model + layout pass: size box, centre anchor, origin offset, order, alpha. */
 class StickerLayersTest {
 
     // ---- Model validation (the structured-parse-failure backstop) ----
@@ -54,8 +49,7 @@ class StickerLayersTest {
 
     @Test
     fun `the s prefix never collides with the text family's t prefix`() {
-        // The families key their newIds independently; the same numeric
-        // suffix in both is legal by construction.
+        // The families key their newIds independently; shared suffixes are legal by construction.
         assertEquals("s2", StickerLayer.newId(listOf("t1", "s1")))
         assertEquals("t2", TextLayer.newId(listOf("t1", "s1")))
     }
@@ -95,9 +89,7 @@ class StickerLayersTest {
         assertEquals(200f, export[0].centerX, 0f) // 0.25 * 800
         assertEquals(450f, export[0].centerY, 0f) // 0.75 * 600
 
-        // The preview shape: the same output canvas carried at an origin
-        // inside a larger post-geometry frame --- the offset identity
-        // (preview ≡ export by construction, the r34 test's sticker twin).
+        // The preview shape: the same canvas at an origin offset -- preview ≡ export identity.
         val preview = StickerLayout.place(layers, 120f, 40f, 800f, 600f)
         assertEquals(export[0].sizePx, preview[0].sizePx, 0f)
         assertEquals(export[0].centerX + 120f, preview[0].centerX, 0f)

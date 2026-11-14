@@ -19,47 +19,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The r68 pro surfaces' screenshot fixtures (Phase 2, the photo pro
- * round: the curve deck, the parade, the zebra, the history strip and
- * the crop dial).
- *
- * Subject choice, determinism-first (the ProSliderScreenshotTest
- * harness shape, reused EXACTLY): every subject is PARAM-LIGHT (no
- * Activity, no ViewModel, no decode, no indeterminate animation) --- a
- * synthetic 256-step gradient histogram built through
- * [EditorHistogram.fromPixels] feeds the plot-dependent surfaces, a
- * synthetic clipped pixel field feeds the zebra builder, and each
- * capture depends only on the pinned Robolectric SDK (34), the fixed
- * w411dp-h891dp-420dpi viewport and the r67 theme. The frame clock is
- * frozen before setContent and advanced one fixed 16ms frame; every
- * capture paints the theme's background first (the r56 rule: a
- * transparent-root capture would gate near-white ink against white).
- *
- * What the fixtures pin, per surface:
- *  - the CURVE DECK, neutral (the identity diagonal over the faint
- *    histogram, the two endpoint handles, the channel chips, the Done
- *    affordance) and DRAGGED (a lifted midpoint on Master --- the baked
- *    monotone curve bowing above the diagonal, the middle handle riding
- *    it);
- *  - the PARADE (the three channel traces side-by-side over the
- *    gradient's own bins);
- *  - the ZEBRA (the stripe mask over a half-blown, half-crushed pixel
- *    field: red highlight stripes on the blown half, blue shadow
- *    stripes on the crushed half);
- *  - the HISTORY STRIP (four entries --- the Original chip, an
- *    adjustment, a curve, a straighten --- with the third marked
- *    current in ember);
- *  - the CROP DIAL, rotated (the ember arc burning +8 deg from the
- *    twelve o'clock detent, the mono readout at "+8"; the QUIET dial
- *    is already pinned by the chassis suite's crop-panel capture).
- *
- * NO BASELINES ARE RECORDED in this round: the record pass
- * (recordRoborazziDebug) runs as the round's deliberate re-record (the
- * design plan's R1 mitigation --- ONE pass per phase merge, never
- * scattered re-records). The PNG names are pinned by the module's
- * `roborazzi.record.namingStrategy = fullyQualifiedName` property:
- * `com.toadgallery.editor.ProSurfacesScreenshotTest.<method>.png`
- * under src/test/resources/roborazzi (the plugin outputDir).
+ * Roborazzi baselines for the pro surfaces (curve deck, parade, zebra, history strip, crop dial)
+ * over synthetic fixtures; captures paint the theme background first (no transparent-root ghosts).
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -70,22 +31,16 @@ class ProSurfacesScreenshotTest {
     val rule = createComposeRule()
 
     /**
-     * The synthetic 256-step gradient the plot-dependent surfaces read:
-     * a diagonal ramp red-up/blue-down, one pixel per bin --- every
-     * channel's histogram is a known single-count column set, so both
-     * the deck's faint rendering and the parade's traces are pinned by
-     * construction, not by luck.
+     * Synthetic 256-step gradient (diagonal ramp, red up / blue down, one pixel per bin):
+     * every histogram column is known, pinning the deck and parade by construction.
      */
     private val gradientPixels: IntArray = IntArray(256) { v ->
         (0xFF shl 24) or (v shl 16) or (v shl 8) or (255 - v)
     }
 
     /**
-     * The synthetic clipped field the zebra builder reads: a 16x16
-     * field whose left quarter is blown to pure white, right quarter
-     * crushed to pure black, and middle half a smooth ramp --- the mask
-     * must stripe exactly the two clipped quarters and leave the ramp
-     * bare.
+     * Synthetic 16x16 clipped field for the zebra: blown left quarter, crushed right
+     * quarter, smooth middle ramp -- the mask must stripe the quarters, leave the ramp bare.
      */
     private val clippedPixels: IntArray = IntArray(256) { v ->
         when {
@@ -128,9 +83,8 @@ class ProSurfacesScreenshotTest {
     }
 
     /**
-     * The dragged deck: a lifted Master midpoint (0.5, 0.62) --- the
-     * baked monotone curve bows above the identity diagonal and the
-     * middle handle rides it.
+     * Dragged deck: lifted Master midpoint (0.5, 0.62) -- the monotone curve bows
+     * above the diagonal and the middle handle rides it.
      */
     @Test
     fun curveDeckDraggedRecordsBaseline() {
@@ -197,10 +151,8 @@ class ProSurfacesScreenshotTest {
     }
 
     /**
-     * The zebra: the stripe mask over the clipped field --- red stripes
-     * on the blown quarter, blue on the crushed one, the ramp bare.
-     * (The 16dp-tall host shows the stripe tiling at a legible pitch;
-     * the mask itself is the same 16x16 field the builder read.)
+     * Zebra: red stripes on the blown quarter, blue on the crushed one, the ramp
+     * bare (the 16dp host shows tiling at a legible pitch).
      */
     @Test
     fun zebraOverlayRecordsBaseline() {
@@ -228,10 +180,8 @@ class ProSurfacesScreenshotTest {
     }
 
     /**
-     * The history strip: four entries --- the Original chip, an
-     * exposure adjustment, a curve and a straighten --- with the CURVE
-     * marked current in ember (the straighten behind it reads as
-     * undone).
+     * History strip: four entries (Original, exposure, curve, straighten) with the
+     * curve marked current in ember.
      */
     @Test
     fun historyStripRecordsBaseline() {
@@ -266,9 +216,8 @@ class ProSurfacesScreenshotTest {
     }
 
     /**
-     * The rotated dial: the ember arc burning +8 deg from the twelve
-     * o'clock detent, the mono readout at "+8" --- the C1 contract's
-     * live state, at rest.
+     * Rotated dial: ember arc +8 deg from the twelve o'clock detent, mono
+     * readout "+8" -- live state at rest.
      */
     @Test
     fun cropDialRotatedRecordsBaseline() {

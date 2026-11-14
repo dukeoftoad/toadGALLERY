@@ -6,7 +6,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The geometry toolset (r30, Phase 6 v1 slice 1). */
+/** The geometry toolset: crop, aspect, flip, straighten, perspective. */
 class GeometryTest {
 
     // ---- CropRect ----
@@ -64,8 +64,7 @@ class GeometryTest {
 
     @Test
     fun `original aspect fits the image ratio inside a taller box`() {
-        // Image 4:3 (40x30); box 8x6 inside a 8x10 frame region: ORIGINAL
-        // fits 4:3 into the box.
+        // Image 4:3 (40x30); ORIGINAL fits 4:3 into the 8x10 box.
         val fitted = CropAspect.ORIGINAL.fit(PixelRect(0, 0, 8, 10), 40, 30)
         assertEquals(4.0 / 3.0, fitted.width.toDouble() / fitted.height, 1e-6)
         assertTrue(fitted.width <= 8 && fitted.height <= 10)
@@ -90,7 +89,7 @@ class GeometryTest {
         assertEquals(16.0 / 9.0, fitted.width.toDouble() / fitted.height, 0.05)
     }
 
-    // ---- CropRect.fromPixelRect (r32) ----
+    // ---- CropRect.fromPixelRect ----
 
     @Test
     fun `fromPixelRect is the exact inverse of toPixels`() {
@@ -110,8 +109,7 @@ class GeometryTest {
 
     @Test
     fun `the round trip never expands the crop`() {
-        // toPixels rounds inward (or exactly); converting back can only
-        // move each edge by less than one pixel's worth of normalization.
+        // toPixels rounds inward; converting back moves each edge by < 1px of normalization.
         val original = CropRect(0.3, 0.2, 0.83, 0.91).normalized()
         val roundTrip = CropRect.fromPixelRect(original.toPixels(320, 240), 320, 240)
         assertTrue(roundTrip.left >= original.left - 1.0 / 320)
@@ -122,9 +120,7 @@ class GeometryTest {
 
     @Test
     fun `a preset fit survives the recipe round trip`() {
-        // The crop-preset path: fit a 16:9 rect inside a 40x30 frame, take
-        // it to normalized (what the sidecar recipe stores), bring it back
-        // (what the pipeline crops) --- the pixel rect is stable.
+        // Fit 16:9 -> normalized (sidecar) -> back (pipeline); the pixel rect is stable.
         val fitted = CropAspect.RATIO_16_9.fit(PixelRect(0, 0, 40, 30), 40, 30)
         val normalized = CropRect.fromPixelRect(fitted, 40, 30)
         val back = normalized.toPixels(40, 30)
@@ -182,7 +178,7 @@ class GeometryTest {
 
     @Test
     fun `the expanded canvas is the bounding box of the rotated corners`() {
-        // 4x4 at 45 degrees: side 4*sqrt(2) ~ 5.66 -> ceil 6? Exact: |4*cos45|+|4*sin45| = 5.657 -> 6.
+        // 4x4 at 45 deg: |4*cos45| + |4*sin45| = 5.66 -> 6.
         val result = straightenPixels(IntArray(16) { 0xFF000000.toInt() or it }, 4, 4, 45.0)
         assertEquals(6, result.width)
         assertEquals(6, result.height)
@@ -192,23 +188,16 @@ class GeometryTest {
     fun `corners of the expanded canvas are transparent at forty-five degrees`() {
         val grid = IntArray(16) { 0xFF336699.toInt() }
         val result = straightenPixels(grid, 4, 4, 45.0)
-        // (0, 0): distance from the canvas centre is ~0.707*6 > 4/2 = 2
-        // (the source half-diagonal is 2.12): outside -> 0x00000000.
+        // (0, 0): outside the rotated source (0.707*6 > half-diagonal 2.12) -> transparent.
         assertEquals(0, result.pixels[0])
-        // The canvas CENTRE pixel maps exactly onto the source centre (2, 2)
-        // on the 4x4 source --- wait: centre of a 6x6 canvas is (2.5, 2.5);
-        // rotate back by -45 around (1.5, 1.5): both offsets 1: |1,1| ~1.41
-        // rotated stays within the source (|offset| <= 1.5 diag is 2.12) ->
-        // an interior sample, opaque.
+        // Canvas centre: rotate-back offset ~1.41 from the source centre, inside its 2.12 diagonal.
         val centerIdx = 2 * result.width + 2
         assertTrue((result.pixels[centerIdx] ushr 24) == 0xFF)
     }
 
     @Test
     fun `straighten preserves the centre pixel exactly`() {
-        // 5x5 with a distinct centre (12); any angle maps the centre onto
-        // the centre (rotation about the centre), so the output centre is
-        // exactly pixel (2, 2) bilinearly == the source centre.
+        // 5x5 with distinct centre pixel 12; rotation about the centre maps centre onto centre.
         val grid = IntArray(25) { i -> if (i == 12) 0xFF00FF00.toInt() else 0xFF000000.toInt() }
         val result = straightenPixels(grid, 5, 5, 33.0)
         val ow = result.width
@@ -216,8 +205,7 @@ class GeometryTest {
         val ocy = (result.height - 1) / 2.0
         val cxi = (result.width - 1) / 2
         val cyi = (result.height - 1) / 2
-        // The exact centre may be fractional on even canvases; assert the
-        // four-centre cluster is opaque (the source centre region).
+        // Centre may be fractional on even canvases; assert the centre cluster is opaque.
         assertTrue((result.pixels[cyi * ow + cxi] ushr 24) == 0xFF)
         assertTrue(ocx == (ow - 1) / 2.0) // sanity: convention consistent
     }
@@ -233,9 +221,7 @@ class GeometryTest {
 
     @Test
     fun `a displaced corner lands exactly on the corresponding output corner`() {
-        // 8x2 grid (the clamp allows offsets up to w/4 = 2); pull the TL
-        // corner to (1, 0): output (0, 0) then samples the source at
-        // exactly (1, 0) -> pixel 20.
+        // 8x2 grid; TL pulled to (1, 0): output (0, 0) samples the source exactly at (1, 0).
         val grid = intArrayOf(
             10, 20, 30, 40, 50, 60, 70, 80,
             90, 100, 110, 120, 130, 140, 150, 160,

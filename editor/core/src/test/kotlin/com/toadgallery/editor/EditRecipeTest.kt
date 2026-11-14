@@ -46,11 +46,11 @@ class EditRecipeTest {
         assertEquals(recipe.copy(schemaVersion = restored.schemaVersion), restored)
     }
 
-    // ---- Codec: the r33 LUT selection ----
+    // ---- Codec: the LUT selection ----
 
     @Test
     fun `a pre-r33 sidecar loads with no lut selection`() {
-        // No `lut` key at all: every r30-r32 sidecar in the wild.
+        // No `lut` key: a legacy sidecar without LUT selection.
         val parsed = EditRecipeCodec.fromJson("{\"schemaVersion\":1,\"brightness\":10}")
         val restored = (parsed as EditRecipeCodec.ParseResult.Valid).recipe
         assertNull(restored.lut)
@@ -59,8 +59,7 @@ class EditRecipeTest {
 
     @Test
     fun `an unresolvable lut id survives the round-trip verbatim`() {
-        // The recipe is the user's data: an id this build cannot resolve
-        // (a newer bundle, a hand-edited sidecar) still round-trips.
+        // An id this build cannot resolve (newer bundle, hand-edited sidecar) still round-trips.
         val recipe = EditRecipe(lut = LutSelection(lutId = "a-look-from-the-future", intensity = 33))
         val restored = (EditRecipeCodec.fromJson(EditRecipeCodec.toJson(recipe))
             as EditRecipeCodec.ParseResult.Valid).recipe
@@ -273,8 +272,7 @@ class EditPipelineTest {
 
     @Test
     fun `crop applies AFTER rotation --- the normalized rect rides the post-geometry frame`() {
-        // A 4x2 grid of two halves, rotated 90 -> 2x4, then a bottom-half
-        // crop (top 0.5) keeps only the rotated lower half.
+        // 4x2 two-half grid rotated to 2x4; a bottom-half crop keeps the rotated lower half.
         val pixels = IntArray(4 * 2) { i ->
             if (i < 4) argb(10, 0, 0, 0) else argb(200, 0, 0, 0)
         }
@@ -323,9 +321,7 @@ class EditPipelineTest {
 
     @Test
     fun `vignette and sharpen apply to the CROPPED frame (display-space effects last)`() {
-        // A 2x1 crop from a 4x1 solid: the vignette must see a 2x1 frame ---
-        // pinned indirectly: the crop's output dims are the plan's, and the
-        // pipeline's output equals them (no vignette-induced resize).
+        // The vignette must see the 2x1 cropped frame; pinned via matching output dims.
         val recipe = EditRecipe(
             crop = CropRect(0.25, 0.0, 0.75, 1.0),
             vignette = 50,
@@ -335,10 +331,8 @@ class EditPipelineTest {
         val result = EditPipeline.apply(solid(4, 1, argb(120, 120, 120)), 4, 1, recipe)
         assertEquals(plan.cropPixelRect.width, result.width)
         assertEquals(2, result.width)
-        // A constant image stays constant under sharpen at any amount ---
-        // verified WITHOUT the vignette (the vignette deliberately darkens
-        // this 2x1 frame's edge pixels; the width asserts above carry the
-        // display-space-crop contract).
+        // A constant image stays constant under sharpen; the vignette is
+        // disabled here because it deliberately darkens this frame's edges.
         val sharpenOnly = EditPipeline.apply(
             solid(4, 1, argb(120, 120, 120)), 4, 1, recipe.copy(vignette = 0),
         )

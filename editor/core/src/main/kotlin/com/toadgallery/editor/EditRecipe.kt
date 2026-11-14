@@ -5,17 +5,9 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * The non-destructive edit recipe (r30, Phase 6 v1; ADR-0011): the FULL
- * declarative state of an edit session, serialized as a versioned JSON
- * sidecar in the editor's app-private storage --- never overwriting the
- * original bytes (the source URI stays read-only by construction), and the
- * session survives process death: the sidecar is saved on every committed
- * change, restored on relaunch, and cleared only when the user exports.
- *
- * The codec is ADDITIVE-versioned like the launch contract: v1 fields are
- * frozen; v2 may add optional fields; an unknown key is IGNORED on parse
- * (forward compatibility), a wrong-typed or out-of-range value is a
- * structured parse failure (never a crash, never a silent default).
+ * The full declarative state of an edit session, serialized as a versioned JSON sidecar (the
+ * source bytes stay read-only). Additive versioning: unknown keys are IGNORED on parse; a
+ * wrong-typed or out-of-range value is a structured parse failure, never a crash or silent default.
  */
 data class EditRecipe(
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
@@ -32,72 +24,53 @@ data class EditRecipe(
     val contrast: Int = 0,
     val highlights: Int = 0,
     val shadows: Int = 0,
-    // ---- Tone, r74 (the plan doc's slider list: whites/blacks join the
-    // LUT chain's far ends; see LutBuilder.build's seven-stage overload.
-    // The sidecar keys ride the additive-versioning rule --- absent in a
-    // pre-r74 sidecar reads as 0, and a 0 value never changes the baked
-    // table, so every existing recipe round-trips byte-clean) ----
+    // ---- Tone (whites/blacks join the LUT chain's far ends; absent reads
+    // as 0, so existing sidecars round-trip byte-clean) ----
     val whites: Int = 0,
     val blacks: Int = 0,
     // ---- Colour (the full-pixel stage) ----
     val saturation: Int = 0,
     val temperature: Int = 0,
     val tint: Int = 0,
-    // ---- Colour, r74: the luma-weighted saturation (the plan doc's
-    // slider list; PixelOps.applyVibrance) ----
+    // ---- Colour: vibrance, luma-weighted (PixelOps.applyVibrance) ----
     val vibrance: Int = 0,
     // ---- Colour grade + detail ----
     val hslBands: HslBands = HslBands(),
     val vignette: Int = 0,
     val sharpness: Int = 0,
-    // ---- Curve (r68, Phase 2 of the editor rebirth: the tone curve) ----
-    // Absent = a pre-r68 sidecar / a clean session / a played-with curve
-    // straightened back to the diagonal (the panel normalizes at commit).
-    // The MASTER curve composes into the pipeline's tone LUT after the
-    // shadows stage; the per-channel curves ride as forward state (see
-    // ToneCurves.kt). The schema version STAYS 1: the field rides as an
-    // optional key exactly like lut/textLayers/stickerLayers before it
-    // (absent defaults to identity, older readers ignore the unknown key
-    // --- the additive-versioning rule), and bumping would falsely
-    // declare every existing sidecar unsupported.
+    // ---- Tone curve ----
+    // Absent = a clean session / a curve straightened back to the diagonal;
+    // schema STAYS 1 (optional key, older readers ignore it). MASTER composes
+    // into the tone LUT after shadows; per-channel curves ride as forward
+    // state (see ToneCurves.kt).
     val toneCurves: ToneCurves? = null,
-    // ---- Filter (r33, Phase 7 v2: the .cube look layer) ----
+    // ---- Filter (.cube look layer) ----
     val lut: LutSelection? = null,
-    // ---- Text (r34, Phase 7 v2: the OFL-font layer system) ----
-    // Absent = a pre-r34 sidecar / a clean session; empty normalises to
-    // absent. Unresolvable fontIds round-trip verbatim (the tolerance
-    // contract; see TextLayers.kt).
+    // ---- Text (OFL-font layer system) ----
+    // Empty normalises to absent; unresolvable fontIds round-trip verbatim
+    // (the tolerance contract; see TextLayers.kt).
     val textLayers: TextLayers? = null,
-    // ---- Stickers (r35, Phase 7 v2: the sticker layer system) ----
-    // Absent = a pre-r35 sidecar / a clean session; empty normalises to
-    // absent. Unresolvable stickerIds round-trip verbatim and render
-    // NOTHING at render time (the tolerance contract; see
-    // StickerLayers.kt) --- there is no default sticker to degrade to.
+    // ---- Stickers ----
+    // Empty normalises to absent; unresolvable stickerIds round-trip verbatim
+    // and render NOTHING (no default sticker to degrade to; see StickerLayers.kt).
     val stickerLayers: StickerLayers? = null,
-    // ---- Drawing (r36, Phase 7 v2: the freehand stroke system) ----
-    // Absent = a pre-r36 sidecar / a clean session; empty normalises to
-    // absent. One gesture = one layer = one undo snapshot; the points
-    // are the user's data, thinned at commit (see DrawLayers.kt).
+    // ---- Drawing (freehand strokes) ----
+    // Empty normalises to absent; one gesture = one layer = one undo snapshot;
+    // points thinned at commit (see DrawLayers.kt).
     val drawLayers: DrawLayers? = null,
-    // ---- Regions (r37, Phase 7 v2: the mosaic/blur pixel stage) ----
-    // Absent = a pre-r37 sidecar / a clean session; empty normalises to
-    // absent. The regions run as the pipeline's FINAL pixel stage, after
-    // sharpen (see RegionLayers.kt).
+    // ---- Regions (mosaic/blur pixel stage) ----
+    // Empty normalises to absent; runs as the pipeline's FINAL pixel stage,
+    // after sharpen (see RegionLayers.kt).
     val mosaicRegions: RegionLayers? = null,
-    // ---- Frame (r38, Phase 7 v2: the single mounting; the closing round) ----
-    // Absent = a pre-r38 sidecar / a clean session. ONE frame at a time
-    // (the LutSelection shape); an unresolvable frameId round-trips
-    // verbatim and degrades to NO FRAME at render time (the look's
-    // tolerance contract; see Frames.kt).
+    // ---- Frame (single mounting) ----
+    // ONE frame at a time; an unresolvable frameId round-trips verbatim and
+    // degrades to NO FRAME at render time (see Frames.kt).
     val frame: FrameSelection? = null,
-    // ---- The r41 AI containers (Phase 10 sub-scope A; layer types 6-9) ----
-    // Absent = a pre-r41 sidecar / a clean session; empty normalises to
-    // absent. The four are PIXEL STAGE families in the pipeline's tail
-    // (erase -> sky -> bokeh -> retouch -> the regions, which stay
-    // FINAL). Artifact keys resolve in the derived-artifact store
-    // (EditAiStore.kt); an unresolvable key round-trips verbatim and
-    // renders NOTHING (the frame/sticker tolerance contract; see
-    // AiLayers.kt).
+    // ---- AI containers ----
+    // PIXEL STAGE families in the pipeline tail: erase -> sky -> bokeh ->
+    // retouch (regions stay FINAL). Empty normalises to absent; an
+    // unresolvable artifact key round-trips verbatim and renders NOTHING
+    // (keys resolve in EditAiStore.kt; see AiLayers.kt).
     val aiErase: AiEraseLayers? = null,
     val sky: SkySelection? = null,
     val bokeh: BokehSelection? = null,
@@ -156,7 +129,7 @@ data class EditRecipe(
     val isRetouchIdentity: Boolean
         get() = retouch == null
 
-    /** The r41 four: absent AI containers run nothing (the family rule). */
+    /** Absent AI containers run nothing (the family rule). */
     val isAiIdentity: Boolean
         get() = isAiEraseIdentity && isSkyIdentity && isBokehIdentity && isRetouchIdentity
 
@@ -183,11 +156,9 @@ data class EditRecipe(
 }
 
 /**
- * The selected LUT look (r33, Phase 7 v2): WHICH bundled `.cube` look
- * and HOW MUCH of it. The id is the [BundledLuts] registry id; an id
- * the registry cannot resolve (a version skew, a hand-edited sidecar)
- * SURVIVES the round-trip untouched --- the recipe is the user's data ---
- * but the pipeline stage degrades to no-look rather than crashing.
+ * The selected look: WHICH bundled `.cube` and HOW MUCH. The id is a [BundledLuts] registry id;
+ * an unresolvable id (version skew, hand-edited sidecar) round-trips untouched --- the recipe is
+ * the user's data --- but the pipeline stage degrades to no-look rather than crashing.
  */
 data class LutSelection(
     val lutId: String,
@@ -204,10 +175,9 @@ data class LutSelection(
 }
 
 /**
- * The sidecar codec: `org.json` (the platform parser at runtime; the real
- * artifact on the JVM test classpath, exactly the gallery's r23 pattern).
- * The wire shape is one flat object + one nested `hsl` object; every field
- * optional on parse (defaults to identity) for forward compatibility.
+ * The sidecar codec over `org.json` (the platform parser at runtime; the real artifact on the
+ * JVM test classpath). The wire shape is one flat object + one nested `hsl` object; every field
+ * is optional on parse (defaults to identity) for forward compatibility.
  */
 object EditRecipeCodec {
 
@@ -244,8 +214,7 @@ object EditRecipeCodec {
         root.put("contrast", recipe.contrast)
         root.put("highlights", recipe.highlights)
         root.put("shadows", recipe.shadows)
-        // r74: the far-end tone pair rides the same flat-key shape (a
-        // pre-r74 sidecar never wrote them; the fromJson defaults are 0).
+        // The far-end tone pair rides the same flat-key shape (absent keys read as 0).
         root.put("whites", recipe.whites)
         root.put("blacks", recipe.blacks)
         root.put("saturation", recipe.saturation)
@@ -264,10 +233,8 @@ object EditRecipeCodec {
         root.put("hsl", hsl)
         root.put("vignette", recipe.vignette)
         root.put("sharpness", recipe.sharpness)
-        // r68: the curve key exists only for a non-null state (the lut
-        // family's rule), so a pre-r68 sidecar and a clean session
-        // round-trip byte-clean. Channel lists ride only when non-empty
-        // (the layer-family rule).
+        // Curve key written only when non-null (older sidecars round-trip byte-clean);
+        // channel lists ride only when non-empty.
         recipe.toneCurves?.let { curves ->
             val curveObj = org.json.JSONObject()
             curveObj.put("master", curvePointsJson(curves.master))
@@ -284,8 +251,7 @@ object EditRecipeCodec {
                     .put("intensity", it.intensity),
             )
         }
-        // r34: the key is written ONLY for a non-empty layer list, so a
-        // pre-r34 sidecar and a clean session round-trip byte-clean.
+        // Key written ONLY for a non-empty layer list (older sidecars round-trip byte-clean).
         recipe.textLayers?.takeIf { it.layers.isNotEmpty() }?.let { tl ->
             val arr = org.json.JSONArray()
             for (layer in tl.layers) {
@@ -304,8 +270,7 @@ object EditRecipeCodec {
             }
             root.put("textLayers", arr)
         }
-        // r35: the same rule for stickers --- the key exists only for a
-        // non-empty list, so a pre-r35 sidecar round-trips byte-clean.
+        // Same rule for stickers: key written only for a non-empty list.
         recipe.stickerLayers?.takeIf { it.layers.isNotEmpty() }?.let { sl ->
             val arr = org.json.JSONArray()
             for (layer in sl.layers) {
@@ -322,8 +287,7 @@ object EditRecipeCodec {
             }
             root.put("stickerLayers", arr)
         }
-        // r36: the same rule for strokes; points ride as 2-element
-        // arrays of the output-canvas fractions.
+        // Same rule for strokes; points ride as 2-element arrays of output-canvas fractions.
         recipe.drawLayers?.takeIf { it.layers.isNotEmpty() }?.let { dl ->
             val arr = org.json.JSONArray()
             for (layer in dl.layers) {
@@ -343,7 +307,7 @@ object EditRecipeCodec {
             }
             root.put("drawLayers", arr)
         }
-        // r37: the same rule for regions; the kind rides its wire name.
+        // Same rule for regions; the kind rides its wire name.
         recipe.mosaicRegions?.takeIf { it.layers.isNotEmpty() }?.let { rl ->
             val arr = org.json.JSONArray()
             for (layer in rl.layers) {
@@ -361,7 +325,7 @@ object EditRecipeCodec {
             }
             root.put("mosaicRegions", arr)
         }
-        // r38: the single mounting, the lut object's shape.
+        // Single mounting; the lut object's shape.
         recipe.frame?.let {
             root.put(
                 "frame",
@@ -371,9 +335,7 @@ object EditRecipeCodec {
                     .put("color", "%08X".format(it.colorArgb)),
             )
         }
-        // r41: the same rule for the AI containers --- the keys exist only
-        // for a non-empty state, so a pre-r41 sidecar and a clean session
-        // round-trip byte-clean.
+        // Same rule for the AI containers: keys written only for a non-empty state.
         recipe.aiErase?.takeIf { it.layers.isNotEmpty() }?.let { el ->
             val arr = org.json.JSONArray()
             for (layer in el.layers) {
@@ -470,7 +432,6 @@ object EditRecipeCodec {
             contrast = root.optInt("contrast", 0).coerceIn(-100, 100),
             highlights = root.optInt("highlights", 0).coerceIn(-100, 100),
             shadows = root.optInt("shadows", 0).coerceIn(-100, 100),
-            // r74: absent keys (a pre-r74 sidecar) read as the neutral 0.
             whites = root.optInt("whites", 0).coerceIn(-100, 100),
             blacks = root.optInt("blacks", 0).coerceIn(-100, 100),
             saturation = root.optInt("saturation", 0).coerceIn(-100, 100),
@@ -509,10 +470,9 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `lut` object: absent (a pre-r33 sidecar) or carrying
-     * a blank id means NO look; the intensity coerces like every other
-     * Int slider. An unknown-but-present id is KEPT --- the recipe is
-     * the user's data; resolution is the applier's problem.
+     * The optional `lut` object: absent or blank id means NO look; an unknown-but-present id
+     * is KEPT (the recipe is the user's data; resolution is the applier's problem). The
+     * intensity coerces like every other Int slider.
      */
     private fun readLut(lut: org.json.JSONObject?): LutSelection? {
         if (lut == null) return null
@@ -522,17 +482,11 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `textLayers` array (r34): absent or empty means NO text
-     * (a pre-r34 sidecar loads clean). Tolerance rules, mirroring the LUT
-     * contract: an entry that is not an object, or whose id is blank, is
-     * SKIPPED (a layer without identity cannot be re-targeted by the UI,
-     * the drag or undo/redo); a blank fontId means "no face chosen" and
-     * reads as the registry default; an UNKNOWN non-blank fontId is KEPT
-     * verbatim --- the recipe is the user's data, resolution is the
-     * renderer's problem ([BundledFonts.effectiveId]). Numerics coerce
-     * like every other slider; a malformed color reads as the default
-     * color; text truncates at the model cap (the tolerant-read
-     * convention --- a hand-edited sidecar never loses its whole session).
+     * The optional `textLayers` array: absent/empty means NO text. Tolerance: a non-object
+     * or blank-id entry is SKIPPED; a blank fontId reads as the registry default; an UNKNOWN
+     * non-blank fontId is KEPT verbatim (resolution is the renderer's problem,
+     * [BundledFonts.effectiveId]); numerics coerce; a malformed color reads as the default;
+     * text truncates at the model cap (a hand-edited sidecar never loses its session).
      */
     private fun readTextLayers(arr: org.json.JSONArray?): TextLayers? {
         if (arr == null) return null
@@ -562,17 +516,10 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `stickerLayers` array (r35): absent or empty means NO
-     * stickers (a pre-r35 sidecar loads clean). Tolerance rules, the
-     * r34 set with the one image-shaped delta: an entry that is not an
-     * object, or whose id is blank, is SKIPPED; a blank `stickerId` is a
-     * SKIP TOO --- with no default shape to degrade to, "no sticker
-     * chosen" cannot be rendered (the r34 blank fontId read as the
-     * default face; a fake sticker would draw something the user never
-     * chose). An UNKNOWN non-blank stickerId is KEPT verbatim --- the
-     * recipe is the user's data, resolution is the compositor's problem
-     * (it renders nothing). Numerics coerce like every other slider
-     * (the tolerant-read convention).
+     * The optional `stickerLayers` array: absent/empty means NO stickers. Tolerance: a
+     * non-object or blank id/stickerId entry is SKIPPED --- with no default shape, "no sticker
+     * chosen" cannot be rendered; an UNKNOWN non-blank stickerId is KEPT verbatim (resolution
+     * is the compositor's problem: it renders nothing); numerics coerce.
      */
     private fun readStickerLayers(arr: org.json.JSONArray?): StickerLayers? {
         if (arr == null) return null
@@ -600,17 +547,10 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `drawLayers` array (r36): absent or empty means NO
-     * strokes (a pre-r36 sidecar loads clean). The tolerance set is
-     * smaller than the sticker family's --- a stroke is its own data,
-     * so there is no foreign id to resolve: an entry that is not an
-     * object, or whose id is blank, is SKIPPED (the family rule); a
-     * points entry that is not a 2-element numeric array is dropped
-     * from the list; a layer whose points all fail (or whose count
-     * would be zero) is skipped --- a stroke without a point cannot
-     * render; the surviving points clamp to 0..1 and the count caps at
-     * the model cap (the tolerant-read convention; a hand-edited
-     * sidecar never loses its whole session).
+     * The optional `drawLayers` array: absent/empty means NO strokes. A stroke is its own data
+     * (no foreign id): a non-object or blank-id entry is SKIPPED; a point that is not a
+     * 2-element numeric array is dropped; a layer with zero surviving points is skipped;
+     * points clamp to 0..1 and cap at the model cap.
      */
     private fun readDrawLayers(arr: org.json.JSONArray?): DrawLayers? {
         if (arr == null) return null
@@ -646,13 +586,10 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `mosaicRegions` array (r37): absent or empty means NO
-     * regions (a pre-r37 sidecar loads clean). The tolerance set is the
-     * stroke family's plus the kind: an entry whose `kind` is not a
-     * known wire name is corrupt data --- the layer is SKIPPED, never a
-     * crash; a blank id is the family skip; a layer whose points all
-     * fail or that carries none is skipped (a region needs an area);
-     * surviving points clamp to 0..1 and the count caps at the model cap.
+     * The optional `mosaicRegions` array: absent/empty means NO regions. Tolerance (the stroke
+     * family's plus the kind): a blank id skips the layer; an unknown `kind` is corrupt data
+     * --- SKIPPED, never a crash; a layer with fewer than three surviving points is skipped
+     * (a region needs an area); points clamp to 0..1 and cap at the model cap.
      */
     private fun readRegions(arr: org.json.JSONArray?): RegionLayers? {
         if (arr == null) return null
@@ -691,12 +628,10 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `frame` object (r38), the `lut` object's tolerance
-     * shape: absent or carrying a blank id means NO frame; an UNKNOWN
-     * non-blank frameId is KEPT verbatim --- the recipe is the user's
-     * data, resolution is the compositor's problem (it renders nothing);
-     * `widthPct` coerces like every other slider (default 20); a
-     * malformed colour reads as the default white.
+     * The optional `frame` object (the `lut` tolerance shape): absent or blank id means NO
+     * frame; an UNKNOWN non-blank frameId is KEPT verbatim (the compositor renders nothing);
+     * widthPct coerces like every other slider (default 20); a malformed colour reads as
+     * the default white.
      */
     private fun readFrame(frame: org.json.JSONObject?): FrameSelection? {
         if (frame == null) return null
@@ -724,17 +659,11 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `toneCurves` object (r68): absent means NO curve (a
-     * pre-r68 sidecar loads clean). The tolerance set is the draw-layer
-     * family's (points are the curve's own data --- there is no foreign id
-     * to resolve): a point entry that is not a 2-element numeric array is
-     * dropped; surviving coordinates coerce into 0..1; the list sorts by
-     * x, drops duplicate-x stragglers and caps at the model cap
-     * (LilypadCurveMath.sanitize, the tolerant-read convention). A MASTER
-     * under two surviving points reads the WHOLE container as absent: this
-     * round's engine and deck are master-driven, and a channel-only state
-     * has no honest render or edit surface here. Channels under two
-     * points read empty.
+     * The optional `toneCurves` object: absent means NO curve. Point tolerance lives in
+     * LilypadCurveMath.sanitize (coerce to 0..1, sort by x, drop duplicate-x, cap). A MASTER
+     * under two surviving points reads the WHOLE container as absent (the engine is
+     * master-driven; a channel-only state has no honest render/edit surface); channels under
+     * two points read empty.
      */
     private fun readToneCurves(curves: org.json.JSONObject?): ToneCurves? {
         if (curves == null) return null
@@ -765,14 +694,10 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `aiErase` array (r41): absent or empty means NO erase
-     * (a pre-r41 sidecar loads clean). The tolerance set is the region
-     * family's: an entry that is not an object, or whose id is blank, is
-     * SKIPPED; a seed under three points is skipped (an erase needs an
-     * area, the region commit rule); an empty artifactRef is KEPT --- the
-     * layer round-trips verbatim and renders nothing at render time (the
-     * sticker family's unresolvable-id rule; there is no default fill to
-     * degrade to).
+     * The optional `aiErase` array: absent/empty means NO erase. Region-family tolerance: a
+     * non-object or blank-id entry is SKIPPED, as is a seed under three points (an erase needs
+     * an area); an empty artifactRef is KEPT --- the layer round-trips verbatim and renders
+     * nothing (no default fill to degrade to).
      */
     private fun readAiErase(arr: org.json.JSONArray?): AiEraseLayers? {
         if (arr == null) return null
@@ -806,10 +731,8 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `sky` object (r41), the `frame` object's tolerance
-     * shape: absent or carrying a blank skyId means NO sky; a blank
-     * maskRef is KEPT verbatim (renders nothing, the tolerance contract);
-     * the opacity coerces like every other Int slider (default 100).
+     * The optional `sky` object (the `frame` tolerance shape): absent or blank skyId means NO
+     * sky; a blank maskRef is KEPT verbatim (renders nothing); opacity coerces (default 100).
      */
     private fun readSky(sky: org.json.JSONObject?): SkySelection? {
         if (sky == null) return null
@@ -823,10 +746,8 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `bokeh` object (r41): absent means NO bokeh; the depthRef
-     * is kept verbatim however it reads; the strength coerces 1..100
-     * (default 40); the focal depth is a 0..1 double (the r34 centre
-     * convention), default 0.5.
+     * The optional `bokeh` object: absent means NO bokeh; depthRef is kept verbatim; strength
+     * coerces 1..100 (default 40); focal depth is a 0..1 double (default 0.5).
      */
     private fun readBokeh(bokeh: org.json.JSONObject?): BokehSelection? {
         if (bokeh == null) return null
@@ -844,9 +765,8 @@ object EditRecipeCodec {
     }
 
     /**
-     * The optional `retouch` object (r41): absent means NO retouch; the
-     * boxesRef is kept verbatim however it reads; the three controls
-     * coerce 0..100 with family default 0 (no contribution).
+     * The optional `retouch` object: absent means NO retouch; boxesRef is kept verbatim; the
+     * three controls coerce 0..100 (default 0, no contribution).
      */
     private fun readRetouch(retouch: org.json.JSONObject?): RetouchSelection? {
         if (retouch == null) return null
@@ -866,13 +786,10 @@ object EditRecipeCodec {
 }
 
 /**
- * The sidecar store: one JSON file per source media item inside the
- * editor's app-private `edit-sidecars/` directory, keyed by the SHA-256 of
- * the source URI (no filesystem path or URI text ever becomes a filename).
- * Writes are atomic (tmp + rename); a CORRUPT sidecar is deleted and
- * reported absent (self-healing, the repo's established state-file
- * pattern) --- the user's edit session degrades to a fresh one, never to a
- * crash or a half-applied recipe.
+ * The sidecar store: one JSON file per source media item in app-private `edit-sidecars/`,
+ * keyed by the SHA-256 of the source URI (no path or URI text ever becomes a filename).
+ * Writes are atomic (tmp + rename); a corrupt sidecar is deleted and reported absent
+ * (self-healing) --- a fresh session, never a crash or a half-applied recipe.
  */
 class EditRecipeStore(private val dir: File) {
 
@@ -919,11 +836,9 @@ class EditRecipeStore(private val dir: File) {
 }
 
 /**
- * The export-time choices (NOT part of the recipe --- the recipe is the
- * edit state; format/quality are per-export decisions). JPEG, PNG and
- * WebP only: the platform Bitmap has NO HEIC encoder (HEIC is decode-only
- * in this app's manifest filter), so offering it would be a lie --- the
- * honest set is what the encoder can actually write.
+ * Per-export choices (NOT recipe state). JPEG/PNG/WebP only: the platform Bitmap has no HEIC
+ * encoder (HEIC is decode-only here), so offering it would be a lie --- the honest set is what
+ * the encoder can actually write.
  */
 enum class ExportFormat(val mimeType: String, val extension: String) {
     JPEG("image/jpeg", "jpg"),
@@ -943,12 +858,9 @@ data class ExportRequest(
     val quality: Int,
     val metadataPolicy: MetadataPolicy,
     /**
-     * The PREVIEW grid's width the recipe was authored against (r68): the
-     * keystone quad is authored in preview pixels, and the export decodes
-     * the source at full resolution, so [LilypadKeystoneMath.scaledForExport]
-     * needs the authoring grid to retarget the same warp. 0 = unknown (no
-     * base decoded); a 0 grid never scales --- the quad rides verbatim,
-     * the only honest degrade for a grid that does not exist.
+     * The preview grid width the recipe was authored against: the keystone quad is authored in
+     * preview pixels, so [LilypadKeystoneMath.scaledForExport] needs it to retarget the warp at
+     * full export resolution. 0 = unknown; a 0 grid never scales (the quad rides verbatim).
      */
     val previewWidth: Int = 0,
     /** [previewWidth]'s height twin. */

@@ -7,19 +7,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r38 frame on the ADR-0011 sidecar wire (the contract's
- * round-trip set, the look's tolerance shape): a pre-r38 sidecar loads
- * clean (even one carrying ALL FOUR earlier containers --- the round-five
- * stacking proof), the lossless round-trip, the unknown-frameId skip,
- * clamps and defaults.
- */
+/** The frame selection on the sidecar wire: legacy loads, lossless round-trip, unknown-id skip, clamps. */
 class FramesRecipeTest {
 
     private fun valid(json: String): EditRecipe =
         (EditRecipeCodec.fromJson(json) as EditRecipeCodec.ParseResult.Valid).recipe
 
-    // ---- The absent key (every pre-r38 sidecar in the wild) ----
+    // ---- The absent key ----
 
     @Test
     fun `a pre-r38 sidecar loads with no frame`() {
@@ -31,8 +25,7 @@ class FramesRecipeTest {
 
     @Test
     fun `a pre-r38 sidecar carrying all four earlier containers keeps them intact`() {
-        // The round-five stacking proof: every earlier container is
-        // untouched by r38's key.
+        // Every earlier container is untouched by the frame key.
         val json = JSONObject()
             .put("schemaVersion", 1)
             .put(

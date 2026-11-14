@@ -1,9 +1,0 @@
-<resources>
-    <!-- toadGALLERY identity tokens (Phase 2 seed set - full token system: issue #11).
-         Compose mirror: ui/theme/Theme.kt (keep both in sync until the token system
-         consolidates on one source). -->
-    <color name="toad_green">#3E9B4F</color>
-    <color name="toad_green_dark">#2E7A3C</color>
-    <color name="toad_green_accent">#5DBF6E</color>
-    <color name="toad_green_bg">#EAF6EC</color>
-</resources>

@@ -1,17 +1,16 @@
 package com.toadgallery.editor.contract
 
 /**
- * The gallery-side parse of an editor reply (spec section 3): one function,
- * all three terminal states, no exception paths. Unknown result codes and
- * malformed OK replies degrade to structured [EditOutcome.Error] values
- * rather than crashes, so the gallery can always narrate honestly.
+ * The gallery-side parse of an editor reply (spec section 3): one function, all three terminal
+ * states, no exception paths. Unknown codes and malformed OK replies degrade to structured
+ * [EditOutcome.Error] values rather than crashes, so the gallery can always narrate honestly.
  */
 sealed interface EditOutcome {
 
     /** The editor saved a copy at [outputUri]; the gallery refreshes via MediaStore observation. */
     data class SavedCopy(
         val outputUri: String,
-        /** The policy the editor reported applying; absent on pre-r29 editors. */
+        /** The policy the editor reported applying; absent on older editors. */
         val metadataPolicyApplied: MetadataPolicy?,
     ) : EditOutcome
 
@@ -31,10 +30,9 @@ data class RawResult(
 )
 
 /**
- * The contract section 5 honesty-UI triggers (additive r31) over the
- * applied-policy echo: the gallery narrates WHAT was stripped, never a
- * bare "saved". A `null` applied policy (a pre-r29 editor) makes no claim
- * at all --- both triggers are false and the narration stays generic.
+ * Honesty-UI triggers (contract section 5) over the applied-policy echo: the gallery narrates
+ * WHAT was stripped, never a bare "saved". A `null` applied policy (an older editor) makes
+ * no claim at all --- both triggers are false and the narration stays generic.
  */
 val EditOutcome.SavedCopy.stripsAllMetadata: Boolean
     get() = metadataPolicyApplied == MetadataPolicy.STRIP_ALL
@@ -76,9 +74,8 @@ object EditResultParser {
 
     private fun parseError(result: RawResult): EditOutcome {
         val code = result.errorCode?.takeIf { it.isNotBlank() } ?: EditContract.ERROR_INTERNAL
-        // An unknown code is still a failure --- keep the editor's code as the
-        // message prefix (nothing is lost) but classify as INTERNAL so gallery
-        // narration never claims a guarantee the code does not make.
+        // An unknown code is still a failure --- keep the code as the message prefix but
+        // classify as INTERNAL, so narration never claims a guarantee the code does not make.
         if (code !in EditContract.ERROR_CODES) {
             return EditOutcome.Error(
                 EditContract.ERROR_INTERNAL,

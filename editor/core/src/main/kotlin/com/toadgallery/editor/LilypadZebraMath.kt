@@ -1,35 +1,19 @@
 package com.toadgallery.editor
 
-// ---------------------------------------------------------------------------
-// r68: the photo pro round (Phase 2 of the editor rebirth plan,
-// docs/editor/lilypad-design.md) --- the clipping zebra's arithmetic as
-// PURE DATA (the ADR-0011 split: the thresholds, the classification and
-// the stripe tiling are pinned here on the JVM in LilypadZebraMathTest;
-// the overlay bitmap builder in ZebraOverlay.kt only READS these rules).
+// The clipping zebra's arithmetic as PURE DATA (pinned on the JVM by LilypadZebraMathTest;
+// the overlay bitmap builder in ZebraOverlay.kt only READS these rules). The zebra marks
+// tones where information is GONE, not merely bright: red stripes where ANY channel sits at
+// or above the highlight pin (that channel's detail is clipped at the top --- a saturated
+// red petal at R=252 has lost its red micro-contrast even though the pixel is not white);
+// blue stripes where any channel sits at or below the shadow pin. The per-channel rule never
+// calls a pixel clipped that still carries detail in every channel.
 //
-// WHAT THE ZEBRA SAYS. A clipping warning marks the tones where the
-// photo's information is GONE, not where it is merely bright: red diagonal
-// stripes where ANY channel sits at or above the highlight pin (that
-// channel's detail is clipped at the top --- a saturated red petal at
-// R=252 has lost its red micro-contrast even though the pixel is not
-// white), blue diagonal stripes where any channel sits at or below the
-// shadow pin. The per-channel rule is the honest one for a display-space
-// warning: it never calls a pixel clipped that still carries detail in
-// every channel, and it never hides a channel that has none left.
-//
-// THE PINS. The thresholds are fixed constants, not settings --- 250/255
-// and 5/255 are the ~2% headroom bands every serious editor's default
-// warning uses, and a preference here would invite the user to lie to
-// themselves about what the sensor recorded. The stripe geometry is
-// DETERMINISTIC by the same token: fixed period, fixed duty, fixed phase,
-// opposite diagonals for the two zones so a boundary pixel reads as one
-// or the other, never a moire of both.
-// ---------------------------------------------------------------------------
+// The pins are FIXED constants, not settings (250/255 and 5/255 are the ~2% headroom bands
+// every serious editor defaults to). The stripe geometry is DETERMINISTIC: fixed period,
+// duty and phase, opposite diagonals for the two zones so a boundary pixel reads as one or
+// the other, never a moire of both.
 
-/**
- * The clipping zebra's pure arithmetic: the zone classification and the
- * stripe tiling (see the file header for the contract).
- */
+/** The clipping zebra's pure arithmetic: the zone classification and the stripe tiling. */
 internal object LilypadZebraMath {
 
     /** A channel at or above this is highlight-clipped (250 of 255). */
@@ -39,10 +23,9 @@ internal object LilypadZebraMath {
     const val SHADOW_THRESHOLD = 5
 
     /**
-     * The overlay grid's downsample factor: one zebra cell per 4x4 block
-     * of preview pixels, point-sampled at the block's corner. The preview
-     * is a bounded working grid (<= 2048), so the overlay stays a ~200k
-     * cell pass --- cheap enough to recompute on every drag tick.
+     * The overlay grid's downsample factor: one zebra cell per 4x4 block of preview pixels,
+     * point-sampled at the block's corner. The preview is bounded (<= 2048), so the overlay
+     * stays a ~200k-cell pass --- cheap enough to recompute on every drag tick.
      */
     const val DOWNSAMPLE = 4
 
@@ -65,11 +48,9 @@ internal object LilypadZebraMath {
     enum class Zone { NONE, HIGHLIGHT, SHADOW }
 
     /**
-     * The classification: HIGHLIGHT when any channel sits at or above
-     * [HIGHLIGHT_THRESHOLD] (highlight wins --- a pixel clipped at the top
-     * of one channel is clipped, whatever its other channels do), SHADOW
-     * when any channel sits at or below [SHADOW_THRESHOLD], NONE between
-     * the pins.
+     * HIGHLIGHT when any channel sits at or above [HIGHLIGHT_THRESHOLD] (highlight wins ---
+     * a pixel clipped at the top of one channel is clipped), SHADOW when any channel sits
+     * at or below [SHADOW_THRESHOLD], NONE between the pins.
      */
     fun classify(r: Int, g: Int, b: Int): Zone = when {
         r >= HIGHLIGHT_THRESHOLD || g >= HIGHLIGHT_THRESHOLD || b >= HIGHLIGHT_THRESHOLD -> Zone.HIGHLIGHT

@@ -8,13 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The bundled-sticker conformance suite (r35, Phase 7 v2; the
- * `BundledFontsTest` pattern adapted for authored code): the registry's
- * self-consistency, and --- reading the LIVE registry definitions (the
- * committed source IS the asset; there is no file to pin) --- that every
- * shape is structurally valid and that spot coordinates pin the authored
- * trigonometry with safe rounding margins (>= 0.3 units from a .5
- * boundary), so a change to any formula fails the build, not the user.
+ * Bundled-sticker conformance: registry self-consistency, structural validity of every
+ * shape, and spot coordinates pinning the authored trigonometry (>= 0.3 from a .5 boundary).
  */
 class BundledStickersTest {
 
@@ -146,8 +141,7 @@ class BundledStickersTest {
         // 24-gon + LineTo(50,96) + Close: the tip is the second-to-last op.
         assertEquals(StickerShape.Op.LineTo(50, 96), head[head.size - 2])
         assertEquals(StickerShape.Op.Close, head.last())
-        // The inner white circle is 12-gon r=11 about (50,40): theta=0
-        // exact (61,40).
+        // The inner white circle is a 12-gon r=11 about (50,40): theta=0 -> (61,40) exact.
         assertEquals(StickerShape.Op.MoveTo(61, 40), pin.parts[1].ops[0])
     }
 

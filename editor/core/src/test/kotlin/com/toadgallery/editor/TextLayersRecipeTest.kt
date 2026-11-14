@@ -8,13 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r34 text layers on the ADR-0011 sidecar wire (the contract's
- * round-trip set): a pre-r34 sidecar loads clean, the full round-trip is
- * lossless, an unresolvable fontId round-trips verbatim + degrades at
- * render, and the tolerant-read rules (clamps, skips, defaults) hold ---
- * a hand-edited sidecar never loses its whole session.
- */
+/** Text layers on the sidecar wire: legacy loads, lossless round-trip, fontId tolerance, tolerant reads. */
 class TextLayersRecipeTest {
 
     private fun valid(json: String): EditRecipe =
@@ -47,15 +41,14 @@ class TextLayersRecipeTest {
         return JSONObject().put("schemaVersion", 1).put("textLayers", arr).toString()
     }
 
-    // ---- The absent key (every pre-r34 sidecar in the wild) ----
+    // ---- The absent key ----
 
     @Test
     fun `a pre-r34 sidecar loads with no text layers`() {
         val restored = valid("{\"schemaVersion\":1,\"brightness\":10}")
         assertNull(restored.textLayers)
         assertTrue(restored.isTextIdentity)
-        // brightness 10 rides through untouched --- the recipe is NOT
-        // identity (only its TEXT half is); the absent key corrupts nothing.
+        // brightness rides through: the recipe is not identity, only its text half is.
         assertFalse(restored.isIdentity)
     }
 
@@ -176,8 +169,7 @@ class TextLayersRecipeTest {
 
     @Test
     fun `duplicate layer ids are a structured parse failure, not a corrupt session`() {
-        // The container rejects duplicates; the codec surfaces it as an
-        // Invalid (the sidecar then self-heals away per the store rules).
+        // The container rejects duplicates; the codec surfaces Invalid (sidecar self-heals).
         val parsed = EditRecipeCodec.fromJson(
             recipeWithLayers(layerJson(id = "t1"), layerJson(id = "t1", text = "dupe")),
         )

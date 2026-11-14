@@ -1,23 +1,7 @@
 package com.toadgallery.editor
 
-// ---------------------------------------------------------------------------
-// The r69 timeline-viewport math (Phase 3, the video timeline foundation):
-// the pure geometry of a pinch-zoomable, pannable timeline strip ---
-// the same ADR-0011 split as every Lilypad math file (LilypadSliderMath,
-// LilypadDialMath, LilypadDeckMath): Float arithmetic, zero Compose or
-// Android imports, every rule pinned by a JVM test, the composable a thin
-// shell over it.
-//
-// THE MODEL. A timeline viewport is (zoom, centerMs):
-//   - `zoom` is a multiplier on the strip's pixels-per-millisecond, where
-//     1f means THE WHOLE TIMELINE FITS the viewport width (the r63d
-//     TrimStrip's fixed view);
-//   - `centerMs` is the timeline instant under the viewport's horizontal
-//     center.
-// Content is drawn at
-//   px(ms) = (ms - centerMs) * pxPerMs + viewportWidthPx / 2,
-//   pxPerMs = (viewportWidthPx / durationMs) * zoom.
-// ---------------------------------------------------------------------------
+// The timeline-viewport math (ADR-0011 split): Float arithmetic, zero Compose/Android
+// imports, JVM-pinned; composable is a thin shell. pxPerMs = viewportWidth/durationMs * zoom.
 
 /** The zoomable timeline's viewport state: which zoom, which instant centered. */
 internal data class TimelineViewport(
@@ -28,10 +12,8 @@ internal data class TimelineViewport(
 )
 
 /**
- * The pinch-zoom / pan geometry (pure, r69). Every function is total:
- * degenerate durations (<= 0) pin to safe identities instead of throwing,
- * and a NaN zoom clamps to [ZOOM_MIN] --- the same defensive discipline
- * the plan validator applies to NaN volume.
+ * The pinch-zoom / pan geometry (pure). Every function is total: degenerate durations
+ * (<= 0) pin to safe identities instead of throwing, and a NaN zoom clamps to [ZOOM_MIN].
  */
 internal object LilypadTimelineMath {
 
@@ -39,9 +21,8 @@ internal object LilypadTimelineMath {
     const val ZOOM_MIN: Float = 1f
 
     /**
-     * The zoom ceiling: at 16x a tenth of the clip fills the strip ---
-     * enough for frame-adjacent work without letting a stray pinch turn
-     * the strip into a single-frame microscope.
+     * The zoom ceiling: enough for frame-adjacent work without letting a stray pinch
+     * turn the strip into a single-frame microscope.
      */
     const val ZOOM_MAX: Float = 16f
 
@@ -64,9 +45,8 @@ internal object LilypadTimelineMath {
     }
 
     /**
-     * The half-window in ms: how far the viewport reaches from its center
-     * (`viewportWidthPx / 2 / pxPerMs`). At zoom 1 it is half the timeline;
-     * it shrinks linearly as the zoom grows.
+     * The half-window in ms: how far the viewport reaches from its center. At zoom 1 it
+     * is half the timeline; it shrinks linearly as the zoom grows.
      */
     fun halfSpanMs(durationMs: Float, viewportWidthPx: Float, zoom: Float): Float {
         if (durationMs <= 0f) return 0f
@@ -74,9 +54,8 @@ internal object LilypadTimelineMath {
     }
 
     /**
-     * Keep the window inside the timeline: at fit (the window >= the whole
-     * timeline) the center pins to the middle; zoomed in, it clamps so no
-     * edge of the window may leave the `[0, durationMs]` span. A degenerate
+     * Keep the window inside the timeline: at fit the center pins to the middle; zoomed
+     * in, it clamps so no window edge may leave the `[0, durationMs]` span. A degenerate
      * duration pins to `durationMs / 2`.
      */
     fun clampCenter(centerMs: Float, durationMs: Float, viewportWidthPx: Float, zoom: Float): Float {
@@ -87,12 +66,9 @@ internal object LilypadTimelineMath {
     }
 
     /**
-     * THE anchored zoom: change the zoom while `focalMs` stays at the same
-     * viewport pixel (the finger's centroid). From the content equation,
-     * keeping `px(focalMs)` fixed while `z1 -> z2` solves to
-     * `center2 = focal - (focal - center1) * z1 / z2`. The clamped center
-     * can still shift the focal point when the zoom runs against a bound
-     * --- the honest fallback (a clamped camera, not a frozen one).
+     * THE anchored zoom: change the zoom while `focalMs` stays at the same viewport
+     * pixel (the pinch centroid): `center2 = focal - (focal - center1) * z1 / z2`. The
+     * clamped center can still shift the focal when the zoom runs against a bound.
      */
     fun anchoredZoom(
         viewport: TimelineViewport,
@@ -115,9 +91,8 @@ internal object LilypadTimelineMath {
     }
 
     /**
-     * Pan by pixels: dragging the content `panPx` right moves the window
-     * the same distance the OTHER way in time (`center -= panPx / pxPerMs`
-     * at the CURRENT zoom). The caller clamps the result.
+     * Pan by pixels: dragging the content `panPx` right moves the window the OTHER way
+     * in time (`center -= panPx / pxPerMs` at the current zoom).
      */
     fun pannedCenter(viewport: TimelineViewport, panPx: Float, durationMs: Float, viewportWidthPx: Float): Float {
         val ppm = pxPerMs(durationMs, viewportWidthPx, viewport.zoom)
@@ -138,9 +113,8 @@ internal object LilypadTimelineMath {
     }
 
     /**
-     * A released pinch snaps onto a detent when it landed within
-     * [DETENT_SNAP_RATIO] of one (relative to the detent); otherwise the
-     * zoom stays where the fingers left it, clamped.
+     * A released pinch snaps onto a detent when it landed within [DETENT_SNAP_RATIO] of
+     * one (relative to the detent); otherwise the zoom stays clamped where the fingers left it.
      */
     fun snapZoomToDetent(zoom: Float): Float {
         val z = clampZoom(zoom)
@@ -152,8 +126,7 @@ internal object LilypadTimelineMath {
 
     /**
      * The zoom chip's label: one decimal, `x`-suffixed, root-locale digits
-     * (`1.0x` ... `16.0x`) --- the counting-digit convention, no resource
-     * needed for a pure number.
+     * (`1.0x` ... `16.0x`).
      */
     fun zoomLabel(zoom: Float): String =
         String.format(java.util.Locale.ROOT, "%.1fx", clampZoom(zoom))

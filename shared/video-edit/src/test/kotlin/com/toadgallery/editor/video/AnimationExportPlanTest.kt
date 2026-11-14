@@ -5,9 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The animation-export plan rules (r42, decision 5): the bounds, the
- * frame-count derivation with the source-rate deduplication, the timestamp
- * walk and the byte-budget preflight's refusal paths.
+ * Animation-export plan rules: bounds, frame-count derivation, timestamp walk, byte-budget preflight.
  */
 class AnimationExportPlanTest {
 

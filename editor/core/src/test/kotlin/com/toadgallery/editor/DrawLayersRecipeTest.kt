@@ -8,14 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r36 stroke layers on the ADR-0011 sidecar wire (the contract's
- * round-trip set, the family conventions): a pre-r36 sidecar loads clean
- * (even one carrying r34 text AND r35 stickers --- the stacking proof),
- * the full round-trip is lossless, the points tolerate malformed
- * entries, and the clamps/defaults/duplicate rules hold --- a hand-edited
- * sidecar never loses its whole session.
- */
+/** Stroke layers on the sidecar wire: legacy loads, lossless round-trip, points tolerance, clamps. */
 class DrawLayersRecipeTest {
 
     private fun valid(json: String): EditRecipe =
@@ -48,7 +41,7 @@ class DrawLayersRecipeTest {
         return JSONObject().put("schemaVersion", 1).put("drawLayers", arr).toString()
     }
 
-    // ---- The absent key (every pre-r36 sidecar in the wild) ----
+    // ---- The absent key ----
 
     @Test
     fun `a pre-r36 sidecar loads with no strokes`() {
@@ -60,8 +53,7 @@ class DrawLayersRecipeTest {
 
     @Test
     fun `a pre-r36 sidecar carrying r34 text and r35 stickers keeps them intact`() {
-        // The stacking proof for round three: both earlier containers are
-        // untouched by r36's key.
+        // Both earlier containers are untouched by the strokes key.
         val json = JSONObject()
             .put("schemaVersion", 1)
             .put(

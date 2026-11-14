@@ -1,52 +1,30 @@
 package com.toadgallery.editor.video
 
 /**
- * One clip's slot in a multi-clip composition (r69, the Phase 3 timeline
- * foundation): the source (a URI string --- the shared module stays pure,
- * it never touches Android), the clip's duration fact, the trim window
- * into that source, and the clip's WHOLE-clip speed factor.
- *
- * The v1 video editor's speed plan ([VideoEditPlan.speedSegments]) stays
- * the single-clip contract; a [ClipTimeline] entry carries ONE factor per
- * clip because that is what a timeline surface edits (per-clip speed, not
- * intra-clip ramps --- the Phase 4 keyframe round's territory). The two
- * models deliberately share [TimeRange] and the speed-factor bounds so the
- * single-clip lane can adopt the composition model without a translation
- * layer.
- *
- * r70 grew the entry's FACT set: [audioTrackPresent] joins durationMs as
- * an input fact the caller supplies (the retriever reads it per clip) ---
- * the same additive growth [VideoEditPlan] took at r42, facts before
- * surfaces.
- *
- * r74 grows the entry twice, both additive (defaults preserve every
- * pre-r74 value and test byte-for-byte): the SPEED RAMP
- * ([ramp] --- the plan doc's P2 "speed ramps" rung, keyframed factors
- * interpolated linearly between instants; absent = flat at
- * [speedFactor], exactly the r69 shape), and the composition lane's own
- * speed bounds [ClipTimelineValidator.MAX_SPEED_FACTOR] = 4.0 --- the
- * plan doc's 0.25x..4x ladder range. The v1 single-clip contract
- * ([VideoEditPlanValidator]) STAYS frozen at 0.25x..2x; the two lanes
- * carry their own bounds, stated on their own validators, never one
- * borrowed constant stretched after the fact.
+ * One clip's slot in a multi-clip composition: the source (a URI string --- the shared module
+ * stays pure, it never touches Android), the clip's duration fact, the trim window, and the
+ * speed handling. ONE factor per clip (a timeline surface edits per-clip speed, not
+ * intra-clip ramps), optionally refined by [ramp] (keyframed factors interpolated linearly;
+ * absent/empty = flat at [speedFactor]). Deliberately shares [TimeRange] and the speed-factor
+ * bounds with [VideoEditPlan] so the single-clip lane can adopt the composition model without
+ * a translation layer. The two lanes carry their OWN bounds: this lane 0.25x..4x
+ * ([ClipTimelineValidator]), the single-clip plan frozen at 0.25x..2x.
  */
 data class ClipTimelineEntry(
     /** The source clip's URI (opaque to this module; the activity resolves it). */
     val sourceUri: String,
     /** The source clip's duration in milliseconds (a fact, > 0). */
     val durationMs: Long,
-    /** The input fact: whether THIS clip has an audio track at all (r70; the retriever reads it per clip --- a composition may mix sounding and silent sources). */
+    /** The input fact: whether THIS clip has an audio track at all (the retriever reads it per clip --- a composition may mix sounding and silent sources). */
     val audioTrackPresent: Boolean,
     /** The trim window into the source; the clip plays exactly this range. */
     val trim: TimeRange,
     /** The clip's whole-clip speed factor, in [ClipTimelineValidator.MIN_SPEED_FACTOR]..[ClipTimelineValidator.MAX_SPEED_FACTOR]. */
     val speedFactor: Double = 1.0,
     /**
-     * The clip's keyframed speed curve (r74): sorted strictly-increasing
-     * keyframes inside the trim, interpolated linearly between. Absent
-     * (empty) = the flat whole-clip factor above --- the r69 shape,
-     * verbatim. Validated by [SpeedRampValidator] through the
-     * composition gate.
+     * The clip's keyframed speed curve: sorted strictly-increasing keyframes inside the trim,
+     * interpolated linearly between. Empty = the flat whole-clip factor above; validated by
+     * [SpeedRampValidator] through the composition gate.
      */
     val ramp: List<SpeedKeyframe> = emptyList(),
 ) {
@@ -61,18 +39,15 @@ data class ClipTimelineEntry(
                 "[${ClipTimelineValidator.MIN_SPEED_FACTOR}.." +
                 "${ClipTimelineValidator.MAX_SPEED_FACTOR}]"
         }
-        // The trim-bounds-vs-duration rule needs the duration fact, so it
-        // belongs to the validator (the structured-failure shape), not the
-        // constructor --- exactly the TimeRange precedent.
+        // The trim-bounds-vs-duration rule belongs to the validator (structured failure),
+        // not the constructor.
     }
 }
 
 /**
- * An ordered multi-clip composition: clip 1, then clip 2, and so on. The
- * v1 editor edits a one-entry timeline; the Phase 3 surfaces (the clip
- * picker, the reorder rail) grow the list. The model is deliberately
- * minimal --- audio ducking, per-clip looks and text ride later rounds on
- * top of it, the same additive way [VideoEditPlan] grew its containers.
+ * An ordered multi-clip composition: clip 1, then clip 2, and so on. The v1 editor edits a
+ * one-entry timeline; the model is deliberately minimal (audio ducking, per-clip looks and
+ * text can ride on top additively).
  */
 data class ClipTimeline(
     val entries: List<ClipTimelineEntry>,
@@ -91,11 +66,9 @@ object ClipTimelineValidator {
     const val MAX_ENTRIES: Int = 256
 
     /**
-     * The composition lane's speed bounds (r74): the plan doc's ladder
-     * range 0.25x..4x. The v1 single-clip plan keeps its own frozen
-     * 0.25x..2x ([VideoEditPlanValidator]); the timeline lane --- built
-     * after the rebirth plan landed --- carries the range the plan
-     * doc's P0 ladder names.
+     * The composition lane's speed bounds: 0.25x..4x. The single-clip plan keeps its own
+     * frozen 0.25x..2x ([VideoEditPlanValidator]); each lane states its bounds on its
+     * own validator.
      */
     const val MIN_SPEED_FACTOR: Double = 0.25
     const val MAX_SPEED_FACTOR: Double = 4.0
@@ -123,8 +96,7 @@ object ClipTimelineValidator {
                         "duration ${entry.durationMs} ms",
                 )
             }
-            // r74: the entry's keyframed ramp validates against its own
-            // trim window (sorted, in-bounds, within the keyframe cap).
+            // The keyframed ramp validates against its own trim window (sorted, in-bounds, capped).
             when (val ramp = SpeedRampValidator.validate(entry.ramp, entry.trim)) {
                 is SpeedRampValidation.Invalid -> {
                     return ClipTimelineValidation.Invalid("clip $index: ${ramp.reason}")
@@ -137,10 +109,9 @@ object ClipTimelineValidator {
 }
 
 /**
- * The derived math over a VALIDATED composition (pure; every rule pinned
- * by tests) --- the timeline-surface counterpart of [VideoEditMath]. All
- * walks are piecewise linear per clip: a clip's output length is
- * `trimLength / speedFactor`, and inside a clip source time advances at
+ * Derived math over a VALIDATED composition (pure; every rule pinned by tests) --- the
+ * timeline-surface counterpart of [VideoEditMath]. Walks are piecewise linear per clip: a
+ * clip's output length is `trimLength / speedFactor`, and source time advances at
  * `speedFactor` ms per output ms.
  */
 object ClipTimelineMath {
@@ -166,13 +137,9 @@ object ClipTimelineMath {
     }
 
     /**
-     * The output offset where a given source position sits: how far into
-     * the OUTPUT timeline the player must seek to land at
-     * `sourceMs` inside clip `entryIndex`. The inverse of
-     * [playheadAtOutputOffset] --- pinned as a round trip by tests.
-     * `sourceMs` is clamped into the clip's trim window first (a caller
-     * asking about an untrimmed position gets the nearest bound --- the
-     * honest answer, not a failure).
+     * The output offset the player must seek to land at `sourceMs` inside clip `entryIndex`
+     * (the inverse of [playheadAtOutputOffset], pinned as a round trip by tests). `sourceMs`
+     * is clamped into the trim window first: an untrimmed position gets the nearest bound.
      */
     fun outputOffsetOfSource(timeline: ClipTimeline, entryIndex: Int, sourceMs: Long): Long {
         require(entryIndex in timeline.entries.indices) {
@@ -192,13 +159,10 @@ object ClipTimelineMath {
     }
 
     /**
-     * The source position an output offset resolves to: walk the clips,
-     * consuming each clip's output length, until the offset lands inside
-     * one; return WHICH clip and WHERE (source-relative, inside the trim).
-     * A boundary offset belongs to the NEXT clip's start (a walk that
-     * consumes clip i exactly arrives at clip i+1's trim start --- the
-     * convention the tests pin). Offsets at or past the total clamp to the
-     * last clip's trim end; the caller never folds time backwards.
+     * The source position an output offset resolves to: walk the clips until the offset
+     * lands inside one; return WHICH clip and WHERE (source-relative, inside the trim).
+     * A boundary offset belongs to the NEXT clip's start; offsets at or past the total
+     * clamp to the last clip's trim end.
      */
     fun playheadAtOutputOffset(timeline: ClipTimeline, outputOffsetMs: Long): TimelinePlayhead {
         require(outputOffsetMs >= 0) { "output offset must be non-negative, was $outputOffsetMs" }

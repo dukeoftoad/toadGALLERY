@@ -198,10 +198,8 @@ class HslVignetteSharpTest {
         applySharpen(pixels, w, h, -100)
         val darkSide = redOf(pixels[2 * w + 3])
         val lightSide = redOf(pixels[2 * w + 4])
-        // Negative unsharp pulls both sides toward the local mean (the 3x3
-        // means are 93 and 146; a strong negative amount overshoots, so the
-        // honest assertion is "moved substantially toward 120 from both
-        // sides", not an exact value).
+        // Negative unsharp pulls both sides toward the local mean (3x3 means are 93 and 146; a
+        // strong negative amount overshoots, so the honest assertion is "moved substantially toward 120").
         assertTrue("dark side must rise toward the mean", darkSide in 41..125)
         assertTrue("light side must fall toward the mean", lightSide in 115..199)
     }

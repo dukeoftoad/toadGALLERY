@@ -17,9 +17,8 @@ data class EditRequest(
     /** Optional UI pre-selection hint; unknown values are rejected, not ignored. */
     val operationHint: OperationHint?,
     /**
-     * The r42 additive media kind: image (the default, exactly the v1
-     * behavior) or video. Never null after validation; the builder omits
-     * the extra entirely for image launches so the v1 wire stays identical.
+     * The additive media kind: image (the default) or video. Never null after validation;
+     * the builder omits the extra entirely for image launches so the v1 wire stays identical.
      */
     val mediaKind: MediaKind = MediaKind.IMAGE,
 )
@@ -117,9 +116,8 @@ object EditRequestValidator {
             )
         }
 
-        // Metadata policy: required, total parse (spec: editor never silently
-        // strips anything; an unknown policy is a contract violation, not a
-        // reason to fall back to preserve).
+        // Metadata policy: required, total parse (an unknown policy is a contract
+        // violation, never a silent fallback to preserve).
         val policy = MetadataPolicy.fromWire(raw.metadataPolicy)
         if (policy == null) {
             return RequestValidation.Invalid(
@@ -130,9 +128,8 @@ object EditRequestValidator {
             )
         }
 
-        // Operation hint: optional, but an unknown value is a contract
-        // violation (the hint only pre-selects UI, so callers that mistype
-        // it should hear about it in development, not ship silent defaults).
+        // Operation hint: optional, but an unknown value is a contract violation
+        // (it only pre-selects UI; mistyping should surface, not ship silent defaults).
         val hint = OperationHint.fromWire(raw.operationHint)
         if (hint == null && raw.operationHint != null) {
             return RequestValidation.Invalid(
@@ -143,8 +140,7 @@ object EditRequestValidator {
             )
         }
 
-        // Media kind (r42 additive): absent = image (the v1 default); an
-        // unknown value is a contract violation, never a silent fallback.
+        // Media kind (additive): absent = image; an unknown value is a contract violation.
         val mediaKind = MediaKind.fromWire(raw.mediaKind)
         if (mediaKind == null && raw.mediaKind != null) {
             return RequestValidation.Invalid(
@@ -169,11 +165,10 @@ object EditRequestValidator {
 }
 
 /**
- * Builds the launch extras the gallery attaches to the contract intent.
- * Pure: the Android layer copies the entries into the Bundle verbatim
- * (`EXTRA_CONTRACT_VERSION` is an Int, every other value a String). The
- * r42 media-kind extra rides ONLY on video launches --- an image launch's
- * extras are byte-identical to v1 (the additive-versioning rule).
+ * Builds the launch extras the gallery attaches to the contract intent. Pure: the Android
+ * layer copies the entries into the Bundle verbatim (`EXTRA_CONTRACT_VERSION` is an Int,
+ * every other value a String). The media-kind extra rides ONLY on video launches --- an
+ * image launch's extras are byte-identical to v1 (the additive-versioning rule).
  */
 object EditLaunchExtrasBuilder {
 

@@ -4,15 +4,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * The animation-export plan (r42, decision 5): a short GIF/WebP animation
- * over an in/out range with a bounded target width and a bounded frame
- * rate. The derived frame count and the byte-budget preflight are PURE
- * MATH here --- the preflight refuses an over-budget request BEFORE any
- * render starts, with an honest message (the ExportPreflight shape).
- *
- * The caps are ROUND-PINNED (r42) and live here as plan fields' bounds:
- * they are defensible mid-range numbers, not laws of nature --- the
- * contract doc records them and a later round may re-pin them.
+ * The animation-export plan: a short GIF/WebP animation over an in/out range with bounded
+ * width and frame rate. Frame-count derivation + byte-budget preflight are pure math; an
+ * over-budget request is refused before any render. Caps are documented, re-pinnable bounds.
  */
 data class AnimationExportPlan(
     /** The source clip's duration in milliseconds (the fact). */
@@ -29,30 +23,26 @@ data class AnimationExportPlan(
     val format: AnimationFormat,
 )
 
-/** The honest encodable set for animations (the r42 encoders realize both). */
+/** The encodable animation formats; both are realized by the export path. */
 enum class AnimationFormat(val mimeType: String, val extension: String) {
     GIF("image/gif", "gif"),
     WEBP("image/webp", "webp"),
 }
 
-/** The round-pinned r42 caps (documented in docs/phase-10/video-editor.md). */
+/** The animation caps (documented plan bounds). */
 object AnimationCaps {
 
-    /** Max animation frame width --- 1280 (HD long edge; mid-range decode-safe). */
+    /** Max frame width: 1280 px (HD long edge; decode-safe on mid-range devices). */
     const val MAX_TARGET_WIDTH_PX: Int = 1280
 
     /** Min animation frame width --- 64 (below this a frame is a thumbnail, not an animation). */
     const val MIN_TARGET_WIDTH_PX: Int = 64
 
-    /** The fps bounds --- 2..30 (2 = a crawl, 30 = the smooth ceiling). */
+    /** The fps bounds: 2..30. */
     const val MIN_FPS: Int = 2
     const val MAX_FPS: Int = 30
 
-    /**
-     * The output byte budget --- 32 MiB. The preflight's deliberately
-     * generous over-estimate must fit inside it or the export refuses
-     * before rendering a single frame.
-     */
+    /** Output byte budget: 32 MiB. The preflight's generous over-estimate must fit under it. */
     const val MAX_OUTPUT_BYTES: Long = 32L * 1024 * 1024
 }
 
@@ -105,11 +95,8 @@ object AnimationExportPlanValidator {
     }
 
     /**
-     * The deduplicated frame rate: the requested fps capped at the SOURCE
-     * frame rate when it is known and positive --- frames beyond the
-     * source's own rate would be pure duplicates, so the derivation never
-     * asks for them. An unknown source rate (null or non-positive) rides
-     * the requested fps.
+     * The deduplicated frame rate: requested fps capped at the source rate when known
+     * (frames beyond it would be duplicates); an unknown source rate rides the request.
      */
     fun effectiveFps(requestedFps: Int, sourceFrameRateFps: Double?): Double {
         if (sourceFrameRateFps == null || sourceFrameRateFps <= 0.0) {
@@ -118,10 +105,7 @@ object AnimationExportPlanValidator {
         return min(requestedFps.toDouble(), sourceFrameRateFps)
     }
 
-    /**
-     * The derived frame count: `range x effectiveFps`, rounded, minimum 1.
-     * Pure math, pinned by tests.
-     */
+    /** The derived frame count: `range x effectiveFps`, rounded, minimum 1. */
     fun frameCount(plan: AnimationExportPlan, sourceFrameRateFps: Double?): Int {
         val rangeSeconds = (plan.endMs - plan.startMs) / 1000.0
         return (rangeSeconds * effectiveFps(plan.fps, sourceFrameRateFps))
@@ -129,10 +113,7 @@ object AnimationExportPlanValidator {
             .coerceAtLeast(1)
     }
 
-    /**
-     * The retriever timestamps for the derived frames: `start + i / fps`,
-     * clamped into the range. The exporter walks exactly this list.
-     */
+    /** Retriever timestamps for the derived frames: `start + i / fps`, clamped into the range. */
     fun frameTimestampsMs(plan: AnimationExportPlan, sourceFrameRateFps: Double?): List<Long> {
         val count = frameCount(plan, sourceFrameRateFps)
         val fps = effectiveFps(plan.fps, sourceFrameRateFps)
@@ -143,11 +124,9 @@ object AnimationExportPlanValidator {
 }
 
 /**
- * The animation preflight (the ExportPreflight shape): the byte model is a
- * deliberately generous OVER-estimate --- GIF stores at most one byte per
- * pixel indexed (model: width x height x 1), lossless WebP photographic
- * content lands around two bytes per pixel (model: width x height x 2) ---
- * and the request must fit the round-pinned budget BEFORE any render.
+ * The animation preflight: the byte model is a deliberate over-estimate (GIF = 1 B/px
+ * indexed, lossless WebP = 2 B/px photographic); the request must fit the budget before
+ * any render.
  */
 object AnimationPreflight {
 
@@ -157,11 +136,7 @@ object AnimationPreflight {
         data class Refusal(val reason: String) : Outcome
     }
 
-    /**
-     * The generous per-format byte model per frame. Requires the frame
-     * HEIGHT (derived by the caller from the source aspect at the target
-     * width --- the plan deliberately carries width only).
-     */
+    /** Per-frame byte model per format; the caller derives the height from the source aspect. */
     fun estimateBytes(frameCount: Int, widthPx: Int, heightPx: Int, format: AnimationFormat): Long {
         val perFrame = when (format) {
             AnimationFormat.GIF -> widthPx.toLong() * heightPx * 1L
@@ -171,9 +146,8 @@ object AnimationPreflight {
     }
 
     /**
-     * The full preflight: validation, the platform's WebP capability (an
-     * input fact --- the caller supplies it; the lossless WebP encoder the
-     * muxer rides exists only on API 30+), then the byte budget.
+     * The full preflight: validation, the caller-supplied WebP capability (lossless WebP
+     * exists only on API 30+), then the byte budget.
      */
     fun preflight(
         plan: AnimationExportPlan,

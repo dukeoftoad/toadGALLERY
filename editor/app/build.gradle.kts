@@ -6,12 +6,9 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.TaskAction
 
-// :editor:app --- the standalone editor APPLICATION shell (Phase 1
-// modularization). A thin launcher over :editor:core; owns the applicationId,
-// versioning, signing, build types, and the editor's STRICTER privacy gate
-// (contract section 4.5: the standalone editor NEVER requires network ---
-// there is no allowlist mechanism at all; any INTERNET in the merged
-// manifest fails the build).
+// :editor:app — the standalone editor APK shell over :editor:core. Owns the
+// applicationId, versioning, signing, and the stricter privacy gate: the
+// standalone editor never requires network (contract 4.5, no allowlist).
 
 plugins {
     alias(libs.plugins.android)
@@ -25,8 +22,7 @@ android {
         applicationId = "com.toadgallery.editor"
         minSdk = libs.versions.app.build.minimumSDK.get().toInt()
         targetSdk = libs.versions.app.build.targetSDK.get().toInt()
-        // versionCode 19 (0.4.14-edit-alpha): the last value the old
-        // :apps:edit defaultConfig carried (round history in git).
+        // versionCode 19 (0.4.14-edit-alpha).
         versionCode = 19
         versionName = "0.4.14-edit-alpha"
     }
@@ -49,9 +45,7 @@ android {
         includeInApk = false
     }
 
-    // --- Release signing (r43, the Phase 11 release-engineering round) ---
-    // The SAME four TG_* env vars convention as the gallery; absent env =
-    // unsigned release by design.
+    // Release signing via the TG_* env vars; absent env = unsigned release.
     val releaseKeystoreFile = providers.environmentVariable("TG_KEYSTORE_FILE")
     signingConfigs {
         if (releaseKeystoreFile.isPresent) {
@@ -66,12 +60,10 @@ android {
 
     buildTypes {
         debug {
-            // The dogfood suffix the gallery's EditorIdentity explicitly
-            // accepts (the only suffix beyond the exact release ID).
+            // The .debug suffix is the one EditorIdentity accepts beyond the exact release ID.
             applicationIdSuffix = ".debug"
         }
-        // r43: the release variant mirrors the gallery's --- R8 minify +
-        // resource shrink; the keeps live in proguard-rules.pro.
+        // Release mirrors the gallery: R8 minify + resource shrink; keeps in proguard-rules.pro.
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -83,9 +75,7 @@ android {
     }
 }
 
-// --- The editor privacy gate (contract section 4.5) --- verbatim from the
-// old :apps:edit build: NO allowlist, ANY INTERNET in the merged manifest
-// fails the build.
+// Editor privacy gate: ANY INTERNET permission in the merged manifest fails the build.
 abstract class EditInternetPermissionGateTask : DefaultTask() {
 
     @get:InputFile
@@ -142,9 +132,8 @@ androidComponents {
     }
 }
 
-// AGP 9's built-in Kotlin reports 2.2.10 for compose-group-mapping, a
-// version never published; pin the mapping artifact to the catalog Kotlin
-// (the exact fixup the old :apps:edit build carried).
+// Pin compose-group-mapping to the catalog Kotlin: AGP 9's built-in Kotlin reports
+// a version that was never published.
 configurations.configureEach {
     if (name == "composeMappingProducerClasspath") {
         resolutionStrategy.eachDependency {

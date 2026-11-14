@@ -5,16 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r66 histogram's JVM pins (ADR-0011: the counting is pure integer
- * arithmetic, so it is tested here and only the drawing rides the
- * screenshot harness).
- *
- * The pins are the properties the chart and its a11y state lean on: the
- * bins account for every pixel exactly once per channel, the pure-colour
- * and zone-boundary arithmetic is exact, the percents always sum to
- * exactly 100 (the a11y sentence can never read 99% of a picture), the
- * count is deterministic, and an empty input degrades instead of
- * throwing.
+ * Histogram counting pins: every pixel counted exactly once per channel, exact pure-colour and
+ * boundary arithmetic, zone percents summing to exactly 100, determinism, empty-input degrade.
  */
 class EditorHistogramTest {
 
@@ -44,9 +36,8 @@ class EditorHistogramTest {
 
     @Test
     fun `the luma zones split at the documented thirds`() {
-        // Grays carry luma == their own value (the 299+587+114 weights
-        // sum to 1000), so exact boundary values are one gray pixel
-        // each: 84 shadows, 85 and 170 midtones, 171 highlights.
+        // Grays carry luma == their value (299+587+114 weights sum to 1000): 84 shadows,
+        // 85 and 170 midtones, 171 highlights.
         val h = EditorHistogram.fromPixels(
             intArrayOf(
                 0xFF545454.toInt(), // luma 84 -> shadows
@@ -63,8 +54,7 @@ class EditorHistogramTest {
 
     @Test
     fun `the zone percents always sum to exactly 100`() {
-        // 7 pixels: 1 shadow, 6 highlights --- the floor division leaves
-        // a remainder only the midtone share can absorb (14 + ? + 85).
+        // 7 pixels: 1 shadow, 6 highlights --- floor division leaves a remainder only midtones absorb.
         val pixels = IntArray(7) { i -> if (i == 0) 0xFF000000.toInt() else 0xFFFFFFFF.toInt() }
         val (shadows, midtones, highlights) = EditorHistogram.fromPixels(pixels).zoneFractions()
         assertEquals(100, shadows + midtones + highlights)

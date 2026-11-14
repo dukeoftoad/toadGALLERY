@@ -7,21 +7,9 @@ import android.graphics.Path
 import android.graphics.RectF
 
 /**
- * The sticker compositing pass (r35, Phase 7 v2) --- the ONLY place a
- * sticker is rendered, shared by the live preview and the export (the
- * contract's "same code path, no second renderer"): both callers hand
- * the SAME function their target bitmap, the recipe's layers and their
- * output-canvas rectangle, exactly as `TextCompositor` takes them.
- *
- * Pipeline placement (`stickers.md` decision 3): a compositing pass
- * AFTER the whole pixel pipeline and BELOW the text pass --- stickers
- * are scene objects, captions float above them. Within the family,
- * layers draw in list order, top LAST.
- *
- * Tolerance tiers, mirroring the family contract: an unresolvable
- * `stickerId` (a version skew, a deleted import) renders NOTHING but
- * keeps its recipe state --- the user's layer survives round-trips.
- * Never a crash, never a dropped session.
+ * The sticker compositing pass — the ONLY place a sticker renders, shared by preview and
+ * export. Runs after the pixel pipeline, below the text pass; layers draw in list order,
+ * top LAST. An unresolvable stickerId renders nothing but keeps its recipe state.
  */
 object StickerCompositor {
 
@@ -47,9 +35,7 @@ object StickerCompositor {
         val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         val path = Path()
         for (spec in specs) {
-            // The tolerance contract: an id this session cannot resolve
-            // (a deleted import, a version skew) renders nothing --- the
-            // recipe keeps the layer, the canvas skips it.
+            // Tolerance: an unresolvable id renders nothing; the recipe keeps the layer.
             val resolved = resolver(spec.layer.stickerId) ?: continue
             canvas.save()
             canvas.rotate(spec.layer.rotationDeg.toFloat(), spec.centerX, spec.centerY)
@@ -57,8 +43,7 @@ object StickerCompositor {
                 is Resolved.Vector -> {
                     val box = StickerShape.DESIGN_BOX
                     val half = box / 2f
-                    // The design box maps onto the size square, centred
-                    // on the anchor: pixel = center + (authored - 50) * s.
+                    // Design box maps onto the size square, centred: pixel = center + (authored - 50) * s.
                     val s = spec.sizePx / box
                     for (part in resolved.shape.parts) {
                         path.reset()
@@ -84,9 +69,7 @@ object StickerCompositor {
                 is Resolved.Bitmap -> {
                     val bm = resolved.bitmap
                     if (bm.width < 1 || bm.height < 1) continue
-                    // An imported bitmap scales to FIT inside the size
-                    // square preserving its aspect --- a non-square import
-                    // lands as itself, never stretched.
+                    // An imported bitmap scales to fit the size square, aspect preserved (never stretched).
                     val scale = spec.sizePx / maxOf(bm.width, bm.height)
                     val dw = bm.width * scale
                     val dh = bm.height * scale

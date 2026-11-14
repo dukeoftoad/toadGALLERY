@@ -1,20 +1,14 @@
 package com.toadgallery.editor.video
 
 /**
- * The validated trim range (r42, decision 2 of the design contract):
- * `0 <= startMs < endMs <= durationMs`, both bounds inclusive to the clip.
- * A zero-length range (start == end), a negative-length range (start > end)
- * and an out-of-bounds bound are all structured failures with honest
- * messages --- never a silent clamp (the request-validator shape: the UI
- * already bounds its own inputs, so a plan failure means a bug or tampering,
- * and it says so).
+ * The validated trim range: `0 <= startMs < endMs <= durationMs`, both bounds
+ * inclusive to the clip. Zero/negative length and out-of-bounds bounds are structured
+ * failures with honest messages, never a silent clamp (the UI bounds its own inputs).
  */
 data class TimeRange(val startMs: Long, val endMs: Long) {
     init {
-        // The range-local invariant is POSITIVE LENGTH only; the
-        // clip-relative bounds (start >= 0, end <= durationMs) need the
-        // duration fact and so belong to [VideoEditPlanValidator] --- which
-        // returns them as structured failures, never constructor throws.
+        // Range-local invariant: positive length only. Clip-relative bounds (start >= 0,
+        // end <= duration) belong to [VideoEditPlanValidator] as structured failures.
         require(endMs > startMs) { "endMs must be strictly after startMs, was $startMs..$endMs" }
     }
 
@@ -23,11 +17,9 @@ data class TimeRange(val startMs: Long, val endMs: Long) {
 }
 
 /**
- * One speed segment: a factor in [0.25, 2.0] applied over
- * [startMs, endMs). Segments live INSIDE the trim range, must not overlap,
- * and every segment's source time must strictly increase (the monotonicity
- * rule --- a positive-length segment at a positive factor always does; the
- * validator plus the derived [VideoEditPlan.sourceTimeAtOutputMs] pin it).
+ * One speed segment: a factor in [0.25, 2.0] applied over [startMs, endMs). Segments
+ * live INSIDE the trim range, must not overlap, and source time must strictly increase
+ * across the output timeline (pinned by the validator and the derived math).
  */
 data class SpeedSegment(val startMs: Long, val endMs: Long, val speedFactor: Double) {
     init {
@@ -41,7 +33,7 @@ enum class VideoContainer(val mimeType: String, val extension: String) {
     MP4("video/mp4", "mp4"),
 }
 
-/** What the export does with the clip's audio (decision 4 of the contract). */
+/** What the export does with the clip's audio. */
 enum class MuteDecision {
     /** No mute requested: the audio track is copied through. */
     KEEP_AUDIO,
@@ -50,9 +42,8 @@ enum class MuteDecision {
     STRIP_AUDIO,
 
     /**
-     * Mute on a clip with NO audio track: a recorded no-op --- the export
-     * proceeds video-only and the UI states "no audio track" instead of
-     * showing a dead toggle (the honest-note convention).
+     * Mute on a clip with NO audio track: a recorded no-op --- video-only export, and
+     * the UI states "no audio track" instead of showing a dead toggle.
      */
     RECORDED_NO_OP,
 }
@@ -64,14 +55,10 @@ sealed interface VideoPlanValidation {
 }
 
 /**
- * The whole lightweight-edit session as ONE pure value (r42, decision 1):
- * trim range + speed plan + the audio fact + the mute request + the r52
- * volume gain + the nine ADR-0012 colour adjustments + the output
- * container. The activity executes a VALIDATED plan; every rule below is
- * JVM-pinned.
- *
- * The facts ([durationMs], [audioTrackPresent]) are INPUTS supplied by the
- * caller from the retriever --- the plan never guesses them.
+ * The whole lightweight-edit session as ONE pure value: trim range + speed plan +
+ * audio fact + mute request + volume gain + colour adjustments + output container.
+ * The activity executes a VALIDATED plan (JVM-pinned). The facts ([durationMs],
+ * [audioTrackPresent]) are caller-supplied inputs --- the plan never guesses them.
  */
 data class VideoEditPlan(
     /** The source clip's duration in milliseconds (a fact, > 0). */
@@ -79,9 +66,8 @@ data class VideoEditPlan(
     /** The validated trim range; the export covers exactly this range. */
     val trim: TimeRange,
     /**
-     * The speed plan: sorted, non-overlapping segments over the trim range.
-     * Gaps between segments ride at 1x. The v1 UI exposes whole-clip (one
-     * segment) or ONE selected region, but the model stays general.
+     * The speed plan: sorted, non-overlapping segments over the trim range; gaps ride
+     * at 1x. The v1 UI exposes whole-clip or one region, but the model stays general.
      */
     val speedSegments: List<SpeedSegment> = emptyList(),
     /** The input fact: whether the source clip has an audio track at all. */
@@ -89,13 +75,9 @@ data class VideoEditPlan(
     /** The mute request; on a no-audio clip it is a recorded no-op. */
     val mute: Boolean = false,
     /**
-     * The audio gain request (r52's maintainer-approved mute+volume bundle,
-     * decision 2026-11-06): 1f = unchanged (the default, so every pre-r52
-     * plan value and test stays byte-compatible), 0f = silent, 2f = the
-     * +6 dB boost ceiling. MUTE WINS over volume at the realization --- a
-     * muted export strips the audio track outright, so the gain is moot
-     * there; on a clip with no audio track both requests are recorded
-     * no-ops (the honest-fact convention).
+     * The audio gain request: 1f = unchanged, 0f = silent, 2f = the +6 dB boost ceiling.
+     * MUTE WINS over volume at the realization (a muted export strips the audio track,
+     * gain moot); on a clip with no audio track both requests are recorded no-ops.
      */
     val volume: Float = 1f,
     /** The nine ADR-0012 adjustment parameters (0 = neutral everywhere). */
@@ -111,7 +93,7 @@ object VideoEditPlanValidator {
     const val MIN_SPEED_FACTOR: Double = 0.25
     const val MAX_SPEED_FACTOR: Double = 2.0
 
-    /** The volume gain bounds (r52: 0 = silent .. 2 = +6 dB; 1f is the unchanged identity). */
+    /** The volume gain bounds: 0 = silent .. 2 = +6 dB; 1f is the unchanged identity. */
     const val MIN_VOLUME: Float = 0.0f
     const val MAX_VOLUME: Float = 2.0f
 
@@ -160,10 +142,8 @@ object VideoEditPlanValidator {
             previousEnd = segment.endMs
         }
 
-        // The volume gain: NaN is refused FIRST (every comparison against
-        // NaN is false, so the bounds check below alone would let it slip
-        // through as valid --- defensive; the UI never produces it, the
-        // validator is the second gate).
+        // NaN is refused FIRST: comparisons against NaN are false, so the bounds check
+        // alone would let it slip through as valid.
         if (plan.volume.isNaN()) {
             return VideoPlanValidation.Invalid(
                 "volume ${plan.volume} is not a number (NaN) --- not a gain the export can apply",
@@ -191,11 +171,9 @@ object VideoEditPlanValidator {
 object VideoEditMath {
 
     /**
-     * The timeline runs the export realizes: the trim range expanded into an
-     * ordered list of (start, end, factor) runs --- the explicit speed
-     * segments plus the 1x gap runs between and around them. The media3
-     * runner builds one clipped item per run; gaps riding at 1x is the
-     * contract's rule, realized here once so preview and export cannot drift.
+     * The timeline the export realizes: the trim range expanded into ordered
+     * (start, end, factor) runs --- explicit segments plus 1x gap runs between and
+     * around them. Realized here once so preview and export cannot drift.
      */
     fun timelineRuns(plan: VideoEditPlan): List<SpeedSegment> {
         val runs = mutableListOf<SpeedSegment>()
@@ -214,8 +192,8 @@ object VideoEditMath {
     }
 
     /**
-     * The derived output duration: sum over every run of
-     * `runLength / factor` (ms, rounded once at the end). Pinned by tests.
+     * The derived output duration: sum over every run of `runLength / factor`
+     * (ms, rounded once at the end).
      */
     fun outputDurationMs(plan: VideoEditPlan): Long {
         var exact = 0.0
@@ -226,12 +204,9 @@ object VideoEditMath {
     }
 
     /**
-     * The source-time mapping: given an output-timeline offset (0-based,
-     * within the derived output duration), the source-timeline offset the
-     * player/encoder should read. Piecewise linear over the runs; used by
-     * the tests to pin the monotonicity rule (source time strictly
-     * increases across the whole output timeline --- no plan may fold time
-     * backwards).
+     * The source-time mapping: given an output-timeline offset (0-based), the source
+     * offset the player/encoder should read. Piecewise linear over the runs; source
+     * time strictly increases across the whole output timeline --- no folding backwards.
      */
     fun sourceTimeAtOutputOffset(plan: VideoEditPlan, outputOffsetMs: Long): Long {
         require(outputOffsetMs >= 0) { "output offset must be non-negative, was $outputOffsetMs" }
@@ -248,7 +223,7 @@ object VideoEditMath {
     }
 }
 
-/** The derived mute decision over the audio fact (decision 4). */
+/** The derived mute decision over the audio fact. */
 fun VideoEditPlan.muteDecision(): MuteDecision = when {
     !mute -> MuteDecision.KEEP_AUDIO
     audioTrackPresent -> MuteDecision.STRIP_AUDIO

@@ -9,12 +9,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/**
- * The r41 derived-artifact store contract (the contract's artifact-store
- * set): the codec round-trips (mask/fill/depth/boxes), the collision-free
- * append-only keys, the atomic writes, the forgiving reads, the sweep,
- * and the missing-ref tolerance.
- */
+/** Artifact store: codec round-trips, append-only keys, atomic writes, forgiving reads, sweep. */
 class EditAiStoreTest {
 
     @get:Rule
@@ -113,8 +108,7 @@ class EditAiStoreTest {
 
     @Test
     fun `stores are isolated per source and a re-apply keeps the old artifact`() {
-        // The append-only session semantics: a second write under a NEW
-        // key never removes the first (the undo stack stays coherent).
+        // Append-only session semantics: a second write under a NEW key never removes the first.
         val (store, _) = store()
         val mask = FractionRleMask.fromMaskAt(handMask(6, 6), 6, 6)
         val first = store.keyFor("e1", "inputs1", EditAiModels.IDENTITY_SALIENCY)
@@ -155,8 +149,7 @@ class EditAiStoreTest {
     @Test
     fun `unsafe key characters are stripped from file names`() {
         val (store, root) = store()
-        // keyFor derives keys from safe layer ids; force a hostile one
-        // through the internal path by writing under a crafted key.
+        // keyFor derives keys from safe ids; force a hostile one through the internal write path.
         val dir = File(root, "src-${EditRecipeStore.sha256("content://media/1").take(16)}")
         val mask = FractionRleMask.fromMaskAt(handMask(6, 6), 6, 6)
         store.writeSkyMask("../../evil", mask)

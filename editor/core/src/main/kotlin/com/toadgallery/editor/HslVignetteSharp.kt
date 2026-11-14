@@ -5,22 +5,14 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 
 /**
- * The colour-grade + detail stage (r30, Phase 6 v1 slice 3).
- *
- *  - [HslBands]: per-channel HSL --- eight hue bands (red 0, orange 30,
- *    yellow 60, green 120, aqua 180, blue 240, purple 280, magenta 320
- *    degrees), each with hue shift [-180, 180], saturation [-100, 100] and
- *    luminance [-100, 100]. A pixel's band weight is a cosine hat over +/-
- *    30 degrees around the band centre (0 at the edge, 1 at the centre);
- *    overlapping bands share the pixel smoothly. RGB <-> HSL round-trips
- *    the standard formulas; the identity (all-zero) state is SKIPPED
- *    entirely so it is exact.
- *  - [applyVignette]: radial darkening (positive) / brightening (negative)
- *    of the frame edges --- smoothstep mask from 35% radius out to the
- *    corner, at most +-80% at the extreme corner.
- *  - [applySharpen]: a 3x3 unsharp mask, amount [-100, 100] -> weight
- *    0..1.5; the blur is a replicate-edge 3x3 mean. Zero is skipped
- *    (exact identity); a constant image is an identity at ANY amount.
+ * The colour-grade + detail stage.
+ *  - [HslBands]: eight hue bands (centres 0/30/60/120/180/240/280/320 degrees), each
+ *    hue [-180,180], sat/luma [-100,100]; a pixel's band weight is a cosine hat over +/-30
+ *    degrees (overlapping bands blend smoothly); the identity state is skipped, exactly.
+ *  - [applyVignette]: radial edge darkening (positive) / brightening (negative); smoothstep
+ *    mask from 35% radius out to the corner, at most +/-80% at the extreme corner.
+ *  - [applySharpen]: 3x3 unsharp mask, amount [-100,100] -> weight 0..1.5, replicate-edge
+ *    blur; zero is an exact identity.
  */
 object RgbHsl {
 
@@ -123,10 +115,8 @@ fun applyHslBands(pixels: IntArray, bands: HslBands) {
         val g = (p ushr 8) and 0xFF
         val b = p and 0xFF
         val (h0, s0, l0) = RgbHsl.toHsl(r, g, b)
-        // Achromatic pixels (s0 == 0) carry no hue to shift: only the
-        // luminance part of a band could matter, and the luma stages
-        // (exposure/shadows/highlights) already cover flat pixels ---
-        // skip them so grey never drifts coloured.
+        // Achromatic pixels (s0 == 0): skip — the luma stages already cover flat pixels, so
+        // grey never drifts coloured.
         if (s0 == 0.0) continue
         var hueDelta = 0.0
         var satFactorPct = 100.0

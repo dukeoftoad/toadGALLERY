@@ -1,33 +1,9 @@
 package com.toadgallery.editor
 
-// ---------------------------------------------------------------------------
-// The r67 Lilypad foundation round (Phase 1 of the editor rebirth plan,
-// docs/editor/lilypad-design.md): the Deck's arithmetic as PURE DATA ---
-// the three sheet states, their heights, and the snap rules, with zero
-// compose/android imports (the ADR-0011 split: pure logic tested pure ---
-// LilypadDeckMathTest pins every rule on the JVM; LilypadDeck.kt only
-// READS these numbers).
-//
-// THE DECK CONTRACT. The r54 chassis hosted the tool panels in a fixed
-// `heightIn(max = 300.dp)` scroll column --- a window that cramped every
-// panel and hid the Adjust board behind its own scroll. The Deck replaces
-// it with ONE sheet, THREE states, the state CALLER-OWNED:
-//
-//   Collapsed --- a 64dp peek: the drag handle plus a sliver of the
-//                first row, the photo unobstructed;
-//   Half       --- the working surface, 45% of the available height;
-//   Full       --- the immersive surface, 78% (Phase 2's curve deck; no
-//                call site references it in Phase 1).
-//
-// Heights never exceed the available space, and a degenerate (zero or
-// negative) available height degrades to zero --- the sheet never lies
-// with a negative or infinite number.
-//
-// (r67 recovery note: the r67 working tree was lost mid-round; this file
-// was re-derived from the Deck contract above and the test matrix, not
-// restored verbatim --- the lost-tree recovery documented in the round's
-// delivery report.)
-// ---------------------------------------------------------------------------
+// The Deck's arithmetic as pure data (LilypadDeckMathTest pins it): three sheet
+// states — Collapsed (64dp peek), Half (45% of available height), Full (78%) —
+// with caller-owned state. Heights never exceed the available space, and a
+// degenerate (zero or negative) available height degrades to zero.
 
 /**
  * The Deck's three chassis states. The declaration order IS the snap
@@ -36,10 +12,7 @@ package com.toadgallery.editor
  */
 internal enum class LilypadDeckState { Collapsed, Half, Full }
 
-/**
- * The Deck's pure arithmetic: state heights and the snap rules
- * (see the file header for the contract).
- */
+/** The Deck's pure arithmetic: state heights and the snap rules. */
 internal object LilypadDeckMath {
 
     /** The collapsed peek height, dp: the handle band plus a content sliver. */
@@ -55,15 +28,12 @@ internal object LilypadDeckMath {
     const val SNAP_DRAG_DP = 48f
 
     /**
-     * The state's height in px given the available [maxHeightPx] and the
-     * [density] scale. Collapsed is a FIXED dp height (never a fraction
-     * --- the peek is a shape, not a share), clamped down if the chassis
-     * is smaller than the peek itself; Half and Full are plain fractions
-     * of the available height (0.45 and 0.78 are both < 1, so they never
-     * overflow by construction). A degenerate chassis (maxHeightPx <= 0)
-     * returns exactly 0 --- the sheet never lies with a negative number.
-     * On any real chassis (available height far beyond the 64dp peek) the
-     * states order strictly: Collapsed < Half < Full < maxHeight.
+     * The state's height in px given [maxHeightPx] and the [density] scale.
+     * Collapsed is a FIXED dp height (the peek is a shape, not a share), clamped
+     * if the chassis is smaller than the peek; Half and Full are plain fractions
+     * (< 1, never overflow by construction). A degenerate chassis returns exactly
+     * 0. On any real chassis the states order strictly:
+     * Collapsed < Half < Full < maxHeight.
      */
     fun targetHeightPx(state: LilypadDeckState, maxHeightPx: Float, density: Float): Float {
         if (maxHeightPx <= 0f) return 0f

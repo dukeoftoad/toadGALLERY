@@ -1,27 +1,21 @@
 package com.toadgallery.editor
 
 /**
- * The export preflight (r31): the pure, JVM-tested decision layer for the
- * on-device robustness matrix (large files, low storage, process death).
+ * The export preflight: the pure, JVM-tested decision layer for the on-device robustness
+ * matrix (large files, low storage, process death).
  *
- *  - the DECODE GUARD refuses a full-resolution decode beyond the pixel
- *    cap (the export pipeline holds the pixels twice --- the IntArray and
- *    the ARGB_8888 bitmap --- so an uncapped 108 MP source is a certain
- *    OOM on mid-range devices). The cap is generous (48 MP): the honest
- *    failure is `ERROR_UNSUPPORTED` before any work, never a crash;
- *  - the STORAGE PREFLIGHT refuses to start an insert the device cannot
- *    hold. The byte model is a deliberately generous OVER-estimate (the
- *    preflight's job is to fail early with a clear message, not to
- *    predict the encoder); availability comes from `StorageManager`
- *    (advisory --- an unknown value always proceeds, MediaStore still
- *    enforces), and the decision demands a 1.5x headroom;
- *  - the PROCESS-DEATH policy documents what an interrupted export leaves
- *    behind: on Q+ the pending row is invisible to every other app and
- *    MediaStore reclaims it automatically; pre-Q the legacy insert may
- *    leave a visible partial row the editor cannot delete (it holds no
- *    delete permission --- the row is the user's to remove). The sidecar
- *    is cleared only AFTER a successful export, so either way the edit
- *    session restores losslessly on relaunch.
+ *  - DECODE GUARD: refuses a full-resolution decode beyond the pixel cap (the export holds
+ *    the pixels twice --- the IntArray and the ARGB_8888 bitmap --- so an uncapped 108 MP
+ *    source is a certain OOM on mid-range devices). The cap is generous (48 MP); the honest
+ *    failure is ERROR_UNSUPPORTED before any work, never a crash.
+ *  - STORAGE PREFLIGHT: refuses to start an insert the device cannot hold. The byte model
+ *    is a deliberately generous OVER-estimate (fail early, not predict the encoder);
+ *    availability comes from `StorageManager` (advisory --- an unknown value always
+ *    proceeds, MediaStore still enforces), and the decision demands a 1.5x headroom.
+ *  - PROCESS-DEATH policy: on Q+ the pending row is invisible and MediaStore reclaims it;
+ *    pre-Q the legacy insert may leave a visible partial row the editor cannot delete
+ *    (no delete permission --- the row is the user's to remove). The sidecar is cleared
+ *    only AFTER a successful export, so the edit session restores losslessly on relaunch.
  */
 object ExportPreflight {
 
@@ -41,12 +35,10 @@ object ExportPreflight {
     const val ASSUMED_PIXELS: Long = 12_000_000L
 
     /**
-     * The encoded-size model: `pixels x 4` (ARGB_8888) scaled per format.
-     * PNG is lossless and stores every pixel --- deflate cannot be relied
-     * on for photographic content, so the estimate is the raw size. JPEG
-     * and WebP scale with quality `(0.05 + 0.01 x q) x raw`, which at the
-     * default q95 over-estimates a real encode --- deliberately: the
-     * preflight fails early rather than predicting exactly.
+     * The encoded-size model: `pixels x 4` (ARGB_8888) scaled per format. PNG stores every
+     * pixel losslessly (deflate can't be relied on for photographic content) --- estimate is
+     * the raw size. JPEG/WebP scale with quality `(0.05 + 0.01 x q) x raw`, deliberately
+     * over-estimating: the preflight fails early rather than predicting exactly.
      */
     fun estimateBytes(pixels: Long, format: ExportFormat, quality: Int): Long {
         require(pixels >= 0) { "pixels must be non-negative" }

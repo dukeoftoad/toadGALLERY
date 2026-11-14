@@ -1,21 +1,10 @@
 package com.toadgallery.editor.video
 
 /**
- * The export runner seam (r42, decision 7): the job in, typed progress and
- * result out --- the ModelDownloader-seam precedent, so the JVM tests drive
- * the plans against a fake runner and ONLY the thin media3 implementation in
- * the edit app touches Transformer. No Android type crosses this seam:
- * URIs are strings, the render lands in a caller-supplied working directory
- * and the MediaStore insert (the non-destructive policy) stays with the
- * activity, exactly like the photo editor's ExportPlan execution.
- *
- * r70 grew the seam to TWO jobs under one parent: the v1 single-clip
- * [VideoExportRequest] (a validated [VideoEditPlan] over one source) and
- * the multi-clip [ClipExportRequest] (a validated [ClipTimeline]
- * composition). One interface, one coordinator: the single-flight and
- * exactly-once-terminal rules are the job's, not the plan shape's, so both
- * requests ride the same [VideoExportCoordinator] and the runner picks its
- * resolution by type.
+ * The export runner seam: job in, typed progress and result out. No Android type crosses
+ * it (URIs are strings; the render lands in a caller-supplied dir; the MediaStore insert
+ * stays with the activity), so JVM tests run a fake runner and only the thin media3 impl
+ * touches Transformer. Both job shapes ride one coordinator: single-flight, one terminal result.
  */
 
 /** What a runner may be asked to render, and where the rendered bytes may land. */
@@ -51,9 +40,8 @@ enum class VideoExportStage { PREPARING, RENDERING, FINALIZING }
 /** The typed terminal result, delivered exactly once. */
 sealed interface VideoExportResult {
     /**
-     * The render landed at [renderedFilePath]; the activity copies the bytes
-     * into a NEW MediaStore row and deletes the temp file. [outputDurationMs]
-     * is the plan's derived output duration (pinned by the plan tests).
+     * The render landed at [renderedFilePath]; the activity copies it into a NEW MediaStore
+     * row and deletes the temp file. [outputDurationMs] is the derived output duration.
      */
     data class Success(val renderedFilePath: String, val outputDurationMs: Long) : VideoExportResult
 
@@ -77,12 +65,9 @@ interface VideoExportRunner {
 }
 
 /**
- * The coordinator over the seam (pure, JVM-tested over a fake): validates
- * the job BEFORE the runner ever sees it (by type --- the v1 plan through
- * [VideoEditPlanValidator], the r70 composition through
- * [ClipExportValidator]), enforces single-flight (one render at a time),
- * forwards typed progress and delivers exactly one terminal result per
- * accepted job.
+ * The coordinator over the seam (pure, JVM-tested over a fake): validates the job before
+ * the runner sees it (by type), enforces single-flight, forwards typed progress, and
+ * delivers exactly one terminal result per accepted job.
  */
 class VideoExportCoordinator(private val runner: VideoExportRunner) : VideoExportListener {
 

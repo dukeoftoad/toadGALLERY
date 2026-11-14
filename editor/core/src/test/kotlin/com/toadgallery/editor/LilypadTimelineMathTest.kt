@@ -3,11 +3,7 @@ package com.toadgallery.editor
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The r69 viewport-geometry pins: the anchored zoom's focal invariant, the
- * center clamps, the px/ms round trip, the detent snap, and the defensive
- * identities (NaN, degenerate durations).
- */
+/** Viewport-geometry pins: anchored zoom focal invariant, center clamps, px/ms round trip, detent snap. */
 private const val DURATION = 60_000f
 private const val WIDTH = 1_000f
 
@@ -16,9 +12,7 @@ class LilypadTimelineMathTest {
     private fun viewport(zoom: Float, centerMs: Float = DURATION / 2f) =
         TimelineViewport(LilypadTimelineMath.clampZoom(zoom), centerMs)
 
-    // ------------------------------------------------------------------ //
-    // the fit invariant
-    // ------------------------------------------------------------------ //
+    // ---- the fit invariant ----
 
     @Test
     fun `zoom one fits the whole timeline with its center pinned`() {
@@ -35,9 +29,7 @@ class LilypadTimelineMathTest {
         assertEquals(30_000f, LilypadTimelineMath.clampCenter(60_000f, DURATION, WIDTH, 1f), 1e-3f)
     }
 
-    // ------------------------------------------------------------------ //
-    // the anchored zoom
-    // ------------------------------------------------------------------ //
+    // ---- the anchored zoom ----
 
     @Test
     fun `an anchored zoom keeps the focal instant at the same pixel`() {
@@ -72,14 +64,11 @@ class LilypadTimelineMathTest {
         assertEquals(30_000f, out.centerMs, 1e-1f)
     }
 
-    // ------------------------------------------------------------------ //
-    // the center clamps
-    // ------------------------------------------------------------------ //
+    // ---- the center clamps ----
 
     @Test
     fun `a zoomed window may not pan past either end`() {
-        // At 4x the half window is 7 500 ms, so the center is pinned
-        // inside [7 500, 52 500].
+        // At 4x the half window is 7500 ms, so the center is pinned inside [7500, 52500].
         assertEquals(7_500f, LilypadTimelineMath.clampCenter(-5_000f, DURATION, WIDTH, 4f), 1e-3f)
         assertEquals(52_500f, LilypadTimelineMath.clampCenter(70_000f, DURATION, WIDTH, 4f), 1e-3f)
         assertEquals(
@@ -100,9 +89,7 @@ class LilypadTimelineMathTest {
         assertEquals(52_500f, LilypadTimelineMath.pannedCenter(v, -1_000_000f, DURATION, WIDTH), 1e-3f)
     }
 
-    // ------------------------------------------------------------------ //
-    // the px/ms round trip
-    // ------------------------------------------------------------------ //
+    // ---- the px/ms round trip ----
 
     @Test
     fun `px and ms invert each other at every zoom`() {
@@ -116,9 +103,7 @@ class LilypadTimelineMathTest {
         }
     }
 
-    // ------------------------------------------------------------------ //
-    // the detent snap
-    // ------------------------------------------------------------------ //
+    // ---- the detent snap ----
 
     @Test
     fun `a released pinch near a detent snaps to it`() {
@@ -140,9 +125,7 @@ class LilypadTimelineMathTest {
         assertEquals(1f, LilypadTimelineMath.snapZoomToDetent(0.3f), 1e-4f)
     }
 
-    // ------------------------------------------------------------------ //
-    // the defensive identities
-    // ------------------------------------------------------------------ //
+    // ---- the defensive identities ----
 
     @Test
     fun `a NaN zoom pins to fit`() {
@@ -162,9 +145,7 @@ class LilypadTimelineMathTest {
         assertEquals(8f, out.zoom, 1e-4f)
     }
 
-    // ------------------------------------------------------------------ //
-    // the chip label
-    // ------------------------------------------------------------------ //
+    // ---- the chip label ----
 
     @Test
     fun `the zoom label is one decimal with an x suffix`() {

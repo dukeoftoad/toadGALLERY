@@ -7,19 +7,8 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * F-72's JVM pins (ADR-0011: the geometry is pure, so the contract the
- * editor canvas's pinch/pan/double-tap rides on is tested without any
- * Android surface). The properties the UX leans on:
- *
- *  - the zoom BOUNDS: 1x (fit) .. 4x (the proposal's ceiling), both clamps
- *    inclusive, from any raw gesture scale;
- *  - the centroid contract: zooming about a pinch centroid keeps that
- *    content point under the fingers (the pan then shifts it, minus the
- *    bounds);
- *  - the bounds contract: at 1x the offset is exactly zero, and beyond it
- *    each axis parks at the overflow edge instead of escaping;
- *  - double-tap-to-fit: the identity pose is exactly scale=1 + zero offset,
- *    and a full zoom-in-then-out round trip can end there exactly.
+ * The canvas zoom-math pins (F-72): 1x..4x bounds, centroid-stable zoom,
+ * bounds-clamped pan, and double-tap-to-fit == the exact identity pose.
  */
 class CanvasZoomMathTest {
 
@@ -51,8 +40,7 @@ class CanvasZoomMathTest {
 
     @Test
     fun `a pure zoom about the canvas center keeps the offset at zero`() {
-        // Zoom 2x about the center of a 1000x800 canvas: the symmetric
-        // answer is scale 2, offset (0, 0) --- the center never moves.
+        // Zoom 2x about the 1000x800 center: scale 2, offset (0, 0) --- the center never moves.
         val out = CanvasZoomMath.step(
             scale = 1f, offsetX = 0f, offsetY = 0f,
             zoomChange = 2f, panX = 0f, panY = 0f,
@@ -66,17 +54,8 @@ class CanvasZoomMathTest {
 
     @Test
     fun `a zoom about an off-center centroid keeps that point under the fingers`() {
-        // Zoom 2x about the point (250, 200) from the fit pose, no pan.
-        // The content point under the centroid before the gesture is at
-        // 25% of the width / 25% of the height; after a 2x zoom it sits at
-        // center + 2*(25% - 50%) = 0% of the width (the left edge) --- so
-        // the offset must carry it back to the finger: offset = centroid -
-        // center - 2*(rel) with rel = centroid - offset - center.
-        // relX = 250 - 0 - 500 = -250 -> offsetX = 250 - 500 - 2*(-250) = 0... 
-        // wait: 250 + 0 - 500 - (2 * -250) = -250 + 500 = 250? The formula:
-        // rawX = centroid + pan - center - applied*rel = 250 - 500 - (2*-250)
-        //      = -250 + 500 = +250. The point that WAS at screen x=250 now
-        // sits at 500 + 2*(0.25-0.5)*1000 + 250 = 0 + 250 = 250. Kept.
+        // Zoom 2x about (250, 200) from the fit pose: the content point at 25%/25%
+        // must stay under the fingers -- the offset lands at exactly (250, 200).
         val out = CanvasZoomMath.step(
             scale = 1f, offsetX = 0f, offsetY = 0f,
             zoomChange = 2f, panX = 0f, panY = 0f,
@@ -86,9 +65,7 @@ class CanvasZoomMathTest {
         assertEquals(2f, out[0])
         assertClose(250f, out[1])
         assertClose(200f, out[2])
-        // And the kept point: screen = center + scale*(content-center) + off
-        // with content = (250,200) (the fit pose's content == screen) gives
-        // 500 + 2*(-250) + 250 = 250 on x, 400 + 2*(-200) + 200 = 200 on y.
+        // Kept-point check: 500 + 2*(-250) + 250 = 250 on x, 400 + 2*(-200) + 200 = 200 on y.
     }
 
     @Test
@@ -102,16 +79,14 @@ class CanvasZoomMathTest {
             widthPx = 1000f, heightPx = 800f,
         )
         assertEquals(2f, out[0])
-        // rawX = 500 + 300 - 500 - 1*(500 - 500 - 500) = 300 + 500 = 800 ->
-        // clamped to 500.
+        // rawX = 500 + 300 - 500 - 1*(500 - 500 - 500) = 800 -> clamped to 500.
         assertEquals(500f, out[1])
         assertClose(0f, out[2])
     }
 
     @Test
     fun `zooming back out to 1x re-centers exactly (the double-tap endpoint)`() {
-        // From the 2x/250/200 pose above, zoom back 0.5x about anywhere:
-        // the offset must land at exactly (0, 0) --- the fit pose.
+        // Zoom back 0.5x from the 2x/250/200 pose: the offset lands exactly at (0, 0).
         val out = CanvasZoomMath.step(
             scale = 2f, offsetX = 250f, offsetY = 200f,
             zoomChange = 0.5f, panX = 0f, panY = 0f,
@@ -126,8 +101,7 @@ class CanvasZoomMathTest {
 
     @Test
     fun `a clamped zoom absorbs the excess at the ceiling without jumping`() {
-        // At 4x (the ceiling), a further 2x pinch step keeps scale 4 and
-        // the pose legal --- no jump past the bound, no NaN.
+        // A further 2x pinch at the 4x ceiling keeps scale 4, pose legal --- no jump, no NaN.
         val out = CanvasZoomMath.step(
             scale = 4f, offsetX = 0f, offsetY = 0f,
             zoomChange = 2f, panX = 0f, panY = 0f,

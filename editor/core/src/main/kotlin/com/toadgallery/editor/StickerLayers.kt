@@ -5,20 +5,10 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * The sticker-layer system (r35, Phase 7 v2; the design contract is
- * `docs/phase-7/stickers.md`, decision set 1-6).
- *
- * Pure Kotlin, JVM-tested (the repo's ADR-0011 convention: the model and
- * layout are pure; only the Canvas/Paint pass lives on the Android side,
- * in `StickerRender.kt`, and shares THIS object's layout math for the
- * preview and the export --- one code path, no second renderer).
- *
- * The tolerance contract mirrors r33/r34: a pre-r35 sidecar (or a clean
- * session) has no `stickerLayers` key and loads byte-clean; an
- * UNRESOLVABLE `stickerId` round-trips verbatim (the recipe is the user's
- * data) and renders NOTHING at render time --- there is no default
- * sticker to degrade to, and faking one would draw something the user
- * never chose. Never a load failure, never a crash.
+ * The sticker-layer system. Pure Kotlin, JVM-tested; only the Canvas/Paint pass lives on the
+ * Android side (`StickerRender.kt`) and shares THIS object's layout math (one code path).
+ * Tolerance: a sidecar without `stickerLayers` loads byte-clean; an unresolvable `stickerId`
+ * round-trips verbatim and renders NOTHING (no default sticker to degrade to).
  */
 data class StickerLayer(
     val id: String,
@@ -50,11 +40,7 @@ data class StickerLayer(
         const val MAX_ID_LENGTH = 64
         const val DEFAULT_SIZE_PCT = 15
 
-        /**
-         * The next free session id over `existing` ("s1", "s2", ...): the
-         * r34 `newId` convention, the `s` prefix keeping the families
-         * collision-free by construction.
-         */
+        /** The next free session id over `existing` ("s1", "s2", ...); the `s` prefix keeps the families collision-free. */
         fun newId(existing: Collection<String>): String {
             var max = 0
             for (id in existing) {
@@ -67,9 +53,8 @@ data class StickerLayer(
 }
 
 /**
- * The recipe's additive sticker container: absent (null) = a pre-r35
- * sidecar or a clean session; empty is normalised BACK to absent by the
- * codec (the r34 `TextLayers` rule).
+ * The recipe's additive sticker container: absent = a pre-existing sidecar or a clean session;
+ * empty is normalised back to absent by the codec.
  */
 data class StickerLayers(val layers: List<StickerLayer>) {
     init {
@@ -84,10 +69,8 @@ data class StickerLayers(val layers: List<StickerLayer>) {
 }
 
 /**
- * One authored sticker: filled subpaths in the 0..100 design box (y
- * down, screen convention). Project-authored code --- the authorship
- * and licensing record is `docs/phase-7/bundled-stickers.md`; there is
- * no asset file, no sha256 pin and no §5 ledger row by design.
+ * One authored sticker: filled subpaths in the 0..100 design box (y down, screen convention).
+ * Project-authored code; the authorship/licensing record is `docs/phase-7/bundled-stickers.md`.
  */
 data class StickerShape(val parts: List<Part>) {
     init {
@@ -98,8 +81,7 @@ data class StickerShape(val parts: List<Part>) {
     data class Part(val colorArgb: Long, val ops: List<Op>) {
         init {
             require(colorArgb in 0..0xFFFFFFFFL) { "part color outside the unsigned ARGB range" }
-            // The palette carries no authored alpha: the layer's opacity
-            // slider owns transparency, so a part's alpha byte is 0xFF.
+            // No authored alpha: the layer's opacity slider owns transparency, so alpha is 0xFF.
             require((colorArgb ushr 24) == 0xFFL) { "part colors must be opaque (alpha 0xFF)" }
             require(ops.isNotEmpty()) { "a part needs at least one subpath" }
         }
@@ -173,12 +155,9 @@ data class StickerShape(val parts: List<Part>) {
 }
 
 /**
- * The bundled-sticker registry (r35; the `BundledFonts` pattern adapted
- * for authored code). PURE: the platform side turns definitions into
- * `Path` fills (see `StickerRender.kt`); the authorship record is
- * `docs/phase-7/bundled-stickers.md`, and `BundledStickersTest` pins the
- * structural invariants plus spot coordinates, so a change to any
- * formula fails the build, not the user.
+ * The bundled-sticker registry. PURE: the platform side turns definitions into `Path` fills
+ * (see `StickerRender.kt`); `BundledStickersTest` pins the structural invariants and spot
+ * coordinates, so a formula change fails the build, not the user.
  */
 object BundledStickers {
 
@@ -336,9 +315,8 @@ object BundledStickers {
     )
 
     private fun flower(): StickerShape {
-        // Five petal centres at radius 22 about (50,50), 72° apart; one
-        // pink part, five subpaths (a Part carries any number of closed
-        // subpaths); the yellow centre draws last, on top.
+        // Five petal centres at radius 22 about (50,50), 72° apart; one pink part
+        // with five subpaths; the yellow centre draws last, on top.
         val petalCentres = listOf(
             50 to 72, 29 to 57, 37 to 32, 63 to 32, 71 to 57,
         )
@@ -381,13 +359,10 @@ object BundledStickers {
 }
 
 /**
- * The pure layout pass (JVM-tested): turns the recipe's fraction-space
- * layers into pixel-space draw specs IN LIST ORDER (the draw order:
- * layers render in list order, top LAST --- the r34 rule). Resolution
- * of the stickerId does NOT happen here (a bundled vector and an
- * imported bitmap resolve on the platform side, in `StickerRender.kt`);
- * this pass owns the geometry both kinds share: the size box, the
- * centre anchor and the paint alpha.
+ * The pure layout pass (JVM-tested): turns fraction-space layers into pixel-space draw specs
+ * IN LIST ORDER, top LAST. stickerId resolution does NOT happen here (bundled vectors and
+ * imported bitmaps resolve in `StickerRender.kt`); this pass owns the shared geometry: the
+ * size box, the centre anchor and the paint alpha.
  */
 object StickerLayout {
 
@@ -408,9 +383,8 @@ object StickerLayout {
     fun sizePxFor(sizePct: Int, canvasMinEdge: Float): Float = sizePct / 100f * canvasMinEdge
 
     /**
-     * The paint alpha: the opacity slider mapped to 0..255, rounded
-     * half-up ((opacity*255 + 50) / 100 --- 100% stays 255; 50% is 128,
-     * not 127). The r34 alpha math with the color byte pinned at 0xFF.
+     * The paint alpha: opacity mapped to 0..255, rounded half-up
+     * ((opacity*255 + 50) / 100 --- 100% stays 255; 50% is 128, not 127).
      */
     fun alphaFor(layer: StickerLayer): Int = (layer.opacity * 255 + 50) / 100
 

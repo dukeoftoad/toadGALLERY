@@ -6,16 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r71 channel composition's JVM pins (Phase 2's declared follow-up,
- * docs/editor/lilypad-design.md §5): the three-table build (master-then-
- * channel per channel), the equivalence pins (a no-channel state
- * reproduces the r68 one-table apply; three copies of one table
- * reproduce applyLut), the pipeline's routing, and the honest degrades
- * (degenerate channel lists, the forward-state sidecar that now
- * renders).
- *
- * Pure JVM, no compose/android (ADR-0011) --- this class is one of the
- * Lilypad-prefixed set the editor CI filter runs.
+ * Channel composition pins: the three-table build, one-table equivalence, pipeline
+ * routing, and the honest degrades (degenerate channel lists, forward-state sidecars).
  */
 class LilypadChannelCurveTest {
 
@@ -71,9 +63,8 @@ class LilypadChannelCurveTest {
 
     @Test
     fun `the channel curve composes OVER the master, not before it`() {
-        // Pure lift master (y = x + 0.2, clamped) + a pure halving red
-        // curve: red[v] = redCurve(masterCurve(v)), NOT masterCurve
-        // (redCurve(v)) --- the composition reads the master's output.
+        // Pure lift master (y = x + 0.2 clamped) + pure halving red curve:
+        // red[v] = redCurve(masterCurve(v)), NOT masterCurve(redCurve(v)) (composition reads master's output).
         val master = curve(0.0 to 0.2, 0.8 to 1.0)
         val red = curve(0.0 to 0.0, 1.0 to 0.5)
         val three = LutBuilder.buildChannels(
@@ -92,8 +83,7 @@ class LilypadChannelCurveTest {
 
     @Test
     fun `the five sliders feed the chain first`() {
-        // exposure +100 doubles before any curve reads a value: red[v] =
-        // redCurve(masterCurve(2v clamped)) --- the stage order, pinned.
+        // exposure +100 doubles before any curve reads: red[v] = redCurve(masterCurve(2v clamped)).
         val red = curve(0.0 to 0.0, 1.0 to 0.5)
         val three = LutBuilder.buildChannels(
             brightness = 0, contrast = 0, exposure = 100, highlights = 0, shadows = 0,
@@ -108,9 +98,8 @@ class LilypadChannelCurveTest {
 
     @Test
     fun `a degenerate channel list reads the master-composed table`() {
-        // Under two points there is no channel curve; the honest read is
-        // the r68 apply, per channel (never a crash, never an invented
-        // shape).
+        // Under two points there is no channel curve; the honest read is the one-table apply,
+        // per channel (never a crash, never an invented shape).
         val master = curve(0.0 to 0.1, 1.0 to 0.9)
         val three = LutBuilder.buildChannels(
             brightness = 0, contrast = 0, exposure = 0, highlights = 0, shadows = 0,
@@ -156,9 +145,8 @@ class LilypadChannelCurveTest {
 
     @Test
     fun `each channel reads its own table and alpha survives`() {
-        // Three different ramps: red identity, green pinned to 42, blue
-        // pinned to 200 --- the pixel's channels must each read their own
-        // table, alpha untouched.
+        // Three different ramps: red identity, green pinned to 42, blue pinned to 200 ---
+        // each channel reads its own table, alpha untouched.
         val redLut = IntArray(256) { it }
         val greenLut = IntArray(256) { 42 }
         val blueLut = IntArray(256) { 200 }
@@ -179,8 +167,7 @@ class LilypadChannelCurveTest {
         val base = intArrayOf(
             0xFF0A64C8.toInt(), 0xFF808080.toInt(), 0xFFFA053C.toInt(),
         )
-        // Master-only: byte-identical to the r68 one-table apply (the
-        // frozen path --- the drift the routing must never introduce).
+        // Master-only: byte-identical to the frozen one-table apply (drift the routing must never introduce).
         val masterOnly = base.copyOf()
         val expectedMasterOnly = base.copyOf()
         EditPipeline.apply(
@@ -198,9 +185,8 @@ class LilypadChannelCurveTest {
         )
         assertTrue(masterOnly.contentEquals(expectedMasterOnly))
 
-        // With a red curve: the red channel moves where the master-only
-        // path left it (the channel path is LIVE, and the green/blue
-        // channels still match the master-only apply).
+        // With a red curve: red moves where the master-only path left it (the channel path is
+        // LIVE); green/blue still match the master-only apply.
         val withRed = base.copyOf()
         EditPipeline.apply(
             withRed, 3, 1,
@@ -224,9 +210,8 @@ class LilypadChannelCurveTest {
 
     @Test
     fun `an r68 forward-state sidecar renders its channel curves today`() {
-        // The exact wire shape r68 round-tripped as forward state: a
-        // green curve that lifts the shadows. No migration, no flag ---
-        // the same JSON renders the colour it promised.
+        // A wire shape previously round-tripped as forward state: a green curve lifting the
+        // shadows. No migration, no flag --- the same JSON renders the colour it promised.
         val sidecar = EditRecipeCodec.fromJson(
             "{\"schemaVersion\":1,\"toneCurves\":{\"master\":[[0.0,0.0],[1.0,1.0]]," +
                 "\"green\":[[0.0,0.3],[0.5,0.6],[1.0,1.0]]}}",
@@ -236,9 +221,8 @@ class LilypadChannelCurveTest {
         assertTrue(curves.hasChannelCurves)
         val pixels = intArrayOf(argb(255, 0, 0, 0))
         EditPipeline.apply(pixels, 1, 1, restored)
-        // Green at input 0 reads the green curve's floor (0.3 * 255 = 76.5,
-        // the bake's kotlin.math.round --- Math.rint, half-to-EVEN --- lands
-        // on 76); red and blue stay at the identity ramp's 0.
+        // Green at input 0 reads the green curve's floor: 0.3*255 = 76.5, and kotlin.math.round
+        // (Math.rint, half-to-EVEN) lands on 76; red and blue stay at the identity ramp's 0.
         assertEquals(76, (pixels[0] ushr 8) and 0xFF)
         assertEquals(0, (pixels[0] ushr 16) and 0xFF)
         assertEquals(0, pixels[0] and 0xFF)
@@ -246,8 +230,7 @@ class LilypadChannelCurveTest {
 
     @Test
     fun `a channel-only state breaks the recipe identity`() {
-        // ToneCurves(identity, red = curve) is NOT the identity: the
-        // pipeline's gate opens for it (isIdentity == false).
+        // ToneCurves(identity, red = curve) is NOT the identity: the pipeline's gate opens for it.
         val channelOnly = EditRecipe(
             toneCurves = ToneCurves(identity, blue = curve(0.0 to 0.0, 1.0 to 0.7)),
         )

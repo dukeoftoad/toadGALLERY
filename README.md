@@ -1,73 +1,49 @@
-# toadGALLERY --- `editor` (the Editor product lane)
+# toadGALLERY Edit
 
-**toadGALLERY** is a private, offline-first Android gallery family built from
-scratch in Kotlin + Jetpack Compose (inspired by Mi Gallery, Aves libre, and
-Fossify Gallery --- features and UX only, no upstream code, ADR-0008). The
-full project story, screenshots, and goals live in the
-[`main` README](https://github.com/dukeoftoad/toadGALLERY/blob/main/README.md);
-the authoritative policy is
-[`docs/PROJECT_ARCHITECTURE.md`](https://github.com/dukeoftoad/toadGALLERY/blob/main/docs/PROJECT_ARCHITECTURE.md).
+The editor extension of **toadGALLERY**: a private, offline-first photo
+and video editor for Android, built with Kotlin + Jetpack Compose. It
+ships as a separate installable APK (`com.toadgallery.editor`) that the
+main Gallery app opens through the versioned editor contract — and it
+works standalone too.
 
-**This branch is the standalone Editor product lane** of the virtual fork.
+- **No network. Ever.** The merged manifest must not declare
+  `android.permission.INTERNET` — a build-time gate fails the build if
+  it does. All AI models ship inside the APK
+  (`editor/core/src/main/assets/models/`).
+- **Non-destructive pipeline.** Edits are recipes over the original;
+  export defaults to saving a copy.
 
----
+## Modules
 
-## Branch identity card
-
-| | |
+| Module | Purpose |
 |---|---|
-| **Role** | Integration/development lane for the standalone companion editor. |
-| **Product owned here** | **Editor** --- `toadGALLERY Edit` (`com.toadgallery.editor`), a separately installable APK opened from the gallery via a versioned content-URI contract (`shared/editor-contract`, ADR-0002/0007), updatable independently. |
-| **Push CI** | `editor-ci.yml` --- assemble + lint + tests + the contract module. |
-| **Releases** | **Retired on this lane** (2026-11-10): releases originate from `unified` (alpha/beta bundles) and `main` (stable) only. |
-| **Flows to** | `unified`, via a reviewed PR once the lane's work is ready. |
+| `editor/app` | Standalone Edit APK shell: applicationId, signing, INTERNET build gate |
+| `editor/core` | The editor library: photo chassis, tune rail, video editor, export pipeline, AI stages |
+| `shared/editor-contract` | Pure-JVM Gallery ↔ Edit contract (identity, version negotiation, request/result parsing) |
+| `shared/video-edit` | Pure-JVM video export plans (trim, speed, mute, frames, animation) |
 
-## CI on this branch
-
-[`editor-ci.yml`](.github/workflows/editor-ci.yml) triggers on pushes to
-`editor`, path-filtered over `editor/**`, `shared/**`, the gradle files, and
-the workflow tree:
+## Build
 
 ```bash
-./gradlew :editor:app:assembleDebug
-./gradlew :editor:app:lintDebug
-./gradlew :editor:app:testDebugUnitTest :shared:editor-contract:test
+./gradlew :editor:app:assembleDebug          # debug APK
+./gradlew :editor:app:assembleRelease        # R8 release; signs only with TG_* env vars
+./gradlew :editor:app:gateDebugInternetPermission  # privacy gate
+./gradlew :editor:core:recordRoborazziDebug  # screenshot baselines
+./gradlew :editor:core:testDebugUnitTest     # unit tests
 ```
 
-The contract-module tests always ride the editor gate --- the Gallery ↔ Edit
-handoff is a published interface, and the editor may not drift from it.
+Toolchain: JDK 17, Android SDK 36, AGP 9.2.1, Kotlin 2.3.10 (pinned in
+`gradle/libs.versions.toml`).
 
-The branch also carries the repo-wide dispatch surfaces and the other lanes'
-CI files --- each is branch-scoped and stays dormant outside its own lane.
+## Layout
 
-## What lives here
+```text
+editor/core/src/main/kotlin/com/toadgallery/editor/   editor sources
+editor/core/src/main/assets/models/                    bundled ONNX models
+editor/core/src/main/assets/luts/                      bundled .cube filters
+editor/core/src/test/                                  unit + Roborazzi tests
+shared/                                                pure-JVM contract + plans
+docs/                                                  architecture, ADRs, phase records
+```
 
-- `editor/app` --- the editor application module
-  (`com.toadgallery.editor`; the current line is `0.4.14-edit-alpha`).
-- `editor/core` --- the editor Kotlin/Compose core:
-  - adjustments, filters/LUTs, frames, stickers, text, draw, regions,
-    crop/geometry;
-  - the on-device AI passes (magic erase, sky replace, bokeh, opt-in face
-    retouch) with their bundled non-Ente ONNX models --- the editor bundles
-    its applicable models per the distribution policy
-    (PROJECT_ARCHITECTURE.md §6; Ente model weights are never bundled, they
-    are download-on-demand in the gallery products);
-  - the non-destructive edit pipeline (recipes, export preflight, the
-    export-policy consent chip);
-  - the lightweight video editor (trim, mute, speed, frame extract,
-    GIF/WebP export) and the Roborazzi screenshot baselines.
-- `shared/` --- the editor-contract (the versioned Gallery ↔ Edit handoff)
-  and the video-edit plan module.
-
-## Working on this branch
-
-JDK 17 + Android SDK (`platforms;android-36`). No Rust toolchain needed ---
-the editor declares **no network permission at all** and carries no native
-engine code.
-
-**When the lane's work is ready:** confirm `editor-ci.yml` is green on the
-tip, then open a PR into `unified` --- the four-product integration gate
-validates the whole family there. Backports from `main` are manual and rare;
-this lane tracks `unified`, not `main`. See
-[`.github/BRANCH_STRATEGY.md`](https://github.com/dukeoftoad/toadGALLERY/blob/main/.github/BRANCH_STRATEGY.md)
-for the full topology and operator runbook.
+GPL-3.0 — see `LICENSE`.

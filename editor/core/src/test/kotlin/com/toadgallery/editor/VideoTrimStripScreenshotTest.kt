@@ -23,31 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The video surface's screenshot baselines (r63d, the approved section-5
- * spec) --- the trim-on-filmstrip strip, the Time row and the flex tab bar,
- * the pieces the r63d extraction made composable in isolation. Harness
- * shape = [EditChassisScreenshotTest] verbatim (the r56 rules): param-light
- * subjects (no Activity, no ViewModel, no real bitmap decode, no
- * indeterminate animation), the pinned Robolectric SDK 34 and the fixed
- * w411dp-h891dp-420dpi viewport, the frame clock frozen before setContent
- * and advanced one fixed 16ms frame, and the theme's background painted
- * first (a transparent-root capture would gate near-white ink against
- * white, not the contrast the user actually sees).
- *
- * The strip fixture renders the honest dark placeholder slots (the decode
- * callback delivers an empty list --- the same surface a slow decode
- * shows), with the window at 1200..6800ms of an 8000ms clip and the
- * playhead at 2600ms: one capture pins the two 16dp handles, the dim scrim
- * OUTSIDE the window, and the 2dp white playhead clamped INSIDE it.
- *
- * The PNG names are pinned by the module's
- * `roborazzi.record.namingStrategy = fullyQualifiedName` property:
- * `com.toadgallery.editor.VideoTrimStripScreenshotTest.<method>.png`
- * under src/test/resources/roborazzi (the plugin outputDir). The plugin's
- * recordRoborazziDebug task records them; verifyRoborazziDebug gates
- * against the committed baselines once they exist.
- */
+/** Video surface screenshot baselines (trim strip, Time row, tab bar) on the shared frozen-clock harness. */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
@@ -109,9 +85,8 @@ class VideoTrimStripScreenshotTest {
 
     @Test
     fun videoDraggingTrimStripRecordsBaseline() {
-        // The drag-live state: the leading timestamp rides accent (the
-        // section-5 "accent, mono" rule) and the window hugs the start
-        // handle, so the golden pins the accent + scrim + clamp trio.
+        // The drag-live state: the leading timestamp rides accent ("accent, mono" rule) and the
+        // window hugs the start handle; the golden pins the accent + scrim + clamp trio.
         rule.mainClock.autoAdvance = false
         rule.setContent {
             VideoEditTheme {

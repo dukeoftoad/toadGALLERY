@@ -9,9 +9,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * The face-retouch consent machine (r41, the contract's consent set):
- * default-off, grant (per-install persisted), deny (re-asks next use),
- * permanent disable --- and the stage-refusal rule under consent-off.
+ * The face-retouch consent machine: default-off, per-install grant, re-asking deny,
+ * permanent disable -- and the stage-refusal rule under consent-off.
  */
 class RetouchConsentTest {
 
@@ -69,9 +68,8 @@ class RetouchConsentTest {
 
     @Test
     fun `the stage refuses under consent-off even with a restored sidecar`() {
-        // The whole-gate rule: only GRANTED lets the retouch stage run;
-        // the layer stays verbatim in the recipe either way (pinned in
-        // AiRenderTest's pipeline test; this pins the gate itself).
+        // The whole-gate rule: only GRANTED lets the retouch stage run; the layer
+        // stays verbatim in the recipe either way (pinned in AiRenderTest).
         for (state in RetouchConsent.entries) {
             assertEquals(state == RetouchConsent.GRANTED, state.stageMayRun)
         }

@@ -6,17 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The ProSlider arithmetic's JVM pins (ADR-0011: the scrub, the tick
- * predicate, the live rule and the track geometry are pure Float math,
- * so they are tested here and only the drawing rides the screenshot
- * harness).
- *
- * The pins are the properties the C1 contract leans on: a full row-width
- * drag maps exactly to the range span (no gain drift), fine mode is
- * exactly one tenth, scrubs never escape the range, the zero tick fires
- * on crossings and landings but not on same-side moves, the pill's live
- * rule flips exactly at the neutral, and the bipolar track puts zero at
- * its geometric center (the notch's honesty guard).
+ * ProSlider arithmetic pins: full-width drag maps the span, fine mode is one tenth, scrubs clamp,
+ * the zero tick fires on crossings/landings, the live rule flips at neutral, zero sits at center.
  */
 class LilypadSliderMathTest {
 
@@ -36,15 +27,13 @@ class LilypadSliderMathTest {
 
     @Test
     fun `a half row-width drag maps half the span`() {
-        // 200px over a 400px track is half the track: half of the 200-wide
-        // bipolar span is +100.
+        // 200px over a 400px track is half: half of the 200-wide bipolar span is +100.
         assertClose(100f, LilypadSliderMath.scrub(0f, 100f, 300f, 400f, bipolar))
     }
 
     @Test
     fun `fine mode is exactly one tenth`() {
-        // A full-width drag moves the whole span (+200) at normal gain;
-        // the same drag in fine mode moves exactly one tenth of it (+20).
+        // Full-width drag moves the whole span (+200) at normal gain; fine mode moves one tenth (+20).
         assertClose(20f, LilypadSliderMath.scrub(0f, 0f, 400f, 400f, bipolar, fine = true))
     }
 

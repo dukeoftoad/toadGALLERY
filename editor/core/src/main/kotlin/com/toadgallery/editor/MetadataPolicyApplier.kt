@@ -3,12 +3,9 @@ package com.toadgallery.editor
 import com.toadgallery.editor.contract.MetadataPolicy
 
 /**
- * The EXIF metadata plan for the saved copy (contract section 4.4: the
- * editor respects the metadata policy EXACTLY --- GPS removal is opt-in,
- * explicit, and reported; nothing is ever stripped silently).
- *
- * Pure model over the androidx.exifinterface tag surface: the activity
- * walks the source's tags and applies the plan's per-tag decision. The
+ * The EXIF metadata plan for the saved copy (contract section 4.4: the policy is
+ * respected EXACTLY --- GPS removal is opt-in, explicit, and reported; nothing is ever
+ * stripped silently). Pure model over the androidx.exifinterface tag surface. The
  * default is PRESERVE --- every tag the source carries rides onto the copy.
  */
 object MetadataPolicyApplier {
@@ -40,15 +37,11 @@ object MetadataPolicyApplier {
     }
 
     /**
-     * The EXIF tags the saved-copy pass walks: androidx.exifinterface
-     * exposes NO public tag enumeration, so "preserve" is implemented as
-     * this explicit, documented surface (the same precedent the gallery's
-     * r15 EditableExifCodec set). The names are the EXIF 2.3 identifiers
-     * the library's TAG_* constants carry. Tags the source does not carry
-     * are skipped; GPS tags are included so STRIP_LOCATION can null them
-     * explicitly, and the purely structural tags the encoder recomputes
-     * (JPEG length, compression, thumbnail offsets) are deliberately
-     * absent --- the encoder owns those on the new copy.
+     * The EXIF tags the saved-copy pass walks: androidx.exifinterface exposes NO public
+     * tag enumeration, so "preserve" is this explicit surface (EXIF 2.3 identifiers).
+     * Absent tags are skipped; GPS tags ride so STRIP_LOCATION can null them; purely
+     * structural tags the encoder recomputes (length, compression, thumbnail offsets)
+     * are deliberately absent --- the encoder owns those on the new copy.
      */
     val COPYABLE_TAGS: List<String> = listOf(
         // IFD0 (TIFF) descriptive
@@ -86,8 +79,8 @@ object MetadataPolicyApplier {
     )
 
     /**
-     * Whether the applied policy must be narrated back to the gallery as a
-     * location removal (the honesty UI contract section 4.4 promises).
+     * Whether the applied policy must be narrated back to the gallery as a location
+     * removal (the honesty contract section 4.4 promises).
      */
     fun removedLocation(policy: MetadataPolicy): Boolean =
         policy == MetadataPolicy.STRIP_LOCATION || policy == MetadataPolicy.STRIP_ALL

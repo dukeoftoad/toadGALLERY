@@ -3,7 +3,7 @@ package com.toadgallery.editor
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The LUT + pixel adjustment stages (r30, Phase 6 v1 slice 2). */
+/** The LUT + pixel adjustment stages. */
 class AdjustmentsTest {
 
     // ---- LutBuilder ----
@@ -34,9 +34,8 @@ class AdjustmentsTest {
 
     @Test
     fun `exposure composes before brightness and contrast`() {
-        // The r29 pinned composed value was 156 for b=+50,c=+50 at v=10.
-        // With exposure=0 this must reproduce it EXACTLY (backward compat
-        // with the r29 preview for zero new params).
+        // The pinned composed value is 156 for b=+50, c=+50 at v=10; with exposure=0 this must
+        // reproduce it EXACTLY (backward compat for zero new params).
         val lut = LutBuilder.build(brightness = 50, contrast = 50, exposure = 0, highlights = 0, shadows = 0)
         assertEquals(156, lut[10])
     }
@@ -57,8 +56,7 @@ class AdjustmentsTest {
         val lut = LutBuilder.build(brightness = 0, contrast = 0, exposure = 0, highlights = 0, shadows = 100)
         // Pure black lifted by the full half-scale: +127.5 -> 128.
         assertEquals(128, lut[0])
-        // Bright values untouched: weight = 1 - smoothstep(0,128,v) = 0
-        // for every v >= 128, so bright values pass through EXACTLY.
+        // Bright values untouched: weight = 1 - smoothstep(0,128,v) = 0 for v >= 128 (exact pass-through).
         assertEquals(255, lut[255])
         assertEquals(200, lut[200])
     }

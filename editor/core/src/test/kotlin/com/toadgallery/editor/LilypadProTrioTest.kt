@@ -5,12 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r74 photo round's JVM pins: the whites/blacks LUT stage (the
- * far-end pair), the vibrance kernel (the luma-weighted saturation),
- * the luminance histogram, the copy-paste transfer, and the recipe
- * codec's additive keys.
- */
+/** JVM pins: whites/blacks LUT stage, vibrance kernel, luminance histogram, grade transfer, codec keys. */
 class LilypadProTrioTest {
 
     // ---- whites/blacks: the LUT chain's far ends ----
@@ -42,8 +37,7 @@ class LilypadProTrioTest {
         val lifted = LutBuilder.build(0, 0, 0, 0, 0, whites = 100, blacks = 0)
         // The far dark end is untouched (the mask is zero there).
         assertEquals(neutral[10], lifted[10])
-        // The far bright end moves UP where headroom exists (245 has 10
-        // counts of headroom at half scale +127) and clamps at 255.
+        // Far bright end lifts where headroom exists (245: 10 counts) and clamps at 255.
         assertTrue("245 must lift: ${lifted[245]}", lifted[245] > neutral[245])
         // The ceiling itself cannot lift --- it is already 255.
         assertEquals(255, lifted[255])
@@ -63,8 +57,7 @@ class LilypadProTrioTest {
     fun `the midtone stays put under both far-end moves`() {
         val neutral = LutBuilder.build(0, 0, 0, 0, 0)
         val moved = LutBuilder.build(0, 0, 0, 0, 0, whites = 60, blacks = 60)
-        // Around 128 both masks are ~0: the mid grey barely moves (the
-        // smoothstep tails), at most 2 counts of carry.
+        // Around 128 both masks are ~0 (smoothstep tails): at most 2 counts of carry.
         assertTrue(
             "128 moved by ${moved[128] - neutral[128]}",
             kotlin.math.abs(moved[128] - neutral[128]) <= 2,
@@ -104,8 +97,7 @@ class LilypadProTrioTest {
         PixelOps.applyVibrance(vivid, 100)
         val mutedSpread = (muted[0] shr 16 and 0xFF) - (muted[0] and 0xFF)
         val vividSpread = (vivid[0] shr 16 and 0xFF) - (vivid[0] and 0xFF)
-        // The muted pixel's channel spread grew RELATIVELY more than the
-        // vivid one's: 20 -> 40 (x2) versus 100 -> ~179 (x1.79).
+        // Muted spread grows relatively more: 20 -> 40 (x2) vs 100 -> ~179 (x1.79).
         val mutedBefore = 120 - 80
         val vividBefore = 200 - 0
         val mutedGrowth = mutedSpread.toDouble() / mutedBefore
@@ -124,8 +116,7 @@ class LilypadProTrioTest {
         val g = (pixels[0] shr 8) and 0xFF
         val b = pixels[0] and 0xFF
         val lum = (r * 299 + g * 587 + b * 114) / 1000
-        // The channels pull toward the ORIGINAL luma; with weight, the
-        // pull is partial but real (spread shrinks by at least a third).
+        // Channels pull toward the original luma; partial but real (spread shrinks).
         assertTrue("spread must shrink: r=$r b=$b", (r - b) < 200)
     }
 
@@ -145,8 +136,7 @@ class LilypadProTrioTest {
         assertEquals(1, histogram.luma[76])
         assertEquals(1, histogram.luma[149])
         assertEquals(4, histogram.luma.sum())
-        // The peak is the TALLEST single bin (1 here), not the sum ---
-        // the chart's own normalization convention.
+        // Peak is the tallest single bin (1 here), not the sum: the chart's convention.
         assertEquals(1, histogram.lumaPeak)
     }
 
@@ -204,9 +194,7 @@ class LilypadProTrioTest {
 
     @Test
     fun `a pre-r74 sidecar round-trips with the new fields neutral`() {
-        // No whites/blacks/vibrance keys: the parse defaults to 0 and the
-        // re-serialize writes the explicit zeros (flat keys, the family's
-        // shape) --- values unchanged, recipe equivalent.
+        // Missing keys parse as 0 and re-serialize as explicit flat zeros; recipe equivalent.
         val pre = EditRecipe(exposure = 20, saturation = -5)
         val json = EditRecipeCodec.toJson(pre)
         val back = (EditRecipeCodec.fromJson(json) as EditRecipeCodec.ParseResult.Valid).recipe

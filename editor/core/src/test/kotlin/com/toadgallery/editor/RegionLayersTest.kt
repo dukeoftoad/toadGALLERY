@@ -6,11 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The r37 region model + the pure kernels (the contract's
- * `RegionLayersTest`): the even-odd scanline mask (exact pinned masks:
- * a triangle, a self-crossing bowtie, a degenerate path), the mosaic
- * block average and the linear blur window (exact hand grids), the
- * sliding-window equivalence, and the pipeline stage integration.
+ * Region model + pure kernels: even-odd scanline mask, mosaic block average, linear blur
+ * window, sliding-window equivalence, and the pipeline stage integration.
  */
 class RegionLayersTest {
 
@@ -63,9 +60,8 @@ class RegionLayersTest {
 
     @Test
     fun `a triangle masks its interior with strict pixel centres`() {
-        // Pixel coords (2,2)-(8,2)-(2,8) over a 10x10 grid: the
-        // hypotenuse x = 8 - (y - 2); expected per-row spans (computed
-        // by hand): y=2: 2..6, y=3: 2..5, y=4: 2..4, y=5: 2..3, y=6: 2..2.
+        // Pixel triangle (2,2)-(8,2)-(2,8) over 10x10; hypotenuse x = 8 - (y - 2).
+        // Expected per-row spans (hand-computed): y=2: 2..6, y=3: 2..5, y=4: 2..4, y=5: 2..3, y=6: 2..2.
         val mask = RegionMask.build(pts(0.2, 0.2, 0.8, 0.2, 0.2, 0.8), 10, 10)
         var count = 0
         for (m in mask) if (m) count++
@@ -80,9 +76,8 @@ class RegionLayersTest {
 
     @Test
     fun `a self-crossing bowtie masks both lobes and pinches at the middle`() {
-        // (2,2)-(8,2)-(2,8)-(8,8) pixel coords over 10x10: rows 2 and 7
-        // carry the lobes (x=3..6 and 3..6), rows 4-5 are the pinch
-        // (empty), rows 3/6 carry x=4..5.
+        // Bowtie (2,2)-(8,2)-(2,8)-(8,8) over 10x10: rows 2 and 7 carry the lobes (x=3..6),
+        // rows 4-5 are the empty pinch, rows 3/6 carry x=4..5.
         val mask = RegionMask.build(pts(0.2, 0.2, 0.8, 0.2, 0.2, 0.8, 0.8, 0.8), 10, 10)
         var count = 0
         for (m in mask) if (m) count++
@@ -115,10 +110,8 @@ class RegionLayersTest {
 
     @Test
     fun `the mosaic block average is exact on a hand grid`() {
-        // 6x6, cell 2 (strength 20 x minEdge 6 / 1000 -> floor 0 -> coerce
-        // 2; wait: 20*6/1000 = 0.12 -> 0 -> 2). Every pixel masked; rgb =
-        // (x*10, y*10, 7). Cell (0,0): pixels (0,0,7)(10,0,7)(0,10,7)(10,10,7)
-        // -> avg (5,5,7) = 0xFF050507. Cell (2,0): r avg 25 -> 0x19.
+        // 6x6, cell 2 (20*6/1000 = 0.12 -> floor 0 -> coerced 2); every pixel masked; rgb = (x*10, y*10, 7).
+        // Cell (0,0): avg of (0,0,7)(10,0,7)(0,10,7)(10,10,7) = (5,5,7); cell (2,0): r avg 25 -> 0x19.
         val w = 6
         val h = 6
         val pixels = IntArray(w * h) { i ->
@@ -135,8 +128,6 @@ class RegionLayersTest {
         assertEquals(argb(0x19, 5, 7), pixels[0 * w + 2]) // cell (2,0): r=25
         assertEquals(argb(0x19, 5, 7), pixels[1 * w + 3])
         assertEquals(argb(5, 0x19, 7), pixels[2 * w + 0]) // cell (0,2): g=25
-        // The unmasked-pixel path: with the full mask every pixel is
-        // rewritten; the averages above are the exact hand values.
     }
 
     @Test
@@ -153,10 +144,8 @@ class RegionLayersTest {
 
     @Test
     fun `the linear blur window is exact with edge clamps`() {
-        // Width 8, one row; r = 1 (strength 10 x minEdge 8 / 1000 -> 0 ->
-        // coerce 1). rgb = (x, 0, 0). Averages over [x-1, x+1] clamped:
-        // x=0: [0,1]: (0+1)/2=0 (floor of 0.5); x=1: [0,2]: 1; x=2: 2;
-        // x=7: [6,7]: (6+7)/2=6 (floor of 6.5).
+        // Width 8, one row; r = 1 (10*8/1000 -> 0 -> coerced 1); rgb = (x, 0, 0); windows [x-1, x+1] clamped:
+        // x=0: (0+1)/2=0; x=1: 1; x=2: 2; x=7: (6+7)/2=6 (integer floors).
         val w = 8
         val h = 1
         val pixels = IntArray(w * h) { i -> argb(i, 0, 0) }
@@ -170,8 +159,7 @@ class RegionLayersTest {
 
     @Test
     fun `the sliding window equals the per-pixel loop`() {
-        // Deterministic pseudo-random grid (LCG), r=3, w=12, h=4; the
-        // sliding window must equal a naive per-pixel reference exactly.
+        // LCG pseudo-random grid, r=3, w=12, h=4: the sliding window must equal a naive reference exactly.
         val w = 12
         val h = 4
         var seed = 123456789L
@@ -228,16 +216,14 @@ class RegionLayersTest {
         )
         assertTrue(!recipe.isIdentity)
         assertTrue(recipe.isGeometryIdentity && recipe.isAdjustmentIdentity && recipe.isFilterIdentity)
-        // apply() censors: a 4x4 gradient, the whole-canvas mosaic at
-        // strength 50 -> cell = 50*4/1000 = 0 -> coerce 2: 2x2 cells.
+        // 4x4 gradient, whole-canvas mosaic at strength 50 -> cell = 50*4/1000 = 0 -> coerced 2.
         val w = 4
         val h = 4
         val pixels = IntArray(w * h) { i -> argb((i % w) * 20, (i / w) * 20, 3) }
         val out = EditPipeline.apply(pixels, w, h, recipe)
         assertEquals(w, out.width)
         assertEquals(h, out.height)
-        // Cell (0,0): r samples 0,20,0,20 -> avg 10; the first pixel now
-        // reads the block average, not the gradient sample.
+        // Cell (0,0): r samples 0,20,0,20 -> avg 10; the pixel reads the block average, not the gradient.
         assertEquals(argb(10, 10, 3), out.pixels[0])
         assertEquals(argb(10, 10, 3), out.pixels[5]) // (1,1): same cell
         // Cell (2,0): r samples 40,60,40,60 -> avg 50; g samples 0,0,20,20 -> 10.
@@ -246,9 +232,8 @@ class RegionLayersTest {
 
     @Test
     fun `the stage order grew the regions tail`() {
-        // r41: the AI pixel stages sit between sharpen and the regions ---
-        // the regions stay FINAL (a mosaic over a retouched face is still a
-        // mosaic); the assertion pins the new documented tail.
+        // The AI pixel stages sit between sharpen and the regions: regions stay FINAL (a mosaic
+        // over a retouched face is still a mosaic).
         assertTrue(
             EditPipeline.STAGE_ORDER.contains(
                 "vignette -> sharpen -> AI erase -> AI sky -> AI bokeh -> AI retouch -> mosaic/blur regions",

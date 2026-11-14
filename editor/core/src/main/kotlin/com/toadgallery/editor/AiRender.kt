@@ -1,23 +1,16 @@
 package com.toadgallery.editor
 
 /**
- * The r41 AI pixel kernels + the stage entry (Phase 10 sub-scope A; the
- * design contract `docs/phase-10/edit-v3-ai.md`, decision 1): the four AI
- * stages are PIXEL STAGES slotted between sharpen and the regions (which
- * stay FINAL) --- they transform existing pixels, they do not composite
- * over. The stage order is semantic and stated: erase first (later stages
- * see the restored surroundings), sky next (the new sky exists before the
- * depth-driven blur), bokeh over the replaced world, retouch polishes the
- * subject last among the AI stages --- and the regions stage stays FINAL
- * so a mosaic over a retouched face is still a mosaic.
+ * AI pixel kernels + the stage entry: the four AI stages are PIXEL STAGES
+ * between sharpen and the regions stage (which stays FINAL). Stage order is
+ * semantic: erase first (later stages see the restored surroundings), then sky,
+ * bokeh over the replaced world, retouch polishes the subject last among the AI
+ * stages; regions stay final so a mosaic over a retouched face is still a mosaic.
  *
- * The kernels are the r37 discipline verbatim: integer-deterministic,
- * clamped windows, floor division, hand-grid-pinned in `AiRenderTest`,
- * every read over a SNAPSHOT of the grid the kernel receives.
- *
- * Pure Kotlin, JVM-tested (the repo's ADR-0011 convention). No model
- * ever runs here: the stages replay over the artifacts the inference
- * seam produced at commit time (`EditAiEngine.kt`) and the store
+ * Kernels are integer-deterministic, clamped windows, floor division; every
+ * read is over a SNAPSHOT of the grid the kernel receives. Pure Kotlin,
+ * JVM-tested. No model runs here: the stages replay over the artifacts the
+ * inference seam produced at commit time (`EditAiEngine.kt`) and the store
  * persisted (`EditAiStore.kt`).
  */
 
@@ -31,11 +24,10 @@ sealed interface SkySource {
 }
 
 /**
- * The resolved render-time bundle the pipeline's AI stages consume: the
- * artifacts LOADED from the store (the recipe's keys resolved by the
- * caller), the resolved sky source, and the retouch consent state. A
- * missing entry degrades --- that stage renders nothing, never a crash
- * (the frame/sticker tolerance contract).
+ * Render-time bundle the AI stages consume: the artifacts loaded from the store
+ * (keys resolved by the caller), the resolved sky source, and the retouch
+ * consent state. A missing entry degrades — that stage renders nothing, never
+ * a crash (the frame/sticker tolerance contract).
  */
 class EditAiStageInputs(
     /** The refined erase masks, by erase layer id. */
@@ -51,9 +43,9 @@ class EditAiStageInputs(
     /** The retouch face boxes (null = the stage degrades to no retouch). */
     val faceBoxes: FaceBoxes?,
     /**
-     * The retouch consent gate (ADR-0010 §5): the stage REFUSES when
-     * false even with a restored sidecar --- the layer stays verbatim in
-     * the recipe, the stage skips. `RetouchConsent.kt` owns the machine.
+     * The retouch consent gate: the stage REFUSES when false even with a
+     * restored sidecar — the layer stays in the recipe, the stage skips.
+     * `RetouchConsent.kt` owns the machine.
      */
     val retouchConsentGranted: Boolean,
 ) {
@@ -72,9 +64,9 @@ class EditAiStageInputs(
 }
 
 /**
- * The stage entry the pipeline calls (the regions' sibling): every AI
- * container in the documented order, each degrading honestly when its
- * resolved inputs are absent. Absent containers run NOTHING.
+ * The stage entry the pipeline calls (the regions' sibling): every AI container
+ * in the documented order, each degrading honestly when its resolved inputs are
+ * absent. Absent containers run nothing.
  */
 object AiStages {
 
@@ -91,9 +83,8 @@ object AiStages {
         // ---- AI sky ----
         val sky = recipe.sky
         if (sky != null && inputs.skyMask != null && inputs.skySource != null) {
-            // The source resolves inside the kernel (parametric renders at
-            // the box size; imported validates its dims); an unresolvable
-            // source returns early --- no replacement, never a crash.
+            // Source resolves in-kernel (parametric at box size; imported
+            // validates dims); unresolvable returns early — never a crash.
             AiKernels.applySkyBlend(
                 pixels, width, height, inputs.skyMask, inputs.skySource, sky.opacityPct,
             )
@@ -108,25 +99,23 @@ object AiStages {
         // ---- AI retouch ----
         val retouch = recipe.retouch
         if (retouch != null && inputs.faceBoxes != null && inputs.retouchConsentGranted) {
-            // The stage REFUSES under consent-off even with a restored
-            // sidecar: the layer stays verbatim in the recipe, the stage
-            // skips (the SemanticContentPolicy consent-off precedent).
+            // Consent-off refuses even with a restored sidecar: the layer
+            // stays in the recipe, the stage skips.
             AiKernels.applyRetouch(pixels, width, height, inputs.faceBoxes, retouch)
         }
     }
 }
 
 /**
- * The pure kernels (integer-deterministic, hand-grid-pinned). Every
- * kernel reads a SNAPSHOT of the grid it receives.
+ * The pure kernels: integer-deterministic, hand-grid-pinned; every kernel reads
+ * a SNAPSHOT of the grid it receives.
  */
 object AiKernels {
 
     /**
-     * The erase paste: for each masked pixel, the fill patch's nearest
-     * sample over the patch's placement (deterministic floor mapping).
-     * The patch's alpha is forced opaque --- the fill is generated
-     * content, not a transparency layer.
+     * The erase paste: each masked pixel takes the fill patch's nearest sample
+     * over its placement (floor mapping); patch alpha forced opaque — the fill
+     * is generated content, not a transparency layer.
      */
     fun pasteEraseFill(pixels: IntArray, width: Int, height: Int, mask: FractionRleMask, fill: FillPatch) {
         val gridMask = mask.maskAt(width, height)
@@ -142,12 +131,11 @@ object AiKernels {
     }
 
     /**
-     * The sky cover-crop blend: the sky bitmap is scaled to COVER the
-     * mask's bounding box (center-crop --- a stretched sky reads wrong),
-     * then blended over the MASKED pixels only, at the selection's
-     * opacity: out = (src * (100 - o) + sky * o) / 100 per channel,
-     * integer floor. The source crop keeps its aspect: the larger of the
-     * two relative dimensions wins, the other is centered and cropped.
+     * The sky cover-crop blend: the sky is scaled to COVER the mask's bounding
+     * box (center-crop — a stretched sky reads wrong; the larger relative
+     * dimension wins, the other is centered and cropped), blended over masked
+     * pixels only at the selection's opacity: out = (src * (100 - o) + sky * o)
+     * / 100 per channel, integer floor.
      */
     fun applySkyBlend(
         pixels: IntArray,
@@ -162,9 +150,8 @@ object AiKernels {
         val bounds = mask.boundsAt(width, height) ?: return
         val bw = (bounds.x1 - bounds.x0).coerceAtLeast(1)
         val bh = (bounds.y1 - bounds.y0).coerceAtLeast(1)
-        // Resolve the source pixels (parametric renders at the box size, so
-        // its cover-crop is the identity; imported keeps its own dims and
-        // validates them here --- an unresolvable source returns early).
+        // Parametric renders at the box size (its cover-crop is the identity);
+        // imported keeps its own dims, validated here (unresolvable → early return).
         val srcPixels: IntArray
         val sw: Int
         val sh: Int
@@ -223,14 +210,12 @@ object AiKernels {
 
     /**
      * The depth-driven variable blur (bokeh): per-pixel radius
-     * r = maxRadius * |depth - focal| / 255 (integer division; 0 leaves
-     * the pixel untouched --- the focal band stays sharp), the radius
-     * from the r37 kernels' formula max(1, strengthPct x minEdge / 1000).
-     * The blur itself is a separable box: a horizontal pass then a
-     * vertical pass, each over a SNAPSHOT, each window clamped to the
-     * grid and averaged by integer floor division --- the prefix-sum
-     * windows equal the naive per-pixel loops exactly (pinned in
-     * `AiRenderTest`, the r37 sliding-window equivalence pattern).
+     * r = maxRadius * |depth - focal| / 255 (integer division; 0 leaves the
+     * pixel untouched — the focal band stays sharp), maxRadius from
+     * max(1, strengthPct x minEdge / 1000). Separable box blur: a horizontal
+     * then a vertical pass, each over a SNAPSHOT, each window clamped to the
+     * grid and averaged by integer floor division — the prefix-sum windows
+     * equal the naive per-pixel loops exactly (pinned in `AiRenderTest`).
      */
     fun applyVariableBlur(
         pixels: IntArray,
@@ -303,10 +288,9 @@ object AiKernels {
     }
 
     /**
-     * The retouch pass: per face box, in list order, smoothing ->
-     * eye-band brighten -> the slim displacement warp. Each sub-kernel
-     * reads a SNAPSHOT of the grid it receives (its own writes never feed
-     * its own reads).
+     * The retouch pass: per face box, in list order, smoothing -> eye-band
+     * brighten -> the slim displacement warp. Each sub-kernel reads a SNAPSHOT
+     * of the grid it receives (its own writes never feed its own reads).
      */
     fun applyRetouch(pixels: IntArray, width: Int, height: Int, boxes: FaceBoxes, retouch: RetouchSelection) {
         for (box in boxes.boxes) {
@@ -317,15 +301,14 @@ object AiKernels {
             if (x1 <= x0 || y1 <= y0) continue
             val bw = x1 - x0 + 1
             val bh = y1 - y0 + 1
-            // 1. Skin smoothing: a uniform box blur over the box's pixels,
-            //    radius from the r37 formula over the box's min edge.
+            // 1. Skin smoothing: uniform box blur over the box's pixels,
+            //    radius over the box's min edge.
             if (retouch.smoothingPct > 0) {
                 val radius = (retouch.smoothingPct * minOf(bw, bh) / 1000).coerceAtLeast(1)
                 boxBlurRegion(pixels, width, height, x0, y0, x1, y1, radius)
             }
-            // 2. Eye-band brighten: the box's rows 20%..45% (the eye band;
-            //    the v1 box-only artifact carries no landmarks), delta
-            //    eyeBrightenPct * 255 / 200 per channel, clamped at 255.
+            // 2. Eye-band brighten: box rows 20%..45% (the box-only artifact
+            //    carries no landmarks), delta = eyeBrightenPct * 255 / 200, clamped.
             if (retouch.eyeBrightenPct > 0) {
                 val delta = retouch.eyeBrightenPct * 255 / 200
                 val bandTop = y0 + (bh * 20) / 100
@@ -341,11 +324,10 @@ object AiKernels {
                     }
                 }
             }
-            // 3. The slim displacement warp: inside the box, each column
-            //    samples from further out (sampleX = x0 + (x - x0) *
-            //    (100 + slim) / 100), pulling the box's content toward its
-            //    centre; clamped inside the box (a LOCAL warp, not the
-            //    geometry toolset).
+            // 3. Slim warp: each column samples further out
+            //    (sampleX = x0 + (x - x0) * (100 + slim) / 100), pulling the
+            //    content toward the centre; clamped inside the box (LOCAL warp,
+            //    not the geometry toolset).
             if (retouch.faceSlimPct > 0) {
                 val snapshot = pixels.copyOf()
                 for (y in y0..y1) {
@@ -361,10 +343,9 @@ object AiKernels {
 
     /**
      * A uniform box blur restricted to a rect (the retouch smoothing):
-     * separable horizontal + vertical passes, each over a snapshot, each
-     * window clamped to the RECT (not the grid --- the smoothing must not
-     * bleed the box's surroundings into the face), averaged by integer
-     * floor division.
+     * separable passes, each over a snapshot, each window clamped to the RECT
+     * (not the grid — the smoothing must not bleed the box's surroundings into
+     * the face), averaged by integer floor division.
      */
     private fun boxBlurRegion(
         pixels: IntArray,

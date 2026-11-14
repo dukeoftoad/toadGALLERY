@@ -1,19 +1,11 @@
 package com.toadgallery.editor.video
 
 /**
- * The nine ADR-0012 YES rows as one pure parameter struct (r42, decision 6):
- * brightness, contrast, exposure, highlights, shadows, saturation,
- * temperature, tint, vignette --- every range [-100..100], 0 = neutral, the
- * Phase 6 semantics VERBATIM. The parameter SET is reused, NOT the photo
- * pipeline implementation (ADR-0012 section 3): this module holds the
- * projection onto GL uniforms + the validation, and BOTH realizations
- * (the ExoPlayer preview and the Transformer export effect) consume the
- * same [VideoAdjustProjection.uniforms] list against the same
- * [VideoAdjustProjection.FRAGMENT_SHADER_LINES] source --- one model, two
- * realizations, no drift.
- *
- * HSL per-channel, sharpen, LUT looks, mosaic/blur regions, geometry and
- * every AI feature are OFF-video in v1 --- see [VideoAdjustProjection.OFF_VIDEO].
+ * The nine ADR-0012 YES rows as one pure parameter struct, every range [-100..100],
+ * 0 = neutral. The SET is reused, not the photo pipeline: both realizations (ExoPlayer
+ * preview, Transformer export) consume the same uniforms + shader source --- no drift.
+ * HSL per-channel, sharpen, LUT looks, mosaic/blur regions, geometry and AI features
+ * are OFF-video in v1 --- see [VideoAdjustProjection.OFF_VIDEO].
  */
 data class VideoAdjustParams(
     val brightness: Int = 0,
@@ -36,18 +28,18 @@ data class VideoAdjustParams(
 data class VideoAdjustUniform(val name: String, val value: Float)
 
 /**
- * The projection: the Phase 6 per-parameter semantics mapped onto the
- * shader's normalized [0,1] colour space, plus the table conformance record.
+ * The per-parameter semantics mapped onto the shader's normalized [0,1] colour space,
+ * plus the table conformance record.
  */
 object VideoAdjustProjection {
 
-    /** The shared parameter range: [-100, 100], 0 = neutral (Phase 6). */
+    /** The shared parameter range: [-100, 100], 0 = neutral. */
     const val MIN_VALUE: Int = -100
     const val MAX_VALUE: Int = 100
 
     /**
-     * The NINE ADR-0012 YES rows, in the fixed uniform order the shader
-     * declares. A table-conformance test pins exactly this set.
+     * The nine ADR-0012 YES rows, in the fixed uniform order the shader declares;
+     * a table-conformance test pins exactly this set.
      */
     val ADJUSTABLE: List<String> = listOf(
         "brightness", "contrast", "exposure", "highlights", "shadows",
@@ -55,8 +47,8 @@ object VideoAdjustProjection {
     )
 
     /**
-     * The OFF-video rows with their ADR-0012 citations --- the honest
-     * boundary, pinned by the same conformance test so nothing creeps in.
+     * The OFF-video rows with their ADR-0012 citations, pinned by the same
+     * conformance test so nothing creeps in.
      */
     val OFF_VIDEO: Map<String, String> = linkedMapOf(
         "hsl-per-channel" to "off-video (ADR-0012 section 2, explicit)",
@@ -79,22 +71,19 @@ object VideoAdjustProjection {
     }
 
     /**
-     * The uniform mapping over the Phase 6 semantics, each normalized to the
-     * shader's [0,1] space:
+     * The uniform mapping, each normalized to the shader's [0,1] space:
      *
      *  - exposure e: gain = 2^(e/100) (the EV rule);
      *  - brightness b: offset = 2.55 * b / 255;
-     *  - contrast c: the r29 mid-grey-pivot factor (pivot 128/255);
-     *  - highlights h / shadows s: the half-scale 127.5-shifts masked by
-     *    smoothstep over the bright/dark half (normalized by 255);
-     *  - saturation: the luma-pull factor (100 + sat) / 100;
-     *  - temperature / tint: the +/- 63/255 channel shifts (255/400 scaled);
-     *  - vignette: k = strength / 100 (the shader applies
-     *    1 - 0.8 * k * smoothstep(0.35, 1.0, radius)).
+     *  - contrast c: mid-grey-pivot factor (pivot 128/255);
+     *  - highlights h / shadows s: half-scale 127.5-shifts masked by smoothstep
+     *    over the bright/dark half (normalized by 255);
+     *  - saturation: luma-pull factor (100 + sat) / 100;
+     *  - temperature / tint: +/- 63/255 channel shifts (255/400 scaled);
+     *  - vignette: k = strength / 100 (shader applies 1 - 0.8 * k * smoothstep(0.35, 1.0, radius)).
      *
-     * Every neutral value is an exact identity in the shader's arithmetic
-     * (gain 1.0, offsets 0.0, factors 1.0), so a neutral parameter set is
-     * an exact no-op without any stage skipping.
+     * Every neutral value is an exact identity (gain 1.0, offsets 0.0, factors 1.0):
+     * a neutral set is an exact no-op without any stage skipping.
      */
     fun uniforms(params: VideoAdjustParams): List<VideoAdjustUniform> = listOf(
         VideoAdjustUniform("uExposureGain", Math.pow(2.0, params.exposure / 100.0).toFloat()),
@@ -112,13 +101,9 @@ object VideoAdjustProjection {
     )
 
     /**
-     * The r74 look stage's uniform set (the shared `.cube` look on
-     * video): the intensity blend factor and the cube's size fact. The
-     * look's SAMPLES ride as a 3D texture bound by the realization
-     * shell (GL_TEXTURE_2D array rows in ES 2.0 --- the shell picks the
-     * layout); these two uniforms plus the texture unit are everything
-     * the shader needs. A null look reads as intensity 0 --- the stage
-     * is a no-op exactly like a neutral parameter set.
+     * The look stage's uniforms: intensity blend factor + cube size. The samples ride
+     * as a 3D texture bound by the realization shell; these two uniforms plus the
+     * texture unit are all the shader needs. A null look reads as intensity 0 (no-op).
      */
     fun lookUniforms(look: VideoLutLook?): List<VideoAdjustUniform> = listOf(
         VideoAdjustUniform(
@@ -129,18 +114,12 @@ object VideoAdjustProjection {
     )
 
     /**
-     * The look stage's shader lines (r74): a manual trilinear 3D-sample
-     * over the bound 2D texture, inserted into [FRAGMENT_SHADER_LINES]
-     * at [LOOK_STAGE_INSERT_INDEX] --- the look grades the finished
-     * frame, the photo pipeline's own order (the r33 look runs after the
-     * adjustments, before the final clamp). The texture layout is the
-     * 2D unwrap the realization shell uploads: x = r + g*size (red
-     * fastest), y = b --- the .cube's RED-MAJOR order verbatim --- with
-     * texel centres offset by half a texel (the sampler's own
-     * convention). The arithmetic mirrors [VideoLutSampler.sampleCube]:
-     * domain-mapped, trilinear over the 8 corners, then the intensity
-     * blend (`mix(c, sampled, uLookIntensity)` --- the r33 grammar). At
-     * intensity 0 the stage is an exact no-op (the early return).
+     * The look stage's shader lines: a manual trilinear 3D-sample over the bound 2D
+     * texture, inserted at [LOOK_STAGE_INSERT_INDEX] (grades the finished frame, after
+     * adjustments, before the final clamp). Texture layout: x = r + g*size (red fastest),
+     * y = b, texel centres offset half a texel; mirrors [VideoLutSampler.sampleCube]:
+     * domain-mapped, trilinear over the 8 corners, then `mix(c, sampled, uLookIntensity)`.
+     * Intensity 0 is an exact no-op (the early return).
      */
     val LOOK_STAGE_LINES: List<String> = listOf(
         "uniform sampler2D uLookSampler;",
@@ -185,14 +164,12 @@ object VideoAdjustProjection {
     )
 
     /**
-     * Where the look stage's lines insert into the fragment shader:
-     * after the last uniform (index 10, `uVignetteStrength`), before
-     * the `varying` line --- the preamble's end, where a function
-     * definition is legal GLSL.
+     * Where the look stage's lines insert into the fragment shader: after the last
+     * uniform, before the `varying` line (the preamble's end, legal GLSL for a function).
      */
     const val LOOK_STAGE_INSERT_INDEX: Int = 11
 
-    /** The r29 contrast factor (identical formula to LutBuilder, normalized pivot). */
+    /** The contrast factor (identical formula to LutBuilder, normalized pivot). */
     internal fun contrastFactor(contrast: Int): Double {
         val contrastPercent = contrast * 2.55
         return (259.0 * (contrastPercent + 255.0)) / (255.0 * (259.0 - contrastPercent))
@@ -212,10 +189,8 @@ object VideoAdjustProjection {
     }
 
     /**
-     * The single fragment shader both realizations compile (GLSL ES 2.0 ---
-     * the media3 effect pipeline's own shader level). One shader, one
-     * uniform set: preview and export agree by construction. The lines are
-     * a plain list (the house single-line-string rule) joined at use time.
+     * The single fragment shader both realizations compile (GLSL ES 2.0): preview and
+     * export agree by construction. Plain string lines, joined at use time.
      */
     val FRAGMENT_SHADER_LINES: List<String> = listOf(
         "precision highp float;",
@@ -265,19 +240,16 @@ object VideoAdjustProjection {
         "  float radius = length(vTexCoord - centre) / length(centre);",
         "  float mask = smoothstep01(0.35, 1.0, radius);",
         "  c = c * (1.0 - 0.8 * uVignetteStrength * mask);",
-        // r74: the shared look, over the finished grade (the r33 order).
+        // The shared look, over the finished grade (after adjustments, before the clamp).
         "  c = sampleLook(c);",
         "  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);",
         "}",
     )
 
     /**
-     * The composed fragment source (r74): [FRAGMENT_SHADER_LINES] with
-     * the look stage's function and uniforms spliced in at
-     * [LOOK_STAGE_INSERT_INDEX] (before `void main`, where the preamble
-     * ends). With no look the stage's early return makes it an exact
-     * no-op, so ONE shader serves both states --- preview and export
-     * agree by construction, the module's rule.
+     * The composed fragment source: [FRAGMENT_SHADER_LINES] with the look stage spliced
+     * in at [LOOK_STAGE_INSERT_INDEX] (before `void main`). With no look the stage's
+     * early return is an exact no-op, so ONE shader serves both states.
      */
     fun fragmentShaderWithLookStage(): String =
         (
@@ -290,9 +262,8 @@ object VideoAdjustProjection {
     fun fragmentShaderSource(): String = FRAGMENT_SHADER_LINES.joinToString("\n")
 
     /**
-     * The vertex shader (GLSL ES 2.0): the media3 effect pipeline's
-     * normalized-coordinate quad --- four vertices, texture coordinates
-     * mapped from NDC. No transformation matrices (no geometry on video).
+     * The vertex shader (GLSL ES 2.0): the media3 normalized-coordinate quad, texture
+     * coordinates from NDC. No transformation matrices (no geometry on video).
      */
     val VERTEX_SHADER_LINES: List<String> = listOf(
         "attribute vec4 aFramePosition;",
@@ -307,8 +278,8 @@ object VideoAdjustProjection {
     fun vertexShaderSource(): String = VERTEX_SHADER_LINES.joinToString("\n")
 
     /**
-     * The uniform names in the order [uniforms] emits them --- the
-     * conformance tests assert the shader declares exactly these.
+     * The uniform names in the order [uniforms] emits them; conformance tests
+     * assert the shader declares exactly these.
      */
     val UNIFORM_NAMES: List<String> =
         listOf("uTexSampler") + uniforms(VideoAdjustParams()).map { it.name }

@@ -5,17 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r41 undo/redo extension capstone: the r38 mixed-session test grown
- * across ALL NINE families --- one layer/selection of each family, a
- * commit sequence across every family's controls, undo all the way back
- * to the launch state, redo all the way forward --- asserting the EXACT
- * recipe at every step. The mechanism is the r30 snapshot stack; every
- * family pinned its per-commit granularity; the AI families' controls
- * (the sky opacity, the bokeh strength/focal, the retouch trio) commit
- * one snapshot each, exactly like the frame width's single-selection
- * keys.
- */
+/** Mixed nine-family undo/redo: one snapshot per commit across every family, exact recipe at every step. */
 class UndoRedoAiExtensionTest {
 
     private fun textLayer(id: String, size: Int = 20) =
@@ -44,9 +34,7 @@ class UndoRedoAiExtensionTest {
         val launch = EditRecipe()
         val session = EditSessionState(launch)
 
-        // 1. Add one layer/selection of each family, in family order, one
-        //    snapshot per add (the per-commit granularity every round
-        //    pinned).
+        // 1. Add one layer/selection of each family, in family order: one snapshot per add.
         val withText = launch.copy(textLayers = TextLayers(listOf(textLayer("t1"))))
         session.commit(withText)
         val withSticker = withText.copy(
@@ -133,8 +121,7 @@ class UndoRedoAiExtensionTest {
         )
         session.commit(retouchEdited)
 
-        // 3. Undo ALL the way back to the launch state, asserting the
-        //    exact recipe at every step.
+        // 3. Undo ALL the way back to the launch state, asserting the exact recipe at every step.
         assertEquals(retouchEdited, session.current)
         assertEquals(bokehEdited, session.undo())
         assertEquals(skyEdited, session.undo())
@@ -182,8 +169,7 @@ class UndoRedoAiExtensionTest {
 
     @Test
     fun `the sidecar round-trip preserves the nine-family session for the next launch`() {
-        // The ADR-0011 promise: every committed change persists; the
-        // restored sidecar reproduces the exact mixed recipe.
+        // Every committed change persists; the restored sidecar reproduces the exact mixed recipe.
         val mixed = EditRecipe(
             textLayers = TextLayers(listOf(textLayer("t1"))),
             stickerLayers = StickerLayers(listOf(StickerLayer(id = "s1", stickerId = "heart", sizePct = 25))),
@@ -210,9 +196,8 @@ class UndoRedoAiExtensionTest {
 
     @Test
     fun `undoing a re-applied erase restores the previous artifact key`() {
-        // The store's append-only promise: the earlier artifact id is
-        // still present in the recipe after the undo (the coherence the
-        // content-hash keys buy).
+        // The store's append-only promise: the earlier artifact id is still present in the recipe
+        // after the undo (the coherence the content-hash keys buy).
         val session = EditSessionState(EditRecipe(), maxDepth = 8)
         val first = EditRecipe(
             aiErase = AiEraseLayers(

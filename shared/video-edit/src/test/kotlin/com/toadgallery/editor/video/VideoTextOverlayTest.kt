@@ -5,11 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r74 text-overlay model's JVM pins (ADR-0011): every rule the
- * validator states and the envelope math derives, over hand-composed
- * cases only --- no Android, no media3.
- */
+/** The text-overlay model: validator rules and envelope math over hand-composed cases. */
 class VideoTextOverlayTest {
 
     private fun overlay(

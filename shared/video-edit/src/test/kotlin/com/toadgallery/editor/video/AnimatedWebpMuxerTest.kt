@@ -5,11 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The animated WebP muxer (r42): the RIFF framing, the VP8X canvas header,
- * the ANIM loop chunk, the per-frame ANMF fields and the verbatim
- * image-chunk extraction --- pinned over hand-built static-WebP byte
- * arrays (no platform encoder needed on the JVM). The muxer was also
- * cross-validated against Pillow during development.
+ * The animated WebP muxer: RIFF framing, VP8X canvas, ANIM loop, ANMF fields, verbatim chunk extraction.
  */
 class AnimatedWebpMuxerTest {
 

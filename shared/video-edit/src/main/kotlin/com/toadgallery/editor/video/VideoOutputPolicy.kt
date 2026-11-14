@@ -1,21 +1,11 @@
 package com.toadgallery.editor.video
 
 /**
- * The non-destructive MediaStore policy as data (r42, decision 9 --- the
- * ExportPlan precedent, video-shaped). Every export --- trimmed video,
- * muted export, slow-mo export, extracted frame, animation --- is an INSERT
- * of a NEW entry:
- *
- *  - the source URI is read-only by construction: never opened for write,
- *    never updated, never deleted (there is NO replace-original path at
- *    all --- this object exposes no such operation);
- *  - the insert carries IS_PENDING on API 29+ while the bytes land, and a
- *    FAILED write must CANCEL the pending row --- no partial MediaStore
- *    entry survives;
- *  - the display name derives from the source name with an "-edit" suffix
- *    and the extension follows the chosen output kind;
- *  - video outputs land under Movies, still outputs (frames, animations)
- *    under Pictures --- the volumes MediaStore owns for each kind.
+ * The non-destructive MediaStore policy as data: every export is an INSERT of a NEW
+ * entry. The source URI is never opened for write, never updated, never deleted (no
+ * replace-original path exists here). The insert carries IS_PENDING on API 29+ while
+ * the bytes land; a FAILED write must CANCEL the pending row. Display name derives
+ * from the source name + "-edit"; video lands under Movies, stills under Pictures.
  */
 object VideoOutputPlan {
 
@@ -30,10 +20,9 @@ object VideoOutputPlan {
     const val IS_PENDING_FALSE: Int = 0
 
     /**
-     * Derives the saved-copy display name from the source display name and
-     * the output kind: extension replaced, an "-edit" suffix added, path
-     * separators and control characters stripped. `null` source falls back
-     * to a stable generic name.
+     * Derives the display name from the source name + the output kind: extension
+     * replaced, "-edit" suffix, path separators and control chars stripped. A null
+     * source falls back to a stable generic name.
      */
     fun displayNameFor(sourceDisplayName: String?, kind: VideoOutputKind): String {
         val base = (sourceDisplayName ?: "video")
@@ -46,9 +35,8 @@ object VideoOutputPlan {
     }
 
     /**
-     * The initial INSERT values. `api29Plus` toggles the modern columns
-     * (RELATIVE_PATH + IS_PENDING); pre-Q devices insert with the display
-     * name only (the legacy write grant is requested at export time).
+     * The initial INSERT values. `api29Plus` toggles the modern columns (RELATIVE_PATH +
+     * IS_PENDING); pre-Q inserts with the display name only (legacy write grant at export).
      */
     fun insertValues(
         displayName: String,
@@ -81,11 +69,9 @@ object VideoOutputPlan {
         }
 
     /**
-     * Failure-recovery decision (pure): a failed export must cancel the
-     * pending row when one exists (API 29+), and must NOT attempt any
-     * cleanup on pre-Q (an insert there is visible immediately; deleting
-     * another app-visible row would need permissions the editor refuses to
-     * hold --- the row is the user's to remove).
+     * Failure-recovery decision (pure): a failed export cancels the pending row when one
+     * exists (API 29+); pre-Q does NO cleanup (an insert there is visible immediately;
+     * deleting another app-visible row needs permissions the editor refuses to hold).
      */
     fun failureRecovery(api29Plus: Boolean): Recovery =
         if (api29Plus) Recovery.CANCEL_PENDING_ROW else Recovery.LEAVE_ROW
@@ -94,25 +80,14 @@ object VideoOutputPlan {
 }
 
 /**
- * The export PREFLIGHT verdict for the resolution-and-HDR tier (r74, the
- * plan doc's P2 rung: "4K/HDR export policies --- surfaced honestly in
- * export preflight"): PURE facts in, an honest verdict out. The model
- * knows nothing about codec queries --- the caller supplies the device
- * facts (max output width/height the encoders report, whether an HDR
- * (10-bit) decode path exists, the API level) and the requested tier,
- * and the verdict says EXACTLY what the export will do, never more.
+ * The export PREFLIGHT verdict for the resolution-and-HDR tier: PURE device facts in,
+ * an honest verdict out (the caller supplies encoder limits, HDR decode path, API level;
+ * the model knows nothing about codec queries).
  *
- * THE POLICY (each rule pinned by [VideoOutputPolicyTest]):
- *  - SDR is always offered (the r42 default --- the tier the v1 editor
- *    shipped); 4K SDR rides only when the encoder profile reports
- *    3840x2160 or better;
- *  - HDR10 requires BOTH the API-33+ gate (the plan doc names it: "HDR
- *    requires API 33+ hardware") AND an HDR decode path; without either
- *    the verdict REFUSES the tier with the honest reason --- it never
- *    silently exports SDR and calls it HDR (the honest-software
- *    principle, applied to a codec fact);
- *  - a refusal is always a plain sentence the export sheet can show
- *    verbatim (the human-readable-diagnosis budget rule).
+ * The policy: SDR is always offered; 4K SDR rides only when the encoders report
+ * 3840x2160+; HDR10 requires BOTH the API-33+ gate AND an HDR decode path, otherwise
+ * the tier is REFUSED with the honest reason (never silently exported as SDR). A
+ * refusal is a plain sentence the export sheet can show verbatim.
  */
 object VideoExportPreflight {
 
@@ -183,7 +158,7 @@ object VideoExportPreflight {
 /** Which MediaStore collection an output kind belongs to. */
 enum class VideoOutputStore { VIDEO, IMAGE }
 
-/** Every r42 output kind with its MediaStore facts. */
+/** Every output kind with its MediaStore facts. */
 enum class VideoOutputKind(
     val store: VideoOutputStore,
     val mimeType: String,

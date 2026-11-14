@@ -6,12 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The nine-row ADR-0012 projection (r42, decision 6): the ranges, the
- * identity, the Phase 6 uniform semantics and the table conformance ---
- * exactly the nine YES rows mapped, the OFF-video rows pinned with their
- * citations, and the shader's declared uniform set pinned to the mapping.
- */
+/** ADR-0012 projection pins: the nine adjustable rows, ranges, uniform mapping and shader conformance. */
 class VideoAdjustProjectionTest {
 
     // ---- the table conformance (ADR-0012 section 2/3) ----
@@ -114,7 +109,7 @@ class VideoAdjustProjectionTest {
         }
     }
 
-    // ---- the uniform mapping (the Phase 6 semantics verbatim) ----
+    // ---- the uniform mapping semantics ----
 
     private fun uniformValue(params: VideoAdjustParams, name: String): Float =
         VideoAdjustProjection.uniforms(params).first { it.name == name }.value
@@ -147,14 +142,14 @@ class VideoAdjustProjectionTest {
 
     @Test
     fun `brightness maps to the 2x55-per-100 offset`() {
-        // +100 -> 255/255 = 1.0 (the full r29 rule, normalized)
+        // +100 -> 255/255 = 1.0 (the full rule, normalized)
         assertEquals(1.0f, uniformValue(VideoAdjustParams(brightness = 100), "uBrightnessOffset"), 1e-6f)
         assertEquals(-1.0f, uniformValue(VideoAdjustParams(brightness = -100), "uBrightnessOffset"), 1e-6f)
     }
 
     @Test
     fun `contrast maps to the mid-grey-pivot factor`() {
-        // the r29 formula: c=100 -> 2.55*100=255 percent
+        // formula at c=100: 2.55*100=255 percent
         val expected100 = (259.0 * (255.0 + 255.0)) / (255.0 * (259.0 - 255.0))
         assertEquals(
             expected100.toFloat(),

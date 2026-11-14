@@ -5,13 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The r41 AI pixel kernels (the contract's hand-grid set, the r37
- * discipline verbatim): the erase paste, the sky cover-crop blend, the
- * depth-driven variable blur (with the prefix-sum/pass equivalence
- * pinned against a naive reference), the retouch smoothing/brighten/slim
- * --- plus the pipeline tail assertions.
- */
+/** Pins the AI pixel kernels (erase paste, sky blend, variable blur, retouch) plus the pipeline tail. */
 class AiRenderTest {
 
     private fun argb(r: Int, g: Int, b: Int): Int = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
@@ -20,8 +14,7 @@ class AiRenderTest {
 
     @Test
     fun `the erase paste maps the patch over the masked block exactly`() {
-        // 6x6; the mask is the 3x3 block (2..4)x(2..4); the patch is 3x3
-        // with placement fractions covering the same block's centres.
+        // 6x6; the mask and the patch's placement fractions cover the 3x3 block (2..4)x(2..4).
         val w = 6
         val h = 6
         val maskBool = BooleanArray(w * h) { i ->
@@ -46,7 +39,6 @@ class AiRenderTest {
         assertEquals(argb(80, 8, 7), pixels[4 * w + 4]) // u=v=1 -> patch(2,2), index 8
         // (2,4): the mask's bottom-left -> the patch's bottom-left (0,2), index 6.
         assertEquals(argb(60, 6, 7), pixels[4 * w + 2])
-        // The centre maps to the patch's centre.
         assertEquals(argb(40, 4, 7), pixels[3 * w + 3]) // u=v=0.5 -> patch(1,1), index 4
         // Unmasked pixels untouched; the alpha forced opaque.
         assertEquals(argb(0, 0, 0), pixels[0])
@@ -57,9 +49,7 @@ class AiRenderTest {
 
     @Test
     fun `the sky blend cover-crops the source and blends at the opacity`() {
-        // 8x8 grid; the mask is the top half (rows 0..3, all columns).
-        // The sky source is 8x2 (relatively wider than the 8x4 box): the
-        // cover-crop keeps its columns 2..5.
+        // 8x8; the mask is the top half (rows 0..3). The 8x2 sky source cover-crops to columns 2..5.
         val w = 8
         val h = 8
         val maskBool = BooleanArray(w * h) { i -> (i / w) < 4 }
@@ -71,13 +61,11 @@ class AiRenderTest {
         }
         val pixels = IntArray(w * h) { argb(0, 0, 0) }
         AiKernels.applySkyBlend(pixels, w, h, mask, SkySource.Pixels(source, 8, 2), 50)
-        // (0,0): sx = 2 + (0*4)/8 = 2, sy = 0 + (0*2)/4 = 0 -> sky(20,0)
-        // out = (0*50 + 20*50)/100 = 10.
+        // (0,0): sx = 2 + (0*4)/8 = 2, sy = 0 + (0*2)/4 = 0 -> sky(20,0); out = (0*50 + 20*50)/100 = 10.
         assertEquals(argb(10, 0, 0), pixels[0])
         // (4,0): sx = 2 + (4*4)/8 = 4, sy = 0 -> sky(40,0) -> out 20.
         assertEquals(argb(20, 0, 0), pixels[4])
-        // (7,3): sx = 2 + (7*4)/8 = 5, sy = 0 + (3*2)/4 = 1 -> sky(50,10)
-        // out r = 50/2 = 25, g = 10/2 = 5.
+        // (7,3): sx = 2 + (7*4)/8 = 5, sy = 0 + (3*2)/4 = 1 -> sky(50,10); out r = 50/2 = 25, g = 10/2 = 5.
         assertEquals(argb(25, 5, 0), pixels[3 * w + 7])
         // The unmasked bottom half is untouched.
         assertEquals(argb(0, 0, 0), pixels[4 * w + 0])
@@ -86,9 +74,7 @@ class AiRenderTest {
 
     @Test
     fun `a parametric sky blends its own render at full opacity`() {
-        // The parametric path renders at the box size (the cover-crop is
-        // the identity), so at opacity 100 the masked pixels equal the
-        // authored render exactly.
+        // Parametric renders at the box size (cover-crop is identity), so opacity 100 equals the authored render.
         val w = 8
         val h = 8
         val maskBool = BooleanArray(w * h) { i -> (i / w) < 4 }
@@ -109,19 +95,16 @@ class AiRenderTest {
 
     @Test
     fun `the variable blur is exact on the hand grid with the focal band sharp`() {
-        // 8x8; depth grid 8x8 (identity mapping): row 0 carries d=255
-        // (dist 255 from focal 0 -> r=1), every other row d=0 (r=0,
-        // untouched). maxRadius = 100*8/1000 -> 0 -> coerce 1.
+        // 8x8; identity depth grid: row 0 d=255 (r=1), other rows d=0 = focal (r=0, untouched).
+        // maxRadius = 100*8/1000 -> 0 -> coerced to 1.
         val w = 8
         val h = 8
         val depthValues = ByteArray(w * h) { i -> if (i / w == 0) 255.toByte() else 0.toByte() }
         val depth = DepthGrid(depthValues, w, h)
         val pixels = IntArray(w * h) { i -> argb((i % w) * 8, 0, 0) }
         AiKernels.applyVariableBlur(pixels, w, h, depth, 100, 0.0)
-        // Row 0, pass 1 (horizontal, r=1, window [x-1,x+1] clamped):
-        // x=0: (0+8)/2=4; x=1: (0+8+16)/3=8; ... x=7: (48+56)/2=52.
-        // Pass 2 (vertical, window rows [0,1]): row 1 is untouched (8x).
-        // Final: x -> floor((P[x] + 8x)/2): [2, 8, 16, 24, 32, 40, 48, 54].
+        // H pass (r=1, clamped window) then V pass (window rows [0,1]): final x -> floor((P[x] + 8x)/2).
+        // Expected: [2, 8, 16, 24, 32, 40, 48, 54].
         assertEquals(argb(2, 0, 0), pixels[0])
         assertEquals(argb(8, 0, 0), pixels[1])
         assertEquals(argb(16, 0, 0), pixels[2])
@@ -140,9 +123,8 @@ class AiRenderTest {
 
     @Test
     fun `the prefix-sum passes equal the naive per-pixel loops`() {
-        // A 24x20 deterministic grid (LCG), a rich depth pattern, radius
-        // maxRadius = 100*20/1000 = 2; the separable prefix-sum kernel must
-        // equal a naive per-pixel horizontal-then-vertical reference exactly.
+        // 24x20 LCG grid, rich depth pattern, maxRadius = 100*20/1000 = 2: the prefix-sum kernel
+        // must equal a naive per-pixel horizontal-then-vertical reference exactly.
         val w = 24
         val h = 20
         var seed = 987654321L
@@ -155,8 +137,7 @@ class AiRenderTest {
         val depth = DepthGrid(depthValues, w, h)
         val byKernel = src.copyOf()
         AiKernels.applyVariableBlur(byKernel, w, h, depth, 100, 0.5)
-        // The naive reference: H pass then V pass, per-pixel windows over
-        // snapshots, integer floor averages.
+        // The naive reference: H pass then V pass, per-pixel windows over snapshots, integer floor averages.
         val byLoop = src.copyOf()
         val maxRadius = 2
         val focal8 = 128
@@ -214,9 +195,8 @@ class AiRenderTest {
 
     @Test
     fun `the eye-band brighten hits the band rows only`() {
-        // 10x10; one box (0.2,0.2)-(0.8,0.8) -> px x0=2..x1=8, y0=2..y1=8
-        // (bw=bh=7); the band rows are 2+(7*20)/100=3 .. 2+(7*45)/100=5
-        // (exclusive) -> rows 3..4, columns 2..8.
+        // 10x10; one box (0.2,0.2)-(0.8,0.8) -> px 2..8 (bw=bh=7); the eye band rows are
+        // 2+(7*20)/100 .. 2+(7*45)/100 (exclusive) -> rows 3..4, columns 2..8.
         val w = 10
         val h = 10
         val boxes = FaceBoxes(listOf(FaceBoxes.Box(0.2, 0.2, 0.8, 0.8)))
@@ -261,9 +241,8 @@ class AiRenderTest {
 
     @Test
     fun `the retouch smoothing smears a spike into its neighbourhood`() {
-        // The same box; smoothing 40 -> radius = 40*7/1000 -> 0 -> coerce 1.
-        // A single 49-valued spike at (5,5) over a zero region: the two
-        // passes smear it to a 3x3 block of 5 (16/3 and 49/3 floors).
+        // The same box; smoothing 40 -> radius = 40*7/1000 -> 0 -> coerced 1. A single 49-valued
+        // spike at (5,5): the two passes smear it to a 3x3 block of 5 (16/3 and 49/3 floors).
         val w = 10
         val h = 10
         val boxes = FaceBoxes(listOf(FaceBoxes.Box(0.2, 0.2, 0.8, 0.8)))
@@ -279,7 +258,6 @@ class AiRenderTest {
         assertEquals(argb(5, 0, 0), pixels[4 * w + 6])
         // Distant pixels inside the box stay zero (the blur is bounded).
         assertEquals(argb(0, 0, 0), pixels[2 * w + 2])
-        // Outside the box the spike never existed; nothing to assert there.
     }
 
     // ---- The pipeline tail ----
@@ -344,10 +322,8 @@ class AiRenderTest {
         assertEquals(argb(200, 200, 200), out.pixels[3 * w + 3])
         assertEquals(argb(200, 200, 200), out.pixels[2 * w + 2])
         assertEquals(argb(0, 0, 0), out.pixels[0])
-        // The absent-bundle degrade: with no resolved inputs the erase
-        // layer renders NOTHING (the tolerance contract). A fresh black
-        // grid --- the apply above mutated `pixels` in place (the house
-        // pipeline contract: the stages write the grid they receive).
+        // The absent-bundle degrade: no resolved inputs -> the erase layer renders NOTHING
+        // (tolerance contract). Fresh black grid: the apply above mutated `pixels` in place.
         val degraded = EditPipeline.apply(
             IntArray(w * h) { argb(0, 0, 0) },
             w,

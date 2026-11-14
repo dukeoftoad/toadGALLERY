@@ -5,13 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The clipping zebra's JVM pins (r68, the photo pro round): the zone
- * classification (the per-channel honesty --- any channel at the pin is a
- * clip) and the stripe tiling (deterministic diagonals, opposite slopes,
- * exact duty). Pure JVM, no compose/android (ADR-0011) --- one of the
- * Lilypad-prefixed set the editor CI filter runs.
- */
+/** Zebra-clipping pins: per-channel zone classification and deterministic opposite-slope stripe tiling. */
 class LilypadZebraMathTest {
 
     // ---- classify ----
@@ -26,8 +20,7 @@ class LilypadZebraMathTest {
 
     @Test
     fun `a single clipped channel is a highlight even when the pixel is not white`() {
-        // A saturated red petal: R at the pin, G and B deep --- the red
-        // channel's detail is gone, and the zebra says so.
+        // A saturated red petal: R at the pin, G and B deep --- the channel's detail is gone.
         assertEquals(
             LilypadZebraMath.Zone.HIGHLIGHT,
             LilypadZebraMath.classify(250, 30, 20),
@@ -62,8 +55,7 @@ class LilypadZebraMathTest {
 
     @Test
     fun `highlight wins over shadow at a pixel both pins could claim`() {
-        // R is pinned HIGH and B is pinned LOW: the top-of-range clip is
-        // the one the warning must not hide.
+        // R pinned HIGH and B pinned LOW: the top-of-range clip is the one the warning must not hide.
         assertEquals(
             LilypadZebraMath.Zone.HIGHLIGHT,
             LilypadZebraMath.classify(255, 100, 0),
@@ -93,10 +85,8 @@ class LilypadZebraMathTest {
 
     @Test
     fun `the shadow stripe is the opposite diagonal`() {
-        // The highlight tiling is constant along the (1, -1) direction
-        // (x + y unchanged) and the shadow tiling along the (1, 1)
-        // direction (x - y unchanged) --- opposite slopes, so the two
-        // zones read differently where they meet.
+        // Highlight tiling is constant along (1,-1) (x + y fixed); shadow along (1,1) (x - y fixed) ---
+        // opposite slopes, so the two zones read differently where they meet.
         for (y in 0 until 12) {
             for (x in 0 until 12) {
                 assertEquals(
@@ -109,8 +99,7 @@ class LilypadZebraMathTest {
                 )
             }
         }
-        // The phase pin: the main diagonal itself sits at shadow-phase
-        // zero (always on) --- deterministic, never a moire.
+        // Phase pin: the main diagonal sits at shadow-phase zero (always on) --- never a moire.
         for (i in 0 until 24) {
             assertTrue(LilypadZebraMath.shadowStripeOn(i, i))
         }
@@ -134,8 +123,7 @@ class LilypadZebraMathTest {
 
     @Test
     fun `the tiling never goes negative on the subtraction diagonal`() {
-        // x - y dips negative in the upper triangle; the mod must stay
-        // non-negative there (the Kotlin % keeps the dividend's sign).
+        // x - y dips negative in the upper triangle; the mod must stay non-negative (Kotlin % keeps the sign).
         for (y in 0 until 12) {
             for (x in 0 until y) {
                 LilypadZebraMath.shadowStripeOn(x, y) // must not throw

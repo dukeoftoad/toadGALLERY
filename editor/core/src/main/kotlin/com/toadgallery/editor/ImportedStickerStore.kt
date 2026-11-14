@@ -3,38 +3,25 @@ package com.toadgallery.editor
 import java.io.File
 
 /**
- * The user-imported sticker store (r35, Phase 7): the SAF-picked PNG/WebP
- * files copied VERBATIM into the editor's app-private `imported-stickers/`
- * directory, completing the roadmap's Phase 7 sticker bullet ("the user
- * can import their own PNG/WebP stickers").
+ * The user-imported sticker store: SAF-picked PNG/WebP files copied VERBATIM into the
+ * app-private `imported-stickers/` directory.
  *
- * Design contract (the `ImportedLutStore` pattern, image-shaped; see
- * `docs/phase-7/stickers.md`):
- *  - The user's BYTES are stored verbatim (never re-encoded --- the same
- *    "the file is the author's data" philosophy). Writes are atomic
- *    (tmp + rename, the sidecar store's pattern); a REJECTED import
- *    leaves the store byte-identical (validation happens BEFORE any
- *    write). The store never decodes images: the magic-byte + size check
- *    IS the parse-before-write step, and a payload that later fails to
- *    decode on the platform side is skipped at render time, never thrown.
- *  - The id is DERIVED, never trusted: slug of the picked file-name stem,
- *    sanitized to `[a-z0-9-]`, capped at 40 chars. An id that would
- *    collide with a BUNDLED sticker ([BundledStickers.ORDERED]) or an
- *    EXISTING import is SUFFIXED (`-2`, `-3`, ...) --- an import can
- *    never shadow the bundled set, so the merged registry's keys are
- *    disjoint by construction.
- *  - The file keeps its magic's extension (`$id.png` / `$id.webp`); the
- *    directory listing IS the index (list/load re-derive), so it can
- *    never drift from the files.
- *  - Deleting a sticker a sidecar still references is SAFE by the
- *    tolerance contract: the recipe keeps the id verbatim and the
- *    compositor renders nothing.
+ * Contract:
+ *  - The user's BYTES are stored verbatim (never re-encoded); writes are atomic
+ *    (tmp + rename) and a REJECTED import leaves the store byte-identical (validation
+ *    happens BEFORE any write). The store never decodes images: the magic-byte + size
+ *    check IS the parse-before-write step; a payload that fails to decode later is
+ *    skipped at render time, never thrown.
+ *  - The id is DERIVED, never trusted: slug of the file-name stem, `[a-z0-9-]`, 40 chars;
+ *    a collision with a bundled or existing id is SUFFIXED (-2, -3, ...), so an import
+ *    never shadows the bundled set (the merged registry's keys are disjoint by construction).
+ *  - The file keeps its magic's extension (`$id.png` / `$id.webp`); the directory listing
+ *    IS the index, so it can never drift from the files.
+ *  - Deleting a sticker a sidecar still references is SAFE: the recipe keeps the id
+ *    verbatim and the compositor renders nothing.
  *
- * Pure Kotlin (JVM-testable): the caller supplies the bytes (the UI
- * reads the SAF stream through the content resolver) and the store owns
- * everything else. The id/slug helpers duplicate the `ImportedLutStore`
- * convention rather than coupling the stores --- the stores stay
- * independent; the convention is documented in both.
+ * Pure Kotlin (JVM-testable): the caller supplies the bytes. The id/slug helpers duplicate
+ * the `ImportedLutStore` convention rather than coupling the stores.
  */
 class ImportedStickerStore(private val dir: File) {
 
@@ -60,9 +47,8 @@ class ImportedStickerStore(private val dir: File) {
             .map { id -> ImportedSticker(id = id, fileName = fileNameFor(id)) }
 
     /**
-     * Imports one image: validate FIRST (a rejection writes nothing),
-     * derive a collision-free id, then store the bytes atomically.
-     * [suggestedName] (the picked file's display name) is the id source.
+     * Imports one image: validate FIRST (a rejection writes nothing), derive a collision-free
+     * id, store atomically. [suggestedName] (the picked file's display name) is the id source.
      */
     fun import(bytes: ByteArray, suggestedName: String?): ImportResult {
         val kind = detectKind(bytes)
@@ -75,8 +61,7 @@ class ImportedStickerStore(private val dir: File) {
         val fileName = "$id.$kind"
         val target = File(dir, fileName)
         if (target.exists()) {
-            // collisionFreeId guarantees a fresh name; unreachable
-            // defensive honesty, not an expected path.
+            // Unreachable (collisionFreeId guarantees a fresh name); defensive, not an expected path.
             return ImportResult.Rejected("could not derive a free id for the sticker")
         }
         val tmp = File(dir, "$fileName.tmp")

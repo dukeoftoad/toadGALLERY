@@ -10,11 +10,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * The user-imported frame store (r38; the `ImportedStickerStoreTest`
- * shape, frame-sized): PNG/WebP magic-before-write, verbatim bytes,
- * derived collision-suffixed ids that can never shadow the bundled set,
- * the listing-as-index, idempotent delete --- and a rejection leaving
- * the store byte-identical.
+ * The user-imported frame store: PNG/WebP magic-before-write, verbatim bytes,
+ * collision-suffixed ids that never shadow the bundled set, listing-as-index, idempotent delete.
  */
 class ImportedFrameStoreTest {
 

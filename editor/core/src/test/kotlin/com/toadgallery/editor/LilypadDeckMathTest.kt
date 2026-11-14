@@ -5,16 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The Deck arithmetic's JVM pins (ADR-0011: the heights, the snap ladder
- * and the tap toggle are pure arithmetic, so they are tested here and
- * only the sheet's drawing and spring ride the compose surface).
- *
- * The pins are the properties the chassis leans on: the collapsed peek is
- * a fixed dp height, the working fractions are exactly 45% and 78%, every
- * height respects the available space (and a degenerate chassis yields
- * exactly zero), a drag snaps at most one step along the ladder with the
- * threshold read from both sides, and the tap toggle cycles the working
- * pair.
+ * The Deck arithmetic's pins: fixed collapsed peek, 45%/78% working fractions, height
+ * bounds, one-step snap ladder with a symmetric threshold, and the tap toggle cycle.
  */
 class LilypadDeckMathTest {
 
@@ -47,9 +39,7 @@ class LilypadDeckMathTest {
 
     @Test
     fun `no height ever exceeds the available space`() {
-        // A tiny chassis clamps the fixed peek and shrinks the fractions;
-        // the ordering invariant is only promised on a real chassis (the
-        // one this Deck ships in --- see targetHeightPx's contract).
+        // A tiny chassis clamps the peek and shrinks the fractions; ordering holds only on a real chassis.
         assertEquals(50f, LilypadDeckMath.targetHeightPx(LilypadDeckState.Collapsed, 50f, 2f))
         assertEquals(22.5f, LilypadDeckMath.targetHeightPx(LilypadDeckState.Half, 50f, 2f))
         assertEquals(39f, LilypadDeckMath.targetHeightPx(LilypadDeckState.Full, 50f, 2f))

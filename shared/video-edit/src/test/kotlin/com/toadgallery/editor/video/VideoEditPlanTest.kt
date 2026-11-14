@@ -6,10 +6,9 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * The VideoEditPlan rules (r42, decisions 1-4): the trim validation matrix,
- * the speed-plan rules, the monotonicity rule, the derived-duration math,
- * the audio-fact handling and the r52 volume-gain bounds. Every rule is a
- * structured failure with an honest message --- never a silent clamp.
+ * Pins the VideoEditPlan rules: trim validation matrix, speed-plan rules,
+ * monotonicity, derived-duration math, audio facts and volume-gain bounds --
+ * always structured failures, never silent clamps.
  */
 class VideoEditPlanTest {
 
@@ -24,8 +23,7 @@ class VideoEditPlanTest {
         adjustments: VideoAdjustParams = VideoAdjustParams(),
     ) = VideoEditPlan(
         durationMs = durationMs,
-        // TimeRange guards only the positive length; the clip-relative
-        // bounds are the validator's structured failures (see the matrix).
+        // TimeRange guards only positive length; clip-relative bounds are validator failures.
         trim = TimeRange(startMs, endMs),
         speedSegments = segments,
         audioTrackPresent = audioTrackPresent,
@@ -181,9 +179,7 @@ class VideoEditPlanTest {
 
     @Test
     fun `a zero-length segment past the trim is also a plan failure`() {
-        // The constructor guard covers start == end inside the range; a
-        // segment that escapes the trim is caught by the validator even
-        // before its own bounds check, proving the trim rule runs first.
+        // The trim rule fires before the segment's own bounds check.
         val result = VideoEditPlanValidator.validate(
             plan(startMs = 2_000, endMs = 8_000, segments = listOf(SpeedSegment(0, 1_000, 0.5))),
         )
@@ -218,8 +214,7 @@ class VideoEditPlanTest {
                 SpeedSegment(4_000, 6_000, 2.0),
             ),
         )
-        // The two adjacent segments chain directly (no 1x run BETWEEN them);
-        // the trim's trailing 6..10s rides at 1x as its own run (the rule).
+        // Adjacent segments chain directly; the trailing 6..10s rides at 1x.
         assertEquals(
             listOf(
                 SpeedSegment(0, 4_000, 0.25),
@@ -357,7 +352,7 @@ class VideoEditPlanTest {
         assertTrue(reason.contains("101"))
     }
 
-    // ---- the r52 volume gain ----
+    // ---- the volume gain bounds ----
 
     @Test
     fun `a plan without a volume argument validates and carries the 1f unchanged default`() {

@@ -3,14 +3,7 @@ package com.toadgallery.editor
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The straighten dial's JVM pins (r68, the photo pro round): the clock
- * angle convention (0 at twelve, positive clockwise, the seam stable),
- * the shortest-way-round delta, the rotary scrub with and without the
- * fine gain, the zero detent and the range bounds. Pure JVM, no
- * compose/android (ADR-0011) --- one of the Lilypad-prefixed set the
- * editor CI filter runs.
- */
+/** The straighten dial math pins: angle convention, shortest delta, rotary scrub, detent, bounds. */
 class LilypadDialMathTest {
 
     // ---- vectorAngleDeg: the quadrants ----
@@ -32,8 +25,7 @@ class LilypadDialMathTest {
 
     @Test
     fun `the four diagonals read their forty-five degree sectors`() {
-        // Screen coordinates: y grows down, so (1, -1) is the upper
-        // right (clockwise from twelve) and (1, 1) the lower right.
+        // Screen coords: y grows down; (1, -1) is upper-right, (1, 1) lower-right.
         assertEquals(45f, LilypadDialMath.vectorAngleDeg(1f, -1f), 1e-4f)
         assertEquals(135f, LilypadDialMath.vectorAngleDeg(1f, 1f), 1e-4f)
         assertEquals(-135f, LilypadDialMath.vectorAngleDeg(-1f, 1f), 1e-4f)
@@ -42,12 +34,9 @@ class LilypadDialMathTest {
 
     @Test
     fun `a finger straight down reads plus one eighty, never the negative twin`() {
-        // The seam: straight down is the one direction atan2 can answer
-        // either way; the pinned answer is +180 so its sign is stable
-        // whichever float route produced it.
+        // Straight down is the one atan2-ambiguous direction; +180 is pinned stable.
         assertEquals(180f, LilypadDialMath.vectorAngleDeg(0f, 1f), 0f)
-        // And the negative-zero twin of the same finger (dx = -0.0)
-        // reads the SAME +180 --- the seam normalization's whole job.
+        // The dx = -0.0 twin reads the same +180 (seam normalization's job).
         assertEquals(180f, LilypadDialMath.vectorAngleDeg(-0.0f, 1f), 0f)
     }
 
@@ -56,8 +45,7 @@ class LilypadDialMathTest {
     @Test
     fun `a clockwise hop reads positive however the angles wrapped`() {
         assertEquals(20f, LilypadDialMath.shortestDeltaDeg(0f, 20f), 0f)
-        // Crossing twelve o'clock: 350 -> 10 is a 20 degree hop, never
-        // the 340 degree tour the other way.
+        // Crossing twelve: 350 -> 10 is a 20 degree hop, not the 340 tour.
         assertEquals(20f, LilypadDialMath.shortestDeltaDeg(350f, 10f), 0f)
         assertEquals(20f, LilypadDialMath.shortestDeltaDeg(170f, -170f), 0f)
     }
@@ -71,17 +59,14 @@ class LilypadDialMathTest {
 
     @Test
     fun `an exactly half turn reads minus one eighty from either side`() {
-        // Either direction is honest at exactly half a turn; the sign is
-        // just pinned stable.
+        // Half a turn is honest either way; the sign is pinned stable.
         assertEquals(-180f, LilypadDialMath.shortestDeltaDeg(0f, 180f), 0f)
         assertEquals(-180f, LilypadDialMath.shortestDeltaDeg(0f, -180f), 0f)
     }
 
     @Test
     fun `the delta stays shortest for inputs beyond one full turn`() {
-        // The pure function answers ANY pair of angles, not only the
-        // composable's (-180, 180] outputs; the floor-mod keeps the
-        // answer in range where a sign-preserving mod would not.
+        // Answers any angle pair (not just (-180, 180]); floor-mod keeps it in range.
         assertEquals(20f, LilypadDialMath.shortestDeltaDeg(0f, 380f), 1e-4f)
         assertEquals(-20f, LilypadDialMath.shortestDeltaDeg(0f, -380f), 1e-4f)
         assertEquals(0f, LilypadDialMath.shortestDeltaDeg(720f, 0f), 0f)
@@ -93,8 +78,7 @@ class LilypadDialMathTest {
 
     @Test
     fun `a quarter turn of the finger moves the value a quarter of the span`() {
-        // One full finger turn covers the whole +/-45 span (the 4:1
-        // reduction): 90 degrees of finger = 22.5 degrees of value.
+        // One full finger turn covers the +/-45 span (4:1): 90 deg finger = 22.5 value.
         assertEquals(
             22.5f,
             LilypadDialMath.scrub(
@@ -149,10 +133,7 @@ class LilypadDialMathTest {
 
     @Test
     fun `a scrub never escapes its range`() {
-        // A quarter-turn clockwise past the ceiling: +90 deg of finger is
-        // +22.5 of span from a 40 anchor --- 62.5, clamped home to 45.
-        // (The overshoot is the point; the exact half-turn seam is pinned
-        // separately below, where its documented stable sign lives.)
+        // 90 deg of finger from a 40 anchor = 62.5, clamped to 45 (overshoot is the point).
         assertEquals(
             LilypadDialMath.RANGE_MAX_DEG,
             LilypadDialMath.scrub(
@@ -177,10 +158,7 @@ class LilypadDialMathTest {
 
     @Test
     fun `the exactly-half-turn seam reads stably negative`() {
-        // 0 -> 180 is the one genuinely ambiguous finger move (either
-        // half of the circle is an honest reading); the contract pins it
-        // to -180 so the sign is STABLE, never a coin flip between
-        // builds --- 40 anchored, -180/360 of the span: 40 - 45 = -5.
+        // 0 -> 180 is ambiguous; pinned to -180 for a stable sign: 40 - 45 = -5.
         assertEquals(
             -5f,
             LilypadDialMath.scrub(

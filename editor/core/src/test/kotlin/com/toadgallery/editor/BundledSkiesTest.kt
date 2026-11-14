@@ -6,12 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The bundled-sky conformance suite (r41; the `BundledFramesTest` /
- * `BundledStickersTest` pattern for parametric code): the registry's
- * self-consistency, the determinism of the authored renders, and the
- * vertical banding's exact integer interpolation.
- */
+/** Bundled-sky conformance: registry self-consistency, deterministic renders, exact integer banding. */
 class BundledSkiesTest {
 
     @Test
@@ -50,9 +45,8 @@ class BundledSkiesTest {
 
     @Test
     fun `the vertical banding is the exact integer interpolation`() {
-        // day-clear: top 0xFF2E7DD1, bottom 0xFF9CCBF0. At h=4 the rows
-        // carry t = 0, 64, 128, 256*3/4=192:
-        // row0: top; row1: top + (bottom-top)*64/256 = exact midpoint /4.
+        // day-clear: top 0xFF2E7DD1, bottom 0xFF9CCBF0. At h=4 rows carry t = 0, 64, 128, 192.
+        // Row 0 is top; row 1: top + (bottom-top)*64/256 = exact midpoint / 4.
         val w = 8
         val h = 4
         val render = BundledSkies.render("day-clear", w, h)!!

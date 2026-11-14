@@ -393,11 +393,27 @@ class MediaFileOps(private val resolver: ContentResolver) {
     // Consent (recovery) request builders --- API 30+ (R), IntentSender out
     // ------------------------------------------------------------------
 
+    // The crash contract (r76.1): a consent builder is a PROVIDER call, and
+    // the provider is allowed to reject the request outright --- an
+    // unrecognized row, a row on a volume that refuses trash, a stale id
+    // between query and build. Those surface as exceptions thrown out of
+    // `createTrashRequest`/`createDeleteRequest`/`createWriteRequest`. The
+    // builders below therefore NEVER rethrow: they run off the main thread
+    // and fold every provider rejection into a `null` the caller narrates
+    // as an honest failure. The first cut called these bare on the main
+    // thread --- a single rejection killed the whole process before the
+    // system consent dialog could even appear (the "crash on delete"
+    // field report).
+
     /**
      * Builds one system "modify these items?" request covering [uris]
      * (`MediaStore.createWriteRequest`); the UI launches the returned
      * [android.content.IntentSender] via
      * `StartIntentSenderForResult` and retries the op on `RESULT_OK`.
+     *
+     * Suspend + IO: the request is a binder round trip, never main-thread
+     * work. Returns `null` when the provider refuses the request (the
+     * caller narrates the failure --- it never crashes).
      *
      * R+ per lint: the `createWriteRequest` overload resolved in the
      * SDK-36 jar reports API 30. The class is Q; the ViewModel guards the
@@ -405,8 +421,8 @@ class MediaFileOps(private val resolver: ContentResolver) {
      * on the fileOps invariant).
      */
     @RequiresApi(Build.VERSION_CODES.R)
-    fun createWriteConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
-        MediaStore.createWriteRequest(resolver, uris).intentSender
+    suspend fun createWriteConsentRequest(uris: Collection<Uri>): android.content.IntentSender? =
+        consentSenderOrNull { MediaStore.createWriteRequest(resolver, uris).intentSender }
 
     /**
      * Builds one system "move these items to trash?" request covering
@@ -415,30 +431,54 @@ class MediaFileOps(private val resolver: ContentResolver) {
      * resolve instantly without a dialog --- so the trash flow is ALWAYS
      * launcher-driven (issue #31); there is deliberately no direct
      * "set IS_TRASHED" op here.
+     *
+     * Suspend + IO + never throws: see the crash contract above. `null`
+     * means the provider refused (stale row, volume without trash) and the
+     * caller narrates "N failed".
      */
     @RequiresApi(Build.VERSION_CODES.R)
-    fun createTrashConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
-        MediaStore.createTrashRequest(resolver, uris, /* trash = */ true).intentSender
+    suspend fun createTrashConsentRequest(uris: Collection<Uri>): android.content.IntentSender? =
+        consentSenderOrNull { MediaStore.createTrashRequest(resolver, uris, /* trash = */ true).intentSender }
 
     /**
      * Builds the inverse of [createTrashConsentRequest]: a "restore these
      * items?" request (`createTrashRequest`, trash = false) that flips
      * `IS_TRASHED` back to 0 and returns the rows to the normal collection
-     * (issue #31 Trash screen).
+     * (issue #31 Trash screen). Same never-throw contract as above.
      */
     @RequiresApi(Build.VERSION_CODES.R)
-    fun createRestoreConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
-        MediaStore.createTrashRequest(resolver, uris, /* trash = */ false).intentSender
+    suspend fun createRestoreConsentRequest(uris: Collection<Uri>): android.content.IntentSender? =
+        consentSenderOrNull { MediaStore.createTrashRequest(resolver, uris, /* trash = */ false).intentSender }
 
     /**
      * Builds one system "delete these items?" request covering [uris]
      * (`MediaStore.createDeleteRequest`); see [createWriteConsentRequest]
      * for the launch/retry flow. One request per batch, one dialog per
-     * request --- never one dialog per item.
+     * request --- never one dialog per item. Same never-throw contract.
      */
     @RequiresApi(Build.VERSION_CODES.R)
-    fun createDeleteConsentRequest(uris: Collection<Uri>): android.content.IntentSender =
-        MediaStore.createDeleteRequest(resolver, uris).intentSender
+    suspend fun createDeleteConsentRequest(uris: Collection<Uri>): android.content.IntentSender? =
+        consentSenderOrNull { MediaStore.createDeleteRequest(resolver, uris).intentSender }
+
+    /**
+     * The one funnel every consent builder runs through: off-main,
+     * cancellation passes through untouched, any provider rejection logs
+     * and folds into `null`. The `CancellationException` rethrow keeps a
+     * cancelled scope cancelling --- swallowing it here would break the
+     * structured-concurrency contract the batch loop relies on.
+     */
+    private suspend inline fun consentSenderOrNull(
+        crossinline build: () -> android.content.IntentSender,
+    ): android.content.IntentSender? = withContext(Dispatchers.IO) {
+        try {
+            build()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (e: Exception) {
+            DiagLog.w(TAG, "consent request rejected: " + e.javaClass.simpleName)
+            null
+        }
+    }
 
     // ------------------------------------------------------------------
     // Provider probes

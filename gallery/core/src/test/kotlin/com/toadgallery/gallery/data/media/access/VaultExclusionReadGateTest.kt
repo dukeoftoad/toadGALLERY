@@ -337,10 +337,21 @@ class VaultExclusionReadGateTest {
         assertFalse(savedByKey.getValue("external_primary:1").unreadable)
     }
 
-    /** Unit-test working dir is the module dir (apps/gallery); be tolerant either way. */
+    /** Unit-test working dir is the module dir (gallery/core); be tolerant of the
+     * pre-push harness's repo-root cwd too (the r77.8 AccessibilityWiringTest
+     * convention --- the pre-#163 `apps/gallery/` fallback named no live dir). */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(File(cwd, relative), File(cwd.parentFile, "apps/gallery/$relative"))
+        // r77.9: the pre-#163 `apps/gallery/` fallback named a module dir that
+        // no longer exists; the candidates now follow the r77.8
+        // AccessibilityWiringTest convention --- the Gradle module dir
+        // (gallery/core) first, then the repo-root-relative path for the
+        // pre-push harness.
+        return sequenceOf(
+            File(cwd, relative),
+            File(cwd, "gallery/core/$relative"),
+            File(cwd.parentFile, "gallery/core/$relative"),
+        )
             .firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }

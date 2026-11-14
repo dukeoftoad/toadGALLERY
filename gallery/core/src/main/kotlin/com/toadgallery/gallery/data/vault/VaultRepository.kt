@@ -573,11 +573,14 @@ class VaultRepository(context: Context) {
      * `createDeleteRequest` builder the file-ops slice uses); R+ per lint
      * (the resolved SDK-36 overload reports API 30). On Q, see the class
      * KDoc: consent-blocked deletes narrate as sealed-but-not-removed.
+     *
+     * r76.1 crash contract: the build is a provider call --- it runs on IO
+     * through the file-ops slice and folds every provider rejection into a
+     * `null` (the caller narrates); it never throws out of the main thread.
      */
     @RequiresApi(Build.VERSION_CODES.R)
-    fun createDeleteConsentRequest(uris: Collection<Uri>): IntentSender =
+    suspend fun createDeleteConsentRequest(uris: Collection<Uri>): IntentSender? =
         ops?.createDeleteConsentRequest(uris)
-            ?: throw IllegalStateException("file ops require Android 10")
 
     // ------------------------------------------------------------------
     // Restore (vault screen; Q+)

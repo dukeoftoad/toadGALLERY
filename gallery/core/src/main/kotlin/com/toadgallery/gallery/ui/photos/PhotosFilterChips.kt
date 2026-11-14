@@ -44,6 +44,7 @@ import com.toadgallery.gallery.data.filters.FilterMediaType
 import com.toadgallery.gallery.data.filters.TimelineFilter
 import com.toadgallery.gallery.data.filters.withFavoritesToggled
 import com.toadgallery.gallery.data.filters.withTypeToggled
+import com.toadgallery.gallery.ui.components.ToadChipDefaults
 import com.toadgallery.gallery.ui.theme.ToadSpacing
 
 /**
@@ -106,6 +107,14 @@ import com.toadgallery.gallery.ui.theme.ToadSpacing
  * DYNAMIC label in the row, so it alone carries the name-ellipsis
  * discipline the Albums cards use (`maxLines = 1` + ellipsis); the fixed
  * labels of the other chips cannot outgrow their chips.
+ *
+ * r77.7 chrome: every chip renders through [ToadChipDefaults] --- the
+ * prototype's chip vocabulary (selected = solid `primary` pill with an
+ * `onPrimary` label, unselected = `bgSurface` + `textMuted` + a `1dp
+ * borderSubtle` stroke) instead of the stock M3 secondaryContainer fill
+ * that read as a near-black pill on the toad palettes. The M3 component
+ * itself stays (ripple, semantics, touch floor); only the color/border
+ * slots follow the palette.
  */
 @Composable
 fun PhotosFilterChipsRow(
@@ -147,6 +156,8 @@ fun PhotosFilterChipsRow(
                     )
                 },
                 modifier = Modifier.testTag("photos_filter_chip_folder"),
+                colors = ToadChipDefaults.colors(),
+                border = ToadChipDefaults.border(),
             )
         }
         item {
@@ -155,6 +166,8 @@ fun PhotosFilterChipsRow(
                 onClick = { onChange(TimelineFilter()) },
                 label = { Text(stringResource(R.string.photos_filter_all)) },
                 modifier = Modifier.testTag("photos_filter_chip_all"),
+                colors = ToadChipDefaults.colors(),
+                border = ToadChipDefaults.border(),
             )
         }
         items(FilterMediaType.entries) { type ->
@@ -165,6 +178,8 @@ fun PhotosFilterChipsRow(
                 modifier = Modifier.testTag(
                     "photos_filter_chip_" + type.name.lowercase(),
                 ),
+                colors = ToadChipDefaults.colors(),
+                border = ToadChipDefaults.border(),
             )
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -174,6 +189,8 @@ fun PhotosFilterChipsRow(
                     onClick = { onChange(filter.withFavoritesToggled()) },
                     label = { Text(stringResource(R.string.photos_filter_favorites)) },
                     modifier = Modifier.testTag("photos_filter_chip_favorites"),
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
             }
         }

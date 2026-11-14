@@ -235,6 +235,14 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material.icons.core) // TopAppBar icons (issue #29)
+    // r76 Material 3 Expressive redesign: the full icon set (the prototype's
+    // Lucide language mapped to Material glyphs) + the Haze frosted-glass
+    // blur behind the sticky headers, bottom navigation and overlays. The
+    // prototype's Plus Jakarta Sans / Inter typefaces ship as BUNDLED OFL
+    // TTFs under res/font/ (the Google-Fonts-provider path would need GMS +
+    // network; ADR-0014's local-first posture says bundle, not download).
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.haze)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

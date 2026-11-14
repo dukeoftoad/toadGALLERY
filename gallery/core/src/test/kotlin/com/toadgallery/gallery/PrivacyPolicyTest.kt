@@ -45,10 +45,21 @@ import java.io.IOException
  */
 class PrivacyPolicyTest {
 
-    /** Unit-test working dir is the module dir (apps/gallery); be tolerant either way. */
+    /** Unit-test working dir is the module dir (gallery/core); be tolerant of the
+     * pre-push harness's repo-root cwd too (the r77.8 AccessibilityWiringTest
+     * convention --- the pre-#163 `apps/gallery/` fallback named no live dir). */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(File(cwd, relative), File(cwd.parentFile, "apps/gallery/$relative"))
+        // r77.9: the pre-#163 `apps/gallery/` fallback named a module dir that
+        // no longer exists; the candidates now follow the r77.8
+        // AccessibilityWiringTest convention --- the Gradle module dir
+        // (gallery/core) first, then the repo-root-relative path for the
+        // pre-push harness.
+        return sequenceOf(
+            File(cwd, relative),
+            File(cwd, "gallery/core/$relative"),
+            File(cwd.parentFile, "gallery/core/$relative"),
+        )
             .firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
@@ -227,8 +238,8 @@ class PrivacyPolicyTest {
 
     @Test
     fun `build-time privacy gate is wired into the build`() {
-        // Phase-1 split: the gate moved verbatim to the gallery APP module
-        // (:gallery:app), so the module dir's ../app sibling is the script.
+        // r77.9: the gate is wired in the gallery APP module's script since the
+        // #163 module split --- "apps/gallery/build.gradle.kts" named no live file.
         val buildScript = moduleFile("../app/build.gradle.kts").readText()
         // Regression tripwire: if the gate task or its merged-manifest wiring is
         // removed from the build script, this test fails the (binding) unit-test

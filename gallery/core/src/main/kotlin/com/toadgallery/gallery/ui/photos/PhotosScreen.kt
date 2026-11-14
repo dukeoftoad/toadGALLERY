@@ -13,15 +13,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -58,6 +62,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
@@ -74,6 +79,10 @@ import com.toadgallery.gallery.data.collage.CollageHandoff
 import com.toadgallery.gallery.data.collage.CollageLayouts
 import com.toadgallery.gallery.data.filters.PhotosFilterHandoff
 import com.toadgallery.gallery.data.filters.TimelineFilter
+import com.toadgallery.gallery.ui.components.ToadMotionSpec
+import com.toadgallery.gallery.ui.components.toadTrailingFade
+import com.toadgallery.gallery.ui.screens.photos.ToadDateScrubber
+import com.toadgallery.gallery.ui.screens.photos.ToadPhotosHeader
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.media.MediaPagingGrid
 import com.toadgallery.gallery.ui.media.MediaPermissionState
@@ -419,6 +428,18 @@ fun PhotosScreen(
                                     iconRes = R.drawable.ic_nav_photos,
                                     titleRes = R.string.state_photos_filtered_empty_title,
                                     bodyRes = R.string.state_photos_filtered_empty_body,
+                                    // r77.9: the prototype's empty state closes with a
+                                    // primary pill CTA --- "Reset Filters"
+                                    // (`resetPhotoFilters`, the empty-state markup's
+                                    // own button). The chips row above stays reachable,
+                                    // and the pill runs the SAME reset the trailing
+                                    // Clear chip runs --- the ViewModel's
+                                    // onFilterChange(TimelineFilter()) UI-state reset,
+                                    // nothing else --- rendered in the prototype's pill
+                                    // chrome (ToadPillButton via StateScreen).
+                                    actionRes = R.string.state_photos_filtered_empty_action,
+                                    onAction = { viewModel.onFilterChange(TimelineFilter()) },
+                                    pillAction = true,
                                 )
                             }
                         }
@@ -433,6 +454,7 @@ fun PhotosScreen(
                 else -> PhotosTimeline(
                     lazyItems = lazyItems,
                     appearance = appearance,
+                    onLayoutChange = settingsViewModel::setLayout,
                     sort = sort,
                     onSortChange = viewModel::onSortChange,
                     filter = filter,
@@ -480,6 +502,7 @@ fun PhotosScreen(
 private fun PhotosTimeline(
     lazyItems: LazyPagingItems<MediaItem>,
     appearance: Appearance,
+    onLayoutChange: (LayoutStyle) -> Unit,
     sort: TimelineSort,
     onSortChange: (TimelineSort) -> Unit,
     filter: TimelineFilter,
@@ -590,34 +613,86 @@ private fun PhotosTimeline(
             // hidden) and tap opens the full-screen viewer (issue #50) --- the
             // pre-#50 plain tap was a no-op.
             Column(modifier = Modifier.fillMaxSize()) {
-                PhotosHeaderBar(
-                    sort = sort,
-                    onSortChange = onSortChange,
-                    // r27: the slideshow launch (the round's overflow
-                    // action) --- the run covers the timeline's loaded
-                    // window, exactly the window a viewer tap hands off.
-                    onStartSlideshow = {
+                // r76: the redesign's frosted header block --- the brand
+                // badge + wordmark, the quick Grid/Collage toggle (writes
+                // the shell Appearance preference, the same flow the
+                // Settings sub-page drives) and the Clean Feed pill (the
+                // r76 TimelineFilter.excludeScreenshots dimension), with
+                // the sort menu + slideshow action riding the same glass
+                // row as small trailing affordances.
+                // r76: the redesign's frosted header block --- the brand
+                // badge + wordmark, the quick Grid/Collage toggle (writes
+                // the shell Appearance preference, the same flow the
+                // Settings sub-page drives) and the Clean Feed pill (the
+                // r76 TimelineFilter.excludeScreenshots dimension), with
+                // r76.1 putting the sort menu + slideshow ON that glass
+                // row as compact circular affordances and the filter-chip
+                // strip INSIDE the same glass block (the prototype's one-
+                // surface header; the first cut floated sort/slideshow as
+                // a bare stray row and clipped the chips below the glass).
+                ToadPhotosHeader(
+                    layoutIsCollage = appearance.layout == LayoutStyle.COLLAGE,
+                    onToggleLayout = {
+                        onLayoutChange(
+                            if (appearance.layout == LayoutStyle.COLLAGE) {
+                                LayoutStyle.GRID
+                            } else {
+                                LayoutStyle.COLLAGE
+                            },
+                        )
+                    },
+                    hideScreenshots = filter.excludeScreenshots,
+                    onToggleHideScreenshots = {
+                        onFilterChange(filter.copy(excludeScreenshots = !filter.excludeScreenshots))
+                    },
+                    onSlideshow = {
+                        // r27: the slideshow launch (the round's overflow
+                        // action) --- the run covers the timeline's loaded
+                        // window, exactly the window a viewer tap hands off.
                         val window = lazyItems.itemSnapshotList.filterNotNull()
                         if (window.isNotEmpty()) onStartSlideshow(window)
                     },
+                    sortMenu = {
+                        TimelineSortMenu(
+                            current = sort,
+                            onChange = onSortChange,
+                            compact = true,
+                        )
+                    },
+                    chipsRow = {
+                        // The smart-filter chips (r17): the prototype's
+                        // trailing-edge fade strip inside the header block.
+                        // One tap = one ViewModel filter change = one fresh
+                        // paging generation (see PhotosViewModel.onFilterChange).
+                        // Since r19b the row also carries the LEADING folder
+                        // chip; its picker sheet and the chip's name state
+                        // thread through the same ViewModel plumbing.
+                        Box(Modifier.toadTrailingFade()) {
+                            PhotosFilterChipsRow(
+                                filter = filter,
+                                onChange = onFilterChange,
+                                selectedFolderName = selectedFolderName,
+                                folders = folders,
+                                onFoldersRefresh = onFoldersRefresh,
+                                onFolderPick = onFolderPick,
+                                onFolderClear = onFolderClear,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    },
                 )
-                // The smart-filter chips (r17): under the header bar, plain
-                // timeline only (selection mode replaces the header with the
-                // count bar, and the chips would collide with the actions
-                // row). One tap = one ViewModel filter change = one fresh
-                // paging generation (see PhotosViewModel.onFilterChange).
-                // Since r19b the row also carries the LEADING folder chip;
-                // its picker sheet and the chip's name state thread through
-                // the same ViewModel plumbing.
-                PhotosFilterChipsRow(
-                    filter = filter,
-                    onChange = onFilterChange,
-                    selectedFolderName = selectedFolderName,
-                    folders = folders,
-                    onFoldersRefresh = onFoldersRefresh,
-                    onFolderPick = onFolderPick,
-                    onFolderClear = onFolderClear,
-                    modifier = Modifier.fillMaxWidth(),
+                // r76: the timeline's heading anchor --- the visible
+                // wordmark lives in ToadPhotosHeader (its own file), so
+                // this zero-height Text carries the screen-title heading
+                // semantics in THIS file (the r40 a11y sweep's
+                // convention; the source-scan suite pins its presence).
+                Text(
+                    text = stringResource(R.string.nav_photos),
+                    color = Color.Transparent,
+                    fontSize = 1.sp,
+                    modifier = Modifier
+                        .height(0.dp)
+                        .semantics { heading() },
                 )
                 // r62: the Stories shelf moved INSIDE the scroll --- it is
                 // the grid's first full-line item and scrolls away with the
@@ -629,6 +704,10 @@ private fun PhotosTimeline(
                 // Appearance "Stories on home page" toggle (default ON ---
                 // the pre-r62 render).
                 Box(modifier = Modifier.weight(1f)) {
+                    // r76: the grid's scroll state, hoisted for the
+                    // floating date scrubber (reads the first visible
+                    // item's month; thumb drags scroll the grid).
+                    val gridState = rememberLazyStaggeredGridState()
                     PhotosGrid(
                         lazyItems = lazyItems,
                         appearance = appearance,
@@ -647,6 +726,70 @@ private fun PhotosTimeline(
                         } else {
                             null
                         },
+                        gridState = gridState,
+                    )
+                    // The floating date scrubber: visible while the grid
+                    // scrolls or the thumb drags; fades 900ms after idle.
+                    val scrubberVisible = remember { mutableStateOf(false) }
+                    // The month label derives from the FIRST VISIBLE MEDIA
+                    // CELL, not the raw first-visible index: the staggered
+                    // grid interleaves full-line date headers (and the
+                    // Stories shelf header) with cells, and the stale
+                    // `row_<n>` positional keys only exist beyond the
+                    // layout interval --- keying on them made the label
+                    // land on wrong months. The snapshot lookup is
+                    // defensive (a paging refresh can shrink the store one
+                    // frame ahead of the layout info).
+                    val monthLabel by remember {
+                        derivedStateOf {
+                            val mediaIndex = gridState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { info ->
+                                    val key = info.key
+                                    key is String && !key.startsWith("header_") &&
+                                        !key.startsWith("row_") && key != "paging_header"
+                                }
+                                ?: gridState.layoutInfo.visibleItemsInfo.firstOrNull()
+                            val item = mediaIndex
+                                ?.let { lazyItems.itemSnapshotList.getOrNull(it.index) }
+                            val millis = item?.captureDateMillis
+                                ?: item?.dateAddedSec?.times(1000L)
+                                ?: System.currentTimeMillis()
+                            val cal = java.util.Calendar.getInstance()
+                            cal.timeInMillis = millis
+                            val monthName = cal.getDisplayName(
+                                java.util.Calendar.MONTH,
+                                java.util.Calendar.SHORT,
+                                java.util.Locale.getDefault(),
+                            ) ?: ""
+                            monthName + " " + cal.get(java.util.Calendar.YEAR)
+                        }
+                    }
+                    // The scrub fraction maps onto the GRID's own item
+                    // count (headers included --- a fraction of the scroll
+                    // extent is a fraction of the layout), not the paging
+                    // store's: the two diverge by exactly the interleaved
+                    // headers, which was the old off-by-headers drift.
+                    LaunchedEffect(gridState.isScrollInProgress) {
+                        if (gridState.isScrollInProgress) {
+                            scrubberVisible.value = true
+                        } else {
+                            kotlinx.coroutines.delay(ToadMotionSpec.SCRUBBER_IDLE_MS)
+                            scrubberVisible.value = false
+                        }
+                    }
+                    ToadDateScrubber(
+                        monthLabel = monthLabel,
+                        visible = scrubberVisible.value,
+                        onScrub = { fraction ->
+                            scrubberVisible.value = true
+                            val target = (gridState.layoutInfo.totalItemsCount * fraction)
+                                .toInt()
+                                .coerceIn(0, (gridState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+                            if (gridState.layoutInfo.totalItemsCount > 0) {
+                                gridState.requestScrollToItem(index = target)
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.CenterEnd),
                     )
                 }
             }
@@ -739,52 +882,6 @@ private fun PhotosTimeline(
 }
 
 /**
- * The plain-timeline header bar (issue #66): the tab title plus the sort
- * menu action. Slim by design --- the timeline's only header affordance
- * before #66 was nothing, and the sort control needs an anchor.
- * `windowInsets = 0` for the same reason [FileOpsSelectionBar] documents:
- * the shell Scaffold already consumed the status-bar inset, so a default
- * TopAppBar would double-pad.
- *
- * r27 adds the slideshow launch as a second action (the round's
- * "launchable from grid surfaces via an overflow action" --- the icon is
- * the viewer's own PlayArrow, so the two surfaces say "slideshow" with
- * the same glyph).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PhotosHeaderBar(
-    sort: TimelineSort,
-    onSortChange: (TimelineSort) -> Unit,
-    onStartSlideshow: () -> Unit,
-) {
-    TopAppBar(
-        title = {
-            Text(
-                text = stringResource(R.string.nav_photos),
-                modifier = Modifier.semantics { heading() },
-            )
-        },
-        actions = {
-            IconButton(
-                onClick = onStartSlideshow,
-                modifier = Modifier.testTag("photos_action_slideshow"),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(R.string.cd_viewer_action_slideshow_start),
-                )
-            }
-            TimelineSortMenu(
-                current = sort,
-                onChange = onSortChange,
-            )
-        },
-        windowInsets = WindowInsets(0, 0, 0, 0),
-    )
-}
-
-/**
  * The timeline grid call, shared by plain and selection layouts so the
  * `photos_state_grid` tag, footer and selection wiring cannot diverge.
  * The shell's [Appearance] lands here: columns, group-by and the GRID
@@ -806,10 +903,12 @@ private fun PhotosGrid(
     selectedKeys: Set<String>,
     onOpenViewer: (window: List<MediaItem>, index: Int) -> Unit,
     header: (@Composable () -> Unit)? = null,
+    gridState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
 ) {
     MediaPagingGrid(
         items = lazyItems,
         modifier = Modifier.testTag("photos_state_grid"),
+        gridState = gridState,
         columns = appearance.columns,
         groupBy = appearance.groupBy,
         uniformCells = appearance.layout == LayoutStyle.GRID,

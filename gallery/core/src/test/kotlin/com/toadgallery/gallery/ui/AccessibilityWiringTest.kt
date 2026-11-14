@@ -35,7 +35,14 @@ import java.io.File
  */
 class AccessibilityWiringTest {
 
-    /** The module-relative prefix of every gallery screen source file. */
+    /**
+     * The module-relative prefix of every gallery screen source file.
+     * r76 fix: the #163 namespace migration moved the tree from
+     * `io/github/dukeoftoad/gallery/` to `com/toadgallery/gallery/` but
+     * this suite's prefix was never updated --- every test errored with
+     * "Cannot locate ..." on the gallery branch since. The prefix now
+     * matches the live tree.
+     */
     private val GALLERY_SRC =
         "src/main/kotlin/com/toadgallery/gallery/"
 
@@ -44,29 +51,29 @@ class AccessibilityWiringTest {
         "src/main/kotlin/com/toadgallery/editor/EditActivity.kt"
 
     /**
-     * Unit-test working dir is the module dir under Gradle (apps/gallery)
-     * but is the repo root under the pre-push harness; be tolerant of both
-     * (the PrivacyPolicyTest moduleFile pattern, generalized to both apps).
-     * The THIRD candidate is the sibling-module case --- the gallery test
-     * task locating the EDIT app's file (apps/gallery cwd -> apps/edit);
-     * the merge-gate's second catch: the first draft had
-     * `cwd.parent + apps/<app>/...`, which resolves `apps/apps/edit/...`
-     * and never exists.
+     * Unit-test working dir is the module dir under Gradle (gallery/core
+     * since the #163 module split) but is the repo root under the pre-push
+     * harness; be tolerant of both. The sibling candidates cover the
+     * editor-module file from BOTH working dirs (gallery/core cwd ->
+     * editor/core via the REPO ROOT, two levels up; repo-root cwd ->
+     * editor/core directly). The r77.8 fix adds the repo-root candidate:
+     * the pre-r77.8 list only looked one level up (gallery/), so every
+     * editor-file scan errored with "Cannot locate ..." whenever the suite
+     * ran under Gradle from gallery/core (CI runs only the app module's
+     * tests, so the break never surfaced there).
      */
     private fun sourceFile(app: String, moduleRelative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         val candidates = listOf(
             File(cwd, moduleRelative),
-            File(cwd, "apps/$app/$moduleRelative"),
-            File(cwd.parentFile, "$app/$moduleRelative"),
-            // Phase-1 split: the sibling module lives at the repo root as
-            // <product>/core (the gallery test task locating the EDIT app's
-            // file: gallery/core cwd -> editor/core).
+            File(cwd, "$app/core/$moduleRelative"),
+            File(cwd.parentFile, "$app/core/$moduleRelative"),
+            // The repo root (gallery/core cwd -> ../../ = repo root).
             File(cwd.parentFile?.parentFile, "$app/core/$moduleRelative"),
         )
         return candidates.firstOrNull { it.exists() }
             ?: error(
-                "Cannot locate apps/$app/$moduleRelative from ${cwd.absolutePath}; " +
+                "Cannot locate $app/core/$moduleRelative from ${cwd.absolutePath}; " +
                     "checked: " + candidates.joinToString { it.path },
             )
     }
@@ -121,6 +128,9 @@ class AccessibilityWiringTest {
 
     @Test
     fun `the editor top-bar title carries the heading convention`() {
+        // r77.8 fix: the module dir is `editor/` (:editor:core in
+        // settings.gradle.kts) --- the pre-r77.8 "edit" module name matched
+        // no directory in the tree, so the scan could only ever fail.
         assertHasHeading("editor", EDIT_ACTIVITY, "the editor surface")
     }
 
@@ -191,6 +201,30 @@ class AccessibilityWiringTest {
             "ToadTouchTarget.minimum is the a11y floor the sweep relies on; " +
                 "DesignTokensTest pins the value, this pins the object exists.",
             source.contains("val minimum: Dp = 48.dp"),
+        )
+    }
+
+    // ---- The r77.8 convention: interactive search chrome carries roles ----
+
+    @Test
+    fun `the search prompt chips and pill clear control carry button-role semantics`() {
+        val source = sourceOf("gallery", GALLERY_SRC + "ui/screens/search/SearchChrome.kt")
+        // The prototype renders the suggested prompts AND the field's clear
+        // control as real <button> elements; the Compose side must give both
+        // `Role.Button` (the prompt chips add the `selected` state, the
+        // M3 FilterChip convention the mode/type chips already carry). A
+        // failing assertion means a chip/control dropped back to bare
+        // clickable text --- restore the wiring.
+        val roleCount = Regex("role = Role\\.Button").findAll(source).count()
+        assertTrue(
+            "SearchChrome must carry Role.Button on BOTH the prompt chips and " +
+                "the pill's clear control (found $roleCount, need >= 2).",
+            roleCount >= 2,
+        )
+        assertTrue(
+            "The prompt chips must carry the selected state so TalkBack " +
+                "announces the active query chip (semantics { selected = active }).",
+            source.contains("selected = active"),
         )
     }
 }

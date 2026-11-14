@@ -81,8 +81,8 @@
     <string name="magic_no_results_body">No photos in your library match that description. Try different or fewer words.</string>
     <string name="magic_state_error_title">Couldn\'t search by content</string>
     <plurals name="magic_results_count">
-        <item quantity="one">%1$d photo matches</item>
-        <item quantity="other">%1$d photos match</item>
+        <item quantity="one">%1$d match found</item>
+        <item quantity="other">%1$d matches found</item>
     </plurals>
 <!-- r26 slice: the People follow-ups round (Workstream 6 closeout) —
      the edit-preserving reclustering overlay (cluster-id remapping so

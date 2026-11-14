@@ -130,6 +130,14 @@ object TimelineFilterCatalogue {
             args += range.startMillis / 1000
             args += range.endMillis / 1000
         }
+        if (filter.excludeScreenshots) {
+            // r76 Clean Feed, the Room leg: the v5 bucketDisplayName column
+            // is the scan's copy of the provider bucket name. NULL-named
+            // rows stay visible (the fail-open rule the MediaStore leg and
+            // the in-memory predicate share).
+            clauses += "(bucketDisplayName IS NULL OR " +
+                "bucketDisplayName NOT LIKE '%screenshot%')"
+        }
         return CatalogueFilterWhere(
             sql = clauses.takeIf { it.isNotEmpty() }?.joinToString(separator = " AND "),
             args = args,

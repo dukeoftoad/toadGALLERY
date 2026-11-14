@@ -943,9 +943,12 @@ private fun CatalogueTimelineItem.asMediaItem(): MediaItem = MediaItem(
  * onto the android-free [TimelineFilterFields] the pure predicate
  * ([com.toadgallery.gallery.data.filters.matches]) evaluates. The
  * one place the snapshot fallback translates a row for the filter engine;
- * the tuple carries every field the engine can read (no bucket ---
+ * the tuple carries every field the engine can read (no bucket ID ---
  * [MediaItem] has none, which is why the bucket dimension fails closed
- * in memory; see the engine's KDoc).
+ * in memory; see the engine's KDoc). r76: the bucket NAME rides as null
+ * here --- the MediaItem carries no folder name either, so the Clean Feed
+ * dimension's in-memory leg sees "unknown" and stays fail-open (the SQL
+ * projections serve the real exclusion on the windowed paths).
  */
 private fun MediaItem.asFilterFields(): TimelineFilterFields =
     TimelineFilterFields(
@@ -953,6 +956,7 @@ private fun MediaItem.asFilterFields(): TimelineFilterFields =
         isVideo = isVideo,
         isFavorite = isFavorite,
         dateAddedSec = dateAddedSec,
+        bucketName = null,
     )
 
 sealed interface PhotosState {

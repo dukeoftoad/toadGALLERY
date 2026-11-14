@@ -57,10 +57,21 @@ import java.io.File
  */
 class EgressSolePathTest {
 
-    /** Unit-test working dir is the module dir (apps/gallery); be tolerant either way. */
+    /** Unit-test working dir is the module dir (gallery/core); be tolerant of the
+     * pre-push harness's repo-root cwd too (the r77.8 AccessibilityWiringTest
+     * convention --- the pre-#163 `apps/gallery/` fallback named no live dir). */
     private fun moduleFile(relative: String): File {
         val cwd = File(System.getProperty("user.dir") ?: ".")
-        return sequenceOf(File(cwd, relative), File(cwd.parentFile, "apps/gallery/$relative"))
+        // r77.9: the pre-#163 `apps/gallery/` fallback named a module dir that
+        // no longer exists; the candidates now follow the r77.8
+        // AccessibilityWiringTest convention --- the Gradle module dir
+        // (gallery/core) first, then the repo-root-relative path for the
+        // pre-push harness.
+        return sequenceOf(
+            File(cwd, relative),
+            File(cwd, "gallery/core/$relative"),
+            File(cwd.parentFile, "gallery/core/$relative"),
+        )
             .firstOrNull { it.exists() }
             ?: error("Cannot locate '$relative' from ${cwd.absolutePath}")
     }
@@ -239,8 +250,9 @@ class EgressSolePathTest {
      */
     @Test
     fun `the build-time INTERNET gates stay wired with their allowlist input and anchors`() {
-        // Phase-1 split: the gate moved verbatim to the gallery APP module
-        // (:gallery:app), so the module dir's ../app sibling is the script.
+        // r77.9: the gate is wired in the gallery APP module's script since
+        // the #163 module split --- the module-relative "build.gradle.kts"
+        // read the core library's script, which carries no gate.
         val buildScript = moduleFile("../app/build.gradle.kts").readText()
         // The per-variant task registration (generates gateDebugInternetPermission
         // and gateReleaseInternetPermission for the debug/release variants):

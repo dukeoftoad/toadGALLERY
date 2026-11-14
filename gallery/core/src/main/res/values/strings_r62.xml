@@ -21,6 +21,9 @@
 
     <!-- The System tab's Storage dashboard. -->
     <string name="settings_storage_section">Storage</string>
+    <!-- r77: the Storage Manager card's eyebrow (the prototype's
+         "App-Private Storage" header row). -->
+    <string name="settings_storage_private_title">App-Private Storage</string>
     <string name="settings_storage_section_body">What toadGALLERY keeps on this device. Everything here is app-private; the models and the index rebuild on demand, the cache is disposable.</string>
     <string name="settings_storage_catalogue">Photo catalogue database</string>
     <string name="settings_storage_ml_index">ML index store (faces + semantic)</string>
@@ -30,6 +33,7 @@
     <string name="settings_storage_trash">Items in the system trash</string>
     <string name="settings_storage_trash_count">%1$d items</string>
     <string name="settings_storage_action_clear_cache">Clear cache</string>
+    <string name="settings_storage_action_reset_ml_index">Reset ML index</string>
     <string name="settings_storage_measuring">Measuring…</string>
 
     <!-- The System tab's Privacy center: an audit-style status page. -->

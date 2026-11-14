@@ -217,7 +217,8 @@ sealed interface VaultBiometricRequest {
  * logs the phase leg of the same story, and the two lines read together),
  * and the state transitions that make up the device story --- session
  * unlocked, auto-locked, biometric enroll/unenroll --- one INFO line each.
- * [probeDiagnostics] is the structured leg the About screen reads. The
+ * [probeDiagnostics] is the structured diagnostics leg (r77 beta: the
+ * About screen no longer renders it; the W1 API stays for the tests). The
  * privacy contract is `DiagLog`'s (ADR-0014): op names, counts and
  * exception class+message ONLY --- never PIN data or display names.
  *
@@ -781,14 +782,28 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (consentBlocked.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val blockedUris = consentBlocked.map { it.uri }
-            pendingConsent = PendingVaultConsent(
-                uris = blockedUris,
-                alreadyMoved = moved,
-                stuckBeforeConsent = notRemoved,
-            )
-            @Suppress("NewApi") // R+ per the check above (createDeleteRequest is API 30)
-            val sender = repository.createDeleteConsentRequest(blockedUris)
-            _events.tryEmit(VaultEvent.RequestConsent(sender))
+            // r76.1: the consent build is a provider call on IO inside a
+            // scope child (the reducer stays non-suspending); a refusal
+            // narrates the batch as moved-plus-stuck --- the first cut
+            // threw on the main thread and killed the process mid-move.
+            viewModelScope.launch {
+                @Suppress("NewApi") // R+ per the check above (createDeleteRequest is API 30)
+                val sender = repository.createDeleteConsentRequest(blockedUris)
+                if (sender == null) {
+                    narrateMove(
+                        moved = moved,
+                        stuck = notRemoved + consentBlocked.size,
+                        failed = failed,
+                    )
+                } else {
+                    pendingConsent = PendingVaultConsent(
+                        uris = blockedUris,
+                        alreadyMoved = moved,
+                        stuckBeforeConsent = notRemoved,
+                    )
+                    _events.tryEmit(VaultEvent.RequestConsent(sender))
+                }
+            }
             return // narration continues after the consent result
         }
         narrateMove(

@@ -1,24 +1,22 @@
 package com.toadgallery.gallery.ui.search
 
+import androidx.annotation.PluralsRes
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,9 +36,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.buildshape.BuildShape
@@ -49,13 +49,20 @@ import com.toadgallery.gallery.data.SearchMediaType
 import com.toadgallery.gallery.data.SearchQuery
 import com.toadgallery.gallery.ml.search.MagicSearchQuery
 import com.toadgallery.gallery.ui.StateScreen
+import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.components.ToadChipDefaults
 import com.toadgallery.gallery.ui.media.LoadingState
 import com.toadgallery.gallery.ui.media.MediaGrid
 import com.toadgallery.gallery.ui.media.MediaPermissionState
 import com.toadgallery.gallery.ui.media.rememberMediaPermissionRequester
+import com.toadgallery.gallery.ui.screens.search.ToadClipOcrBadge
+import com.toadgallery.gallery.ui.screens.search.ToadPromptChips
+import com.toadgallery.gallery.ui.screens.search.ToadSearchHeader
+import com.toadgallery.gallery.ui.screens.search.ToadSearchPillField
 import com.toadgallery.gallery.ui.settings.LayoutStyle
 import com.toadgallery.gallery.ui.settings.SettingsViewModel
 import com.toadgallery.gallery.ui.theme.ToadSpacing
+import com.toadgallery.gallery.ui.theme.ToadTheme
 
 /**
  * The Search tab (issue #62, search tab v1): a name query over the media
@@ -185,9 +192,21 @@ fun SearchScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(ToadSpacing.xl),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        OutlinedTextField(
+        // r76: the redesign header + subtitle. The subtitle is honest per
+        // build shape: the semantic pipeline's "100% on-device semantic &
+        // screenshot text (OCR) search" line only where the SEMANTIC index
+        // exists; the plain Name pipeline states what it is.
+        ToadSearchHeader(
+            subtitle = if (BuildShape.semanticIndex) {
+                "100% on-device semantic & screenshot text (OCR) search"
+            } else {
+                "Search your library by name, fully on-device"
+            },
+        )
+        Spacer(Modifier.height(12.dp))
+        ToadSearchPillField(
             value = query,
             onValueChange = { value ->
                 // r26: the SAME text feeds both pipelines; each gates
@@ -195,45 +214,40 @@ fun SearchScreen(
                 viewModel.onQueryChange(value)
                 magicViewModel.onQueryChange(value)
             },
+            onClear = {
+                viewModel.onQueryChange("")
+                magicViewModel.onQueryChange("")
+            },
+            onSearch = { keyboard?.hide() },
+            hint = stringResource(R.string.search_field_label),
             modifier = Modifier
-                .fillMaxWidth()
                 .focusRequester(focusRequester)
-                .testTag("search_field"),
-            singleLine = true,
-            label = { Text(stringResource(R.string.search_field_label)) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = null, // decorative; the label carries meaning
-                )
-            },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(
-                        onClick = {
-                            viewModel.onQueryChange("")
-                            magicViewModel.onQueryChange("")
-                        },
-                        modifier = Modifier.testTag("search_field_clear"),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Clear,
-                            contentDescription = stringResource(R.string.cd_search_clear),
-                        )
-                    }
-                }
-            },
-            // ToadShapes.small (8dp) --- the token role for text fields
-            // (DesignTokens.kt, issue #11); reached through MaterialTheme
-            // so the shape system stays the single source.
-            shape = MaterialTheme.shapes.small,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                // The query pipeline is debounced in the ViewModel; the IME
-                // action just closes the keyboard so results are visible.
-                onSearch = { keyboard?.hide() },
-            ),
+                .testTag("search_field")
+                .border(1.dp, ToadTheme.palette.borderStrong, CircleShape),
         )
+        Spacer(Modifier.height(10.dp))
+        // r76: the suggested prompts --- one tap runs the query through
+        // the SAME onValueChange pipeline typing uses.
+        ToadPromptChips(
+            prompts = listOf("sunset", "receipt", "dogs", "nature", "notice", "coffee"),
+            activeQuery = query,
+            onPromptTap = { prompt ->
+                viewModel.onQueryChange(prompt)
+                magicViewModel.onQueryChange(prompt)
+            },
+        )
+        Spacer(Modifier.height(10.dp))
+        // r77.9: the results-count row's trailing badge moved DOWN to the
+        // results header slot (the prototype's order). The static
+        // "Matches" + badge row used to sit ABOVE the mode/type chip rows
+        // --- a slot the prototype never draws, showing a hardcoded label
+        // even with zero results. In the prototype the "CLIP + OCR Active"
+        // badge is the results header's TRAILING edge, beside the live
+        // "N matches found" count, immediately above the grid (below the
+        // secondary attribute filters). The badge now rides the shared
+        // [SearchResultsCountText] header (still gated on
+        // BuildShape.semanticIndex --- without the semantic index CLIP+OCR
+        // never ran, and the badge would lie).
         // The r26 "Search by" mode row: Name (the issue #62 filename
         // pipeline, untouched) vs Content (Magic Search). Switching the
         // mode flips BOTH pipelines' engagement through their own gates
@@ -257,6 +271,8 @@ fun SearchScreen(
                     },
                     label = { Text(stringResource(R.string.search_mode_name)) },
                     modifier = Modifier.testTag("search_mode_name"),
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = searchMode == SearchMode.CONTENT,
@@ -266,6 +282,8 @@ fun SearchScreen(
                     },
                     label = { Text(stringResource(R.string.search_mode_content)) },
                     modifier = Modifier.testTag("search_mode_content"),
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
             }
         }
@@ -283,16 +301,22 @@ fun SearchScreen(
                     selected = mediaType == SearchMediaType.ALL,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.ALL) },
                     label = { Text(stringResource(R.string.search_filter_all)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = mediaType == SearchMediaType.IMAGES,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.IMAGES) },
                     label = { Text(stringResource(R.string.search_filter_photos)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
                 FilterChip(
                     selected = mediaType == SearchMediaType.VIDEOS,
                     onClick = { viewModel.onMediaTypeChange(SearchMediaType.VIDEOS) },
                     label = { Text(stringResource(R.string.search_filter_videos)) },
+                    colors = ToadChipDefaults.colors(),
+                    border = ToadChipDefaults.border(),
                 )
             }
         }
@@ -368,17 +392,9 @@ fun SearchScreen(
                 is SearchUiState.Results -> Column(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.search_results_count,
-                            s.items.size,
-                            s.items.size,
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = ToadSpacing.sm),
+                    SearchResultsCountText(
+                        pluralRes = R.plurals.search_results_count,
+                        count = s.items.size,
                     )
                     // The shared staggered grid: same cells, keys, spacing
                     // and tap contract as the album detail view; the tap
@@ -394,6 +410,58 @@ fun SearchScreen(
                 }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The results-count header ROW (r77.8/r77.9 --- the prototype's results
+ * header, `flex items-center justify-between mb-2`): the LIVE count in
+ * the prototype's exact chrome --- `text-xs font-bold` over
+ * `var(--text-muted)` --- as [ToadBodyFont] bold at 12sp in the palette's
+ * [ToadThemePalette.textMuted] tone on the leading edge, the "CLIP + OCR
+ * Active" badge ([ToadClipOcrBadge]) on the trailing edge, the row sitting
+ * immediately above the results grid and BELOW the mode/type chip rows
+ * (the prototype's order; r77.9 retired the pre-header slot above the
+ * chips, which also showed a hardcoded "Matches" label with zero
+ * results).
+ *
+ * ONE composable for BOTH pipelines: the Name results and the Content
+ * results previously rendered the count as stock `bodyMedium`/
+ * `onSurfaceVariant` with two different wordings ("%1$d result(s)" vs
+ * "%1$d photos match") --- a chrome AND vocabulary drift from the
+ * prototype's single header. The plurals themselves now share the
+ * prototype's "N matches found" wording, so the two pipelines read as one
+ * surface; the shared function keeps them from drifting apart again.
+ *
+ * The badge renders only where [BuildShape.semanticIndex] holds (the
+ * r46 build-shape gate the pre-move row already used): without the
+ * semantic index the CLIP/OCR pipelines never ran and the badge would
+ * lie.
+ */
+@Composable
+private fun SearchResultsCountText(
+    @PluralsRes pluralRes: Int,
+    count: Int,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = ToadSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = pluralStringResource(pluralRes, count, count),
+            style = TextStyle(
+                fontFamily = ToadBodyFont,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+            ),
+            color = ToadTheme.palette.textMuted,
+        )
+        if (BuildShape.semanticIndex) {
+            ToadClipOcrBadge()
         }
     }
 }
@@ -505,17 +573,9 @@ private fun MagicSearchStates(
         is MagicSearchUiState.Results -> Column(
             modifier = Modifier.fillMaxSize(),
         ) {
-            Text(
-                text = pluralStringResource(
-                    R.plurals.magic_results_count,
-                    state.items.size,
-                    state.items.size,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = ToadSpacing.sm),
+            SearchResultsCountText(
+                pluralRes = R.plurals.magic_results_count,
+                count = state.items.size,
             )
             // The shared staggered grid, RELEVANCE order (the vecdb's own
             // ranking): same cells, keys, spacing and tap contract as the

@@ -3,33 +3,59 @@ package com.toadgallery.gallery.ui
 import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -44,6 +70,13 @@ import androidx.navigation.navArgument
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.buildshape.BuildShape
 import com.toadgallery.gallery.data.MediaItem
+import com.toadgallery.gallery.ui.components.ToadBodyFont
+import com.toadgallery.gallery.ui.components.ToadPillButton
+import com.toadgallery.gallery.ui.components.ToadToastBanner
+import com.toadgallery.gallery.ui.components.ToadToastState
+import com.toadgallery.gallery.ui.components.rememberToadToast
+import com.toadgallery.gallery.ui.theme.ToadTheme
+import java.util.concurrent.atomic.AtomicBoolean
 import com.toadgallery.gallery.ui.albums.AlbumDetailScreen
 import com.toadgallery.gallery.ui.albums.AlbumsScreen
 import com.toadgallery.gallery.ui.collage.CollageScreen
@@ -65,6 +98,10 @@ import com.toadgallery.gallery.ui.things.ThingsDetailScreen
 import com.toadgallery.gallery.ui.theme.ToadGalleryTheme
 import com.toadgallery.gallery.ui.trash.TrashScreen
 import com.toadgallery.gallery.ui.vault.VaultScreen
+import com.toadgallery.gallery.ui.vault.VaultBiometricRequest
+import com.toadgallery.gallery.ui.vault.VaultBiometrics
+import com.toadgallery.gallery.ui.vault.VaultUiState
+import com.toadgallery.gallery.data.vault.VaultBiometricReadiness
 import com.toadgallery.gallery.ui.vault.VaultViewModel
 import com.toadgallery.gallery.ui.viewer.ViewerScreen
 import com.toadgallery.gallery.ui.viewer.ViewerViewModel
@@ -227,16 +264,33 @@ private data class TopLevelDestination(
     val route: String,
     @DrawableRes val iconRes: Int,
     @StringRes val labelRes: Int,
+    /** r76: the Material vector icon (the prototype's Lucide shape mapped). */
+    val materialIcon: androidx.compose.ui.graphics.vector.ImageVector,
 )
 
 private val bottomNavItems = listOf(
-    TopLevelDestination(Destinations.PHOTOS, R.drawable.ic_nav_photos, R.string.nav_photos),
-    TopLevelDestination(Destinations.ALBUMS, R.drawable.ic_nav_albums, R.string.nav_albums),
-    TopLevelDestination(Destinations.SEARCH, R.drawable.ic_nav_search, R.string.nav_search),
+    TopLevelDestination(
+        Destinations.PHOTOS, R.drawable.ic_nav_photos, R.string.nav_photos,
+        Icons.Filled.PhotoLibrary,
+    ),
+    TopLevelDestination(
+        Destinations.ALBUMS, R.drawable.ic_nav_albums, R.string.nav_albums,
+        Icons.Filled.Collections,
+    ),
+    TopLevelDestination(
+        Destinations.SEARCH, R.drawable.ic_nav_search, R.string.nav_search,
+        Icons.Filled.Search,
+    ),
     // r16: the Map tab rides the same drawable-icon mechanism as its
     // siblings (see ic_nav_map for the shape's provenance).
-    TopLevelDestination(Destinations.MAP, R.drawable.ic_nav_map, R.string.nav_map),
-    TopLevelDestination(Destinations.SETTINGS, R.drawable.ic_nav_settings, R.string.nav_settings),
+    TopLevelDestination(
+        Destinations.MAP, R.drawable.ic_nav_map, R.string.nav_map,
+        Icons.Filled.Place,
+    ),
+    TopLevelDestination(
+        Destinations.SETTINGS, R.drawable.ic_nav_settings, R.string.nav_settings,
+        Icons.Filled.Settings,
+    ),
 )
 
 @Composable
@@ -254,12 +308,19 @@ fun ToadGalleryApp() {
     // the same session. The default (SYSTEM) is the pre-r64 behavior:
     // ToadGalleryTheme resolved `isSystemInDarkTheme()` on its own.
     val appearanceForTheme by settingsViewModel.appearance.collectAsState()
+    // r76: the Theme & Colors sub-page's palette selection (the five
+    // prototype palettes), persisted in the same Appearance prefs bag.
+    val toadPaletteId by settingsViewModel.toadPaletteId.collectAsState()
     val darkTheme = when (appearanceForTheme.themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    ToadGalleryTheme(darkTheme = darkTheme, dynamicColor = useDynamicColor) {
+    ToadGalleryTheme(
+        paletteId = toadPaletteId,
+        darkTheme = darkTheme,
+        dynamicColor = useDynamicColor,
+    ) {
         val navController = rememberNavController()
         // Issue #27: the picked-photos set is shared between the Settings tab
         // (picker entry point + live count) and the `picked` sub-screen, so it
@@ -313,37 +374,95 @@ fun ToadGalleryApp() {
         }
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
+        // r76: the vault's live state for the Albums tab's Utilities card
+        // summary (the same shell-scoped ViewModel the vault screen uses),
+        // plus the biometric readiness (the PIN dialog's trigger).
+        val vaultState by vaultViewModel.state.collectAsState()
+        val vaultBiometricsReady by vaultViewModel.biometrics.collectAsState()
 
+        // r77.5 (the field report: the Albums PIN dialog's fingerprint
+        // trigger did nothing): the BiometricPrompt requests are served
+        // HERE at the shell, not in VaultScreen. The request flow is a
+        // SharedFlow --- an emission with no collector is dropped --- and
+        // the VaultScreen collector only existed while THAT screen was
+        // composed, so a request raised anywhere else (the Albums tab's
+        // Hidden Vault dialog, the Settings vault toggle's enroll round)
+        // silently vanished. The shell is always composed and its context
+        // is MainActivity (a FragmentActivity --- the prompt's host), so
+        // ONE collector here serves every surface. VaultScreen's own
+        // collector moved out with this change: a SharedFlow multicasts to
+        // every collector, and two collectors would launch TWO prompts.
+        val activityContext = LocalContext.current
+        LaunchedEffect(vaultViewModel) {
+            // One prompt at a time: two surfaces can raise for the same
+            // unlock (the Albums dialog's fingerprint tap navigates to the
+            // vault screen, whose own "prompt once on entering Locked"
+            // effect raises again). The collector is one coroutine, so this
+            // flag serializes; [VaultBiometrics] fires its callback on every
+            // path (cipher failures included), so the flag always resets.
+            var promptInFlight = false
+            vaultViewModel.biometricRequests.collect { request ->
+                if (promptInFlight) return@collect
+                val activity = activityContext as? FragmentActivity ?: return@collect
+                promptInFlight = true
+                when (request) {
+                    is VaultBiometricRequest.Unlock -> VaultBiometrics.unlock(
+                        activity,
+                        request.sealedSecret,
+                    ) { result ->
+                        promptInFlight = false
+                        vaultViewModel.onBiometricUnlockResult(result)
+                    }
+
+                    VaultBiometricRequest.Enroll -> VaultBiometrics.enroll(activity) { result ->
+                        promptInFlight = false
+                        vaultViewModel.onBiometricEnrollResult(result)
+                    }
+                }
+            }
+        }
+
+        // r76: the Settings hub-return signal (the nav bar's Settings-pop
+        // rule; the Settings screen raises it while a sub-page is open).
+        val settingsHubRequest = remember { SettingsHubRequest() }
+        CompositionLocalProvider(LocalSettingsHubRequest provides settingsHubRequest) {
+
+        // r76: the shell's toast host --- ONE banner the whole app shares
+        // (the prototype's single #toast-banner); screens get a `showToast`
+        // lambda through the CompositionLocal below so no screen wires its
+        // own snackbar host.
+        val toast = rememberToadToast()
+        Box(modifier = Modifier.fillMaxSize()) {
+            CompositionLocalProvider(LocalToadToast provides toast) {
         Scaffold(
+            containerColor = ToadTheme.palette.bgApp,
             bottomBar = {
                 // Sub-screens (album detail) hide the bottom bar: they carry their
                 // own top app bar with an Up action instead (issue #29).
                 if (currentRoute in Destinations.topLevel) {
-                    NavigationBar {
-                        bottomNavItems.forEach { destination ->
-                            NavigationBarItem(
-                                selected = currentRoute == destination.route,
-                                onClick = {
-                                    navController.navigate(destination.route) {
-                                        // Single top-level back stack: tapping the same tab
-                                        // does not stack screens; Up returns to Photos.
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(destination.iconRes),
-                                        contentDescription = null, // decorative; label carries meaning
-                                    )
-                                },
-                                label = { Text(stringResource(destination.labelRes)) },
-                            )
-                        }
-                    }
+                    ToadExpressiveNavBar(
+                        currentRoute = currentRoute,
+                        onTabSelected = { route ->
+                            // The prototype's Settings behavior rule: tapping
+                            // Settings while a Settings SUB-PAGE is open pops
+                            // back to the hub instead of switching tabs.
+                            if (route == Destinations.SETTINGS &&
+                                currentRoute == Destinations.SETTINGS &&
+                                settingsHubRequest.consume()
+                            ) {
+                                return@ToadExpressiveNavBar
+                            }
+                            navController.navigate(route) {
+                                // Single top-level back stack: tapping the same tab
+                                // does not stack screens; Up returns to Photos.
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
                 }
             },
         ) { innerPadding ->
@@ -392,6 +511,36 @@ fun ToadGalleryApp() {
                         },
                         onOpenThing = { collectionId ->
                             navController.navigate(Destinations.thingsDetail(collectionId))
+                        },
+                        // r76: the Utilities & Privacy card's rows --- the
+                        // PIN dialog + the vault screen + the trash
+                        // screen, wired to the shell-scoped vault session
+                        // (the dialog hands the PIN to the session's async
+                        // attemptUnlock; the vault surface narrates the
+                        // wrong-PIN case).
+                        onOpenVault = { navController.navigate(Destinations.VAULT) },
+                        onOpenTrash = { navController.navigate(Destinations.TRASH) },
+                        onAttemptVaultUnlock = vaultViewModel::attemptUnlock,
+                        onVaultBiometric = vaultViewModel::requestBiometricUnlock,
+                        // r77.5: honest availability --- the fingerprint
+                        // trigger exists only when the user has actually
+                        // enrolled a binding (the opt-in round on the vault
+                        // screen or the Settings vault toggle). The old gate
+                        // (readiness is Supported) lit the trigger whenever
+                        // the HARDWARE could prompt, and tapping it silently
+                        // no-op'd (requestBiometricUnlock refuses an
+                        // unenrolled binding) --- a dead button.
+                        vaultBiometricAvailable =
+                            (vaultBiometricsReady as? VaultBiometricReadiness.Supported)
+                                ?.bindingEnrolled == true,
+                        vaultSummary = when (val vs = vaultState) {
+                            is VaultUiState.Unlocked ->
+                                "Unlocked • ${vs.entries.size} private items"
+                            is VaultUiState.NotConfigured ->
+                                "Set up a PIN to hide photos"
+                            is VaultUiState.Unsupported ->
+                                "Unavailable on this device"
+                            else -> "PIN & biometric locked storage"
                         },
                     )
                 }
@@ -666,19 +815,31 @@ fun ToadGalleryApp() {
                     )
                 }
                 composable(Destinations.ABOUT) {
-                    // About sub-screen: identity, privacy, credits and the
-                    // vault diagnostics probed through the SAME shell-scoped
-                    // vault session (the vault screen's hand-off pattern).
+                    // About sub-screen: identity, privacy, credits.
                     // r64: the Development progress sub-screen (F-1, the
                     // build-time progress.json mirror) is REMOVED per the
                     // maintainer's directive --- the product UI no longer
                     // carries the project's dev dashboard; progress.json
                     // stays the repo's own tracking file.
+                    // r77 beta: the vault-diagnostics probe left with the
+                    // dev tools; the screen is identity + privacy + credits.
                     AboutScreen(
-                        vaultViewModel = vaultViewModel,
                         onBack = { navController.popBackStack() },
                     )
                 }
+            }
+            }
+        }
+        // r76: the floating toast banner, anchored above the bottom bar
+        // (the prototype's single #toast-banner; 24dp above the nav).
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+                .zIndex(10f),
+        ) {
+            ToadToastBanner(message = toast.message, visible = toast.visible)
+        }
             }
         }
     }
@@ -688,6 +849,13 @@ fun ToadGalleryApp() {
  * Reusable screen-state composable (roadmap Phase 2: empty / loading / denied /
  * unsupported / error system --- issue #13). Renders empty-state copy today; the
  * permission state becomes live in Phase 3 when media access lands.
+ *
+ * r77.9: the optional [pillAction] chrome --- the prototype's state surfaces
+ * close with a primary pill CTA (`rounded-full` over `var(--primary)`;
+ * the photos filtered-empty state's "Reset Filters"), not a bare text
+ * button. Default stays the M3 [TextButton] so the existing error/retry
+ * states keep their chrome; [pillAction] renders the house
+ * [ToadPillButton] (the same token pill the prototype draws).
  */
 @Composable
 fun StateScreen(
@@ -696,6 +864,7 @@ fun StateScreen(
     @StringRes bodyRes: Int,
     @StringRes actionRes: Int? = null,
     onAction: (() -> Unit)? = null,
+    pillAction: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -727,11 +896,22 @@ fun StateScreen(
                 .padding(top = 8.dp),
         )
         if (actionRes != null && onAction != null) {
-            TextButton(
-                onClick = onAction,
-                modifier = Modifier.padding(top = 24.dp),
-            ) {
-                Text(stringResource(actionRes))
+            if (pillAction) {
+                // r77.9: the prototype's primary pill CTA (the house
+                // ToadPillButton --- `primary`/`onPrimary`, `rounded-full`,
+                // `text-xs font-bold`, Role.Button carried inside).
+                ToadPillButton(
+                    text = stringResource(actionRes),
+                    onClick = onAction,
+                    modifier = Modifier.padding(top = 24.dp),
+                )
+            } else {
+                TextButton(
+                    onClick = onAction,
+                    modifier = Modifier.padding(top = 24.dp),
+                ) {
+                    Text(stringResource(actionRes))
+                }
             }
         }
         // r50 ux fix: the "Phase 3 --- on-device timeline" milestone badge is
@@ -777,6 +957,125 @@ private fun BuildFeatureUnavailable() {
                     .fillMaxWidth()
                     .padding(24.dp),
             )
+        }
+    }
+}
+
+// ===========================================================================
+// r76: the Material 3 Expressive navigation shell pieces
+// ===========================================================================
+
+/**
+ * The shell-scoped toast hand-off: any descendant calls
+ * `LocalToadToast.current.show(message)` and the ONE banner at the shell
+ * renders it (the prototype's global `showToast()`).
+ */
+val LocalToadToast = staticCompositionLocalOf<ToadToastState> {
+    error("ToadToastState not provided --- the shell provides it")
+}
+
+/**
+ * The Settings hub-return signal (the prototype's behavior rule: tapping
+ * the Settings nav item while a Settings SUB-PAGE is open pops back to
+ * the HUB instead of switching tabs). The Settings screen raises the flag
+ * via [requestHubReturn] whenever a sub-page is composed; the nav handler
+ * consumes it (one-shot) and stays on the Settings tab.
+ */
+class SettingsHubRequest {
+    private val requested = AtomicBoolean(false)
+
+    /** True when a sub-page asked for a hub return and resets the flag. */
+    fun consume(): Boolean = requested.getAndSet(false)
+
+    /** Raises the one-shot hub-return request. */
+    fun requestHubReturn() = requested.set(true)
+}
+
+/** The shell-scoped [SettingsHubRequest] (provided by ToadGalleryApp). */
+val LocalSettingsHubRequest = staticCompositionLocalOf<SettingsHubRequest> {
+    error("SettingsHubRequest not provided --- the shell provides it")
+}
+
+/**
+ * The frosted-glass Material 3 Expressive bottom navigation bar (the
+ * prototype's `<nav>`): `bgGlass` + a top `borderSubtle` hairline, five
+ * destinations, and the ACTIVE item's `CircleShape`-ish pill ---
+ * `primaryContainer` fill behind the icon, `onPrimaryContainer` tint,
+ * `11sp` SemiBold label (the inactive items: `textMuted`, no pill).
+ *
+ * Icons are the Material vector set (the prototype's Lucide shapes mapped
+ * to their closest Material glyphs): Photos=Images, Albums=FolderHeart,
+ * Search, Map=MapPin, Settings.
+ */
+@Composable
+fun ToadExpressiveNavBar(
+    currentRoute: String?,
+    onTabSelected: (String) -> Unit,
+) {
+    val palette = ToadTheme.palette
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(palette.bgGlass)
+            .drawBehind {
+                drawLine(
+                    color = palette.borderSubtle,
+                    strokeWidth = 1.dp.toPx(),
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                )
+            }
+            .navigationBarsPadding(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            bottomNavItems.forEach { destination ->
+                val selected = currentRoute == destination.route
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onTabSelected(destination.route) }
+                        // r76.1: 12dp horizontal padding squeezed the five
+                        // items past the row's budget --- the widest pill
+                        // (~52dp) + padding (~24dp) per item overflowed on
+                        // 360dp screens and the flexible label clipped to
+                        // "Setting". 6dp restores the full word.
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) palette.primaryContainer else Color.Transparent,
+                            )
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        Icon(
+                            imageVector = destination.materialIcon,
+                            contentDescription = null, // decorative; label carries meaning
+                            tint = if (selected) palette.onPrimaryContainer else palette.textMuted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(destination.labelRes),
+                        color = if (selected) palette.textMain else palette.textMuted,
+                        style = TextStyle(
+                            fontFamily = ToadBodyFont,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp,
+                        ),
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

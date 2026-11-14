@@ -5,12 +5,20 @@ import android.os.Build
 import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.toadgallery.gallery.buildshape.BuildShape
+import com.toadgallery.gallery.data.diag.DiagLog
+import com.toadgallery.gallery.ml.engine.MlEngine
+import com.toadgallery.gallery.ml.index.ClipIndexScheduler
+import com.toadgallery.gallery.ml.index.EngineSessionGuard
+import com.toadgallery.gallery.ml.index.FaceIndexScheduler
+import com.toadgallery.gallery.ml.index.faceIndexDirFor
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * r62 (the Settings craft round): one measured location of the app's
@@ -61,6 +69,8 @@ data class StorageInsightsState(
     val trashCount: Int = -1,
     /** True while a measurement pass runs (the rows show placeholders). */
     val measuring: Boolean = false,
+    /** True while the ML index reset is in flight (disables the button). */
+    val resettingIndex: Boolean = false,
 )
 
 /**
@@ -148,6 +158,59 @@ class StorageInsightsViewModel(app: Application) : AndroidViewModel(app) {
             cacheDir.listFiles()?.forEach { it.deleteRecursively() }
             refresh()
         }
+    }
+
+    private val engine = MlEngine()
+
+    /**
+     * r77.4 (the field-report Storage Manager): the second dashboard
+     * action. Wipes the shared ML index store --- the whole `face-index`
+     * directory, i.e. `ml-index.sqlite` (faces + semantic CLIP rows) AND
+     * the queues' `index-state.json` bookkeeping --- in one shot, the same
+     * teardown [com.toadgallery.gallery.ui.settings.AiEngineViewModel.resetFaceIndex]
+     * runs from the AI tab. Faces and semantic search re-index on demand
+     * afterwards, so this is non-destructive to the user's photos (the ML
+     * index is derived, never a source of truth).
+     *
+     * The teardown is the race-free r50/F-38 shape: cancel BOTH index
+     * chains (the face directory is shared, so a live CLIP write would
+     * race the delete), await their idleness, close the native face-index
+     * session THIS process holds, THEN delete the directory. A timeout
+     * still proceeds (the r48 shape) but is mirrored to the diagnostics
+     * ring, so a wedged chain never blocks the reset while leaving the
+     * store half-deleted. Re-measures at the end so the bar+legend read
+     * the new (near-zero) footprint without a separate pull.
+     *
+     * Gated on [BuildShape.faceIndex]: the no-face-index flavors have no
+     * ML index to reset (the button is hidden by the same gate on the
+     * screen), so this is a defensive no-op there rather than a crash.
+     */
+    fun resetMlIndex() {
+        if (!BuildShape.faceIndex) return
+        if (_state.value.resettingIndex) return
+        _state.value = _state.value.copy(resettingIndex = true)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val app = getApplication<Application>()
+                FaceIndexScheduler.cancel(app)
+                // r50 (F-38): the delete below erases the whole face-index
+                // directory INCLUDING the shared ml-index.sqlite the CLIP
+                // chain writes through, so BOTH chains must be terminal.
+                ClipIndexScheduler.cancel(app)
+                val idle = EngineSessionGuard.awaitIndexChainsIdle(app)
+                if (!idle) {
+                    DiagLog.e(TAG, "ml index reset: chains live after await; deleting the index dir anyway (r48 shape)")
+                }
+                engine.closeFaceIndex()
+                faceIndexDirFor(app.filesDir).deleteRecursively()
+            }
+            refresh()
+            _state.value = _state.value.copy(resettingIndex = false)
+        }
+    }
+
+    private companion object {
+        private const val TAG = "StorageInsights"
     }
 
     /**

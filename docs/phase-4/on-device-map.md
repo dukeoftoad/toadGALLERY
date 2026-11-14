@@ -16,11 +16,11 @@ contract for a later round says.
 | Bundled world outline (asset) | `apps/gallery/src/main/assets/maps/world-110m.geojson` |
 | Dependency-free GeoJSON reader + equirectangular projection | `data/geo/GeoJson.kt`, `data/geo/Equirectangular.kt` |
 | Compose renderer (fixed whole-world viewport) | `ui/map/WorldMapCanvas.kt` |
-| Grid-bucket clustering + hit-testing | `ui/map/MapClusterGrid.kt` |
+| Grid-bucket clustering | `ui/map/MapClusterGrid.kt` |
 | GPS location index pass (scan hook) | `data/media/location/LocationIndexer.kt` |
 | Re-index-on-grant decision policy | `data/media/location/LocationConsentReindexPolicy.kt` |
 | Room v3 -> v4 (latitude/longitude/locationSource columns) | `data/catalogue/room/*`, `schemas/.../4.json` |
-| Map tab (nav destination, states, location sheet) | `ui/map/MapScreen.kt`, `ui/map/MapViewModel.kt`, `ui/map/MapContentPolicy.kt`, `ui/ToadGalleryApp.kt` |
+| Map tab (nav destination, states, pins page) | `ui/map/MapScreen.kt`, `ui/map/MapViewModel.kt`, `ui/map/MapContentPolicy.kt`, `ui/ToadGalleryApp.kt` |
 | UI strings | `res/values/strings_r16.xml` |
 
 ## The bundled renderer
@@ -43,19 +43,35 @@ contract for a later round says.
   map letterboxes into the canvas (portrait phones get a full-width band
   around the vertical center); the math lives in the pure
   `EquirectangularViewport` class.
-- **Graticule:** a light 30-degree grid (meridians and parallels), drawn
-  under the landmasses from theme color roles.
-- **Theming:** ocean/land/coastline/graticule/dot colors all come from
-  the Material `colorScheme` roles the toad palettes feed, so the map
-  follows light/dark + dynamic color like every other surface. No
-  hardcoded map pigments.
-- **Dots:** one dot per grid-bucket cluster (24x12 cells, one per 15
-  degrees square on the 2:1 map; at most 288 draw targets). Dot radius
-  grows with the cluster's count; multi-photo clusters carry a count
-  badge. Tapping a dot/cluster opens a bottom sheet listing that
-  location's items in timeline order; tapping an item opens the existing
-  viewer flow (the shell-scoped viewer window hand-off the grid screens
-  use).
+- **Graticule:** a light 30-degree grid (meridians and parallels),
+  drawn under the landmasses with the prototype's dashed-road pattern
+  (`6 4` dash) --- the dashed curve texture of the redesign's map page.
+- **Theming (r77.6):** the canvas wears the prototype's vector-map
+  treatment --- the whole backdrop carries the prototype SVG's 55%
+  opacity, with landmass fill (`primary`/0.22), coastline
+  (`primary`/0.35) and graticule (`textDim`/0.45) tinted by the toad
+  palette, so the map follows light/dark + every palette (Toad Green,
+  Dynamic Amber, Ocean Slate, ...) exactly like the rest of the chrome.
+- **Thumbnail pins (r77.6, the prototype's clustered pins):** one 48dp
+  rounded photo thumbnail per grid-bucket cluster (24x12 cells, one per
+  15 degrees square on the 2:1 map; at most 288 pins), framed by a 2dp
+  border (`bgSurfaceHighest` + white; the selected pin's frame turns
+  `primary`), carrying the cluster's count as a `primary` badge chip at
+  its top-right corner. The canvas-level tap hit-test is gone: each pin
+  is its own clickable. Tapping a pin SELECTS its cluster (the
+  prototype's `selectMapPin`): the pin scales to 1.15x behind a 2.2s
+  pulse ring, and the memory card below + the coordinates pill follow
+  the selection. The card's expand opens the existing viewer flow with
+  the SELECTED CLUSTER's items as the window (the shell-scoped viewer
+  window hand-off the grid screens use) --- the whole location stays
+  swipeable; the r16 bottom sheet is retired (the prototype's map page
+  has no sheet, and the viewer window covers its browse-the-location
+  job with full EXIF and honestly-wired actions).
+- **Heatmap mode (r77.6):** the pins step aside for the prototype's
+  multi-color glow blobs --- radial gradients running red -> amber for
+  the DENSEST cluster and green -> blue for the rest (the thermal hues
+  are semantic, not theme chrome), their radius still scaling with the
+  pure dot-radius formula.
 - **Interiors/holes:** the parser keeps only EXTERIOR rings (v1 scope
   cut): Natural Earth's holes are inland seas (the Caspian), invisible at
   whole-world zoom. The extension point when zoom lands is

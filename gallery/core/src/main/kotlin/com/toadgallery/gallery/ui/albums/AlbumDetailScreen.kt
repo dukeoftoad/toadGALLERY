@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -80,6 +81,7 @@ import com.toadgallery.gallery.data.checkRenameInput
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.media.ErrorState
 import com.toadgallery.gallery.ui.media.LoadingState
+import com.toadgallery.gallery.ui.media.MEDIA_GRID_GAP_DP
 import com.toadgallery.gallery.ui.media.MediaThumb
 import com.toadgallery.gallery.ui.media.SelectionCheck
 import com.toadgallery.gallery.ui.photos.FileOpsEvent
@@ -294,6 +296,7 @@ fun AlbumDetailScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (selection != null) {
                 // Selection mode (issue #64): the count bar replaces the
@@ -535,8 +538,8 @@ private fun AlbumDetailGrid(
         modifier = Modifier
             .fillMaxSize()
             .testTag("album_detail_state_grid"),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalItemSpacing = 2.dp,
+        horizontalArrangement = Arrangement.spacedBy(MEDIA_GRID_GAP_DP.dp),
+        verticalItemSpacing = MEDIA_GRID_GAP_DP.dp,
     ) {
         itemsIndexed(
             items = items,

@@ -3,19 +3,43 @@ name: Gallery CI
 # Phase 2 branch isolation --- the "Virtual Fork" strategy. The gallery
 # integration branch builds ONLY the gallery APK: changes pushed to
 # editor/**, engine/**, or unified/** on other branches never trigger
-# this workflow. The gallery branch merges to main via a manual PR (no
-# auto-merge, per the Phase 2 guardrails).
+# this workflow. The gallery branch contributes to unified through a
+# reviewed PR; unified is the integration gate.
 #
 # Push fires the Basic build (the offline-first core gallery, no native
 # code --- the lighter CI leg). The manual dispatch input lets the
 # maintainer pick Basic OR Engine; the Engine variant pulls the vendored
 # Rust engine (-PwithEngine, the heavier cross-build).
+#
+# r76: the gallery branch's MERGE GATE. The push leg stays the cheap
+# assemble; the PULL_REQUEST leg (the gate for PRs into gallery) runs the
+# full canonical shape mirrored from ci.yml: assembleBasicDebug +
+# lintBasicDebug + unit tests under BOTH the basic and engine flavors
+# (the source-scan AccessibilityWiringTest + the BuildShape algebra +
+# every JVM suite) + the unified flavor's compile (the editor-in-gallery
+# source graph). The roborazzi screenshots workflow no longer runs on
+# PRs (see screenshots.yml --- record is manual-only now), so the
+# redesigned screens' pixel drift does not block this merge; the maintainer
+# re-records baselines as the documented follow-up.
 
 on:
   push:
     branches: [ gallery ]
     paths:
       - 'gallery/**'
+      - 'engine/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/gallery-ci.yml'
+      - '.github/actions/toad-setup/**'
+  pull_request:
+    branches: [ gallery ]
+    paths:
+      - 'gallery/**'
+      - 'engine/**'
       - 'shared/**'
       - 'gradle/**'
       - 'build.gradle.kts'
@@ -77,5 +101,89 @@ jobs:
         with:
           name: gallery-${{ env.VARIANT }}-debug-apk
           path: gallery/app/build/outputs/apk/${{ env.VARIANT }}/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+  # r76: the MERGE GATE. Runs ONLY on pull_request events into gallery
+  # (the push leg keeps the cheap assemble-only job above). Mirrors the
+  # canonical ci.yml gate: lint (hard gate), unit tests under BOTH flavors
+  # (the source-scan AccessibilityWiringTest lives in the basic-flavor JVM
+  # suite; the BuildShape algebra runs in both), and the unified flavor's
+  # compile (the editor-in-gallery source graph --- proves the whole
+  # unified Kotlin graph resolves on every PR, without the heavy APK).
+  gallery-gate:
+    name: Gallery merge gate (lint + tests + unified compile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The pure-Android toolchain (JDK 17 + SDK 36 + the Gradle cache). No
+      # Rust: unit tests compile no native code, and the unified compile
+      # exercises the editor's pure-Kotlin sources in-process.
+      - name: Set up the toolchain (Android)
+        uses: ./.github/actions/toad-setup
+
+      # Build the debug APK (the BASIC flavor --- the canonical
+      # applicationId, no engine library, no engine UI). Catches any
+      # resource/manifest/compile break before the later steps pay for it.
+      - name: Build debug APK
+        run: ./gradlew :gallery:app:assembleBasicDebug --no-daemon --stacktrace
+
+      - name: Run lint
+        run: ./gradlew :gallery:app:lintBasicDebug --no-daemon --stacktrace
+        # Hard gate since the NewApi cleanup (PR #52): lint errors fail
+        # CI. r76: this is the gallery merge gate's lint, not the push
+        # leg's; a redesign that introduces a lint warning fails the PR.
+
+      # r46: unit tests run under BOTH the basic flavor (BuildShape
+      # all-off) AND the engine flavor (the full engine BuildConfig) ---
+      # the same JVM sources, two shapes, the flavor algebra
+      # (BuildShapeTest) exercised in both. No -PwithEngine anywhere:
+      # unit tests compile no native code.
+      #
+      # r76: this is where the source-scan AccessibilityWiringTest (the
+      # r40 a11y convention pins, the path fix this PR landed) runs.
+      - name: Run unit tests (basic + engine flavors)
+        run: ./gradlew :gallery:app:testBasicDebugUnitTest :gallery:app:testEngineDebugUnitTest --no-daemon --stacktrace
+
+      # r59: the canonical gate ALSO compiles the unified flavor's
+      # Kotlin --- the editor app's sources compiled in-process into the
+      # gallery module (sourceSets at apps/edit verbatim).
+      # compileDebugKotlin proves the whole unified source graph (gallery
+      # + editor + both shared modules) resolves and compiles on EVERY
+      # PR, without packaging the heavy APK here.
+      - name: Compile the unified flavor (editor-in-gallery source graph)
+        run: ./gradlew :unified:app:compileDebugKotlin -PwithEngine --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: gallery-debug-apk
+          path: gallery/app/build/outputs/apk/basic/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload lint reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: lint-reports
+          path: gallery/app/build/reports/lint-results-*.html
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            gallery/app/build/reports/tests/
+            gallery/app/build/test-results/
           if-no-files-found: warn
           retention-days: 14

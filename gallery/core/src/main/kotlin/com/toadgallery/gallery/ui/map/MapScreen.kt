@@ -1,21 +1,15 @@
 package com.toadgallery.gallery.ui.map
 
 import android.net.Uri
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -27,27 +21,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.toadgallery.gallery.R
 import com.toadgallery.gallery.data.MediaItem
 import com.toadgallery.gallery.data.catalogue.room.CatalogueLocationRow
+import com.toadgallery.gallery.data.geo.EquirectangularProjection
 import com.toadgallery.gallery.data.media.identity.MediaIdentity
+import com.toadgallery.gallery.ui.LocalToadToast
 import com.toadgallery.gallery.ui.StateScreen
 import com.toadgallery.gallery.ui.media.LoadingState
-import com.toadgallery.gallery.ui.theme.ToadShapes
-import com.toadgallery.gallery.ui.theme.ToadSpacing
 import com.toadgallery.gallery.ui.viewer.ViewerInfoFormat
+import com.toadgallery.gallery.ui.screens.map.ToadMapHeader
+import com.toadgallery.gallery.ui.screens.map.ToadMapMemoryCard
+import com.toadgallery.gallery.ui.screens.map.ToadMapMode
+import com.toadgallery.gallery.ui.screens.map.ToadMapPill
+import com.toadgallery.gallery.ui.theme.ToadSpacing
+import com.toadgallery.gallery.ui.theme.ToadTheme
 import java.util.Locale
+import kotlin.math.abs
 
 /**
  * The Map tab (r16 round, Phase 4 still-open item "on-device map view").
@@ -62,11 +61,16 @@ import java.util.Locale
  *    empty layout tagged `map_state_empty` while the first locations are
  *    pending; Ready draws the map).
  *
- * A tap on a dot (or cluster) opens [MapLocationSheet] listing that
- * location's items in timeline order; tapping an item hands the SAME
- * shell-scoped viewer window hand-off the grid screens use
- * (`viewerViewModel.open(window, index)`), with the cluster's items as
- * the window.
+ * A tap on a thumbnail pin SELECTS its cluster (the prototype's
+ * `selectMapPin`: the pin scales up behind its pulse ring, the memory
+ * card and the coordinates pill follow). The card's expand hands the
+ * SAME shell-scoped viewer window hand-off the grid screens use
+ * (`viewerViewModel.open(window, index)`), with the SELECTED CLUSTER's
+ * items as the window --- the whole location stays swipeable in the
+ * real full-screen viewer (the r77.6 prototype conversion replaced the
+ * r16 bottom sheet: the prototype's map page has no sheet, and the
+ * viewer window covers its browse-the-location job with full EXIF and
+ * honestly-wired actions).
  *
  * Privacy (ADR-0014): no tile fetch, no network --- the map is the
  * bundled outline plus the catalogue's persisted coordinates.
@@ -93,9 +97,6 @@ fun MapScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-
-    // The tapped cluster's rows --- the sheet's content. `null` = closed.
-    var sheetRows by remember { mutableStateOf<List<CatalogueLocationRow>?>(null) }
 
     when (val s = state) {
         MapContentState.Loading -> LoadingState(tag = "map_state_loading")
@@ -134,32 +135,146 @@ fun MapScreen(
         }
 
         is MapContentState.Ready -> {
-            Box(
+            // r77.6: the prototype's FULL map page --- the header + mode
+            // toggle, the rounded bordered canvas card hosting the
+            // thumbnail pins + the coordinates pill, and the
+            // selected-location memory card below. The mode is
+            // session-local UI state (HEATMAP swaps the pins for the
+            // thermal glow blobs; the canvas draws the same clusters
+            // either way); selection is session-local too --- a pin tap
+            // re-points the card, the pill and the pulse ring, exactly
+            // like the prototype's selectMapPin.
+            var mapMode by remember { mutableStateOf(ToadMapMode.PINS) }
+            val toast = LocalToadToast.current
+            // The clusters are the shared shape of this page: the pins
+            // position by them, the card/pill read the selected one.
+            // Same pure grid-bucket math the canvas always used
+            // (ADR-0016, JVM-pinned), hoisted here so one computation
+            // feeds every surface.
+            val clusters = remember(s.rows) {
+                MapClusterGrid.cluster(
+                    s.rows.map { EquirectangularProjection.project(it.longitude, it.latitude) },
+                )
+            }
+            var selectedRow by remember(s.rows) { mutableStateOf(s.rows.firstOrNull()) }
+            val selectedCluster = remember(clusters, selectedRow) {
+                selectedRow?.let { row ->
+                    clusters.firstOrNull { cluster ->
+                        cluster.memberIndexes.any { s.rows[it].localMediaKey == row.localMediaKey }
+                    }
+                } ?: clusters.firstOrNull()
+            }
+            val palette = ToadTheme.palette
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("map_state_ready"),
             ) {
-                WorldMapCanvas(
-                    outline = outline,
-                    rows = s.rows,
-                    contentDescription = stringResource(R.string.map_canvas_description),
-                    onClusterTapped = { tapped -> sheetRows = tapped },
+                ToadMapHeader(
+                    geotaggedCount = s.rows.size,
+                    mode = mapMode,
+                    onModeChange = { mapMode = it },
                 )
-                if (s.pendingUngrantedRows > 0) {
-                    PendingReindexFootnote(count = s.pendingUngrantedRows)
+                // The prototype's map canvas card: `rounded-3xl` +
+                // `border-strong` + `bg-surface` + shadow, everything
+                // (backdrop, pins, pill) clipped inside the frame.
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
+                        .shadow(6.dp, RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(palette.bgSurface)
+                        .border(1.dp, palette.borderStrong, RoundedCornerShape(24.dp)),
+                ) {
+                    WorldMapCanvas(
+                        outline = outline,
+                        rows = s.rows,
+                        clusters = clusters,
+                        heatmap = mapMode == ToadMapMode.HEATMAP,
+                        selectedKey = selectedRow?.localMediaKey,
+                        contentDescription = stringResource(R.string.map_canvas_description),
+                        onClusterTapped = { tapped ->
+                            // The prototype's selectMapPin: selection
+                            // only --- the memory card below is the door
+                            // out to the viewer.
+                            selectedRow = tapped.firstOrNull()
+                        },
+                    )
+                    selectedCluster?.let { cluster ->
+                        val representative = s.rows[cluster.memberIndexes.first()]
+                        // The prototype's "Map Missing GPS Quick Helper
+                        // Pill" --- showing the SELECTED pin's REAL
+                        // coordinates, and (when the honest
+                        // pending-reindex backlog exists) a tap that
+                        // narrates it through the shell's ONE toast
+                        // banner, the prototype's showToast() spot.
+                        // r77.8 fix: the localized narration is resolved in
+                        // COMPOSABLE scope (pluralStringResource IS a
+                        // @Composable read) and the click lambda only
+                        // captures the finished string --- the pre-r77.8
+                        // shape called it inside the lambda, which does not
+                        // compile (and, had it compiled, would re-read
+                        // resources on every click).
+                        val pendingNarration = if (s.pendingUngrantedRows > 0) {
+                            pluralStringResource(
+                                R.plurals.map_note_pending_locations,
+                                s.pendingUngrantedRows,
+                                s.pendingUngrantedRows,
+                            )
+                        } else {
+                            null
+                        }
+                        ToadMapPill(
+                            text = coordinateLine(representative),
+                            onClick = pendingNarration?.let { narration ->
+                                { toast.show(narration) }
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(12.dp),
+                        )
+                    }
+                }
+                selectedCluster?.let { cluster ->
+                    val representative = s.rows[cluster.memberIndexes.first()]
+                    // r76 polish, kept and extended: the card's expand
+                    // opens the REAL full-screen viewer through the SAME
+                    // shell hand-off the grid screens use --- and since
+                    // r77.6 the window is the SELECTED CLUSTER's items,
+                    // so the whole location stays swipeable with the
+                    // viewer's honestly-wired favorites / vault / edit /
+                    // delete actions plus full EXIF (the r76 first cut
+                    // forked a presentation-only lightbox whose four
+                    // action buttons were unwired no-ops; routing to the
+                    // viewer gives the map the same real surface every
+                    // grid has).
+                    ToadMapMemoryCard(
+                        thumbnailUri = representative.canonicalUri,
+                        locationLabel = coordinateLine(representative),
+                        title = ViewerInfoFormat.displayName(
+                            representative.displayName,
+                            representative.canonicalUri,
+                        ) ?: "Geotagged memory",
+                        dateLine = java.text.DateFormat.getDateInstance(
+                            java.text.DateFormat.MEDIUM,
+                        ).format(
+                            java.util.Date(
+                                representative.resolvedCaptureDateMillis
+                                    ?: representative.dateAddedMillis,
+                            ),
+                        ) + " • Tap to inspect EXIF",
+                        onOpen = {
+                            onOpenViewer(
+                                cluster.memberIndexes.map { s.rows[it].asViewerItem() },
+                                0,
+                            )
+                        },
+                        modifier = Modifier.padding(16.dp),
+                    )
                 }
             }
         }
-    }
-
-    sheetRows?.let { rows ->
-        MapLocationSheet(
-            rows = rows,
-            onDismiss = { sheetRows = null },
-            onOpenItem = { index ->
-                onOpenViewer(rows.map { it.asViewerItem() }, index)
-            },
-        )
     }
 }
 
@@ -188,119 +303,20 @@ private fun BoxScope.PendingReindexFootnote(count: Int) {
 }
 
 /**
- * The location sheet (r16): a Material 3 [ModalBottomSheet] (the same
- * sheet idiom the viewer's info sheet uses) listing one location's items
- * in timeline order. One row per item: thumbnail (the content URI ---
- * Coil's app-wide loader decodes it on-device), display name (the
- * viewer's formatter, reused --- honest `null`s become the URI), and the
- * effective date as the timeline would order it.
+ * The selected pin's coordinates as the pill's / location label's
+ * "17.43°N • 78.48°E" line (the prototype pill's format, carrying the
+ * REAL catalogue coordinates --- no reverse-geocoded city names exist
+ * on-device, and none are invented here).
  */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MapLocationSheet(
-    rows: List<CatalogueLocationRow>,
-    onDismiss: () -> Unit,
-    onOpenItem: (index: Int) -> Unit,
-) {
-    // A date is localized prose; feed the pure formatter the current
-    // configuration's locale (the viewer sheet's pattern).
-    val locale: Locale = LocalConfiguration.current.locales[0]
-
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = ToadSpacing.xxl, end = ToadSpacing.xxl)
-                .padding(bottom = ToadSpacing.xxxl),
-        ) {
-            Text(
-                text = stringResource(R.string.map_sheet_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = pluralStringResource(R.plurals.map_sheet_item_count, rows.size, rows.size),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = ToadSpacing.xs),
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = ToadSpacing.lg),
-            ) {
-                itemsIndexed(
-                    items = rows,
-                    key = { _, row -> row.localMediaKey },
-                ) { index, row ->
-                    MapLocationRow(
-                        row = row,
-                        locale = locale,
-                        onClick = { onOpenItem(index) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** One sheet row: thumbnail, name, effective date. */
-@Composable
-private fun MapLocationRow(
-    row: CatalogueLocationRow,
-    locale: Locale,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(ToadShapes.small))
-            .clickable(onClick = onClick)
-            .padding(vertical = ToadSpacing.sm),
-    ) {
-        AsyncImage(
-            // The content Uri string, re-parsed here: every other
-            // thumbnail surface hands Coil the Uri object, so the loader's
-            // dispatch (video frames, GIF first frames) behaves identically.
-            model = Uri.parse(row.canonicalUri),
-            contentDescription = null, // decorative; the label carries meaning
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(ToadShapes.small)),
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = ToadSpacing.md),
-        ) {
-            Text(
-                text = ViewerInfoFormat.displayName(row.displayName, row.canonicalUri)
-                    ?: row.canonicalUri,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = effectiveDateText(row, locale) ?: row.mimeType,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-/**
- * The row's effective instant as localized prose, or `null` when neither
- * a resolved capture date nor a date_added exists (the viewer formatter's
- * honest `null`; the caller degrades to the MIME type).
- */
-private fun effectiveDateText(row: CatalogueLocationRow, locale: Locale): String? {
-    val effectiveSec = (row.resolvedCaptureDateMillis ?: row.dateAddedMillis) / 1000
-    return ViewerInfoFormat.dateAdded(effectiveSec, locale)
-}
+private fun coordinateLine(row: CatalogueLocationRow): String =
+    String.format(
+        Locale.US,
+        "%.2f°%s • %.2f°%s",
+        abs(row.latitude),
+        if (row.latitude >= 0) "N" else "S",
+        abs(row.longitude),
+        if (row.longitude >= 0) "E" else "W",
+    )
 
 /**
  * Row -> viewer item: the SAME mapping the catalogue-backed timeline

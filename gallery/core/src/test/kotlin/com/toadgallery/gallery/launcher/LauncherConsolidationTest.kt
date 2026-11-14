@@ -1,7 +1,6 @@
 package com.toadgallery.gallery.launcher
 
 import android.content.Intent
-import com.toadgallery.gallery.BuildConfig
 import com.toadgallery.gallery.buildshape.BuildShape
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -53,7 +52,7 @@ class LauncherConsolidationTest {
 
         if (BuildShape.withEngine) {
             assertNull(
-                "an engine-family build (" + BuildConfig.APPLICATION_ID + ") must not " +
+                "an engine-family build (" + context.packageName + ") must not " +
                     "expose a launcher entry --- exactly ONE toadGALLERY icon exists " +
                     "on a device (r55 consolidation)",
                 launchIntent,

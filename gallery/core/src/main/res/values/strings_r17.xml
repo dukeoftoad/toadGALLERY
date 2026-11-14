@@ -19,6 +19,10 @@
          matched nothing). -->
     <string name="state_photos_filtered_empty_title">Nothing matches</string>
     <string name="state_photos_filtered_empty_body">No photos or videos match the selected filters. Try clearing a chip or two.</string>
+    <!-- r77.9: the empty state's pill CTA (the prototype's "Reset Filters"
+         button on the filtered-empty surface). Same reset the chips row's
+         Clear affordance runs. -->
+    <string name="state_photos_filtered_empty_action">Reset filters</string>
 
     <!-- Albums tab: the Collections section (derived, zero-persistence views
          over the timeline; see DerivedCollections.kt). -->

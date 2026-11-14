@@ -148,14 +148,26 @@ class TrashViewModel(app: Application) : AndroidViewModel(app) {
         val localOps = ops ?: return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         if (pendingAction != null) return // one consent round at a time
+        // The pendingAction guard is set BEFORE the build so two rapid taps
+        // cannot stage two rounds; a refused build clears it before the
+        // failure message (r76.1: the build is a provider call on IO that
+        // folds rejections into null --- the first cut threw on the main
+        // thread and killed the process from the Recycle Bin).
         pendingAction = PendingAction(restore, items)
-        @Suppress("NewApi")
-        val sender = if (restore) {
-            localOps.createRestoreConsentRequest(items.map { it.uri })
-        } else {
-            localOps.createDeleteConsentRequest(items.map { it.uri })
+        viewModelScope.launch {
+            @Suppress("NewApi")
+            val sender = if (restore) {
+                localOps.createRestoreConsentRequest(items.map { it.uri })
+            } else {
+                localOps.createDeleteConsentRequest(items.map { it.uri })
+            }
+            if (sender == null) {
+                pendingAction = null
+                _events.tryEmit(TrashEvent.ShowMessage(R.string.trash_consent_denied))
+                return@launch
+            }
+            _events.tryEmit(TrashEvent.RequestConsent(sender))
         }
-        _events.tryEmit(TrashEvent.RequestConsent(sender))
     }
 
     /**

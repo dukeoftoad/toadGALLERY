@@ -3243,3 +3243,73 @@ own consent-free UX pass) stays open per the proposal's own rule;
 F-68/F-69/F-70 carried; the v1.0 stable cut + the F-Droid submission +
 every on-device verification row remain the human remainder (the
 standing directive); PAT revocation advised again.
+
+## 2026-11-10 — Photo editor UX and preview responsiveness
+
+- Kept tool navigation available across photo tools, improved selected-tab
+  readability/accessibility, and cleared transient paint modes on switches.
+- Removed the panel crossfade and reused the decoded image for identity previews.
+- Fixed Editor screenshot recording and added selected-tool coverage.
+- Verified: `:editor:core:testDebugUnitTest` and
+  `:editor:core:verifyRoborazziDebug`. Device performance remains unmeasured.
+
+## 2026-11-11 — The r66 round: the editor UI's honest-feedback kit
+
+The maintainer's chat instruction ("NOW I NEED TO DEVELOP AND ENRICH THE UI
+COMPONENTS OF PHOTO EDITOR ... focus on other files under ui of editor tree
+branch") is the mandate; the attached core files (Adjustments, EditorTheme,
+BundledLuts, AiRender, AiLayers) are the style bar. Three kits land, each in
+the r56 honest-control tradition --- every control shows the truth of the
+pipeline it fronts:
+
+- **The live tonal histogram** --- `EditorHistogram.kt` (pure, ADR-0011)
+  counts the three 256-bin channel histograms plus the three luma zones
+  (the 85/170 thirds, the Rec.601 integer weights the PixelOps saturation
+  kernel uses); `PhotoHistogram.HistogramChart` draws the Screen-blended
+  channel fills (the channel identity colours are SEMANTIC CONTENT, the r56
+  reference-strip exemption --- not theme accents) and SPEAKS: name + the
+  zone percents as state (the r32 a11y contract on a read-only chart; the
+  percents sum to exactly 100 by construction). `EditActivity`'s preview
+  render computes it from the SAME pipelined pixels the canvas shows (the
+  uncropped working grid the AI seam reads), re-keyed with the render's own
+  keys, so the chart follows a drag tick for tick and can never disagree
+  with the preview. The scene layers (stickers/strokes/text/frames)
+  composite after the count: an annotation is not a tonal state.
+- **The honest sky thumbnails** --- the AI panel's sky chips were the last
+  text-only picker row (the looks, frames and fonts all got honest previews
+  in r56/r58). `SkyThumbChip` + `renderSkyThumb`: the five bundled
+  parametric skies render through the SAME `BundledSkies.render` the sky
+  stage blends through, at the reference-strip raster; imported skies show
+  their own bitmap (the FrameThumbChip contract).
+- **The neutral notch** --- `NeutralNotch`: a 2dp hairline at the track's
+  exact center on bipolar sliders (the tune rail's active slider, the three
+  HSL band rows, the straighten row). For any range symmetric around zero
+  the M3 thumb's zero position IS the track center (the travel insets are
+  symmetric), so the mark sits exactly where the double-tap returns to ---
+  the affordance becomes discoverable. Guarded honestly: asymmetric ranges
+  draw nothing; unipolar rows do not opt in (`LabeledSlider.neutralTick`
+  defaults false, so every 0..100 row is untouched).
+
+**Wiring discipline.** The chassis change is three touches: the state slot,
+the count inside the existing render effect (including the identity
+short-circuit, which reads the decode once for the counting --- the preview
+bitmap itself still reuses the decode, the 2026-11-10 rule), and the seam
+parameter. `AdjustPanel`'s new parameter is DEFAULTED so the screenshot
+fixtures and any pre-r66 call site compile unchanged; the panel host carries
+it like every other hoisted value.
+
+**Verification.** `EditorHistogramTest` pins the counting: bin accounting
+(every pixel exactly once per channel), the pure-red bins, the
+84/85/170/171 zone boundaries, the always-exactly-100 percent sum (the
+remainder lands in the midtones), determinism, and the empty degrade.
+editor-ci (assemble + lint + app tests) gates the head. NOT runnable in the
+authoring environment: the Android build itself --- the pinned PNGs that
+change (`tuneRail`, `tuneRailLiveDraft`, `cropPanelStraightenSlider`, and
+the at-rest rail capture now carrying the chart fixture) need one
+`:editor:core:recordRoborazziDebug` pass on a JDK+SDK machine, then
+`verifyRoborazziDebug` re-gates.
+
+**Remaining.** F-73 (the Regions-into-Draw merge) stays open; F-68/F-69/F-70
+carried. The histogram is tone-only by design (no clipping-spike indicators
+yet --- a future round could mark the 0/255 bins); the sky thumbs render
+per-composition key like the look chips.

@@ -1,0 +1,401 @@
+name: Release (unified --- four-product alpha/beta bundle)
+
+# Phase 3 manual release pipelines --- the unified alpha/beta release.
+#
+# ABSOLUTE CONTROL (the Phase 3 directive): every release workflow in this
+# repository is workflow_dispatch ONLY. Zero automated triggers (push /
+# tags / schedule) --- a release exists only when a human operator
+# dispatches this workflow and names the tag.
+#
+# The alpha/beta release builds the four canonical product APKs under one tag:
+#
+#   basic    :gallery:app:assembleBasicRelease    (unified tip, property-less)
+#   engine   :gallery:app:assembleEngineRelease   (unified tip, -PwithEngine)
+#   editor   :editor:app:assembleRelease          (unified tip)
+#   unified  :unified:app:assembleRelease         (unified tip, -PwithEngine)
+#
+# TWO gradle invocations, deliberately (the r46 lesson, now verbatim
+# policy): -PwithEngine is a GLOBAL property --- one invocation would
+# register the engine jniLibs srcDir for every variant and package the
+# native libraries into the basic APK. So invocation 1 is property-less
+# (basic + editor) and invocation 2 carries -PwithEngine (engine +
+# unified). The basic negative packaging gate below exists exactly to
+# catch a leak of the property into the wrong invocation.
+#
+# Ref pinning (the PR #164 wrong-baseline lesson): every checkout below
+# pins its canonical branch --- the ref this workflow is dispatched from
+# is ignored by design, so release-unified always releases the unified branch tip.
+#
+# Signing + gates (ADR-0018): the keystore lives only in GitHub Encrypted
+# Secrets (TG_RELEASE_KEYSTORE_BASE64 / _PASSWORD / TG_RELEASE_KEY_ALIAS /
+# TG_RELEASE_KEY_PASSWORD) and reaches gradle through the TG_* env
+# contract, step-level (never interpolated into the script body). Every
+# APK passes a HARD apksigner gate against the pinned release-certificate
+# digest before anything publishes --- an unsigned or debug-signed build
+# can never reach the release page. The four APKs are the ONLY release
+# assets: the per-APK checksums and all four R8 mapping.txt files
+# (bundled into ONE zip) are published as workflow-run artifacts (the
+# Actions tab), not on the release page.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'The release tag, e.g. v0.4.5-alpha-r50 (required: the operator names every release). A trailing -r<N> drives the asset file names; otherwise the run number is used.'
+        type: string
+        required: true
+permissions:
+  contents: read
+
+concurrency:
+  group: release-unified
+  cancel-in-progress: false
+
+jobs:
+  products-unified:
+    name: Unified-tip products (basic + engine + editor + unified)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      version_gallery: ${{ steps.versions.outputs.version_gallery }}
+      version_editor: ${{ steps.versions.outputs.version_editor }}
+      version_unified: ${{ steps.versions.outputs.version_unified }}
+      sha_unified: ${{ steps.versions.outputs.sha_unified }}
+    steps:
+      - name: 'Checkout (pinned: unified)'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: unified
+
+      - name: Set up the toolchain (Rust Android cross + Android)
+        uses: ./.github/actions/toad-setup
+        with:
+          rust: android
+
+      - name: Decode the ADR-0018 release keystore
+        env:
+          TG_RELEASE_KEYSTORE_BASE64: ${{ secrets.TG_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$TG_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/toadgallery-release.jks"
+          chmod 600 "$RUNNER_TEMP/toadgallery-release.jks"
+          if [[ ! -s "$RUNNER_TEMP/toadgallery-release.jks" ]]; then
+            echo "::error::decoded keystore is empty --- is TG_RELEASE_KEYSTORE_BASE64 set (ADR-0018)?"
+            exit 1
+          fi
+
+      - name: Resolve the tag, the round and the version names
+        id: versions
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          if [[ -z "$TAG_NAME" || "$TAG_NAME" =~ [[:space:]] ]]; then
+            echo "::error::tag_name is required and must not contain whitespace"
+            exit 1
+          fi
+          if [[ "$TAG_NAME" =~ -r([0-9]+)$ ]]; then
+            ROUND="${BASH_REMATCH[1]}"
+          else
+            ROUND="$GITHUB_RUN_NUMBER"
+          fi
+          VERSION_GALLERY="$(grep -oP 'versionName = "\K[^"]+' gallery/app/build.gradle.kts | head -n1)"
+          if [[ -z "$VERSION_GALLERY" ]]; then
+            echo "::error::could not extract versionName from gallery/app/build.gradle.kts"
+            exit 1
+          fi
+          VERSION_EDITOR="$(grep -oP 'versionName = "\K[^"]+' editor/app/build.gradle.kts | tail -n1)"
+          if [[ -z "$VERSION_EDITOR" ]]; then
+            echo "::error::could not extract versionName from editor/app/build.gradle.kts"
+            exit 1
+          fi
+          VERSION_UNIFIED="$(grep -oP 'versionName = "\K[^"]+' unified/app/build.gradle.kts | head -n1)"
+          if [[ -z "$VERSION_UNIFIED" ]]; then
+            echo "::error::could not extract versionName from unified/app/build.gradle.kts"
+            exit 1
+          fi
+          SHA_UNIFIED="$(git rev-parse HEAD)"
+          echo "tag=$TAG_NAME round=$ROUND gallery=$VERSION_GALLERY editor=$VERSION_EDITOR unified=$VERSION_UNIFIED sha=$SHA_UNIFIED"
+          {
+            echo "TAG_NAME=$TAG_NAME"
+            echo "ROUND=$ROUND"
+            echo "VERSION_GALLERY=$VERSION_GALLERY"
+            echo "VERSION_EDITOR=$VERSION_EDITOR"
+            echo "VERSION_UNIFIED=$VERSION_UNIFIED"
+            echo "SHA_UNIFIED=$SHA_UNIFIED"
+          } >> "$GITHUB_ENV"
+          {
+            echo "version_gallery=$VERSION_GALLERY"
+            echo "version_editor=$VERSION_EDITOR"
+            echo "version_unified=$VERSION_UNIFIED"
+            echo "sha_unified=$SHA_UNIFIED"
+          } >> "$GITHUB_OUTPUT"
+
+      # Invocation 1: PROPERTY-LESS. The basic gallery flavor + the editor
+      # app. Never pass -PwithEngine here (it is a global property; the
+      # negative packaging gate below hard-verifies the basic APK carries
+      # no engine library). Every assembleRelease runs its release-variant
+      # privacy gate transitively (ADR-0014) plus R8 minify + resource
+      # shrink, so mapping.txt is produced for every APK.
+      - name: Build signed release APKs (basic gallery + editor, property-less)
+        env:
+          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :gallery:app:assembleBasicRelease :editor:app:assembleRelease --no-daemon --stacktrace
+
+      # Invocation 2: -PwithEngine. The engine-flavor gallery + the unified
+      # shell (both register the buildRustEngine Exec task, which runs
+      # engine/scripts/build-android.sh and stages libtoad_ml_jni.so +
+      # libonnxruntime.so into each module's build/rust-jniLibs srcDir ---
+      # the dual-path staging #166 repaired).
+      - name: Build signed release APKs (engine gallery + unified, -PwithEngine)
+        env:
+          TG_KEYSTORE_FILE: ${{ runner.temp }}/toadgallery-release.jks
+          TG_KEYSTORE_PASSWORD: ${{ secrets.TG_RELEASE_KEYSTORE_PASSWORD }}
+          TG_KEY_ALIAS: ${{ secrets.TG_RELEASE_KEY_ALIAS }}
+          TG_KEY_PASSWORD: ${{ secrets.TG_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :gallery:app:assembleEngineRelease :unified:app:assembleRelease -PwithEngine --no-daemon --stacktrace
+
+      # HARD SIGNATURE GATES (ADR-0018) --- one per APK: the APK must
+      # exist, must not be *-unsigned.apk, apksigner must verify it, and
+      # the signer certificate SHA-256 must equal the pinned release
+      # identity (ONE key for every APK, so each updates in place). Any
+      # failure exits before anything is staged or published.
+      - name: Verify release signatures (hard gates)
+        run: |
+          APKSIGNER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/apksigner"
+          if [[ ! -x "$APKSIGNER" ]]; then
+            APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -path '*36.0.0*/apksigner' -print -quit)"
+          fi
+          if [[ -z "$APKSIGNER" || ! -x "$APKSIGNER" ]]; then
+            echo "::error::apksigner not found under build-tools 36.0.0"
+            exit 1
+          fi
+          EXPECTED_SHA256="8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494"
+
+          verify_release_signature() {
+            local APP_LABEL="$1"
+            local APK_DIR="$2"
+            if [[ ! -d "$APK_DIR" ]]; then
+              echo "::error::$APK_DIR does not exist --- assembleRelease produced no output for $APP_LABEL"
+              exit 1
+            fi
+            local SIGNED_APK UNSIGNED_APK
+            SIGNED_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*unsigned*' -print -quit)"
+            UNSIGNED_APK="$(find "$APK_DIR" -maxdepth 1 -name '*unsigned*.apk' -print -quit)"
+            if [[ -z "$SIGNED_APK" ]]; then
+              echo "::error::no signed release APK for $APP_LABEL in $APK_DIR (unsigned present: ${UNSIGNED_APK:-none}) --- the build did not sign; check the TG_* env contract (ADR-0018)"
+              exit 1
+            fi
+            echo "$APP_LABEL release APK: $SIGNED_APK"
+            "$APKSIGNER" verify --print-certs "$SIGNED_APK" > "$RUNNER_TEMP/${APP_LABEL}-apk-certs.txt"
+            cat "$RUNNER_TEMP/${APP_LABEL}-apk-certs.txt"
+            local ACTUAL_SHA256
+            ACTUAL_SHA256="$(grep -oP 'Signer #1 certificate SHA-256 digest: \K[0-9a-fA-F]+' "$RUNNER_TEMP/${APP_LABEL}-apk-certs.txt" | tr '[:upper:]' '[:lower:]')"
+            if [[ -z "$ACTUAL_SHA256" ]]; then
+              echo "::error::$APP_LABEL: apksigner reported no signer certificate --- signature did not verify"
+              exit 1
+            fi
+            if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
+              echo "::error::$APP_LABEL signer mismatch: expected $EXPECTED_SHA256, got $ACTUAL_SHA256 --- NOT the ADR-0018 release key; refusing to publish"
+              exit 1
+            fi
+            echo "$APP_LABEL signature gate OK --- signer cert SHA-256 matches the pinned release identity."
+            VERIFIED_APK="$SIGNED_APK"
+          }
+
+          verify_release_signature "gallery-basic" "gallery/app/build/outputs/apk/basic/release"
+          BASIC_APK="$VERIFIED_APK"
+          verify_release_signature "gallery-engine" "gallery/app/build/outputs/apk/engine/release"
+          ENGINE_APK="$VERIFIED_APK"
+          verify_release_signature "editor" "editor/app/build/outputs/apk/release"
+          EDITOR_APK="$VERIFIED_APK"
+          verify_release_signature "unified" "unified/app/build/outputs/apk/release"
+          UNIFIED_APK="$VERIFIED_APK"
+          echo "ALL FOUR unified-tip signature gates OK."
+          {
+            echo "BASIC_APK=$BASIC_APK"
+            echo "ENGINE_APK=$ENGINE_APK"
+            echo "EDITOR_APK=$EDITOR_APK"
+            echo "UNIFIED_APK=$UNIFIED_APK"
+          } >> "$GITHUB_ENV"
+
+      # THE PACKAGING GATES (the r46 matrix contract): the basic APK must
+      # carry NEITHER engine native library (the negative gate --- what a
+      # global -PwithEngine leak into the property-less invocation would
+      # break), and the engine + unified APKs must carry BOTH.
+      - name: Verify engine-library packaging (negative + positive gates)
+        run: |
+          for LIB in lib/arm64-v8a/libtoad_ml_jni.so lib/arm64-v8a/libonnxruntime.so; do
+            if unzip -l "$BASIC_APK" | grep -q "$LIB"; then
+              echo "::error::the BASIC gallery APK must NOT carry $LIB --- -PwithEngine leaked into the property-less basic invocation"
+              exit 1
+            fi
+            if ! unzip -l "$ENGINE_APK" | grep -q "$LIB"; then
+              echo "::error::the ENGINE gallery APK must carry $LIB"
+              exit 1
+            fi
+            if ! unzip -l "$UNIFIED_APK" | grep -q "$LIB"; then
+              echo "::error::the UNIFIED APK must carry $LIB"
+              exit 1
+            fi
+          done
+          echo "packaging gates OK --- basic carries no engine library; engine + unified carry both."
+
+      # THE MAPPING LINEAGE (Phase 3): every release build is R8-minified,
+      # so every APK's mapping.txt is mandatory --- a missing mapping is a
+      # hard failure, not a warning. Names carry the product + version +
+      # round (a generic mapping.txt is ambiguous across four APKs).
+      - name: Stage the release artifacts (unified-tip products)
+        run: |
+          STAGE="$GITHUB_WORKSPACE/staging"
+          mkdir -p "$STAGE"
+
+          BASIC_NAME="toadGALLERY-${VERSION_GALLERY}-r${ROUND}"
+          ENGINE_NAME="toadGALLERY-engine-${VERSION_GALLERY}-r${ROUND}"
+          EDITOR_NAME="toadGALLERY-editor-${VERSION_EDITOR}-r${ROUND}"
+          UNIFIED_NAME="toadGALLERY-unified-${VERSION_UNIFIED}-r${ROUND}"
+
+          cp "$BASIC_APK" "$STAGE/$BASIC_NAME.apk"
+          cp "$ENGINE_APK" "$STAGE/$ENGINE_NAME.apk"
+          cp "$EDITOR_APK" "$STAGE/$EDITOR_NAME.apk"
+          cp "$UNIFIED_APK" "$STAGE/$UNIFIED_NAME.apk"
+
+          declare -A MAPPINGS=(
+            ["$BASIC_NAME"]="gallery/app/build/outputs/mapping/basicRelease/mapping.txt"
+            ["$ENGINE_NAME"]="gallery/app/build/outputs/mapping/engineRelease/mapping.txt"
+            ["$EDITOR_NAME"]="editor/app/build/outputs/mapping/release/mapping.txt"
+            ["$UNIFIED_NAME"]="unified/app/build/outputs/mapping/release/mapping.txt"
+          )
+          for NAME in "$BASIC_NAME" "$ENGINE_NAME" "$EDITOR_NAME" "$UNIFIED_NAME"; do
+            MAP="${MAPPINGS[$NAME]}"
+            if [[ ! -s "$MAP" ]]; then
+              echo "::error::no R8 mapping at $MAP for $NAME --- the mapping lineage is mandatory on a release"
+              exit 1
+            fi
+            cp "$MAP" "$STAGE/$NAME-mapping.txt"
+          done
+
+          ( cd "$STAGE" && for f in ./*.apk; do sha256sum "$f" > "$f.sha256"; done )
+
+          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+          ls -l "$STAGE"
+
+      - name: Upload the staged release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: rel-unified-products
+          path: staging/*
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    name: Publish the alpha/beta release
+    needs: [ products-unified ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download and verify the staged artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STAGE="$GITHUB_WORKSPACE/staging"
+          mkdir -p "$STAGE"
+          # No checkout in this job --- every gh call names -R explicitly
+          # (git-remote detection cannot work without a .git directory).
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" --pattern 'rel-unified-*' --dir "$STAGE"
+          while IFS= read -r -d '' f; do mv "$f" "$STAGE/"; done < <(find "$STAGE" -mindepth 2 -type f -print0)
+          find "$STAGE" -mindepth 1 -type d -empty -delete
+
+          APK_N="$(find "$STAGE" -maxdepth 1 -name '*.apk' ! -name '*.apk.sha256' | wc -l)"
+          SHA_N="$(find "$STAGE" -maxdepth 1 -name '*.apk.sha256' | wc -l)"
+          MAP_N="$(find "$STAGE" -maxdepth 1 -name '*-mapping.txt' | wc -l)"
+          echo "APKs=$APK_N checksums=$SHA_N mappings=$MAP_N"
+          if [[ "$APK_N" != 4 || "$SHA_N" != 4 || "$MAP_N" != 4 ]]; then
+            echo "::error::the alpha/beta bundle must be exactly 4 APKs + 4 checksums + 4 mappings (got $APK_N/$SHA_N/$MAP_N)"
+            ls -l "$STAGE"
+            exit 1
+          fi
+          ( cd "$STAGE" && sha256sum -c --strict ./*.apk.sha256 )
+          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+
+      # THE MAPPING LINEAGE (the Phase 3 deliverable): all four R8
+      # mapping.txt files bundled into ONE zip, published as the
+      # rel-unified-mappings run artifact (the Actions tab) --- not a
+      # release asset.
+      - name: Bundle the four R8 mappings into one zip
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          ( cd "$STAGE" && zip -q "toadGALLERY-mappings-${TAG_NAME}.zip" ./*-mapping.txt )
+          unzip -l "$STAGE/toadGALLERY-mappings-${TAG_NAME}.zip"
+          echo "MAPPINGS_ZIP=toadGALLERY-mappings-${TAG_NAME}.zip" >> "$GITHUB_ENV"
+
+      - name: Upload the mappings zip as a run artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: rel-unified-mappings
+          path: staging/toadGALLERY-mappings-*.zip
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Guard --- the tag and the release must not already exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          # No checkout in the publish job --- address origin by URL (a public repo, no auth needed).
+          if git ls-remote --tags "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${TAG_NAME}" | grep -q "refs/tags/${TAG_NAME}"; then
+            echo "::error::tag ${TAG_NAME} already exists on origin --- pick a new tag (a release tag is never reused)"
+            exit 1
+          fi
+          if gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::a GitHub release named ${TAG_NAME} already exists --- pick a new tag"
+            exit 1
+          fi
+          echo "tag guard OK --- ${TAG_NAME} is fresh"
+
+      - name: Compose the release notes
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+          SHA_UNIFIED: ${{ needs.products-unified.outputs.sha_unified }}
+          VERSION_GALLERY: ${{ needs.products-unified.outputs.version_gallery }}
+          VERSION_EDITOR: ${{ needs.products-unified.outputs.version_editor }}
+          VERSION_UNIFIED: ${{ needs.products-unified.outputs.version_unified }}
+        run: |
+          NOTES="$RUNNER_TEMP/notes.md"
+          {
+            echo "**toadGALLERY alpha/beta bundle --- the four-product release ${TAG_NAME}.**"
+            echo ""
+            echo "Four products, one tag. All artifacts are built from the approved alpha/beta unified commit:"
+            echo ""
+            echo "| product | source ref | commit | version | applicationId |"
+            echo "|---|---|---|---|---|"
+            echo "| basic (gallery, no engine) | unified | ${SHA_UNIFIED} | ${VERSION_GALLERY} | com.toadgallery |"
+            echo "| engine (gallery + full AI stack) | unified | ${SHA_UNIFIED} | ${VERSION_GALLERY} | com.toadgallery.engine |"
+            echo "| editor (companion editor) | unified | ${SHA_UNIFIED} | ${VERSION_EDITOR} | com.toadgallery.editor |"
+            echo "| unified (everything-in-one shell) | unified | ${SHA_UNIFIED} | ${VERSION_UNIFIED} | com.toadgallery.unified |"
+            echo ""
+            echo "- All four APKs are signed with the same ADR-0018 release key; verify with apksigner verify --- the signer certificate SHA-256 must be 8a4640e0732e28b84c2fa35ee7a350d104ce97d87df92262cc8439832bd29494."
+            echo "- Requires Android 8.0+ (minSdk 26)."
+            echo "- Built by the manual release-unified pipeline (workflow_dispatch only, no automated triggers); dispatch run ${GITHUB_RUN_ID}."
+          } > "$NOTES"
+          echo "NOTES=$NOTES" >> "$GITHUB_ENV"
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+          SHA_UNIFIED: ${{ needs.products-unified.outputs.sha_unified }}
+        run: |
+          gh release create "$TAG_NAME" -R "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --target "$SHA_UNIFIED" \
+            --title "toadGALLERY alpha/beta bundle ${TAG_NAME}" \
+            --notes-file "$NOTES" \
+            "$STAGE"/*.apk
+          gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

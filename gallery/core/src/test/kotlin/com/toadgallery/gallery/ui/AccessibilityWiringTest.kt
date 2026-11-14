@@ -46,7 +46,7 @@ class AccessibilityWiringTest {
     private val GALLERY_SRC =
         "src/main/kotlin/com/toadgallery/gallery/"
 
-    /** The edit module's one touched source file (full module-relative path). */
+    /** The edit module's one touched source file (module-relative path). */
     private val EDIT_ACTIVITY =
         "src/main/kotlin/com/toadgallery/editor/EditActivity.kt"
 

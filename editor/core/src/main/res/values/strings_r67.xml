@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r67: the Lilypad foundation round (Phase 1 of the editor rebirth plan,
+     docs/editor/lilypad-design.md): the three-state Deck that replaces the
+     r54 fixed 300dp panel window, the ProSlider board that retires the
+     one-slider tune rail, and the Looks card shelf. Only NEW concepts live
+     here; everything else reuses the r30-r66 strings in their original
+     files. (Recovery note: the r67 working tree was lost mid-round; the
+     file was restored with the full round's strings after the Deck was
+     rebuilt.) -->
+<resources>
+    <!-- The Deck's drag handle: the a11y NAME, state-dependent (collapsed
+         reads expand, expanded reads collapse; the tap action toggles). -->
+    <string name="editor_r67_deck_handle_expand">Expand tools</string>
+    <string name="editor_r67_deck_handle_collapse">Collapse tools</string>
+    <!-- The unipolar percent value pill (the Looks intensity row): a whole
+         number with the percent sign, formatted for the mono value style. -->
+    <string name="editor_r67_percent_value">%1$d%%</string>
+</resources>

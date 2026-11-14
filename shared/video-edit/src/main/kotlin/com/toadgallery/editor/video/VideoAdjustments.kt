@@ -111,6 +111,87 @@ object VideoAdjustProjection {
         VideoAdjustUniform("uVignetteStrength", (params.vignette / 100f)),
     )
 
+    /**
+     * The r74 look stage's uniform set (the shared `.cube` look on
+     * video): the intensity blend factor and the cube's size fact. The
+     * look's SAMPLES ride as a 3D texture bound by the realization
+     * shell (GL_TEXTURE_2D array rows in ES 2.0 --- the shell picks the
+     * layout); these two uniforms plus the texture unit are everything
+     * the shader needs. A null look reads as intensity 0 --- the stage
+     * is a no-op exactly like a neutral parameter set.
+     */
+    fun lookUniforms(look: VideoLutLook?): List<VideoAdjustUniform> = listOf(
+        VideoAdjustUniform(
+            "uLookIntensity",
+            if (look != null) look.intensity / 100f else 0f,
+        ),
+        VideoAdjustUniform("uLookSize", (look?.size ?: 2).toFloat()),
+    )
+
+    /**
+     * The look stage's shader lines (r74): a manual trilinear 3D-sample
+     * over the bound 2D texture, inserted into [FRAGMENT_SHADER_LINES]
+     * at [LOOK_STAGE_INSERT_INDEX] --- the look grades the finished
+     * frame, the photo pipeline's own order (the r33 look runs after the
+     * adjustments, before the final clamp). The texture layout is the
+     * 2D unwrap the realization shell uploads: x = r + g*size (red
+     * fastest), y = b --- the .cube's RED-MAJOR order verbatim --- with
+     * texel centres offset by half a texel (the sampler's own
+     * convention). The arithmetic mirrors [VideoLutSampler.sampleCube]:
+     * domain-mapped, trilinear over the 8 corners, then the intensity
+     * blend (`mix(c, sampled, uLookIntensity)` --- the r33 grammar). At
+     * intensity 0 the stage is an exact no-op (the early return).
+     */
+    val LOOK_STAGE_LINES: List<String> = listOf(
+        "uniform sampler2D uLookSampler;",
+        "uniform float uLookIntensity;",
+        "uniform float uLookSize;",
+        "vec3 sampleLook(vec3 c) {",
+        "  if (uLookIntensity <= 0.0) { return c; }",
+        "  float f = uLookSize - 1.0;",
+        "  vec3 p = clamp(c, 0.0, 1.0) * f;",
+        "  vec3 i0 = floor(p);",
+        "  vec3 t = p - i0;",
+        "  float texW = uLookSize * uLookSize;",
+        "  float texH = uLookSize;",
+        "  vec2 duv = vec2(1.0 / texW, 1.0 / texH);",
+        "  float x0 = i0.r + i0.g * uLookSize;",
+        "  float x1 = x0 + 1.0;",
+        "  float x2 = i0.r + (i0.g + 1.0) * uLookSize;",
+        "  float x3 = x2 + 1.0;",
+        "  float y0 = i0.b;",
+        "  float y1 = i0.b + 1.0;",
+        "  vec2 uv00 = (vec2(x0, y0) + vec2(0.5)) * duv;",
+        "  vec2 uv10 = (vec2(x1, y0) + vec2(0.5)) * duv;",
+        "  vec2 uv01 = (vec2(x2, y0) + vec2(0.5)) * duv;",
+        "  vec2 uv11 = (vec2(x3, y0) + vec2(0.5)) * duv;",
+        "  vec2 uvB00 = (vec2(x0, y1) + vec2(0.5)) * duv;",
+        "  vec2 uvB10 = (vec2(x1, y1) + vec2(0.5)) * duv;",
+        "  vec2 uvB01 = (vec2(x2, y1) + vec2(0.5)) * duv;",
+        "  vec2 uvB11 = (vec2(x3, y1) + vec2(0.5)) * duv;",
+        "  vec3 c00 = texture2D(uLookSampler, uv00).rgb;",
+        "  vec3 c10 = texture2D(uLookSampler, uv10).rgb;",
+        "  vec3 c01 = texture2D(uLookSampler, uv01).rgb;",
+        "  vec3 c11 = texture2D(uLookSampler, uv11).rgb;",
+        "  vec3 b00 = texture2D(uLookSampler, uvB00).rgb;",
+        "  vec3 b10 = texture2D(uLookSampler, uvB10).rgb;",
+        "  vec3 b01 = texture2D(uLookSampler, uvB01).rgb;",
+        "  vec3 b11 = texture2D(uLookSampler, uvB11).rgb;",
+        "  vec3 lo = mix(mix(c00, c10, t.r), mix(c01, c11, t.r), t.g);",
+        "  vec3 hi = mix(mix(b00, b10, t.r), mix(b01, b11, t.r), t.g);",
+        "  vec3 sampled = mix(lo, hi, t.b);",
+        "  return mix(c, sampled, uLookIntensity);",
+        "}",
+    )
+
+    /**
+     * Where the look stage's lines insert into the fragment shader:
+     * after the last uniform (index 10, `uVignetteStrength`), before
+     * the `varying` line --- the preamble's end, where a function
+     * definition is legal GLSL.
+     */
+    const val LOOK_STAGE_INSERT_INDEX: Int = 11
+
     /** The r29 contrast factor (identical formula to LutBuilder, normalized pivot). */
     internal fun contrastFactor(contrast: Int): Double {
         val contrastPercent = contrast * 2.55
@@ -184,9 +265,26 @@ object VideoAdjustProjection {
         "  float radius = length(vTexCoord - centre) / length(centre);",
         "  float mask = smoothstep01(0.35, 1.0, radius);",
         "  c = c * (1.0 - 0.8 * uVignetteStrength * mask);",
+        // r74: the shared look, over the finished grade (the r33 order).
+        "  c = sampleLook(c);",
         "  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);",
         "}",
     )
+
+    /**
+     * The composed fragment source (r74): [FRAGMENT_SHADER_LINES] with
+     * the look stage's function and uniforms spliced in at
+     * [LOOK_STAGE_INSERT_INDEX] (before `void main`, where the preamble
+     * ends). With no look the stage's early return makes it an exact
+     * no-op, so ONE shader serves both states --- preview and export
+     * agree by construction, the module's rule.
+     */
+    fun fragmentShaderWithLookStage(): String =
+        (
+            FRAGMENT_SHADER_LINES.subList(0, LOOK_STAGE_INSERT_INDEX) +
+                LOOK_STAGE_LINES +
+                FRAGMENT_SHADER_LINES.subList(LOOK_STAGE_INSERT_INDEX, FRAGMENT_SHADER_LINES.size)
+            ).joinToString("\n")
 
     /** The joined fragment-shader source (the GL programs compile this). */
     fun fragmentShaderSource(): String = FRAGMENT_SHADER_LINES.joinToString("\n")

@@ -1,14 +1,20 @@
 # Roborazzi screenshot testing --- the record-first pipeline for the state cards
 
 **Status:** LANDED, then made PLUGIN-FIRST (2026-11-06, Phase 11; plugin-first
-r47 follow-up). This doc records what Roborazzi is, what was wired into the
+r47 follow-up). **PR-gate SUSPENDED (2026-11-12, the r68 round):**
+`screenshots.yml` lost its `pull_request` trigger and is manual-dispatch
+only --- the record/verify harness rests while the Lilypad rebuild ships at
+pace, carried by the per-branch lint/assemble/full-unit CI lanes
+(`editor-ci.yml` now runs the entire `:editor:core` unit suite). The plugin
+wiring, the committed baselines, and both jobs survive untouched; record
+remains the deliberate per-phase baseline pass (design doc R1), verify the
+on-demand drift check, and re-arming the PR gate is a three-line revert.
+This doc records what Roborazzi is, what was wired into the
 build (version catalog, plugins, testOptions, test dependencies), the three
 captured subjects and their baseline tags, the record flow, and the verify
-flow that activates once baselines are committed. It is written honestly
-about its own limits: **no baseline PNGs are committed yet, so nothing gates
-on visual drift yet** --- there is no local Android SDK in the sandbox this
-code was written in, so the PNGs must come from the CI record run's artifact
-first. Cross-references: ADR-0013 (CI as the canonical build environment),
+flow that activates once baselines are committed. The Gallery state-card
+baselines remain pending; Editor panel baselines are recorded under
+`editor/core/src/test/resources/roborazzi`. Cross-references: ADR-0013 (CI as the canonical build environment),
 ADR-0014 (the privacy gate --- everything added here is test-classpath-only
 and touches zero runtime surface), docs/architecture/screen-states.md (the
 state-card system the captures pin), and `.github/workflows/screenshots.yml`

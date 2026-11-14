@@ -11,7 +11,10 @@ package com.toadgallery.editor
  *  4. quarter turns (90-degree steps)
  *  5. crop (the normalized rect over the post-geometry frame)
  *  6. the composed tone LUT (exposure -> brightness -> contrast ->
- *     highlights -> shadows, one pass)
+ *     highlights -> shadows -> curve, one pass; the master curve
+ *     composes after the five sliders since r68; the per-channel R/G/B
+ *     curves compose over the master since r71 --- the three-table
+ *     apply, Phase 2's declared follow-up landed)
  *  7. saturation
  *  8. temperature / tint
  *  9. per-channel HSL bands
@@ -104,20 +107,63 @@ object EditPipeline {
         }
 
         // ---- Tone (one composed per-channel pass) ----
-        if (listOf(recipe.exposure, recipe.brightness, recipe.contrast, recipe.highlights, recipe.shadows)
-            .any { it != 0 }
+        // r68: the gate opens for the five sliders OR a non-identity
+        // curve; the six-parameter build composes the master curve after
+        // the shadows stage (see LutBuilder.ORDER). r71: a state with
+        // CHANNEL curves takes the three-table path (LutBuilder
+        // .buildChannels + PixelOps.applyChannelLuts --- the master-then-
+        // channel composition Phase 2's forward state waited for); the
+        // master-only path stays byte-frozen as the r68 contract.
+        // r74: whites/blacks join the gate and the seven-stage build (the
+        // far-end pair composes into the SAME LUT --- see LutBuilder's
+        // seven-stage overload); a 0 value is a zero term, so pre-r74
+        // recipes bake byte-identical tables.
+        val curves = recipe.toneCurves
+        if (listOf(
+                recipe.exposure,
+                recipe.brightness,
+                recipe.contrast,
+                recipe.highlights,
+                recipe.shadows,
+                recipe.whites,
+                recipe.blacks,
+            ).any { it != 0 } ||
+            curves?.isIdentity == false
         ) {
-            val lut = LutBuilder.build(
-                brightness = recipe.brightness,
-                contrast = recipe.contrast,
-                exposure = recipe.exposure,
-                highlights = recipe.highlights,
-                shadows = recipe.shadows,
-            )
-            PixelAdjuster.applyTo(current, lut)
+            if (curves != null && curves.hasChannelCurves) {
+                PixelOps.applyChannelLuts(
+                    current,
+                    LutBuilder.buildChannels(
+                        brightness = recipe.brightness,
+                        contrast = recipe.contrast,
+                        exposure = recipe.exposure,
+                        highlights = recipe.highlights,
+                        shadows = recipe.shadows,
+                        whites = recipe.whites,
+                        blacks = recipe.blacks,
+                        toneCurves = curves,
+                    ),
+                )
+            } else {
+                val lut = LutBuilder.build(
+                    brightness = recipe.brightness,
+                    contrast = recipe.contrast,
+                    exposure = recipe.exposure,
+                    highlights = recipe.highlights,
+                    shadows = recipe.shadows,
+                    whites = recipe.whites,
+                    blacks = recipe.blacks,
+                    toneCurves = curves,
+                )
+                PixelAdjuster.applyTo(current, lut)
+            }
         }
 
         // ---- Colour ----
+        // r74: vibrance leads saturation (the luma-weighted pull runs
+        // before the flat pull, so each stage sees the prior stage's
+        // output --- the documented single order both stages share).
+        PixelOps.applyVibrance(current, recipe.vibrance)
         PixelOps.applySaturation(current, recipe.saturation)
         PixelOps.applyTemperatureTint(current, recipe.temperature, recipe.tint)
         applyHslBands(current, recipe.hslBands)

@@ -37,6 +37,12 @@
     <string name="editor_tint">Tint: %1$d</string>
     <string name="editor_highlights">Highlights: %1$d</string>
     <string name="editor_shadows">Shadows: %1$d</string>
+    <!-- r74: the far-end tone pair and the luma-weighted saturation (the
+         plan doc's board list; whites/blacks mask to the bright/dark
+         quarter, vibrance boosts flat pixels more than vivid ones). -->
+    <string name="editor_whites">Whites: %1$d</string>
+    <string name="editor_blacks">Blacks: %1$d</string>
+    <string name="editor_vibrance">Vibrance: %1$d</string>
     <string name="editor_vignette">Vignette: %1$d</string>
     <string name="editor_sharpness">Sharpness: %1$d</string>
 

@@ -4,9 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -37,6 +35,17 @@ import androidx.compose.ui.unit.dp
 // --- label + live value pill + double-tap-to-neutral (0 deg). The r32
 // live-draft contract is verbatim (tick writes the "straighten" draft,
 // release commits through `commit`).
+//
+// r68 (the photo pro round, docs/editor/lilypad-design.md): the straighten
+// ROW becomes the straighten DIAL ([LilypadDial] --- the ProSlider's rotary
+// sibling; a value that IS an angle finally reads as one), widened to the
+// recipe's own +/-45 validation bound the old +/-15 track never used, and
+// the panel gains the PERSPECTIVE block the quad has been waiting for since
+// the engine landed it: two keystone ProSlider rows (vertical + horizontal)
+// over [LilypadKeystoneMath]'s fixed two-percent carve of the quad. The
+// corner drag is Phase 4's; the sliders are its honest stand-in. Both
+// families keep the r32 live-draft contract verbatim: tick writes the
+// draft, release commits ONE recipe through `commit` and clears.
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -120,24 +129,28 @@ internal fun CropPanel(
             modifier = Modifier.padding(end = 8.dp),
         )
     }
-    // r32: the straighten slider follows the drag live (the label,
-    // the thumb, the preview) exactly like the adjustment sliders;
-    // it previously held the committed value until release. The
-    // value stays a Double so a fractional sidecar straighten (e.g.
-    // 7.5) displays exactly, not truncated.
-    // r58b: the crafted LabeledSlider (r56) --- label + live value pill
-    // + double-tap-to-neutral (0 deg). The r32 live-draft contract is
-    // verbatim (tick writes the "straighten" draft, release commits).
+    // r32: the straighten control follows the drag live (the label, the
+    // readout, the preview) exactly like the adjustment sliders. The
+    // value stays a Double so a fractional sidecar straighten (e.g. 7.5)
+    // displays exactly, not truncated. r68: the DIAL --- the value IS its
+    // dial angle, the range is the recipe's own +/-45 validation window
+    // (the old +/-15 track was narrower than the engine it fed), and the
+    // r32 live-draft contract is verbatim: tick writes the "straighten"
+    // draft, release commits.
     val straightenLive = draft?.takeIf { it.first == "straighten" }?.second?.toDouble()
         ?: committed.straightenDeg
-    LabeledSlider(
+    LilypadDial(
         name = stringResource(R.string.editor_a11y_straighten),
-        label = stringResource(R.string.editor_straighten, straightenLive.toInt()),
-        valueText = straightenLive.toInt().toString(),
+        label = stringResource(R.string.editor_a11y_straighten),
+        state = stringResource(R.string.editor_straighten, straightenLive.toInt()),
+        valueText = stringResource(
+            R.string.editor_r68_dial_deg,
+            LilypadSliderMath.signedValueText(straightenLive.toInt()),
+        ),
         value = straightenLive.toFloat(),
-        valueRange = -15f..15f,
+        valueRange = LilypadDialMath.RANGE_MIN_DEG..LilypadDialMath.RANGE_MAX_DEG,
         enabled = !exporting,
-        onChange = { onDraftChange(Pair("straighten", it)) },
+        onChange = { onDraftChange(Pair("straighten", it.toInt())) },
         onFinish = {
             draft?.let { d ->
                 if (d.first == "straighten") {
@@ -146,7 +159,100 @@ internal fun CropPanel(
             }
             onDraftChange(null)
         },
-        resetValue = 0,
+    )
+
+    // ---- Perspective: the two keystone rows over the quad ----
+    // The rows read their percents back out of the committed quad (the
+    // recipe stores the QUAD, not the knobs --- LilypadKeystoneMath's
+    // read-back), drafted against the PREVIEW grid the commit builds on,
+    // so what the drag shows is what the release lands. r72: the corner
+    // overlay owns the canvas's drag surface on this screen; the rows
+    // keep the model's a11y path (one model, two surfaces) and gain the
+    // hint that names the gesture.
+    Text(
+        text = stringResource(R.string.editor_r68_section_perspective),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelLarge,
+    )
+    if (LilypadFlags.cornerDragEnabled) {
+        Text(
+            text = stringResource(R.string.editor_r72_corner_hint),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+
+    /**
+     * The keystone commit: ONE recipe per release, the quad built from
+     * the drafted knob and the other knob's committed read-back, on the
+     * preview grid. A draft with no decoded base (the pre-decode window;
+     * the render has nothing to preview either) drops honestly --- the
+     * paint gesture's own rule, never a silently invented quad.
+     */
+    fun commitKeystone(key: String) {
+        val d = draft
+        val base = previewBase
+        if (d != null && d.first == key && base != null) {
+            val vertical = if (key == KEYSTONE_VERTICAL) {
+                d.second
+            } else {
+                LilypadKeystoneMath.verticalPctOf(committed.perspective, base.width)
+            }
+            val horizontal = if (key == KEYSTONE_HORIZONTAL) {
+                d.second
+            } else {
+                LilypadKeystoneMath.horizontalPctOf(committed.perspective, base.height)
+            }
+            commit(
+                committed.copy(
+                    perspective = LilypadKeystoneMath.quadFor(
+                        verticalPct = vertical,
+                        horizontalPct = horizontal,
+                        width = base.width,
+                        height = base.height,
+                    ),
+                ),
+            )
+        }
+        onDraftChange(null)
+    }
+    val baseWidth = previewBase?.width ?: 0
+    val baseHeight = previewBase?.height ?: 0
+    val keystoneRange = LilypadKeystoneMath.KEYSTONE_MIN.toFloat()..
+        LilypadKeystoneMath.KEYSTONE_MAX.toFloat()
+    val verticalLive = if (draft?.first == KEYSTONE_VERTICAL) {
+        draft.second
+    } else {
+        LilypadKeystoneMath.verticalPctOf(committed.perspective, baseWidth)
+    }
+    val horizontalLive = if (draft?.first == KEYSTONE_HORIZONTAL) {
+        draft.second
+    } else {
+        LilypadKeystoneMath.horizontalPctOf(committed.perspective, baseHeight)
+    }
+    ProSlider(
+        name = stringResource(R.string.editor_r68_keystone_vertical),
+        label = stringResource(R.string.editor_r68_keystone_vertical),
+        state = stringResource(R.string.editor_r68_keystone_vertical_state, verticalLive),
+        valueText = LilypadSliderMath.signedValueText(verticalLive),
+        value = verticalLive.toFloat(),
+        valueRange = keystoneRange,
+        neutral = 0f,
+        enabled = !exporting,
+        onChange = { v -> onDraftChange(Pair(KEYSTONE_VERTICAL, v.toInt())) },
+        onFinish = { commitKeystone(KEYSTONE_VERTICAL) },
+    )
+    ProSlider(
+        name = stringResource(R.string.editor_r68_keystone_horizontal),
+        label = stringResource(R.string.editor_r68_keystone_horizontal),
+        state = stringResource(R.string.editor_r68_keystone_horizontal_state, horizontalLive),
+        valueText = LilypadSliderMath.signedValueText(horizontalLive),
+        value = horizontalLive.toFloat(),
+        valueRange = keystoneRange,
+        neutral = 0f,
+        enabled = !exporting,
+        onChange = { v -> onDraftChange(Pair(KEYSTONE_HORIZONTAL, v.toInt())) },
+        onFinish = { commitKeystone(KEYSTONE_HORIZONTAL) },
     )
 
     // ---- Crop aspect presets (centered fits over the post-geometry frame) ----
@@ -195,3 +301,15 @@ internal fun CropPanel(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// r68: the keystone draft keys --- one constant per knob, declared beside
+// their only writers/readers (the panel and the chassis's effectiveRecipe
+// branch), so the wire shape greps from either end.
+// ---------------------------------------------------------------------------
+
+/** The vertical keystone's draft key (the "straighten" slot's sibling). */
+internal const val KEYSTONE_VERTICAL = "keystone-v"
+
+/** The horizontal keystone's draft key. */
+internal const val KEYSTONE_HORIZONTAL = "keystone-h"

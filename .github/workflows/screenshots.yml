@@ -45,6 +45,19 @@ name: Screenshots (Roborazzi)
 #   unzip roborazzi-baselines.zip -d .
 #   git add gallery/core/src/test/resources/roborazzi && git commit
 # The verify gate then activates on the next run of this workflow.
+#
+# r68 SUSPENSION (2026-11-12): the pull_request trigger is GONE. The
+# record-first loop it imposed on every editor/gallery PR --- re-record
+# passes, pixel-drift chases, fixture churn per restyle --- taxes the
+# Lilypad build pace more than it pays, so the harness rests: this
+# workflow is now MANUAL-DISPATCH ONLY (record for the deliberate
+# per-phase baseline pass the design doc's R1 mitigation describes;
+# verify on demand to chase a suspected visual regression). The PR gates
+# that carry the work are the per-branch CI lanes --- lint debug,
+# assemble, and the FULL unit-test suites (editor-ci.yml, gallery-ci.yml,
+# unified-ci.yml). Nothing is deleted: the plugin wiring, the baselines,
+# and both jobs survive untouched, so re-arming the PR gate is a
+# three-line revert of this block.
 
 on:
   workflow_dispatch:

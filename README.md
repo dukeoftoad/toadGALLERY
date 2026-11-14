@@ -1,4 +1,5 @@
 # toadGALLERY --- `gallery` (the Gallery product lane)
+# toadGALLERY --- `unified` (the integration & alpha/beta branch)
 
 **toadGALLERY** is a private, offline-first Android gallery family built from
 scratch in Kotlin + Jetpack Compose (inspired by Mi Gallery, Aves libre, and
@@ -8,33 +9,8 @@ full project story, screenshots, and goals live in the
 the authoritative policy is
 [`docs/PROJECT_ARCHITECTURE.md`](https://github.com/dukeoftoad/toadGALLERY/blob/main/docs/PROJECT_ARCHITECTURE.md).
 
-**This branch is the Gallery product lane** of the virtual fork --- where
-both focused gallery products are developed.
-
----
-
-## Branch identity card
-
-| | |
-|---|---|
-| **Role** | Integration/development lane for the Gallery product work. |
-| **Products owned here** | **Basic Gallery** (`com.toadgallery` --- no native code) and **Gallery Engine** (`com.toadgallery.engine` --- the vendored Rust/ONNX engine, `-PwithEngine`). Semantic and face capabilities are features of Engine, not separate products. |
-| **Push CI** | `gallery-ci.yml` --- Basic + Engine debug APKs on every relevant push. |
-| **Releases** | **Retired on this lane** (2026-11-10): releases originate from `unified` (alpha/beta bundles) and `main` (stable) only. |
-| **Flows to** | `unified`, via a reviewed PR once the lane's work is ready. |
-
-## CI on this branch
-
-[`gallery-ci.yml`](.github/workflows/gallery-ci.yml) triggers on pushes to
-`gallery`, path-filtered over `gallery/**`, `engine/**`, `shared/**`, the
-gradle files, and the workflow tree --- the engine paths are included
-deliberately, because the Engine product consumes the vendored Rust engine.
-The job builds both flavors:
-
-```bash
-./gradlew :gallery:app:assembleBasicDebug                # property-less: no native engine
-./gradlew :gallery:app:assembleEngineDebug -PwithEngine  # the engine-bearing build
-```
+**This branch is the primary integration branch of the virtual fork** ---
+where the whole four-product family comes together.
 
 The two invocations are deliberately separate: `-PwithEngine` is a global
 gradle property, and the Basic APK must never inherit it (the release

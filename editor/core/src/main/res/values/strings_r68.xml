@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- r68: the photo pro round (Phase 2 of the editor rebirth plan,
+     docs/editor/lilypad-design.md): the tone curve deck, the RGB parade
+     and clipping zebra scopes, the history strip, the crop dial and the
+     HSL rows on ProSlider. Only NEW concepts live here; everything else
+     reuses the r30-r67 strings in their original files. XML comments use
+     single dashes (the r66 lesson: a double dash inside an XML comment
+     breaks aapt). -->
+<resources>
+    <!-- The Adjust panel's scope row (r68): the Histogram/Parade chart
+         modes and the Zebra overlay toggle. -->
+    <string name="editor_r68_scope_histogram">Histogram</string>
+    <string name="editor_r68_scope_parade">Parade</string>
+    <string name="editor_r68_scope_zebra">Zebra</string>
+    <!-- The parade chart's a11y NAME (the r32 contract: the chart
+         announces what it is; the histogram's zone percents are its
+         state, the same string the histogram chart reads). -->
+    <string name="editor_r68_parade_a11y">RGB parade</string>
+
+    <!-- The curve deck (r68): the scope row's Curve entry chip, the
+         deck's channel chips, its a11y pair, its Done affordance and
+         the gesture hint under the plot. -->
+    <string name="editor_r68_curve_chip">Curve</string>
+    <string name="editor_r68_curve_channel_master">Master</string>
+    <string name="editor_r68_curve_channel_red">Red</string>
+    <string name="editor_r68_curve_channel_green">Green</string>
+    <string name="editor_r68_curve_channel_blue">Blue</string>
+    <string name="editor_r68_curve_deck_a11y">Tone curve</string>
+    <string name="editor_r68_curve_state_points">Curve: %1$d points</string>
+    <string name="editor_r68_curve_done">Done</string>
+    <string name="editor_r68_curve_hint">Drag a point. Tap to add one. Touch and hold to remove.</string>
+
+    <!-- The history strip (r68): the Main header's entry pair (the
+         state-dependent a11y names the deck handle's convention), the
+         strip's heading, the launch chip, the chip a11y states, the
+         per-family chip words and the chip value formats. Everything
+         else reuses the r30-r67 strings (the slider names read through
+         ADJUST_SLIDERS's own spec, the None card's word, the percent
+         value). -->
+    <string name="editor_r68_history_show">Show history</string>
+    <string name="editor_r68_history_hide">Hide history</string>
+    <string name="editor_r68_history_heading">History</string>
+    <string name="editor_r68_history_original">Original</string>
+    <string name="editor_r68_history_state_current">Current</string>
+    <string name="editor_r68_history_state_redo">Undone</string>
+    <string name="editor_r68_history_deg">%1$d°</string>
+    <string name="editor_r68_history_curve">Curve</string>
+    <string name="editor_r68_history_curve_pts">%1$d pts</string>
+    <string name="editor_r68_history_look">Look</string>
+    <string name="editor_r68_history_crop">Crop</string>
+    <string name="editor_r68_history_rotate">Rotate</string>
+    <string name="editor_r68_history_flip">Flip</string>
+    <string name="editor_r68_history_perspective">Perspective</string>
+    <string name="editor_r68_history_color">Color</string>
+    <string name="editor_r68_history_text">Text</string>
+    <string name="editor_r68_history_stickers">Stickers</string>
+    <string name="editor_r68_history_draw">Draw</string>
+    <string name="editor_r68_history_regions">Regions</string>
+    <string name="editor_r68_history_frame">Frame</string>
+    <string name="editor_r68_history_sky">Sky</string>
+    <string name="editor_r68_history_bokeh">Bokeh</string>
+    <string name="editor_r68_history_retouch">Retouch</string>
+    <string name="editor_r68_history_erase">Erase</string>
+    <string name="editor_r68_history_edit">Edit</string>
+
+    <!-- The crop dial and the keystone rows (r68): the dial's degree
+         readout (the signed text ProSlider's pill already formats), the
+         Perspective block's heading, and the two keystone rows' name and
+         a11y-state pairs (the values read through the signed pill text,
+         the same as every slider row). -->
+    <string name="editor_r68_dial_deg">%1$s°</string>
+    <string name="editor_r68_section_perspective">Perspective</string>
+    <string name="editor_r68_keystone_vertical">Vertical keystone</string>
+    <string name="editor_r68_keystone_vertical_state">Vertical keystone %1$d</string>
+    <string name="editor_r68_keystone_horizontal">Horizontal keystone</string>
+    <string name="editor_r68_keystone_horizontal_state">Horizontal keystone %1$d</string>
+</resources>

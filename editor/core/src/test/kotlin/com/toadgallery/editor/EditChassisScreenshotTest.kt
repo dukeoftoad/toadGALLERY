@@ -8,6 +8,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsSelected
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -78,6 +81,44 @@ class EditChassisScreenshotTest {
         rule.mainClock.advanceTimeBy(16L)
         rule.waitForIdle()
         rule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun photoTabBarSelectedToolRecordsBaseline() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            EditorTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    PhotoTabBar(current = PhotoScreen.Adjust, enabled = true, onSelect = {})
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(16L)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun photoTabBarCanSwitchToolsAndAnnouncesSelection() {
+        rule.setContent {
+            val current = androidx.compose.runtime.remember {
+                androidx.compose.runtime.mutableStateOf(PhotoScreen.Adjust)
+            }
+            EditorTheme {
+                PhotoTabBar(
+                    current = current.value,
+                    enabled = true,
+                    onSelect = { current.value = it },
+                )
+            }
+        }
+
+        rule.onNodeWithText("Filters").performClick()
+        rule.onNodeWithText("Filters").assertIsSelected()
     }
 
     @Test
@@ -153,14 +194,16 @@ class EditChassisScreenshotTest {
     }
 
     /**
-     * r58b: the Crop panel's straighten slider on the crafted LabeledSlider.
-     * Minimal fixture: `EditRecipe()` defaults (straightenDeg = 0.0). The
-     * capture pins the slider row + the geometry chip row + the crop aspect
-     * presets --- the r32 contract on the r56 control, the regression surface
-     * for the straighten conversion.
+     * r68: the Crop panel's straighten DIAL (the r58b LabeledSlider row it
+     * replaced). Minimal fixture: `EditRecipe()` defaults (straightenDeg =
+     * 0.0 --- the quiet dial: bare track, no ember arc, ink readout). The
+     * capture pins the dial + the keystone rows (the r68 Perspective block,
+     * neutral at a null preview base --- the honest 0 read-back) + the
+     * geometry chip row + the crop aspect presets --- the r32 contract on
+     * the r68 instruments, the regression surface for the dial conversion.
      */
     @Test
-    fun cropPanelStraightenSliderRecordsBaseline() {
+    fun cropPanelStraightenDialRecordsBaseline() {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             EditorTheme {
@@ -169,14 +212,16 @@ class EditChassisScreenshotTest {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
                 ) {
-                    CropPanel(
-                        committed = EditRecipe(),
-                        draft = null,
-                        onDraftChange = {},
-                        exporting = false,
-                        previewBase = null,
-                        commit = {},
-                    )
+                    Column {
+                        CropPanel(
+                            committed = EditRecipe(),
+                            draft = null,
+                            onDraftChange = {},
+                            exporting = false,
+                            previewBase = null,
+                            commit = {},
+                        )
+                    }
                 }
             }
         }
@@ -202,37 +247,39 @@ class EditChassisScreenshotTest {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
                 ) {
-                    DrawPanel(
-                        committed = EditRecipe(),
-                        draft = null,
-                        onDraftChange = {},
-                        exporting = false,
-                        commit = {},
-                        sweepPendingDrafts = {},
-                        commitSelectedDrawLayer = {},
-                        drawMode = true,
-                        onDrawModeChange = {},
-                        regionMode = false,
-                        onRegionModeChange = {},
-                        eraseMode = false,
-                        onEraseModeChange = {},
-                        brushColor = 0xFFFFFFFFL,
-                        onBrushColorChange = {},
-                        brushWidth = 25,
-                        onBrushWidthChange = {},
-                        brushOpacity = 80,
-                        onBrushOpacityChange = {},
-                        brushSmoothing = 30,
-                        onBrushSmoothingChange = {},
-                        selectedTextLayerId = null,
-                        onSelectTextLayerChange = {},
-                        selectedStickerLayerId = null,
-                        onSelectStickerLayerChange = {},
-                        selectedDrawLayerId = null,
-                        onSelectDrawLayerChange = {},
-                        selectedRegionLayerId = null,
-                        onSelectRegionLayerChange = {},
-                    )
+                    Column {
+                        DrawPanel(
+                            committed = EditRecipe(),
+                            draft = null,
+                            onDraftChange = {},
+                            exporting = false,
+                            commit = {},
+                            sweepPendingDrafts = {},
+                            commitSelectedDrawLayer = {},
+                            drawMode = true,
+                            onDrawModeChange = {},
+                            regionMode = false,
+                            onRegionModeChange = {},
+                            eraseMode = false,
+                            onEraseModeChange = {},
+                            brushColor = 0xFFFFFFFFL,
+                            onBrushColorChange = {},
+                            brushWidth = 25,
+                            onBrushWidthChange = {},
+                            brushOpacity = 80,
+                            onBrushOpacityChange = {},
+                            brushSmoothing = 30,
+                            onBrushSmoothingChange = {},
+                            selectedTextLayerId = null,
+                            onSelectTextLayerChange = {},
+                            selectedStickerLayerId = null,
+                            onSelectStickerLayerChange = {},
+                            selectedDrawLayerId = null,
+                            onSelectDrawLayerChange = {},
+                            selectedRegionLayerId = null,
+                            onSelectRegionLayerChange = {},
+                        )
+                    }
                 }
             }
         }
@@ -257,33 +304,35 @@ class EditChassisScreenshotTest {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
                 ) {
-                    RegionsPanel(
-                        committed = EditRecipe(),
-                        draft = null,
-                        onDraftChange = {},
-                        exporting = false,
-                        commit = {},
-                        sweepPendingDrafts = {},
-                        commitSelectedRegionLayer = {},
-                        drawMode = false,
-                        onDrawModeChange = {},
-                        regionMode = true,
-                        onRegionModeChange = {},
-                        eraseMode = false,
-                        onEraseModeChange = {},
-                        regionKind = RegionKind.MOSAIC,
-                        onRegionKindChange = {},
-                        regionStrength = 60,
-                        onRegionStrengthChange = {},
-                        selectedTextLayerId = null,
-                        onSelectTextLayerChange = {},
-                        selectedStickerLayerId = null,
-                        onSelectStickerLayerChange = {},
-                        selectedDrawLayerId = null,
-                        onSelectDrawLayerChange = {},
-                        selectedRegionLayerId = null,
-                        onSelectRegionLayerChange = {},
-                    )
+                    Column {
+                        RegionsPanel(
+                            committed = EditRecipe(),
+                            draft = null,
+                            onDraftChange = {},
+                            exporting = false,
+                            commit = {},
+                            sweepPendingDrafts = {},
+                            commitSelectedRegionLayer = {},
+                            drawMode = false,
+                            onDrawModeChange = {},
+                            regionMode = true,
+                            onRegionModeChange = {},
+                            eraseMode = false,
+                            onEraseModeChange = {},
+                            regionKind = RegionKind.MOSAIC,
+                            onRegionKindChange = {},
+                            regionStrength = 60,
+                            onRegionStrengthChange = {},
+                            selectedTextLayerId = null,
+                            onSelectTextLayerChange = {},
+                            selectedStickerLayerId = null,
+                            onSelectStickerLayerChange = {},
+                            selectedDrawLayerId = null,
+                            onSelectDrawLayerChange = {},
+                            selectedRegionLayerId = null,
+                            onSelectRegionLayerChange = {},
+                        )
+                    }
                 }
             }
         }

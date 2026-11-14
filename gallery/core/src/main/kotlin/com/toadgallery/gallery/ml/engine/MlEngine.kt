@@ -241,79 +241,103 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
     }
 
     private object JniBridge : Bridge {
-        override val available: Boolean get() = MlEngineJni.available
-        override fun nativeInit(modelsDir: String): Boolean = MlEngineJni.nativeInit(modelsDir)
-        override fun nativeEngineInfo(): String? = MlEngineJni.nativeEngineInfo()
-        override fun nativeDetectFacesJpeg(jpegBytes: ByteArray): FloatArray =
-            MlEngineJni.nativeDetectFacesJpeg(jpegBytes)
+        /**
+         * The r75 lockstep defense: a LOADED-but-MISMATCHED
+         * `libtoad_ml_jni.so` raises [UnsatisfiedLinkError] (an [Error],
+         * NOT a [RuntimeException]) on the first native call whose
+         * symbol the library can't bind --- the same mixed-version
+         * packaging that breaks `libonnxruntime4j_jni.so` against a
+         * staged `libonnxruntime.so` (see `engine/scripts/build-android.sh`
+         * and `EditAiOrtRuntime`). The class KDoc already promises
+         * *"IllegalStateException (not UnsatisfiedLinkError) on a
+         * library-less build"*; this helper extends that promise to the
+         * loaded-but-mismatched build, so no caller (the `finally` in
+         * `release()` included) ever sees an [Error] escape --- the
+         * facade's documented failure shape holds in every build.
+         */
+        private inline fun <T> guarded(call: () -> T): T = try {
+            call()
+        } catch (e: UnsatisfiedLinkError) {
+            throw IllegalStateException(
+                "engine library present but unbindable (native/JNI symbol mismatch --- " +
+                    "the packaged libtoad_ml_jni.so does not match this Kotlin bridge): ${e.message}",
+                e,
+            )
+        }
 
-        override fun nativeRelease(): Boolean = MlEngineJni.nativeRelease()
+        override val available: Boolean get() = MlEngineJni.available
+        override fun nativeInit(modelsDir: String): Boolean = guarded { MlEngineJni.nativeInit(modelsDir) }
+        override fun nativeEngineInfo(): String? = guarded { MlEngineJni.nativeEngineInfo() }
+        override fun nativeDetectFacesJpeg(jpegBytes: ByteArray): FloatArray =
+            guarded { MlEngineJni.nativeDetectFacesJpeg(jpegBytes) }
+
+        override fun nativeRelease(): Boolean = guarded { MlEngineJni.nativeRelease() }
 
         // ---- r23 ----
         override fun nativeDetectFaceEmbeddingsJpeg(jpegBytes: ByteArray): FloatArray =
-            MlEngineJni.nativeDetectFaceEmbeddingsJpeg(jpegBytes)
+            guarded { MlEngineJni.nativeDetectFaceEmbeddingsJpeg(jpegBytes) }
 
-        override fun nativeStoreOpen(dir: String): Boolean = MlEngineJni.nativeStoreOpen(dir)
+        override fun nativeStoreOpen(dir: String): Boolean = guarded { MlEngineJni.nativeStoreOpen(dir) }
         override fun nativeStorePutFace(fileId: Long, embedding: FloatArray): Long =
-            MlEngineJni.nativeStorePutFace(fileId, embedding)
+            guarded { MlEngineJni.nativeStorePutFace(fileId, embedding) }
 
-        override fun nativeStoreFaceCount(): Long = MlEngineJni.nativeStoreFaceCount()
+        override fun nativeStoreFaceCount(): Long = guarded { MlEngineJni.nativeStoreFaceCount() }
         override fun nativeStoreCluster(distanceThreshold: Double): String =
-            MlEngineJni.nativeStoreCluster(distanceThreshold)
+            guarded { MlEngineJni.nativeStoreCluster(distanceThreshold) }
 
-        override fun nativeStoreClose(): Boolean = MlEngineJni.nativeStoreClose()
+        override fun nativeStoreClose(): Boolean = guarded { MlEngineJni.nativeStoreClose() }
 
         // ---- r24 ----
         override fun nativeStoreIndexedFaceFileIds(): LongArray =
-            MlEngineJni.nativeStoreIndexedFaceFileIds()
+            guarded { MlEngineJni.nativeStoreIndexedFaceFileIds() }
 
         override fun nativeStoreDeleteFacesForFiles(fileIds: LongArray): Boolean =
-            MlEngineJni.nativeStoreDeleteFacesForFiles(fileIds)
+            guarded { MlEngineJni.nativeStoreDeleteFacesForFiles(fileIds) }
 
         // ---- r25 ----
-        override fun nativeStoreFaceClusters(): String = MlEngineJni.nativeStoreFaceClusters()
+        override fun nativeStoreFaceClusters(): String = guarded { MlEngineJni.nativeStoreFaceClusters() }
 
         override fun nativeStoreClusterFileIds(clusterId: String): LongArray =
-            MlEngineJni.nativeStoreClusterFileIds(clusterId)
+            guarded { MlEngineJni.nativeStoreClusterFileIds(clusterId) }
 
         override fun nativeStoreMergeFaceClusters(sourceClusterId: String, targetClusterId: String): Boolean =
-            MlEngineJni.nativeStoreMergeFaceClusters(sourceClusterId, targetClusterId)
+            guarded { MlEngineJni.nativeStoreMergeFaceClusters(sourceClusterId, targetClusterId) }
 
         override fun nativeStoreRemoveFacesFromCluster(clusterId: String, fileIds: LongArray): Boolean =
-            MlEngineJni.nativeStoreRemoveFacesFromCluster(clusterId, fileIds)
+            guarded { MlEngineJni.nativeStoreRemoveFacesFromCluster(clusterId, fileIds) }
 
         // ---- r26 ----
         override fun nativeInitSemantic(modelsDir: String): Boolean =
-            MlEngineJni.nativeInitSemantic(modelsDir)
+            guarded { MlEngineJni.nativeInitSemantic(modelsDir) }
 
         override fun nativeClipImageEmbeddingJpeg(jpegBytes: ByteArray): FloatArray =
-            MlEngineJni.nativeClipImageEmbeddingJpeg(jpegBytes)
+            guarded { MlEngineJni.nativeClipImageEmbeddingJpeg(jpegBytes) }
 
         override fun nativeClipTextEmbedding(text: String): FloatArray =
-            MlEngineJni.nativeClipTextEmbedding(text)
+            guarded { MlEngineJni.nativeClipTextEmbedding(text) }
 
         override fun nativeStorePutClip(fileId: Long, embedding: FloatArray): Boolean =
-            MlEngineJni.nativeStorePutClip(fileId, embedding)
+            guarded { MlEngineJni.nativeStorePutClip(fileId, embedding) }
 
         override fun nativeStoreDeleteClipsForFiles(fileIds: LongArray): Boolean =
-            MlEngineJni.nativeStoreDeleteClipsForFiles(fileIds)
+            guarded { MlEngineJni.nativeStoreDeleteClipsForFiles(fileIds) }
 
         override fun nativeStoreClipIndexedFileIds(): LongArray =
-            MlEngineJni.nativeStoreClipIndexedFileIds()
+            guarded { MlEngineJni.nativeStoreClipIndexedFileIds() }
 
-        override fun nativeStoreClipCount(): Long = MlEngineJni.nativeStoreClipCount()
+        override fun nativeStoreClipCount(): Long = guarded { MlEngineJni.nativeStoreClipCount() }
 
         override fun nativeStoreSearchClips(queryEmbedding: FloatArray, limit: Int): String =
-            MlEngineJni.nativeStoreSearchClips(queryEmbedding, limit)
+            guarded { MlEngineJni.nativeStoreSearchClips(queryEmbedding, limit) }
 
-        override fun nativeStoreFillClipIndex(): String = MlEngineJni.nativeStoreFillClipIndex()
+        override fun nativeStoreFillClipIndex(): String = guarded { MlEngineJni.nativeStoreFillClipIndex() }
 
         // ---- r39 ----
         override fun nativeStoreSearchClipsWithin(
             queryEmbedding: FloatArray,
             maxDistance: Float,
             limit: Int,
-        ): String = MlEngineJni.nativeStoreSearchClipsWithin(queryEmbedding, maxDistance, limit)
+        ): String = guarded { MlEngineJni.nativeStoreSearchClipsWithin(queryEmbedding, maxDistance, limit) }
     }
 
     // The five facade-state flags are PROCESS-GLOBAL (r51, audit C-4): they
@@ -413,9 +437,35 @@ class MlEngine(private val bridge: Bridge = JniBridge) {
      * instance's [state] leaves Ready --- no instance keeps reporting a
      * session the native side no longer has (the C-4 desync, dead).
      */
+    /**
+     * Frees the session: true when one was freed, false when there was
+     * none (also false on a library-less build). Idempotent; the state
+     * returns to [State.Uninitialized] and [initialize] works again.
+     * Process-global since r51: the freed state is shared, so EVERY
+     * instance's [state] leaves Ready --- no instance keeps reporting a
+     * session the native side no longer has (the C-4 desync, dead).
+     *
+     * TOTAL since r75: [release] is called from `finally` blocks (the
+     * AI dogfood self-test, the index queues' teardown), so it MUST NOT
+     * throw --- an exception here masks the original result and escapes
+     * as the user-visible crash. The r75 lockstep failure (a
+     * loaded-but-mismatched `libtoad_ml_jni.so`) makes
+     * [nativeRelease] raise [IllegalStateException] via the bridge's
+     * `guarded` helper; that is caught here, the shared state is reset
+     * anyway (the native session is already unusable), and `false` is
+     * returned --- the next `initialize` re-opens from a clean slate.
+     */
     fun release(): Boolean = synchronized(SharedEngineState.lock) {
         if (!bridge.available) return false
-        val freed = bridge.nativeRelease()
+        // r75: a broken native release must not escape from a finally.
+        val freed = try {
+            bridge.nativeRelease()
+        } catch (_: IllegalStateException) {
+            // The library is loaded but unbindable (the lockstep failure):
+            // the session is already dead on the native side, so the
+            // facade resets to Uninitialized and reports "nothing freed".
+            false
+        }
         SharedEngineState.sessionOpen = false
         SharedEngineState.initError = null
         // nativeRelease closes the face-index store too (the r23 contract);

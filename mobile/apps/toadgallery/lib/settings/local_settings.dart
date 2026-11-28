@@ -142,6 +142,9 @@ class LocalSettings {
 
   final SharedPreferences _prefs;
 
+  // Cached in memory so app-mode reads stay cheap; setAppMode keeps it fresh.
+  AppMode? _cachedAppMode;
+
   // Session-only so the get-started banner waits until the next launch.
   bool localGalleryModeEnabledThisSession = false;
 
@@ -617,15 +620,30 @@ class LocalSettings {
     await _prefs.setBool(_kChristmasBannerEnabled, value);
   }
 
-  AppMode get appMode => AppMode.localGallery;
+  AppMode get appMode {
+    if (_cachedAppMode != null) return _cachedAppMode!;
 
-  bool get isAppModeSet => true;
+    final savedIndex = _prefs.getInt(_kAppMode);
+    if (savedIndex != null &&
+        savedIndex >= 0 &&
+        savedIndex < AppMode.values.length) {
+      _cachedAppMode = AppMode.values[savedIndex];
+      return _cachedAppMode!;
+    }
+
+    _cachedAppMode = AppMode.enteGallery;
+    return _cachedAppMode!;
+  }
+
+  bool get isAppModeSet => _prefs.containsKey(_kAppMode);
 
   Future<void> setAppMode(AppMode mode) async {
     await _prefs.setInt(_kAppMode, mode.index);
+    _cachedAppMode = mode;
   }
 
-  bool get showLocalGalleryModeOption => false;
+  bool get showLocalGalleryModeOption =>
+      _prefs.getBool(_kShowLocalGalleryModeOption) ?? true;
 
   Future<void> setShowLocalGalleryModeOption(bool value) async {
     await _prefs.setBool(_kShowLocalGalleryModeOption, value);

@@ -4,13 +4,12 @@ import "package:connectivity_plus/connectivity_plus.dart";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/service_locator.dart"
     show flagService, hasGrantedMLConsent, isLocalGalleryMode, localSettings;
 import "package:toadgallery/services/machine_learning/ml_exceptions.dart";
 import "package:toadgallery/src/rust/api/ml_indexing_api.dart" as rust_ml;
 import "package:toadgallery/utils/network_util.dart";
-import "package:synchronized/synchronized.dart";
-
 class MLModelDownloadService {
   final _logger = Logger("MLModelDownloadService");
 

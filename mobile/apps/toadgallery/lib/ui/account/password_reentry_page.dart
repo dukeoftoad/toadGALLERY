@@ -1,5 +1,6 @@
 import 'dart:async';
 import "dart:typed_data";
+import 'package:ente_base/models/accounts.dart';
 
 import "package:ente_components/ente_components.dart";
 import "package:ente_strings/ente_strings.dart";
@@ -18,7 +19,6 @@ import 'package:toadgallery/ui/components/buttons/button_widget.dart'
 import 'package:toadgallery/ui/tabs/home_widget.dart';
 import 'package:toadgallery/utils/dialog_util.dart';
 import 'package:toadgallery/utils/email_util.dart';
-
 class PasswordReentryPage extends StatefulWidget {
   final Uint8List? keyEncryptionKey;
 

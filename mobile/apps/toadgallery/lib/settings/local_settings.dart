@@ -142,8 +142,6 @@ class LocalSettings {
 
   final SharedPreferences _prefs;
 
-  AppMode? _cachedAppMode;
-
   // Session-only so the get-started banner waits until the next launch.
   bool localGalleryModeEnabledThisSession = false;
 
@@ -351,7 +349,7 @@ class LocalSettings {
     return getRateUsShownCount() < kRateUsPromptThreshold;
   }
 
-  bool get localGalleryMLConsent => _prefs.getBool(_kLocalGalleryFlagsPrefix + LocalGalleryFlag.mlConsent.name) ?? true;
+  bool get localGalleryMLConsent => _getFlag(LocalGalleryFlag.mlConsent);
 
   Future<void> setLocalGalleryMLConsent(bool value) =>
       _setFlag(LocalGalleryFlag.mlConsent, value);
@@ -625,7 +623,6 @@ class LocalSettings {
 
   Future<void> setAppMode(AppMode mode) async {
     await _prefs.setInt(_kAppMode, mode.index);
-    _cachedAppMode = mode;
   }
 
   bool get showLocalGalleryModeOption => false;

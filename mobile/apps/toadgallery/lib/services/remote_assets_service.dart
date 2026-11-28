@@ -9,9 +9,8 @@ import "package:ente_pure_utils/ente_pure_utils.dart"
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:path_provider/path_provider.dart";
-import "package:toadgallery/core/network/network.dart";
 import "package:synchronized/synchronized.dart";
-
+import "package:toadgallery/core/network/network.dart";
 class RemoteAssetsService {
   static final _logger = Logger("RemoteAssetsService");
   static const int _resumableThresholdBytes = 10 * 1024 * 1024;

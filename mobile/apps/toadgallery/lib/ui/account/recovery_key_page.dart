@@ -6,14 +6,13 @@ import 'package:ente_components/hugeicons.dart';
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/src/rust/third_party/ente_frb_lib/recovery.dart'
     as recovery;
 import "package:toadgallery/ui/account/onboarding_page_scaffold.dart";
 import 'package:toadgallery/ui/notification/toast.dart';
 import 'package:toadgallery/utils/share_util.dart';
-import 'package:share_plus/share_plus.dart';
-
 class RecoveryKeyPage extends StatefulWidget {
   final String recoveryKey;
   final String doneText;

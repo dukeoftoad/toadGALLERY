@@ -1,8 +1,8 @@
+import "package:ente_contacts/contacts.dart" as contacts;
 import "package:toadgallery/models/api/collection/user.dart";
 import "package:toadgallery/models/collection/collection.dart";
 import "package:toadgallery/models/user_details.dart";
 import "package:toadgallery/utils/contact_string_util.dart";
-
 List<User> buildDirectContactUsers({
   required int ownerUserId,
   required String ownerEmail,

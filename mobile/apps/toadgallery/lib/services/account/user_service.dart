@@ -8,6 +8,7 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/foundation.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/event_bus.dart';
 import "package:toadgallery/events/account_configured_event.dart";
@@ -39,9 +40,7 @@ import "package:toadgallery/ui/components/alert_bottom_sheet.dart";
 import 'package:toadgallery/ui/notification/toast.dart';
 import "package:toadgallery/ui/tabs/home_widget.dart";
 import 'package:toadgallery/utils/dialog_util.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import "package:uuid/uuid.dart";
-
 class UserService {
   static const keyHasEnabledTwoFactor = "has_enabled_two_factor";
   static const keyUserDetails = "user_details";

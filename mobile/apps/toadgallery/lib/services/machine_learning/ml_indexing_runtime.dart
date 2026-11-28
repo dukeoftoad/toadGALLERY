@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/foundation.dart" show debugPrint, kDebugMode;
 import "package:logging/logging.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/models/ml/ml_versions.dart"
     show mlIndexFlagCoreML, mlIndexFlagRuntimeRust, mlIndexFlagWebGPU;
 import "package:toadgallery/service_locator.dart" show flagService, localSettings;
@@ -11,8 +12,6 @@ import "package:toadgallery/services/machine_learning/ml_result.dart";
 import "package:toadgallery/services/machine_learning/webgpu_execution_policy.dart";
 import "package:toadgallery/src/rust/api/ml_indexing_api.dart" as rust_ml;
 import "package:toadgallery/utils/ml_util.dart";
-import "package:synchronized/synchronized.dart";
-
 typedef _RuntimeArgs = ({
   String assetsDir,
   bool preparePets,

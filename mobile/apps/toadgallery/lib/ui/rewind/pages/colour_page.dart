@@ -4,6 +4,7 @@ import "package:toadgallery/src/rust/api/rewind_api.dart" as rust;
 import "package:toadgallery/ui/rewind/copy/rewind_copy.dart";
 import "package:toadgallery/ui/rewind/shell/rewind_page.dart";
 import "package:toadgallery/ui/rewind/shell/rewind_share.dart";
+import "package:toadgallery/ui/rewind/story/rewind_colours.dart";
 import "package:toadgallery/ui/rewind/theme/rewind_colors.dart";
 import "package:toadgallery/ui/rewind/theme/rewind_motion.dart";
 import "package:toadgallery/ui/rewind/theme/rewind_text_styles.dart";
@@ -13,7 +14,6 @@ import "package:toadgallery/ui/rewind/widgets/rewind_layer.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_photo.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_stage.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_text.dart";
-
 class ColourPage extends RewindPage {
   const ColourPage(this.colour, this.photos);
 

@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:convert";
 import "dart:developer";
+import "package:ente_contacts/contacts.dart" as contacts;
 
 import "package:computer/computer.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
@@ -27,7 +28,6 @@ import "package:toadgallery/utils/contact_photo_util.dart";
 import "package:toadgallery/utils/contact_string_util.dart";
 import "package:toadgallery/utils/face/face_thumbnail_cache.dart";
 import "package:toadgallery/utils/face_crop_util.dart";
-
 typedef ManualPersonAssignmentResult = ({
   PersonEntity person,
   List<int> addedFileIds,

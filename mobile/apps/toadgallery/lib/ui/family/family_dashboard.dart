@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:ente_contacts/contacts.dart' as contacts;
 
 import 'package:ente_components/ente_components.dart';
 import 'package:ente_components/hugeicons.dart';

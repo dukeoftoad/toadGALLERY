@@ -39,10 +39,6 @@ class _HeaderWidgetState extends State<HeaderWidget> {
   @override
   Widget build(BuildContext context) {
     _logger.info("Building header widget");
-    final bool showGetStartedBanner =
-        isLocalGalleryMode &&
-        !localSettings.localGalleryModeEnabledThisSession &&
-        !Configuration.instance.hasConfiguredAccount();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

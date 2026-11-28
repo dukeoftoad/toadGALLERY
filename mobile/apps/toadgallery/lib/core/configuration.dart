@@ -12,6 +12,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import "package:toadgallery/app_mode.dart";
 import 'package:toadgallery/core/cache/image_cache.dart';
 import 'package:toadgallery/core/cache/thumbnail_in_memory_cache.dart';
@@ -53,9 +54,7 @@ import 'package:toadgallery/services/sync/sync_service.dart';
 import 'package:toadgallery/services/video_preview_service.dart';
 import 'package:toadgallery/src/rust/third_party/ente_frb_lib/account_deletion.dart'
     as account_deletion;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-
 class Configuration implements LockScreenHost, AccountDeletionHost {
   Configuration._privateConstructor();
 

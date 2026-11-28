@@ -152,12 +152,6 @@ class _HomeWidgetState extends State<HomeWidget> {
 
   List<int> get _tabIndices => homeTabIndices(showFeed: !isLocalGalleryMode);
 
-  void _startWithoutAccountFlow() {
-    setState(() {
-      _startWithoutAccount = true;
-    });
-  }
-
   void _handleMissingRecoveryKey() {
     final config = Configuration.instance;
     if (!config.hasConfiguredAccount()) {

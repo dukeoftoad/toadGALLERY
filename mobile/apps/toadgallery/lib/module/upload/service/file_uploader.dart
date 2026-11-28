@@ -8,6 +8,7 @@ import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import "package:permission_handler/permission_handler.dart";
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import "package:toadgallery/core/constants.dart";
 import 'package:toadgallery/core/errors.dart';
@@ -46,9 +47,7 @@ import 'package:toadgallery/services/sync/sync_service.dart';
 import "package:toadgallery/utils/device_storage_error.dart";
 import "package:toadgallery/utils/file_key.dart";
 import "package:toadgallery/utils/network_util.dart";
-import 'package:shared_preferences/shared_preferences.dart';
 import "package:uuid/uuid.dart";
-
 class FileUploader {
   static const kMaximumConcurrentUploads = 4;
   static const kMaximumConcurrentVideoUploads = 2;

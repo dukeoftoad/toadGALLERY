@@ -14,9 +14,6 @@ import "package:toadgallery/models/user_details.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/services/account/user_service.dart";
 import "package:toadgallery/services/review_service.dart";
-import "package:toadgallery/ui/account/email_entry_page.dart";
-import "package:toadgallery/ui/account/login_page.dart";
-import "package:toadgallery/ui/components/banners/offline_settings_banner.dart";
 import "package:toadgallery/ui/growth/referral_screen.dart";
 import "package:toadgallery/ui/notification/toast.dart";
 import "package:toadgallery/ui/notification/update/change_log_page.dart";
@@ -61,10 +58,7 @@ class _SettingsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.componentColors;
     final hasLoggedIn = Configuration.instance.isLoggedIn();
-    final hasConfiguredAccount = Configuration.instance.hasConfiguredAccount();
-    const showLoginEntry = false;
 
     return AnimatedBuilder(
       animation: emailNotifier,
@@ -82,23 +76,6 @@ class _SettingsBody extends StatelessWidget {
               ? null
               : () => _showVerifyIdentityDialog(context),
           children: [
-            if (showLoginEntry) ...[
-              OfflineSettingsBanner(
-                onGetStarted: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const EmailEntryPage(
-                        showReferralSourceField: false,
-                        referralSource: "Offline",
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildOfflineLoginCard(context, colors),
-              const SizedBox(height: 8),
-            ],
             if (hasLoggedIn && !isLocalGalleryMode) ...[
               const StorageCardWidget(),
               const SizedBox(height: 16),
@@ -239,30 +216,6 @@ class _SettingsBody extends StatelessWidget {
       showOnlyLoadingState: showOnlyLoadingState,
       isDestructive: isDestructive,
       onTap: onTap,
-    );
-  }
-
-  Widget _buildOfflineLoginCard(BuildContext context, ColorTokens colors) {
-    return _buildMenuItem(
-      title: context.strings.alreadyHaveAnAccount,
-      icon: HugeIcons.strokeRoundedLogin01,
-      subtitle: context.strings.loginToEnte,
-      trailing: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: colors.green,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(
-          Icons.arrow_forward_rounded,
-          color: colors.specialWhite,
-          size: 20,
-        ),
-      ),
-      onTap: () async {
-        await routeToPage(context, const LoginPage());
-      },
     );
   }
 

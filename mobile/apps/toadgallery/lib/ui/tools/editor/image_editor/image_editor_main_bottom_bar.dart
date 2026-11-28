@@ -4,11 +4,11 @@ import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
+import 'package:pro_image_editor/core/mixins/converted_configs.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import "package:toadgallery/ui/tools/editor/image_editor/circular_icon_button.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_configs_mixin.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_constants.dart";
-import 'package:pro_image_editor/core/mixins/converted_configs.dart';
-import 'package:pro_image_editor/pro_image_editor.dart';
 
 class ImageEditorMainBottomBar extends StatefulWidget with SimpleConfigsAccess {
   const ImageEditorMainBottomBar({

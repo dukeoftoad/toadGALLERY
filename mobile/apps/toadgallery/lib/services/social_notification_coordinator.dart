@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:ente_strings/ente_strings.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/db/files_db.dart';
 import 'package:toadgallery/db/social_db.dart';
@@ -19,7 +20,6 @@ import 'package:toadgallery/services/app_lifecycle_service.dart';
 import 'package:toadgallery/services/collections_service.dart';
 import 'package:toadgallery/services/language_service.dart';
 import 'package:toadgallery/services/notification_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum SocialNotificationTrigger { remoteSync, feedRefresh }
 

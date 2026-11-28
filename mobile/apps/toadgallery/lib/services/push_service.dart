@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/core/event_bus.dart';
@@ -14,7 +15,6 @@ import 'package:toadgallery/services/notification_key_service.dart';
 import 'package:toadgallery/services/notification_service.dart';
 import 'package:toadgallery/services/sync/sync_service.dart';
 import 'package:toadgallery/utils/bg_task_utils.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 typedef BackgroundPushHandler = Future<void> Function(Object message);
 

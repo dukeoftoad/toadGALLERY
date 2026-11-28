@@ -5,13 +5,13 @@ import "package:computer/computer.dart";
 import 'package:exif_reader/exif_reader.dart';
 import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
+import 'package:random_access_source/random_access_source.dart';
 import 'package:toadgallery/models/file/file.dart';
 import "package:toadgallery/models/file/file_type.dart";
 import "package:toadgallery/models/location/location.dart";
 import "package:toadgallery/models/metadata/file_magic.dart";
 import 'package:toadgallery/module/download/file.dart';
 import "package:toadgallery/services/location_service.dart";
-import 'package:random_access_source/random_access_source.dart';
 
 const kDateTimeOriginal = "EXIF DateTimeOriginal";
 const _imageDateTime = "Image DateTime";

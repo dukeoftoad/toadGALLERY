@@ -4,8 +4,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:integration_test/integration_test.dart";
 import "package:logging/logging.dart";
-import "package:toadgallery/main.dart" as app;
 import "package:scrollable_positioned_list/scrollable_positioned_list.dart";
+import "package:toadgallery/main.dart" as app;
 
 void main() {
   group("Home gallery scroll test", () {

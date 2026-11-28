@@ -16,6 +16,7 @@ import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:path_provider_platform_interface/path_provider_platform_interface.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/cache/thumbnail_in_memory_cache.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/constants.dart";
@@ -77,7 +78,6 @@ import "package:toadgallery/ui/viewer/hierarchical_search/app_bar_filter_chips.d
 import "package:toadgallery/ui/viewer/people/person_face_widget.dart";
 import "package:toadgallery/ui/viewer/search/result/magic_result_screen.dart";
 import "package:toadgallery/utils/face/face_thumbnail_cache.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

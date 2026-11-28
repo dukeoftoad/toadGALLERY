@@ -1,9 +1,9 @@
 import "package:logging/logging.dart";
 import "package:path/path.dart" show join;
 import "package:path_provider/path_provider.dart";
+import "package:sqlite_async/sqlite_async.dart";
 import "package:toadgallery/db/common/base.dart";
 import "package:toadgallery/db/ml/schema.dart";
-import "package:sqlite_async/sqlite_async.dart";
 
 class OfflineFilesDB with SqlDbBase {
   static final Logger _logger = Logger("OfflineFilesDB");

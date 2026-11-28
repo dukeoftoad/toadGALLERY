@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/errors.dart';
 import 'package:toadgallery/core/event_bus.dart';
@@ -17,7 +18,6 @@ import 'package:toadgallery/services/account/user_service.dart';
 import 'package:toadgallery/services/collections_service.dart';
 import 'package:toadgallery/services/library_sharing_store.dart';
 import 'package:toadgallery/utils/contact_string_util.dart';
-import 'package:synchronized/synchronized.dart';
 
 const librarySharingRoles = [
   CollectionParticipantRole.viewer,

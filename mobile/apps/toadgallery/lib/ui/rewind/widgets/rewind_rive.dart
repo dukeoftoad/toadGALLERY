@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
+import "package:rive/rive.dart" as rive;
 import "package:toadgallery/ui/rewind/theme/rewind_assets.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_pixels.dart";
-import "package:rive/rive.dart" as rive;
 
 final _logger = Logger("RewindRive");
 

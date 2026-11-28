@@ -1,8 +1,8 @@
 import "package:dio/dio.dart";
 import "package:flutter/foundation.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/gateways/storage_bonus/models/storage_bonus.dart";
 import "package:toadgallery/gateways/storage_bonus/storage_bonus_gateway.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 class StorageBonusService {
   final StorageBonusGateway gateway;

@@ -3,6 +3,7 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/ente_theme_data.dart";
 import "package:toadgallery/models/file/file.dart";
 import "package:toadgallery/models/file/file_type.dart";
@@ -10,7 +11,6 @@ import "package:toadgallery/models/file/trash_file.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/ui/viewer/file/file_icons_widget.dart";
 import "package:toadgallery/ui/viewer/file/gallery_file_viewer_filmstrip.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   setUpAll(() async {

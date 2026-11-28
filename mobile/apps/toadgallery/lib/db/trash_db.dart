@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:logging/logging.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 import 'package:toadgallery/db/common/base.dart';
 import 'package:toadgallery/models/file/trash_file.dart';
 import 'package:toadgallery/models/file_load_result.dart';
-import 'package:sqlite_async/sqlite_async.dart';
 
 // Store only fields needed to query trash. Restore fetches the full file.
 class TrashDB with SqlDbBase {

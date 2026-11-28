@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 import "package:toadgallery/db/common/base.dart";
 import "package:toadgallery/db/common/conflict_algo.dart";
 import 'package:toadgallery/models/file/file.dart';
@@ -19,7 +20,6 @@ import 'package:toadgallery/models/location/location.dart';
 import "package:toadgallery/models/metadata/common_keys.dart";
 import "package:toadgallery/models/metadata/file_magic.dart";
 import "package:toadgallery/services/filter/db_filters.dart";
-import 'package:sqlite_async/sqlite_async.dart';
 
 class FilesDB with SqlDbBase {
   /*

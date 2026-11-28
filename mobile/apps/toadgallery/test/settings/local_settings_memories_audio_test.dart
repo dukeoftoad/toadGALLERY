@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:toadgallery/settings/local_settings.dart";
 import "package:shared_preferences/shared_preferences.dart";
+import "package:toadgallery/settings/local_settings.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -25,6 +25,8 @@ import "package:media_extension/media_extension_action_types.dart";
 import "package:media_kit/media_kit.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import 'package:path_provider/path_provider.dart';
+import 'package:rive/rive.dart' as rive;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/app.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
@@ -73,8 +75,6 @@ import "package:toadgallery/utils/device_info.dart";
 import "package:toadgallery/utils/email_util.dart";
 import "package:toadgallery/utils/intent_util.dart";
 import "package:toadgallery/utils/photos_crypto_api_adapter.dart";
-import 'package:rive/rive.dart' as rive;
-import 'package:shared_preferences/shared_preferences.dart';
 
 final _logger = Logger("main");
 

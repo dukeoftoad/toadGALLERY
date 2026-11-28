@@ -9,6 +9,7 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:image/image.dart" as img;
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/cache/image_cache.dart";
 import "package:toadgallery/core/cache/thumbnail_in_memory_cache.dart";
 import "package:toadgallery/core/configuration.dart";
@@ -29,7 +30,6 @@ import "package:toadgallery/ui/notification/update/change_log_page.dart";
 import "package:toadgallery/ui/viewer/file/file_widget.dart";
 import "package:toadgallery/ui/viewer/file/image_zoom/image_zoom_viewer.dart";
 import "package:toadgallery/ui/viewer/file/image_zoom/viewer_jpeg_image.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

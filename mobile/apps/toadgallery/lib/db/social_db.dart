@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 import 'package:toadgallery/db/common/base.dart';
 import 'package:toadgallery/models/social/anon_profile.dart';
 import 'package:toadgallery/models/social/comment.dart';
 import 'package:toadgallery/models/social/reaction.dart';
-import 'package:sqlite_async/sqlite_async.dart';
 
 class SocialDB with SqlDbBase {
   static final Logger _logger = Logger("SocialDB");

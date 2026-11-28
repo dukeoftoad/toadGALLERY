@@ -4,13 +4,13 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/network/network.dart";
 import "package:toadgallery/ente_theme_data.dart";
 import "package:toadgallery/gateways/cast/cast_gateway.dart";
 import "package:toadgallery/models/collection/collection.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/ui/cast/cast.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -9,6 +9,7 @@ import "package:flutter/services.dart";
 import "package:flutter/widgets.dart";
 import "package:logging/logging.dart";
 import "package:path_provider/path_provider.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/offline_files_db.dart";
 import "package:toadgallery/events/file_uploaded_event.dart";
@@ -29,7 +30,6 @@ import "package:toadgallery/services/machine_learning/semantic_search/semantic_s
 import "package:toadgallery/services/search_service.dart";
 import "package:toadgallery/ui/viewer/search/result/magic_result_screen.dart";
 import "package:toadgallery/utils/cache_util.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 class MagicCache {
   final String title;

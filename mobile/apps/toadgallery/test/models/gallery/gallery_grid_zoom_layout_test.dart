@@ -4,6 +4,7 @@ import "package:dio/dio.dart";
 import "package:flutter/widgets.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/models/file/dummy_file.dart";
 import "package:toadgallery/models/file/file.dart";
@@ -16,7 +17,6 @@ import "package:toadgallery/models/metadata/file_magic.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/settings/local_settings.dart";
 import "package:toadgallery/ui/viewer/gallery/component/group/type.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

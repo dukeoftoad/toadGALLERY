@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
-import 'package:toadgallery/db/common/base.dart';
 import 'package:sqlite_async/sqlite_async.dart';
+import 'package:toadgallery/db/common/base.dart';
 
 class FileUpdationDB with SqlDbBase {
   static const _databaseName = "ente.files_migration.db";

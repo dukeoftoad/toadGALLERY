@@ -1,8 +1,8 @@
 import 'dart:async';
 
+import 'package:sqlite_async/sqlite_async.dart';
 import 'package:toadgallery/db/common/base.dart';
 import 'package:toadgallery/models/memories/memory.dart';
-import 'package:sqlite_async/sqlite_async.dart';
 
 class MemoriesDB with SqlDbBase {
   static const _databaseName = "ente.memories.db";

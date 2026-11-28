@@ -3,12 +3,12 @@ import "dart:ui";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/services/machine_learning/ocr/ocr_backend.dart";
 import "package:toadgallery/services/machine_learning/ocr/ocr_models.dart";
 import "package:toadgallery/services/machine_learning/webgpu_execution_policy.dart";
 import "package:toadgallery/src/rust/api/ml_indexing_api.dart";
 import "package:toadgallery/src/rust/api/ocr_api.dart";
-import "package:synchronized/synchronized.dart";
 
 class RustOcrBackend implements OcrBackend {
   static final _logger = Logger("RustOcrBackend");

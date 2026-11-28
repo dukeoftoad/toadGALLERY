@@ -3,10 +3,10 @@ import "dart:convert";
 import "dart:developer";
 
 import "package:computer/computer.dart";
-import "package:ente_contacts/contacts.dart" as contacts;
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/ml/base.dart";
@@ -27,7 +27,6 @@ import "package:toadgallery/utils/contact_photo_util.dart";
 import "package:toadgallery/utils/contact_string_util.dart";
 import "package:toadgallery/utils/face/face_thumbnail_cache.dart";
 import "package:toadgallery/utils/face_crop_util.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 typedef ManualPersonAssignmentResult = ({
   PersonEntity person,

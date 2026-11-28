@@ -5,10 +5,10 @@ import "dart:ui";
 
 import "package:image/image.dart" as img;
 import "package:logging/logging.dart";
-import "package:toadgallery/models/file/file.dart";
-import "package:toadgallery/module/download/file.dart";
 import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
 import "package:pro_image_editor/pro_image_editor.dart";
+import "package:toadgallery/models/file/file.dart";
+import "package:toadgallery/module/download/file.dart";
 
 final _logger = Logger("lossless_edits");
 

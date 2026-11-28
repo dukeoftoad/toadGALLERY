@@ -6,6 +6,7 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/cupertino.dart';
 import "package:photo_manager/photo_manager.dart";
+import "package:receive_sharing_intent/receive_sharing_intent.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/errors.dart";
 import "package:toadgallery/core/event_bus.dart";
@@ -29,7 +30,6 @@ import "package:toadgallery/ui/payment/subscription.dart";
 import "package:toadgallery/ui/settings/backup/free_space_options.dart";
 import 'package:toadgallery/utils/dialog_util.dart';
 import "package:toadgallery/utils/share_util.dart";
-import "package:receive_sharing_intent/receive_sharing_intent.dart";
 
 extension CollectionFileActions on CollectionActions {
   Future<void> showRemoveFromCollectionSheetV2(

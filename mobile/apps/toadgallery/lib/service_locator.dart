@@ -3,6 +3,7 @@ import "package:ente_cast/ente_cast.dart";
 import "package:ente_feature_flag/ente_feature_flag.dart";
 import "package:ente_install_source/ente_install_source.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/core/network/endpoint_config.dart";
@@ -52,7 +53,6 @@ import "package:toadgallery/services/update_service.dart";
 import "package:toadgallery/services/wake_lock_service.dart";
 import "package:toadgallery/settings/backup_settings.dart";
 import "package:toadgallery/settings/local_settings.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 class ServiceLocator {
   late final SharedPreferences prefs;

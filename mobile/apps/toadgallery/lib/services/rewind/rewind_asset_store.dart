@@ -6,8 +6,8 @@ import "package:flutter/services.dart";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as path;
 import "package:path_provider/path_provider.dart";
-import "package:toadgallery/services/remote_assets_service.dart";
 import "package:synchronized/synchronized.dart";
+import "package:toadgallery/services/remote_assets_service.dart";
 
 class RewindAssetStore {
   static const lilitaOne = "Lilita One";

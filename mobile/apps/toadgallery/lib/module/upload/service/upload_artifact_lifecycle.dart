@@ -3,13 +3,13 @@ import 'dart:io';
 import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
+import 'package:synchronized/synchronized.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/db/files_db.dart';
 import 'package:toadgallery/db/upload_locks_db.dart';
 import 'package:toadgallery/module/download/file.dart';
 import 'package:toadgallery/module/upload/upload_artifact.dart';
-import 'package:synchronized/synchronized.dart';
 
 class UploadArtifactLifecycle {
   UploadArtifactLifecycle(this._uploadLocks, this._filesDB);

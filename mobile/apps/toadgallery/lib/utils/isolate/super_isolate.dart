@@ -3,11 +3,11 @@ import 'dart:isolate';
 
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/core/error-reporting/isolate_logging.dart";
 import "package:toadgallery/core/error-reporting/super_logging.dart";
 import "package:toadgallery/models/base/id.dart";
 import "package:toadgallery/utils/isolate/isolate_operations.dart";
-import "package:synchronized/synchronized.dart";
 
 @pragma('vm:entry-point')
 abstract class SuperIsolate {

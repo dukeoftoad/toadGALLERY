@@ -5,13 +5,13 @@ import "package:ente_components/ente_components.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:password_strength/password_strength.dart';
+import "package:styled_text/styled_text.dart";
 import 'package:toadgallery/core/configuration.dart';
 import "package:toadgallery/service_locator.dart";
 import 'package:toadgallery/services/account/user_service.dart';
 import "package:toadgallery/ui/account/login_page.dart";
 import "package:toadgallery/ui/account/onboarding_page_scaffold.dart";
 import 'package:toadgallery/ui/common/web_page.dart';
-import "package:styled_text/styled_text.dart";
 
 class EmailEntryPage extends StatefulWidget {
   const EmailEntryPage({

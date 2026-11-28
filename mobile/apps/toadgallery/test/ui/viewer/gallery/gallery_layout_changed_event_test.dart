@@ -6,6 +6,7 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/ente_theme_data.dart";
@@ -33,7 +34,6 @@ import "package:toadgallery/ui/viewer/gallery/layout_settings.dart";
 import "package:toadgallery/ui/viewer/gallery/scrollbar/custom_scroll_bar.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

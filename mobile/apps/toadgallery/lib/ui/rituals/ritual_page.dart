@@ -12,6 +12,7 @@ import "package:flutter/rendering.dart";
 import "package:intl/intl.dart";
 import "package:logging/logging.dart";
 import "package:path_provider/path_provider.dart";
+import "package:share_plus/share_plus.dart";
 import "package:toadgallery/db/files_db.dart";
 import "package:toadgallery/models/collection/collection_items.dart";
 import "package:toadgallery/models/file/file.dart";
@@ -29,7 +30,6 @@ import "package:toadgallery/ui/viewer/file/detail_page.dart";
 import "package:toadgallery/ui/viewer/gallery/collection_page.dart";
 import "package:toadgallery/utils/file_sort_util.dart";
 import "package:toadgallery/utils/share_util.dart";
-import "package:share_plus/share_plus.dart";
 
 class RitualPage extends StatefulWidget {
   const RitualPage({super.key, required this.ritualId});

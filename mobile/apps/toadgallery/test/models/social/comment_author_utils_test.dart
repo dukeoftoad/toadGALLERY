@@ -1,7 +1,7 @@
+import "package:test/test.dart";
 import "package:toadgallery/models/api/collection/user.dart";
 import "package:toadgallery/models/social/comment.dart";
 import "package:toadgallery/models/social/comment_author_utils.dart";
-import "package:test/test.dart";
 
 void main() {
   group("CommentAuthorResolver", () {

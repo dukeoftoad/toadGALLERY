@@ -14,6 +14,7 @@ import "package:logging/logging.dart";
 import "package:media_extension/media_extension_action_types.dart";
 import "package:move_to_background/move_to_background.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:receive_sharing_intent/receive_sharing_intent.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/ente_theme_data.dart";
@@ -68,7 +69,6 @@ import "package:toadgallery/ui/home/grant_permissions_widget.dart";
 import "package:toadgallery/ui/home/header_widget.dart";
 import "package:toadgallery/ui/home/home_bottom_nav_bar.dart";
 import "package:toadgallery/ui/home/home_gallery_widget.dart";
-import "package:toadgallery/ui/home/landing_page_widget.dart";
 import "package:toadgallery/ui/home/loading_photos_widget.dart";
 import "package:toadgallery/ui/notification/update/change_log_page.dart";
 import "package:toadgallery/ui/rewind/entry/rewind_entry.dart";
@@ -87,7 +87,6 @@ import "package:toadgallery/ui/viewer/search_tab/search_tab.dart";
 import "package:toadgallery/utils/collection_util.dart";
 import "package:toadgallery/utils/dialog_util.dart";
 import "package:toadgallery/utils/intent_util.dart";
-import "package:receive_sharing_intent/receive_sharing_intent.dart";
 
 class HomeWidget extends StatefulWidget {
   const HomeWidget({super.key});

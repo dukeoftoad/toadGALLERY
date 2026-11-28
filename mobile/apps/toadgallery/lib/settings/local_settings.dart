@@ -1,12 +1,12 @@
 import "dart:io";
 
 import 'package:home_widget/home_widget.dart' as hw;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/app_mode.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/ui/viewer/gallery/component/group/type.dart';
 import "package:toadgallery/utils/ram_check_util.dart";
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum AlbumSortKey { albumName, newestPhoto, lastUpdated }
 

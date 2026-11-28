@@ -11,6 +11,7 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/foundation.dart" show ValueListenable;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
+import "package:share_plus/share_plus.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/details_sheet_event.dart";
@@ -45,7 +46,6 @@ import "package:toadgallery/ui/viewer/file_details/favorite_widget.dart";
 import "package:toadgallery/ui/viewer/gallery/jump_to_date_gallery.dart";
 import "package:toadgallery/utils/dialog_util.dart";
 import "package:toadgallery/utils/share_util.dart";
-import "package:share_plus/share_plus.dart";
 
 const _memoryCaptionHorizontalInset = 16.0;
 const _memoryCaptionActionBarGap = 4.0;

@@ -8,6 +8,8 @@ import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as path;
 import "package:path_provider/path_provider.dart";
+import "package:shared_preferences/shared_preferences.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/files_db.dart";
@@ -38,8 +40,6 @@ import "package:toadgallery/ui/rewind/copy/rewind_copy.dart";
 import "package:toadgallery/ui/rewind/shell/rewind_page.dart";
 import "package:toadgallery/ui/rewind/story/rewind_rituals.dart";
 import "package:toadgallery/ui/rewind/story/rewind_story.dart";
-import "package:shared_preferences/shared_preferences.dart";
-import "package:synchronized/synchronized.dart";
 
 class RewindService {
   RewindService(this._prefs) : _progress = RewindProgress(_prefs) {

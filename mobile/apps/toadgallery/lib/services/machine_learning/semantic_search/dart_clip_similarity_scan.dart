@@ -1,6 +1,7 @@
 import "dart:async" show Timer;
 
 import "package:logging/logging.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/ml/dart_db.dart";
 import 'package:toadgallery/events/embedding_updated_event.dart';
@@ -8,7 +9,6 @@ import "package:toadgallery/service_locator.dart" show isLocalGalleryMode;
 import "package:toadgallery/services/machine_learning/ml_computer.dart";
 import "package:toadgallery/services/machine_learning/semantic_search/clip_similarity_scan.dart";
 import "package:toadgallery/services/machine_learning/semantic_search/query_result.dart";
-import "package:synchronized/synchronized.dart";
 
 class DartClipSimilarityScan implements ClipSimilarityScan {
   static final _logger = Logger("DartClipSimilarityScan");

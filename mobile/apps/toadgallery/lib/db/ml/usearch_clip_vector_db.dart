@@ -5,12 +5,12 @@ import "package:flutter_rust_bridge/flutter_rust_bridge.dart" show Uint64List;
 import "package:logging/logging.dart";
 import "package:path/path.dart";
 import "package:path_provider/path_provider.dart";
+import "package:shared_preferences/shared_preferences.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/db/ml/clip_vector_db.dart";
 import "package:toadgallery/models/ml/vector.dart";
 import "package:toadgallery/services/machine_learning/semantic_search/query_result.dart";
 import "package:toadgallery/src/rust/api/usearch_api.dart";
-import "package:shared_preferences/shared_preferences.dart";
-import "package:synchronized/synchronized.dart";
 
 class UsearchClipVectorDB implements ClipVectorDB {
   static final Logger _logger = Logger("UsearchClipVectorDB");

@@ -4,6 +4,7 @@ import "dart:typed_data";
 
 import "package:ente_contacts/contacts.dart" as contacts;
 import "package:flutter_test/flutter_test.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/db/ml/base.dart";
 import "package:toadgallery/gateways/entity/models/type.dart";
 import "package:toadgallery/models/local_entity_data.dart";
@@ -12,7 +13,6 @@ import "package:toadgallery/services/entity_service.dart";
 import "package:toadgallery/services/machine_learning/face_ml/person/person_service.dart";
 import "package:toadgallery/services/photos_contacts_service.dart";
 import "package:toadgallery/utils/person_contact_linking_util.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   group("PersonService contact link", () {

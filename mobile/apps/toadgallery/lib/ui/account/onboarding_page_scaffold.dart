@@ -6,8 +6,8 @@ import "package:ente_components/hugeicons.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_svg/flutter_svg.dart";
-import "package:toadgallery/ui/settings/developer_settings_tap_area.dart";
 import "package:rive/rive.dart" as rive;
+import "package:toadgallery/ui/settings/developer_settings_tap_area.dart";
 
 enum OnboardingIllustration {
   login("assets/onboarding_login.riv", 0.535, -30.8, 3.9),

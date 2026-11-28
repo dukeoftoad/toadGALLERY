@@ -6,7 +6,6 @@ import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/app_mode_changed_event.dart";
 import 'package:toadgallery/service_locator.dart';
-import "package:toadgallery/ui/components/banners/get_started_banner.dart";
 import "package:toadgallery/ui/home/memories/memories_strip.dart";
 import 'package:toadgallery/ui/home/status_bar_widget.dart';
 

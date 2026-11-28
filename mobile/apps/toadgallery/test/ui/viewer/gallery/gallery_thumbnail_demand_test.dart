@@ -11,6 +11,7 @@ import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:path_provider_platform_interface/path_provider_platform_interface.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/cache/thumbnail_in_memory_cache.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/network/network.dart";
@@ -30,7 +31,6 @@ import "package:toadgallery/ui/viewer/gallery/gallery.dart";
 import "package:toadgallery/ui/viewer/gallery/layout_settings.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

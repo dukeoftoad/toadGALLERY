@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/db/common/conflict_algo.dart';
 import 'package:toadgallery/db/files_db.dart';
@@ -14,8 +16,6 @@ import 'package:toadgallery/module/upload/service/file_uploader.dart';
 import 'package:toadgallery/service_locator.dart';
 import 'package:toadgallery/services/collections_service.dart';
 import 'package:toadgallery/services/sync/remote_sync_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqlite_async/sqlite_async.dart';
 
 void main() => registerPreparationTests();
 

@@ -5,10 +5,10 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
-import "package:toadgallery/ui/tools/editor/image_editor/image_editor_constants.dart";
-import "package:toadgallery/ui/tools/editor/image_editor/image_editor_text_bar.dart";
 import "package:pro_image_editor/features/main_editor/services/layer_copy_manager.dart";
 import "package:pro_image_editor/pro_image_editor.dart";
+import "package:toadgallery/ui/tools/editor/image_editor/image_editor_constants.dart";
+import "package:toadgallery/ui/tools/editor/image_editor/image_editor_text_bar.dart";
 
 const _layerPadding = 24.0;
 const _frameGap = 6.0;

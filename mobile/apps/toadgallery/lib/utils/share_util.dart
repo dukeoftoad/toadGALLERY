@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart';
 import "package:photo_manager/photo_manager.dart";
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/models/file/file.dart';
@@ -14,8 +16,6 @@ import 'package:toadgallery/module/metadata/exif.dart';
 import 'package:toadgallery/module/metadata/filename.dart';
 import 'package:toadgallery/module/metadata/local_file.dart';
 import 'package:toadgallery/utils/dialog_util.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
-import 'package:share_plus/share_plus.dart';
 import "package:uuid/uuid.dart";
 
 final _logger = Logger("ShareUtil");

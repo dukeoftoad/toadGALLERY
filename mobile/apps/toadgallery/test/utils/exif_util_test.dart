@@ -1,6 +1,6 @@
 import "package:exif_reader/exif_reader.dart";
-import "package:toadgallery/module/metadata/exif.dart";
 import "package:test/test.dart";
+import "package:toadgallery/module/metadata/exif.dart";
 
 void main() {
   group("formatExifExposureTime", () {

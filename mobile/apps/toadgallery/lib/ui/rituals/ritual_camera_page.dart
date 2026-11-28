@@ -8,6 +8,7 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:permission_handler/permission_handler.dart";
+import "package:receive_sharing_intent/receive_sharing_intent.dart";
 import "package:toadgallery/models/collection/collection.dart";
 import "package:toadgallery/models/rituals/ritual_models.dart";
 import "package:toadgallery/service_locator.dart";
@@ -19,7 +20,6 @@ import "package:toadgallery/ui/actions/collection/collection_file_actions.dart";
 import "package:toadgallery/ui/actions/collection/collection_sharing_actions.dart";
 import "package:toadgallery/ui/notification/toast.dart";
 import "package:toadgallery/ui/rituals/all_rituals_screen.dart";
-import "package:receive_sharing_intent/receive_sharing_intent.dart";
 
 void openRitualCamera(BuildContext context, Ritual ritual) {
   final albumId = ritual.albumId;

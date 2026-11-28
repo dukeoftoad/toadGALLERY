@@ -8,11 +8,11 @@ import 'package:dio_http2_adapter/dio_http2_adapter.dart';
 import 'package:logging/logging.dart';
 import 'package:native_dio_adapter/native_dio_adapter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/core/network/api_response.dart";
 import "package:toadgallery/core/network/endpoint_config.dart";
 import 'package:toadgallery/core/network/ente_interceptor.dart';
-import "package:shared_preferences/shared_preferences.dart";
 import "package:ua_client_hints/ua_client_hints.dart";
 
 class NetworkClient {

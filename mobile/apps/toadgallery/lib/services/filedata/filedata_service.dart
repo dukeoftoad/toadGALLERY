@@ -3,6 +3,7 @@ import "dart:async";
 import "package:computer/computer.dart";
 import "package:flutter/foundation.dart" show Uint8List;
 import "package:logging/logging.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/db/files_db.dart";
 import "package:toadgallery/db/ml/db.dart";
 import "package:toadgallery/gateways/files/file_data_gateway.dart";
@@ -13,7 +14,6 @@ import "package:toadgallery/services/filedata/model/file_data.dart";
 import "package:toadgallery/services/filedata/model/response.dart";
 import "package:toadgallery/utils/file_key.dart";
 import "package:toadgallery/utils/gzip.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 const _maxMLDataBytes = 4 * 1024 * 1024;
 

@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/core/errors.dart';
@@ -24,7 +25,6 @@ import 'package:toadgallery/services/sync/large_backup_session_tracker.dart';
 import 'package:toadgallery/services/sync/local_sync_service.dart';
 import 'package:toadgallery/services/sync/offline_import_metadata_service.dart';
 import 'package:toadgallery/services/sync/remote_sync_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class SyncService {
   final _logger = Logger("SyncService");

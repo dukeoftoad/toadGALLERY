@@ -6,11 +6,11 @@ import 'package:dio/dio.dart';
 import 'package:ente_contacts/contacts.dart' as contacts;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/event_bus.dart';
 import 'package:toadgallery/events/user_logged_out_event.dart';
 import 'package:toadgallery/service_locator.dart';
 import 'package:toadgallery/services/photos_contacts_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUpAll(() async {

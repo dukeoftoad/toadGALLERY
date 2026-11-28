@@ -1,6 +1,6 @@
+import 'package:sqlite_async/sqlite_async.dart';
 import 'package:toadgallery/db/common/base.dart';
 import 'package:toadgallery/models/api/memory_share/memory_share.dart';
-import 'package:sqlite_async/sqlite_async.dart';
 
 class MemorySharesDB with SqlDbBase {
   static const _databaseName = "ente.memory_shares.db";

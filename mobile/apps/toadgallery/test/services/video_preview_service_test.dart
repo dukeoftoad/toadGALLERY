@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import "package:flutter_cache_manager/flutter_cache_manager.dart";
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/db/files_db.dart";
 import "package:toadgallery/db/upload_locks_db.dart";
@@ -18,7 +19,6 @@ import "package:toadgallery/services/file_magic_service.dart";
 import 'package:toadgallery/services/filedata/model/file_data.dart';
 import 'package:toadgallery/services/machine_learning/compute_controller.dart';
 import 'package:toadgallery/services/video_preview_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

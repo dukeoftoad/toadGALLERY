@@ -6,10 +6,10 @@ import "package:ente_ui/components/loading_widget.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
+import "package:rive/rive.dart" as rive;
 import "package:toadgallery/models/user_details.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/utils/dialog_util.dart";
-import "package:rive/rive.dart" as rive;
 
 class ReferralCodeWidget extends StatefulWidget {
   final String code;

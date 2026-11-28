@@ -4,6 +4,7 @@ import "package:dio/dio.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/cache/thumbnail_in_memory_cache.dart";
 import "package:toadgallery/core/constants.dart";
 import "package:toadgallery/models/file/file.dart";
@@ -20,7 +21,6 @@ import "package:toadgallery/ui/viewer/gallery/state/gallery_context_state.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 import "package:toadgallery/ui/viewer/gallery/swipe_selection_wrapper.dart";
 import "package:toadgallery/ui/viewer/gallery/swipe_to_select_helper.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 // A minimal valid 1x1 RGBA PNG.
 const _tinyImage = <int>[

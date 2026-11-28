@@ -8,13 +8,13 @@ import "package:flutter/services.dart";
 import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/error-reporting/super_logging.dart";
 import "package:toadgallery/ente_theme_data.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/services/account/user_service.dart";
 import "package:toadgallery/ui/settings/security/security_settings_page.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

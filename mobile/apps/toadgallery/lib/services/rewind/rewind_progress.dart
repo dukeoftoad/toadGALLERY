@@ -1,6 +1,6 @@
 import "package:flutter/foundation.dart";
-import "package:toadgallery/services/rewind/rewind_edition.dart";
 import "package:shared_preferences/shared_preferences.dart";
+import "package:toadgallery/services/rewind/rewind_edition.dart";
 
 class RewindProgress extends ChangeNotifier {
   RewindProgress(this._prefs);

@@ -7,6 +7,7 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:password_strength/password_strength.dart';
+import "package:styled_text/styled_text.dart";
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/event_bus.dart';
 import 'package:toadgallery/events/account_configured_event.dart';
@@ -20,7 +21,6 @@ import "package:toadgallery/ui/components/models/button_type.dart";
 import 'package:toadgallery/ui/notification/toast.dart';
 import 'package:toadgallery/ui/payment/subscription.dart';
 import 'package:toadgallery/utils/dialog_util.dart';
-import "package:styled_text/styled_text.dart";
 
 enum PasswordEntryMode { set, update, reset }
 

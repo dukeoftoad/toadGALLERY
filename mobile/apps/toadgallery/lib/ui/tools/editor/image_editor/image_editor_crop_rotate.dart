@@ -6,15 +6,15 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import "package:flutter_svg/svg.dart";
+import 'package:pro_image_editor/core/mixins/converted_configs.dart';
+import 'package:pro_image_editor/features/crop_rotate_editor/providers/tilt_provider.dart';
+import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import "package:toadgallery/ui/tools/editor/image_editor/circular_icon_button.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_adjust_slider.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_configs_mixin.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_constants.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_tune_bar.dart";
-import 'package:pro_image_editor/core/mixins/converted_configs.dart';
-import 'package:pro_image_editor/features/crop_rotate_editor/providers/tilt_provider.dart';
-import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
-import 'package:pro_image_editor/pro_image_editor.dart';
 
 enum CropAspectRatioType {
   original(

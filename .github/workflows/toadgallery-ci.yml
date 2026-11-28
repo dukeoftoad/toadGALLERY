@@ -35,19 +35,32 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
+
+      - name: Drop untranslated-messages-file guard for CI l10n
+        run: sed -i '/^untranslated-messages-file:/d' mobile/packages/strings/l10n.yaml
 
       - name: Install Dart/Flutter dependencies
         working-directory: mobile
         run: flutter pub get
 
+      - name: Generate FRB bindings
+        working-directory: rust
+        run: cargo codegen frb photos
+
       - name: Run Flutter analyze
         working-directory: mobile/apps/toadgallery
         run: flutter analyze
 
+      - name: Build Rust library for tests
+        working-directory: rust
+        run: cargo build -p ente-photos-frb --features flutter
+
       - name: Run Flutter unit tests
         working-directory: mobile/apps/toadgallery
+        env:
+          ENTE_PHOTOS_FRB_LIBRARY: ${{ github.workspace }}/rust/target/debug/libente_photos_frb.so
         run: flutter test
 
   rust-check:

@@ -12,6 +12,8 @@ import 'package:image/image.dart' as img;
 import "package:logging/logging.dart";
 import 'package:path/path.dart' as path;
 import "package:photo_manager/photo_manager.dart";
+import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/files_db.dart";
 import "package:toadgallery/events/local_photos_updated_event.dart";
@@ -37,8 +39,6 @@ import "package:toadgallery/ui/viewer/file/detail_page.dart";
 import "package:toadgallery/utils/dialog_util.dart";
 import "package:toadgallery/utils/image_util.dart";
 import "package:toadgallery/utils/lossless_edits.dart";
-import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
-import 'package:pro_image_editor/pro_image_editor.dart';
 
 class ImageEditorPage extends StatefulWidget {
   final ente.EnteFile originalFile;

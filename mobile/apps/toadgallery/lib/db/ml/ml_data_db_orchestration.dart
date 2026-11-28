@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:typed_data";
 
 import "package:logging/logging.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/ml/base.dart";
 import "package:toadgallery/db/ml/clip_vector_db.dart";
@@ -15,7 +16,6 @@ import "package:toadgallery/models/ml/clip.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/services/machine_learning/compute_controller.dart";
 import "package:toadgallery/services/machine_learning/ml_process_lock.dart";
-import "package:synchronized/synchronized.dart";
 
 mixin MLDataDBOrchestration implements IMLDataDB<int> {
   int _clusterSummaryMutationVersion = 0;

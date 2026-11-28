@@ -6,6 +6,7 @@ import "package:crypto/crypto.dart";
 import "package:ente_crypto/ente_crypto.dart";
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/db/entities_db.dart";
 import "package:toadgallery/db/files_db.dart";
@@ -15,7 +16,6 @@ import "package:toadgallery/gateways/entity/models/key.dart";
 import "package:toadgallery/gateways/entity/models/type.dart";
 import "package:toadgallery/models/local_entity_data.dart";
 import "package:toadgallery/utils/gzip.dart";
-import 'package:shared_preferences/shared_preferences.dart';
 
 class EntityService {
   static const int fetchLimit = 500;

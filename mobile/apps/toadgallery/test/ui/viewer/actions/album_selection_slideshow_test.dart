@@ -6,6 +6,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/db/files_db.dart";
 import "package:toadgallery/db/ignored_files_db.dart";
@@ -19,7 +20,6 @@ import "package:toadgallery/models/selected_albums.dart";
 import "package:toadgallery/ui/collections/collection_list_page.dart";
 import "package:toadgallery/ui/viewer/actions/album_selection_action_widget.dart";
 import "package:toadgallery/ui/viewer/album_slideshow/album_slideshow_page.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

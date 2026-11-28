@@ -2,8 +2,8 @@ import "dart:async";
 
 import 'package:logging/logging.dart';
 import 'package:media_extension/media_extension_action_types.dart';
-import "package:toadgallery/db/ml/db.dart";
 import "package:shared_preferences/shared_preferences.dart";
+import "package:toadgallery/db/ml/db.dart";
 
 class AppLifecycleService {
   static const String keyLastAppOpenTime = "last_app_open_time";

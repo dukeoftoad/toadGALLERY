@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import "package:flutter_svg/svg.dart";
 import "package:intl/intl.dart";
 import 'package:logging/logging.dart';
+import 'package:rive/rive.dart' as rive;
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import "package:toadgallery/core/configuration.dart";
 import 'package:toadgallery/core/constants.dart';
 import "package:toadgallery/models/file/file.dart";
@@ -29,8 +31,6 @@ import "package:toadgallery/ui/viewer/file/detail_page.dart";
 import "package:toadgallery/ui/viewer/file/thumbnail_widget.dart";
 import "package:toadgallery/utils/delete_file_util.dart";
 import "package:toadgallery/utils/dialog_util.dart";
-import 'package:rive/rive.dart' as rive;
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 enum SimilarImagesPageState { setup, loading, results }
 

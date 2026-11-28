@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/event_bus.dart';
 import 'package:toadgallery/db/files_db.dart';
@@ -24,7 +25,6 @@ import 'package:toadgallery/services/search_service.dart';
 import 'package:toadgallery/services/sync/local_sync_service.dart';
 import "package:toadgallery/ui/viewer/file/detail_page.dart";
 import 'package:toadgallery/ui/viewer/gallery/collection_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum _AlbumWidgetCacheUpdateReason { none, changed, stale }
 

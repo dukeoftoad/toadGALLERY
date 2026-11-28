@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/event_bus.dart';
 import 'package:toadgallery/db/ml/base.dart';
@@ -19,7 +20,6 @@ import 'package:toadgallery/services/machine_learning/face_ml/person/person_serv
 import 'package:toadgallery/ui/sharing/share_collection_page.dart';
 import 'package:toadgallery/ui/sharing/widgets/participant_role_row.dart';
 import 'package:toadgallery/ui/sharing/widgets/participant_row.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'library_sharing_test_helpers.dart';
 

@@ -6,11 +6,11 @@ import "package:ente_base/models/accounts.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/services/account/user_service.dart";
 import "package:toadgallery/src/rust/frb_generated.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 Future<void> initializeAccountsTest(FakeAccountsClient client) async {
   EntePhotosRust.initMock(api: _FakePhotosRustApi(client));

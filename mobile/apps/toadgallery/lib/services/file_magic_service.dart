@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:ente_crypto/ente_crypto.dart';
 import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:logging/logging.dart';
+import "package:synchronized/synchronized.dart";
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/core/event_bus.dart';
@@ -19,7 +20,6 @@ import "package:toadgallery/models/metadata/file_magic.dart";
 import "package:toadgallery/service_locator.dart";
 import 'package:toadgallery/services/sync/remote_sync_service.dart';
 import "package:toadgallery/utils/file_key.dart";
-import "package:synchronized/synchronized.dart";
 
 class _PreparedMagicMetadataUpdate<T> {
   const _PreparedMagicMetadataUpdate({

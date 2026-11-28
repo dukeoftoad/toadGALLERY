@@ -7,6 +7,7 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/app_mode.dart";
 import "package:toadgallery/core/cache/thumbnail_in_memory_cache.dart";
 import "package:toadgallery/core/configuration.dart";
@@ -27,7 +28,6 @@ import "package:toadgallery/ui/viewer/gallery/gallery.dart";
 import "package:toadgallery/ui/viewer/gallery/gallery_app_bar_config.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/app_mode.dart';
 import 'package:toadgallery/ente_theme_data.dart';
 import 'package:toadgallery/models/file/file.dart';
@@ -15,7 +16,6 @@ import 'package:toadgallery/models/selected_files.dart';
 import 'package:toadgallery/service_locator.dart';
 import 'package:toadgallery/settings/local_settings.dart';
 import 'package:toadgallery/utils/delete_file_util.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUpAll(() async {

@@ -167,11 +167,12 @@ fn generate_frb(target: FrbTarget) -> Result<(), DynError> {
         .parent()
         .ok_or("failed to resolve repo root from rust/tools/codegen")?;
 
+    // This repository ships a single Flutter app, toadgallery.
     let apps: &[&str] = match target {
-        FrbTarget::All => &["auth", "photos", "locker"],
-        FrbTarget::Auth => &["auth"],
-        FrbTarget::Photos => &["photos"],
-        FrbTarget::Locker => &["locker"],
+        FrbTarget::All => &["toadgallery"],
+        FrbTarget::Auth => &["toadgallery"],
+        FrbTarget::Photos => &["toadgallery"],
+        FrbTarget::Locker => &["toadgallery"],
     };
     let shared_dir = repo_root.join("mobile/packages/frb/lib");
     write_generated_gitignore(&shared_dir)?;
@@ -225,14 +226,14 @@ fn generate_frb(target: FrbTarget) -> Result<(), DynError> {
             shared_types.insert(name, types);
         }
     }
-    if apps.contains(&"photos") {
+    if apps.contains(&"toadgallery") {
         let notifications = UniffiCrate {
             crate_name: "ente_notification_uniffi",
             crate_dir: rust_root.join("bindings/uniffi/notifications"),
         };
         generate_swift(
             &notifications,
-            "mobile/apps/photos/ios/NotificationServiceExtension/Generated",
+            "mobile/apps/toadgallery/ios/NotificationServiceExtension/Generated",
         )?;
     }
     format_frb_bindings(target)

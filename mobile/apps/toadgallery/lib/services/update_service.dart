@@ -4,12 +4,12 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/core/network/network.dart';
 import "package:toadgallery/services/language_service.dart";
 import 'package:toadgallery/services/notification_service.dart';
 import 'package:toadgallery/ui/notification/update/change_log_strings.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum ChangeLogAction { skip, consumeWithoutShowing, show }
 

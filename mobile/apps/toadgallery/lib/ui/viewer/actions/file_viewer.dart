@@ -10,6 +10,7 @@ import "package:media_extension/media_extension.dart";
 import "package:media_extension/media_extension_action_types.dart";
 import "package:photo_manager/photo_manager.dart";
 import "package:photo_manager_image_provider/photo_manager_image_provider.dart";
+import "package:receive_sharing_intent/receive_sharing_intent.dart";
 import "package:toadgallery/models/file/file.dart";
 import "package:toadgallery/models/gallery_type.dart";
 import "package:toadgallery/models/metadata/file_magic.dart";
@@ -18,7 +19,6 @@ import "package:toadgallery/services/app_lifecycle_service.dart";
 import "package:toadgallery/ui/viewer/file/detail_page.dart";
 import "package:toadgallery/ui/viewer/file/external_video_viewer.dart";
 import "package:toadgallery/ui/viewer/file/image_zoom/image_zoom_viewer.dart";
-import "package:receive_sharing_intent/receive_sharing_intent.dart";
 
 class FileViewer extends StatefulWidget {
   final SharedMediaFile? sharedMediaFile;

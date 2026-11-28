@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import "package:logging/logging.dart";
 import 'package:photo_manager/photo_manager.dart';
+import "package:rive/rive.dart" as rive;
+import "package:styled_text/styled_text.dart";
 import "package:toadgallery/app_mode.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/app_mode_changed_event.dart";
@@ -25,8 +27,6 @@ import "package:toadgallery/ui/components/alert_bottom_sheet.dart";
 import "package:toadgallery/ui/components/buttons/button_widget_v2.dart";
 import "package:toadgallery/ui/notification/toast.dart";
 import "package:toadgallery/utils/dialog_util.dart";
-import "package:rive/rive.dart" as rive;
-import "package:styled_text/styled_text.dart";
 
 class GrantPermissionsWidget extends StatefulWidget {
   const GrantPermissionsWidget({super.key, this.startWithoutAccount = false});

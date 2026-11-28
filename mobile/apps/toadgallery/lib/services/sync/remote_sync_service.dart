@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/errors.dart';
 import 'package:toadgallery/core/event_bus.dart';
@@ -41,7 +42,6 @@ import 'package:toadgallery/services/sync/diff_fetcher.dart';
 import 'package:toadgallery/services/sync/local_sync_service.dart';
 import 'package:toadgallery/services/sync/sync_service.dart';
 import 'package:toadgallery/utils/network_util.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class RemoteSyncService {
   final _logger = Logger("RemoteSyncService");

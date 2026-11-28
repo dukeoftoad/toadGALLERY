@@ -7,13 +7,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/service_locator.dart';
 import 'package:toadgallery/services/notification_key_service.dart';
 import 'package:toadgallery/services/notification_service.dart';
 import 'package:toadgallery/services/push_service.dart';
 import 'package:toadgallery/src/rust/frb_generated.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

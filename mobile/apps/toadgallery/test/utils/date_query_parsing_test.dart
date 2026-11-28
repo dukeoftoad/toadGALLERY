@@ -1,5 +1,5 @@
-import 'package:toadgallery/services/date_parse_service.dart';
 import 'package:test/test.dart';
+import 'package:toadgallery/services/date_parse_service.dart';
 
 void main() {
   final parse = DateParseService.instance.parse;

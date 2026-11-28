@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:sqlite_async/sqlite_async.dart';
 import 'package:toadgallery/db/common/base.dart';
 import "package:toadgallery/gateways/collections/models/public_url.dart";
 import "package:toadgallery/models/api/collection/user.dart";
 import 'package:toadgallery/models/collection/collection.dart';
-import 'package:sqlite_async/sqlite_async.dart';
 
 class CollectionsDB with SqlDbBase {
   static const _databaseName = "ente.collections.db";

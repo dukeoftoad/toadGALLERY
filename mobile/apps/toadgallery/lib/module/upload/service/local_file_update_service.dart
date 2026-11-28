@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import "package:toadgallery/core/configuration.dart";
 import 'package:toadgallery/core/errors.dart';
 import 'package:toadgallery/db/file_updation_db.dart';
@@ -9,7 +10,6 @@ import 'package:toadgallery/models/file/file.dart';
 import 'package:toadgallery/models/file/file_type.dart';
 import 'package:toadgallery/module/download/file.dart';
 import "package:toadgallery/module/upload/upload_data.dart";
-import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalFileUpdateService {
   static final instance = LocalFileUpdateService._privateConstructor();

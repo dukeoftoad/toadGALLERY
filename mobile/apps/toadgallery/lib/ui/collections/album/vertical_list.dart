@@ -6,6 +6,7 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import "package:flutter/services.dart";
 import 'package:logging/logging.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:toadgallery/core/configuration.dart';
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/create_new_album_event.dart";
@@ -27,7 +28,6 @@ import "package:toadgallery/ui/sharing/share_collection_page.dart";
 import 'package:toadgallery/ui/viewer/gallery/collection_page.dart';
 import "package:toadgallery/ui/viewer/gallery/empty_state.dart";
 import 'package:toadgallery/utils/dialog_util.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 class AlbumVerticalListWidget extends StatefulWidget {
   final List<Collection> collections;

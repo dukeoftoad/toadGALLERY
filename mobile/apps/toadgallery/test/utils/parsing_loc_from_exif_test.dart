@@ -1,5 +1,5 @@
-import "package:toadgallery/services/location_service.dart";
 import "package:test/test.dart";
+import "package:toadgallery/services/location_service.dart";
 
 void main() {
   group('toLocationObj', () {

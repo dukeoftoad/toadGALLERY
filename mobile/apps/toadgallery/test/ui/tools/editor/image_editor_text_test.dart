@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:pro_image_editor/features/text_editor/widgets/rounded_background_text/rounded_background_text.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:toadgallery/ente_theme_data.dart';
 import 'package:toadgallery/ui/tools/editor/image_editor/image_editor_layer_selection.dart';
 import 'package:toadgallery/ui/tools/editor/image_editor/image_editor_main_bottom_bar.dart';
 import 'package:toadgallery/ui/tools/editor/image_editor/image_editor_text_bar.dart';
-import 'package:pro_image_editor/features/text_editor/widgets/rounded_background_text/rounded_background_text.dart';
-import 'package:pro_image_editor/pro_image_editor.dart';
 
 void main() {
   setUpAll(() async {

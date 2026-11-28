@@ -8,6 +8,7 @@ import 'package:native_video_editor/native_video_editor.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as path_helper;
 import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/network/network.dart';
 import 'package:toadgallery/db/files_db.dart';
@@ -21,7 +22,6 @@ import 'package:toadgallery/ui/tools/editor/native_video_export_service.dart';
 import 'package:toadgallery/ui/tools/editor/video_crop_util.dart';
 import 'package:toadgallery/ui/tools/editor/video_editor/crop_value.dart';
 import 'package:toadgallery/ui/tools/editor/video_editor/video_editor_controller.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class TrimConfig {
   final String label;

@@ -33,12 +33,22 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
+
+      - name: Drop untranslated-messages-file guard for CI l10n
+        run: sed -i '/^untranslated-messages-file:/d' mobile/packages/strings/l10n.yaml
 
       - name: Install dependencies
         working-directory: mobile
         run: flutter pub get
+
+      - name: Generate FRB bindings
+        working-directory: rust
+        run: cargo codegen frb photos
+
+      - name: Free runner disk space
+        run: sudo rm -rf /usr/share/dotnet
 
       - name: Decode Android signing keystore
         if: env.SIGNING_KEYSTORE_BASE64 != ''

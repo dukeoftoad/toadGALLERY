@@ -12,6 +12,7 @@ import "package:media_extension/media_extension_action_types.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:path_provider_platform_interface/path_provider_platform_interface.dart";
 import "package:photo_manager/photo_manager.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/app_mode.dart";
 import "package:toadgallery/core/cache/image_cache.dart";
 import "package:toadgallery/core/cache/thumbnail_in_memory_cache.dart";
@@ -33,7 +34,6 @@ import "package:toadgallery/ui/viewer/file/image_zoom/image_zoom_viewer.dart";
 import "package:toadgallery/ui/viewer/gallery/component/gallery_file_widget.dart";
 import "package:toadgallery/ui/viewer/gallery/gallery.dart";
 import "package:toadgallery/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 import "device_picker_test_helpers.dart";
 

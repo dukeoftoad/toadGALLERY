@@ -6,6 +6,7 @@ import "package:flutter/foundation.dart";
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' show join;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 import "package:toadgallery/db/common/base.dart";
 import "package:toadgallery/db/ml/base.dart";
 import "package:toadgallery/db/ml/clip_vector_db.dart";
@@ -24,7 +25,6 @@ import "package:toadgallery/services/machine_learning/face_ml/face_clustering/fa
 import 'package:toadgallery/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart';
 import "package:toadgallery/services/machine_learning/ml_result.dart";
 import "package:toadgallery/utils/ml_util.dart";
-import 'package:sqlite_async/sqlite_async.dart';
 
 class DartMLDataDB
     with SqlDbBase, MLDataDBOrchestration

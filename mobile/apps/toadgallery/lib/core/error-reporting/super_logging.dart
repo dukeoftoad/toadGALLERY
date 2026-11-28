@@ -13,13 +13,13 @@ import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/error-reporting/tunneled_transport.dart';
 import "package:toadgallery/core/exceptions.dart";
 import 'package:toadgallery/models/typedefs.dart';
 import "package:toadgallery/utils/device_info.dart";
 import "package:toadgallery/utils/ram_check_util.dart";
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 extension SuperString on String {
   Iterable<String> chunked(int chunkSize) sync* {

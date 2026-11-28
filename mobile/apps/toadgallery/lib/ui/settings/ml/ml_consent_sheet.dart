@@ -4,13 +4,13 @@ import "package:ente_components/ente_components.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
+import "package:styled_text/styled_text.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/notification_event.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/services/machine_learning/ml_service.dart";
 import "package:toadgallery/services/machine_learning/semantic_search/semantic_search_service.dart";
 import "package:toadgallery/ui/common/web_page.dart";
-import "package:styled_text/styled_text.dart";
 
 final _logger = Logger("MLConsentSheet");
 

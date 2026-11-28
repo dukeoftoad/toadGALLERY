@@ -2,6 +2,7 @@ import "dart:async" show unawaited;
 
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/cache/lru_map.dart";
 import "package:toadgallery/db/files_db.dart";
 import "package:toadgallery/db/ml/base.dart";
@@ -17,7 +18,6 @@ import "package:toadgallery/services/machine_learning/semantic_search/clip_simil
 import "package:toadgallery/services/machine_learning/semantic_search/query_result.dart";
 import "package:toadgallery/services/search_service.dart";
 import "package:toadgallery/src/rust/api/ml_db_api.dart" as rust;
-import "package:shared_preferences/shared_preferences.dart";
 
 class SemanticSearchService {
   static final _logger = Logger("SemanticSearchService");

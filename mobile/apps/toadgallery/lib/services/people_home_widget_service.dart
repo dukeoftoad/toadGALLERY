@@ -4,6 +4,8 @@ import "package:collection/collection.dart";
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:toadgallery/db/files_db.dart';
 import 'package:toadgallery/models/file/file.dart';
 import 'package:toadgallery/service_locator.dart';
@@ -14,8 +16,6 @@ import 'package:toadgallery/services/search_service.dart';
 import 'package:toadgallery/services/sync/local_sync_service.dart';
 import "package:toadgallery/ui/viewer/file/detail_page.dart";
 import "package:toadgallery/ui/viewer/people/people_page.dart";
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:synchronized/synchronized.dart';
 
 class PeopleHomeWidgetService {
   static const String SELECTED_PEOPLE_KEY = "selectedPeopleHW";

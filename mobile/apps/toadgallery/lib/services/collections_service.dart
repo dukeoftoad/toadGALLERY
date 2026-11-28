@@ -11,6 +11,7 @@ import "package:fast_base58/fast_base58.dart";
 import 'package:flutter/foundation.dart';
 import "package:flutter/material.dart";
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/core/errors.dart';
@@ -48,7 +49,6 @@ import "package:toadgallery/settings/local_settings.dart";
 import "package:toadgallery/src/rust/api/cast_api.dart";
 import "package:toadgallery/utils/dialog_util.dart";
 import "package:toadgallery/utils/file_key.dart";
-import 'package:shared_preferences/shared_preferences.dart';
 
 String? _resolvePublicAlbumAccessToken(Uri uri) {
   final tokenFromQuery = uri.queryParameters["t"];

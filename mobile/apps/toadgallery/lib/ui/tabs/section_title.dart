@@ -1,7 +1,7 @@
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
-import 'package:toadgallery/theme/ente_theme.dart';
 import "package:styled_text/styled_text.dart";
+import 'package:toadgallery/theme/ente_theme.dart';
 
 class SectionTitle extends StatelessWidget {
   final String? title;

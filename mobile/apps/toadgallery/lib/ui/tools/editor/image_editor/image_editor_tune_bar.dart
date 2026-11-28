@@ -5,11 +5,11 @@ import "package:ente_components/hugeicons.dart";
 import 'package:flutter/material.dart';
 import "package:flutter/services.dart";
 import "package:flutter_svg/svg.dart";
+import 'package:pro_image_editor/core/mixins/converted_configs.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_adjust_slider.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_configs_mixin.dart";
 import "package:toadgallery/ui/tools/editor/image_editor/image_editor_constants.dart";
-import 'package:pro_image_editor/core/mixins/converted_configs.dart';
-import 'package:pro_image_editor/pro_image_editor.dart';
 
 class ImageEditorTuneBar extends StatefulWidget with SimpleConfigsAccess {
   const ImageEditorTuneBar({

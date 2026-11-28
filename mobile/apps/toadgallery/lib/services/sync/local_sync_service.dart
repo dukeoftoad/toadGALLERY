@@ -5,6 +5,8 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photo_manager/photo_manager.dart";
+import "package:shared_preferences/shared_preferences.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/errors.dart";
 import "package:toadgallery/core/event_bus.dart";
@@ -27,8 +29,6 @@ import "package:toadgallery/services/sync/import/diff.dart";
 import "package:toadgallery/services/sync/import/local_assets.dart";
 import "package:toadgallery/services/sync/import/model.dart";
 import "package:toadgallery/services/sync/origin_fetch_tracker.dart";
-import "package:shared_preferences/shared_preferences.dart";
-import "package:synchronized/synchronized.dart";
 import "package:tuple/tuple.dart";
 
 class LocalSyncService {

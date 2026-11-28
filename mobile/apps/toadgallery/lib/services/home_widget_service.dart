@@ -6,6 +6,7 @@ import 'package:home_widget/home_widget.dart' as hw;
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path_provider_foundation/path_provider_foundation.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/models/file/file.dart';
 import 'package:toadgallery/module/download/thumbnail.dart';
@@ -19,7 +20,6 @@ import 'package:toadgallery/ui/settings/ml/ml_consent_sheet.dart';
 import 'package:toadgallery/ui/settings/widgets/albums_widget_settings.dart';
 import 'package:toadgallery/ui/settings/widgets/memories_widget_settings.dart';
 import 'package:toadgallery/ui/settings/widgets/people_widget_settings.dart';
-import 'package:synchronized/synchronized.dart';
 
 enum WidgetStatus {
   notSynced,

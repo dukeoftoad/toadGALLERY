@@ -4,6 +4,7 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
+import "package:share_plus/share_plus.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/ml/db.dart";
 import "package:toadgallery/db/ml/rust_db.dart";
@@ -31,7 +32,6 @@ import "package:toadgallery/ui/settings/debug/memories_debug_page.dart";
 import "package:toadgallery/utils/dialog_util.dart";
 import "package:toadgallery/utils/ml_util.dart";
 import "package:toadgallery/utils/share_util.dart";
-import "package:share_plus/share_plus.dart";
 
 typedef _VectorIndexStatus = ({rust.FillState state, int vectors});
 

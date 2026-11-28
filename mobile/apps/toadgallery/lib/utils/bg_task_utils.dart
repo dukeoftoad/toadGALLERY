@@ -7,12 +7,12 @@ import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart" show AppLifecycleState, WidgetsBinding;
 import "package:logging/logging.dart";
 import "package:permission_handler/permission_handler.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/db/upload_locks_db.dart";
 import "package:toadgallery/main.dart";
 import "package:toadgallery/module/upload/service/file_uploader.dart";
 import "package:toadgallery/services/process_activity.dart";
 import "package:toadgallery/utils/background_tasks.dart";
-import "package:shared_preferences/shared_preferences.dart";
 import "package:workmanager/workmanager.dart" as workmanager;
 
 @pragma('vm:entry-point')

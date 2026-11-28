@@ -5,6 +5,7 @@ import 'package:ente_strings/ente_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/db/ml/base.dart';
 import 'package:toadgallery/ente_theme_data.dart';
@@ -13,7 +14,6 @@ import 'package:toadgallery/services/account/user_service.dart';
 import 'package:toadgallery/services/entity_service.dart';
 import 'package:toadgallery/services/machine_learning/face_ml/person/person_service.dart';
 import 'package:toadgallery/ui/sharing/add_people_sheet.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'library_sharing_test_helpers.dart';
 

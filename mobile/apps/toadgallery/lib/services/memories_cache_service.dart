@@ -6,6 +6,8 @@ import "package:flutter/cupertino.dart";
 import "package:flutter/foundation.dart" show kDebugMode;
 import "package:logging/logging.dart";
 import "package:path_provider/path_provider.dart";
+import "package:shared_preferences/shared_preferences.dart";
+import "package:synchronized/synchronized.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/files_db.dart";
 import "package:toadgallery/db/memories_db.dart";
@@ -45,8 +47,6 @@ import "package:toadgallery/ui/viewer/file/detail_page.dart";
 import "package:toadgallery/ui/viewer/people/people_page.dart";
 import "package:toadgallery/utils/cache_util.dart";
 import "package:toadgallery/utils/ml_util.dart";
-import "package:shared_preferences/shared_preferences.dart";
-import "package:synchronized/synchronized.dart";
 
 class MemoriesCacheService {
   static const _lastMemoriesCacheUpdateTimeKey = "lastMemoriesCacheUpdateTime";

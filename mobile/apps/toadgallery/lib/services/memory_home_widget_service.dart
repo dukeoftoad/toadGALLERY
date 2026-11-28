@@ -3,12 +3,12 @@ import "package:collection/collection.dart";
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/models/file/file.dart';
 import 'package:toadgallery/models/memories/smart_memory.dart';
 import 'package:toadgallery/service_locator.dart';
 import 'package:toadgallery/services/home_widget_service.dart';
 import 'package:toadgallery/services/sync/local_sync_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class MemoryHomeWidgetService {
   static const String SELECTED_LAST_YEAR_MEMORIES_KEY =

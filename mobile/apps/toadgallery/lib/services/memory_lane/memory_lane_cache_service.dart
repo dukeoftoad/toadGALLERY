@@ -4,8 +4,8 @@ import "dart:io";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
-import "package:toadgallery/models/memory_lane/memory_lane_models.dart";
 import "package:synchronized/synchronized.dart";
+import "package:toadgallery/models/memory_lane/memory_lane_models.dart";
 
 class MemoryLaneCacheService {
   MemoryLaneCacheService._internal();

@@ -5,6 +5,7 @@ import "dart:math";
 import "package:ente_crypto/ente_crypto.dart";
 import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/core/constants.dart';
 import 'package:toadgallery/core/event_bus.dart';
 import "package:toadgallery/db/files_db.dart";
@@ -21,7 +22,6 @@ import "package:toadgallery/models/metadata/file_magic.dart";
 import "package:toadgallery/services/collections_service.dart";
 import 'package:toadgallery/services/ignored_files_service.dart';
 import "package:toadgallery/utils/file_key.dart";
-import 'package:shared_preferences/shared_preferences.dart';
 
 class TrashSyncService {
   final _logger = Logger("TrashSyncService");

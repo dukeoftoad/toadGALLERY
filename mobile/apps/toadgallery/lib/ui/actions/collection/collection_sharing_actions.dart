@@ -5,6 +5,7 @@ import 'package:ente_pure_utils/ente_pure_utils.dart' hide isValidEmail;
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import "package:styled_text/styled_text.dart";
 import 'package:toadgallery/core/configuration.dart';
 import "package:toadgallery/core/errors.dart";
 import "package:toadgallery/core/network/api_response.dart";
@@ -28,7 +29,6 @@ import 'package:toadgallery/ui/sharing/widgets/sharing_role.dart';
 import 'package:toadgallery/utils/dialog_util.dart';
 import 'package:toadgallery/utils/email_util.dart';
 import 'package:toadgallery/utils/share_util.dart';
-import "package:styled_text/styled_text.dart";
 
 enum AddEmailToCollectionFailure {
   invalidEmail,

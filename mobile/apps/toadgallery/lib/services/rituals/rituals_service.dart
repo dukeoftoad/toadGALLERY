@@ -4,6 +4,7 @@ import "dart:math";
 
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/files_db.dart";
@@ -15,7 +16,6 @@ import "package:toadgallery/models/rituals/ritual_models.dart";
 import "package:toadgallery/service_locator.dart";
 import "package:toadgallery/services/language_service.dart";
 import "package:toadgallery/services/notification_service.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 class RitualsService {
   static final RitualsService instance = RitualsService._privateConstructor();

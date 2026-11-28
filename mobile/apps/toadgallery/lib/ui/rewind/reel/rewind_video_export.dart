@@ -8,6 +8,8 @@ import "package:flutter/scheduler.dart";
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
 import "package:photo_manager/photo_manager.dart";
+import "package:receive_sharing_intent/receive_sharing_intent.dart";
+import "package:share_plus/share_plus.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/db/files_db.dart";
@@ -41,8 +43,6 @@ import "package:toadgallery/ui/rewind/widgets/rewind_swap_in.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_text.dart";
 import "package:toadgallery/utils/dialog_util.dart";
 import "package:toadgallery/utils/gallery_save_title.dart";
-import "package:receive_sharing_intent/receive_sharing_intent.dart";
-import "package:share_plus/share_plus.dart";
 
 final _videos = Expando<File>();
 final _galleryAssets = Expando<AssetEntity>();

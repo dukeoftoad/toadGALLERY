@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:logging/logging.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 import 'package:toadgallery/db/common/base.dart';
 import 'package:toadgallery/models/ignored_file.dart';
-import 'package:sqlite_async/sqlite_async.dart';
 
 // Prevent files deleted from Ente from being reuploaded without user action.
 class IgnoredFilesDB with SqlDbBase {

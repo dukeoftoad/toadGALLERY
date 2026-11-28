@@ -9,13 +9,13 @@ import "package:flutter_timezone/flutter_timezone.dart";
 import "package:logging/logging.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:permission_handler/permission_handler.dart";
+import "package:shared_preferences/shared_preferences.dart";
+import 'package:timezone/data/latest_10y.dart' as tzdb;
+import "package:timezone/timezone.dart" as tz;
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/services/language_service.dart";
 import "package:toadgallery/services/notification_key_service.dart";
 import "package:toadgallery/services/timezone_aliases.dart";
-import "package:shared_preferences/shared_preferences.dart";
-import 'package:timezone/data/latest_10y.dart' as tzdb;
-import "package:timezone/timezone.dart" as tz;
 
 class NotificationService {
   static final NotificationService instance =

@@ -5,10 +5,10 @@ import "package:flutter/rendering.dart";
 import "package:flutter/widgets.dart";
 import "package:flutter_svg/flutter_svg.dart";
 import "package:path_provider/path_provider.dart";
+import "package:share_plus/share_plus.dart";
 import "package:toadgallery/ui/rewind/copy/rewind_copy.dart";
 import "package:toadgallery/ui/rewind/shell/rewind_page_scope.dart";
 import "package:toadgallery/ui/rewind/theme/rewind_assets.dart";
-import "package:share_plus/share_plus.dart";
 
 class RewindShareable extends StatefulWidget {
   const RewindShareable({

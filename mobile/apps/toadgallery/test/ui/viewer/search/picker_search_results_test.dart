@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:photo_manager/photo_manager.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/db/ml/base.dart";
 import "package:toadgallery/ente_theme_data.dart";
@@ -20,7 +21,6 @@ import "package:toadgallery/services/machine_learning/face_ml/person/person_serv
 import "package:toadgallery/ui/device_picker/device_picker_controller.dart";
 import "package:toadgallery/ui/picker/local_media_picker_search.dart";
 import "package:toadgallery/ui/viewer/search/search_suggestions.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 import "../../device_picker/device_picker_test_helpers.dart";
 

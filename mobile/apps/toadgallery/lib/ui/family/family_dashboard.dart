@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:ente_components/ente_components.dart';
 import 'package:ente_components/hugeicons.dart';
-import 'package:ente_contacts/contacts.dart' as contacts;
 import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:ente_strings/ente_strings.dart';
 import 'package:flutter/material.dart';

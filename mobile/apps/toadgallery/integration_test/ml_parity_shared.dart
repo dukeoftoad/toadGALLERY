@@ -6,6 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:integration_test/integration_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:path_provider/path_provider.dart";
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/network/network.dart";
 import "package:toadgallery/service_locator.dart";
@@ -13,7 +14,6 @@ import "package:toadgallery/services/machine_learning/ml_result.dart";
 import "package:toadgallery/src/rust/api/ml_indexing_api.dart" as rust_ml;
 import "package:toadgallery/src/rust/frb_generated.dart" show EntePhotosRust;
 import "package:toadgallery/utils/ml_util.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 const _manifestB64 = String.fromEnvironment("ML_PARITY_MANIFEST_B64");
 const _codeRevision = String.fromEnvironment(

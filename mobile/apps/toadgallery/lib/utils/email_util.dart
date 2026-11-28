@@ -13,6 +13,7 @@ import "package:intl/intl.dart";
 import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/core/error-reporting/super_logging.dart';
 import 'package:toadgallery/theme/ente_theme.dart';
@@ -24,7 +25,6 @@ import 'package:toadgallery/ui/components/dialog_widget.dart';
 import 'package:toadgallery/ui/components/models/button_type.dart';
 import 'package:toadgallery/ui/notification/toast.dart';
 import 'package:toadgallery/utils/dialog_util.dart';
-import 'package:share_plus/share_plus.dart';
 
 final Logger _logger = Logger('email_util');
 const MailComposer _mailComposer = MailComposer();

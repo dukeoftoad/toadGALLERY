@@ -1,9 +1,9 @@
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadgallery/db/device_files_db.dart';
 import 'package:toadgallery/db/files_db.dart';
 import 'package:toadgallery/models/device_collection.dart';
 import 'package:toadgallery/services/sync/remote_sync_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class BackupPreferenceService {
   BackupPreferenceService(this._prefs);

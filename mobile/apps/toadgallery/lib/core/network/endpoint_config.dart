@@ -1,7 +1,7 @@
+import "package:shared_preferences/shared_preferences.dart";
 import "package:toadgallery/core/constants.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/event.dart";
-import "package:shared_preferences/shared_preferences.dart";
 
 class EndpointConfig {
   EndpointConfig(this._preferences);

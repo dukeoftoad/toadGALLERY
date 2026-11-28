@@ -5,13 +5,13 @@ import 'package:ente_pure_utils/ente_pure_utils.dart';
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import 'package:flutter/services.dart';
+import "package:pinput/pinput.dart";
 import 'package:toadgallery/core/configuration.dart';
 import 'package:toadgallery/ente_theme_data.dart';
 import 'package:toadgallery/services/account/user_service.dart';
 import 'package:toadgallery/ui/account/recovery_key_page.dart';
 import 'package:toadgallery/ui/lifecycle_event_handler.dart';
 import 'package:toadgallery/ui/notification/toast.dart';
-import "package:pinput/pinput.dart";
 
 class TwoFactorSetupPage extends StatefulWidget {
   final String secretCode;

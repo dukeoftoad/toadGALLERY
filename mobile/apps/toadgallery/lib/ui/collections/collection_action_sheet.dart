@@ -8,6 +8,7 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:ente_ui/components/loading_widget.dart';
 import 'package:flutter/material.dart';
 import "package:logging/logging.dart";
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/create_new_album_event.dart";
@@ -21,7 +22,6 @@ import 'package:toadgallery/ui/collections/album/vertical_list.dart';
 import "package:toadgallery/ui/common/progress_dialog.dart";
 import "package:toadgallery/utils/dialog_util.dart";
 import "package:toadgallery/utils/separators_util.dart";
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 enum CollectionActionType {
   addFiles,

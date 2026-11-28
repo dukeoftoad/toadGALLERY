@@ -2,8 +2,8 @@ import "dart:async";
 import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:toadgallery/services/memories/memory_music_service.dart";
 import "package:shared_preferences/shared_preferences.dart";
+import "package:toadgallery/services/memories/memory_music_service.dart";
 
 const _manifestPreferenceKey = "memory_music_manifest";
 const _cachedURL = "https://music.ente.com/cached.mp3";

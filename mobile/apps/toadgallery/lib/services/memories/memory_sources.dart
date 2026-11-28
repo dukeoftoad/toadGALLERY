@@ -1,0 +1,156 @@
+import "package:collection/collection.dart";
+import "package:toadgallery/db/files_db.dart";
+import "package:toadgallery/db/memories_db.dart";
+import "package:toadgallery/db/offline_files_db.dart";
+import "package:toadgallery/models/file/file.dart";
+import "package:toadgallery/models/metadata/common_keys.dart";
+import "package:toadgallery/service_locator.dart";
+import "package:toadgallery/services/collections_service.dart";
+import "package:toadgallery/services/filter/db_filters.dart";
+import "package:toadgallery/services/search_service.dart";
+
+MemoriesDB get memoriesDB =>
+    isLocalGalleryMode ? MemoriesDB.localGalleryInstance : MemoriesDB.instance;
+
+Future<Map<int, EnteFile>> getFilesAndMapForMemories({
+  bool useGeneratedIds = false,
+  bool requireLocalId = false,
+  bool useLocalIntIds = false,
+  List<int>? uploadedFileIDs,
+}) async {
+  final uploadRows = uploadedFileIDs == null
+      ? null
+      : await FilesDB.instance.getAllRowsForUploadedFileIDs(uploadedFileIDs);
+  final sourceFiles = uploadRows == null
+      ? await SearchService.instance.getAllFilesForSearch()
+      : await applyDBFilters(
+          uploadRows.sorted(_newestFirst),
+          DBFilterOptions(dedupeUploadID: true),
+        );
+  final archivedOrHiddenCollectionIDs = CollectionsService.instance
+      .archivedOrHiddenCollectionIds();
+  final excludedUploadFileIDs = <int>{};
+  if (archivedOrHiddenCollectionIDs.isNotEmpty) {
+    final filesInArchivedCollections = uploadRows == null
+        ? await FilesDB.instance.getAllFilesFromCollections(
+            archivedOrHiddenCollectionIDs,
+          )
+        : uploadRows.where(
+            (file) => archivedOrHiddenCollectionIDs.contains(file.collectionID),
+          );
+    for (final archivedFile in filesInArchivedCollections) {
+      final archivedUploadID = archivedFile.uploadedFileID;
+      if (archivedUploadID != null && archivedUploadID != -1) {
+        excludedUploadFileIDs.add(archivedUploadID);
+      }
+    }
+  }
+  final candidateFiles = <EnteFile>[];
+  for (final file in sourceFiles) {
+    final localId = file.localID;
+    final hasLocalId = localId != null && localId.isNotEmpty;
+    if (requireLocalId && !hasLocalId) {
+      continue;
+    }
+    final hasId = useLocalIntIds
+        ? hasLocalId
+        : useGeneratedIds
+        ? file.generatedID != null &&
+              (file.uploadedFileID != null || hasLocalId)
+        : file.uploadedFileID != null;
+    if (hasId && file.creationTime != null) {
+      if (excludedUploadFileIDs.contains(file.uploadedFileID)) {
+        continue;
+      }
+      if (file.magicMetadata.visibility == archiveVisibility ||
+          file.magicMetadata.visibility == hiddenVisibility) {
+        continue;
+      }
+      final collectionID = file.collectionID;
+      if (collectionID != null &&
+          archivedOrHiddenCollectionIDs.contains(collectionID)) {
+        continue;
+      }
+      candidateFiles.add(file);
+    }
+  }
+  final Map<String, int> localIdToIntId = useLocalIntIds
+      ? await OfflineFilesDB.instance.ensureLocalIntIds(
+          candidateFiles
+              .map((file) => file.localID)
+              .whereType<String>()
+              .where((id) => id.isNotEmpty),
+        )
+      : <String, int>{};
+  final allFileIdsToFile = <int, EnteFile>{};
+  for (final file in candidateFiles) {
+    final localIntId = useLocalIntIds ? localIdToIntId[file.localID] : null;
+    final mappedFile = localIntId != null
+        ? file.copyWith(generatedID: localIntId)
+        : file;
+    final key = useLocalIntIds
+        ? localIntId
+        : useGeneratedIds
+        ? mappedFile.generatedID
+        : mappedFile.uploadedFileID;
+    if (key != null) {
+      allFileIdsToFile[key] = mappedFile;
+    }
+  }
+  return allFileIdsToFile;
+}
+
+int _newestFirst(EnteFile a, EnteFile b) {
+  final aTime = a.creationTime;
+  final bTime = b.creationTime;
+  if (aTime != bTime) {
+    if (aTime == null) return 1;
+    if (bTime == null) return -1;
+    return bTime.compareTo(aTime);
+  }
+  return (b.generatedID ?? 0).compareTo(a.generatedID ?? 0);
+}
+
+const _junkAlbumNames = {
+  'screenshot',
+  'whatsapp',
+  'telegram',
+  'download',
+  'facebook',
+  'instagram',
+  'messenger',
+  'twitter',
+  'reddit',
+  'discord',
+  'signal',
+  'viber',
+  'wechat',
+  'line',
+  'meme',
+  'internet',
+  'saved images',
+  'document',
+};
+
+bool isJunkAlbumName(String? name) {
+  final lowercased = name?.toLowerCase();
+  return lowercased != null && _junkAlbumNames.any(lowercased.contains);
+}
+
+Future<Set<int>> getCollectionIDsToExclude() async {
+  if (isLocalGalleryMode) {
+    return <int>{};
+  }
+  final collections = CollectionsService.instance.getCollectionsForUI();
+
+  final excludedCollectionIDs = Set<int>.from(
+    CollectionsService.instance.archivedOrHiddenCollectionIds(),
+  );
+  for (final collection in collections) {
+    if (isJunkAlbumName(collection.displayName)) {
+      excludedCollectionIDs.add(collection.id);
+    }
+  }
+
+  return excludedCollectionIDs;
+}

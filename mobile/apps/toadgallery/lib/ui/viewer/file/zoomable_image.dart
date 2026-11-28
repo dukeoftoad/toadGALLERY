@@ -1,0 +1,1065 @@
+import 'dart:async';
+import 'dart:ffi' show Pointer, Uint8, Uint8Pointer;
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data' show Uint8List;
+import 'dart:ui' as ui;
+
+import 'package:ente_ui/components/loading_widget.dart';
+import 'package:flutter/foundation.dart' show SynchronousFuture;
+import 'package:flutter/material.dart';
+import "package:flutter_image_compress/flutter_image_compress.dart";
+import 'package:logging/logging.dart';
+import 'package:toadgallery/core/cache/thumbnail_in_memory_cache.dart';
+import 'package:toadgallery/core/constants.dart';
+import 'package:toadgallery/core/event_bus.dart';
+import 'package:toadgallery/db/files_db.dart';
+import "package:toadgallery/events/files_updated_event.dart";
+import 'package:toadgallery/events/local_photos_updated_event.dart';
+import "package:toadgallery/events/reset_zoom_of_photo_view_event.dart";
+import "package:toadgallery/events/retry_failed_image_load_event.dart";
+import "package:toadgallery/models/file/extensions/file_props.dart";
+import 'package:toadgallery/models/file/file.dart';
+import 'package:toadgallery/module/download/download_error.dart';
+import 'package:toadgallery/module/download/file.dart';
+import 'package:toadgallery/module/download/thumbnail.dart';
+import "package:toadgallery/module/metadata/exif.dart";
+import "package:toadgallery/service_locator.dart" show flagService;
+import "package:toadgallery/src/rust/api/image_processing_api.dart" as rust_image;
+import "package:toadgallery/states/detail_page_state.dart";
+import "package:toadgallery/ui/actions/file/file_actions.dart";
+import "package:toadgallery/ui/viewer/file/file_viewer_image_page_readiness.dart";
+import "package:toadgallery/ui/viewer/file/image_zoom/image_zoom_viewer.dart";
+import "package:toadgallery/ui/viewer/file/image_zoom/viewer_jpeg_image.dart";
+import 'package:toadgallery/ui/viewer/file/thumbnail_widget.dart';
+import 'package:toadgallery/ui/viewer/gallery/state/selection_state.dart';
+import 'package:toadgallery/utils/dialog_util.dart';
+import 'package:toadgallery/utils/image_util.dart';
+import "package:toadgallery/utils/ram_check_util.dart";
+
+class ZoomableImage extends StatefulWidget {
+  final EnteFile photo;
+  final Function(bool)? shouldDisableScroll;
+  final String? tagPrefix;
+  final Decoration? backgroundDecoration;
+  final bool shouldCover;
+  final bool isGuestView;
+  final bool isFromMemories;
+  final bool enableVerticalSwipeActions;
+  // Null for views that don't use screen-sized JPEGs.
+  final bool? isSelectedViewerPage;
+  final double jpegPreviewScale;
+  final Function({required int memoryDuration})? onFinalFileLoad;
+  final ValueChanged<File>? onFinalImageLoaded;
+  final FileViewerImagePageReadinessRegistration?
+  onImagePageReadinessRegistration;
+
+  const ZoomableImage(
+    this.photo, {
+    super.key,
+    this.shouldDisableScroll,
+    required this.tagPrefix,
+    this.backgroundDecoration,
+    this.shouldCover = false,
+    this.isGuestView = false,
+    this.isFromMemories = false,
+    this.enableVerticalSwipeActions = true,
+    this.isSelectedViewerPage,
+    this.jpegPreviewScale = 1,
+    this.onFinalFileLoad,
+    this.onFinalImageLoaded,
+    this.onImagePageReadinessRegistration,
+  });
+
+  @override
+  State<ZoomableImage> createState() => _ZoomableImageState();
+}
+
+class _ZoomableImageState extends State<ZoomableImage> {
+  late Logger _logger;
+  late EnteFile _photo;
+  ImageProvider? _imageProvider;
+  Size? _physicalViewport;
+  Size? _jpegSourceSize;
+  File? _jpegFile;
+  ViewerJpegImage? _jpegFit;
+  ImageProvider? _jpegDetail;
+  ImageProvider? _requestedJpegImage;
+  Timer? _pinchTimer;
+  double _pinchAnchorScale = 1;
+  bool _loadedSmallThumbnail = false;
+  bool _loadingLargeThumbnail = false;
+  bool _loadedLargeThumbnail = false;
+  bool _loadingFinalImage = false;
+  bool _loadedFinalImage = false;
+  bool _finalImageDecryptionFailed = false;
+  // Downloads cannot be cancelled. Defer a retry until the current attempt
+  // fails.
+  bool _pendingFinalImageRetry = false;
+  bool _convertToSupportedFormat = false;
+  bool _showingThumbnailFallback = false;
+  // Start the memory slideshow timer when any image is ready, without waiting
+  // for the original.
+  bool _firedOnReady = false;
+  bool _interactionLocked = false;
+  bool _sheetOpen = false;
+  bool _ignoreDrag = false;
+  Offset? _downPosition;
+  final _imageFrameReady = ValueNotifier(false);
+  final _imageZoomController = ImageZoomController();
+  late final StreamSubscription<ResetZoomOfPhotoView> _resetZoomSubscription;
+  late final StreamSubscription<RetryFailedImageLoadEvent>
+  _retryFailedLoadSubscription;
+
+  // Flutter can crash while decoding very large images.
+  // https://github.com/flutter/flutter/issues/110331
+  static const int _defaultMaxPixels = 100000000; // 100MP
+  static const int _lowRamMaxPixels = 24000000; // 24MP
+  static const int _rustDecodeMaxSideLimit = 6000;
+
+  int get _maxImagePixels =>
+      hasLessThan5GBRAM ? _lowRamMaxPixels : _defaultMaxPixels;
+
+  int get _rustDecodeMaxSide =>
+      min(_rustDecodeMaxSideLimit, sqrt(_maxImagePixels).floor());
+
+  bool get isTooLargeImage => _photo.width * _photo.height > _maxImagePixels;
+
+  @override
+  void initState() {
+    super.initState();
+    _photo = widget.photo;
+    widget.onImagePageReadinessRegistration?.call(
+      _photo,
+      _imageFrameReady,
+      isAttached: true,
+    );
+    _logger = Logger("ZoomableImage");
+    _logger.info('initState for ${_photo.generatedID} with tag ${_photo.tag}');
+    // Render a cached thumbnail on first paint so prefetched files never
+    // flash the spinner while the async load resolves.
+    final cachedThumbnail =
+        ThumbnailInMemoryLruCache.get(_photo, thumbnailLargeSize) ??
+        ThumbnailInMemoryLruCache.get(_photo, thumbnailSmallSize);
+    if (cachedThumbnail != null) {
+      _imageProvider = Image.memory(cachedThumbnail).image;
+      _loadedSmallThumbnail = true;
+      _notifyReadyOnce();
+    }
+    _imageZoomController.addListener(_onZoomChanged);
+
+    _resetZoomSubscription = Bus.instance.on<ResetZoomOfPhotoView>().listen((
+      event,
+    ) {
+      if (event.isSamePhoto(
+        uploadedFileID: widget.photo.uploadedFileID,
+        localID: widget.photo.localID,
+      )) {
+        unawaited(_imageZoomController.reset());
+      }
+    });
+
+    _retryFailedLoadSubscription = Bus.instance
+        .on<RetryFailedImageLoadEvent>()
+        .listen((_) {
+          if (!mounted || _loadedFinalImage) return;
+          _finalImageDecryptionFailed = false;
+          if (!_loadedSmallThumbnail && _photo.isRemoteOnlyFile) {
+            // Thumbnail requests are deduplicated. Evict the failed request
+            // before retrying.
+            removePendingGetThumbnailRequestIfAny(_photo);
+          }
+          if (_loadingFinalImage) {
+            _pendingFinalImageRetry = true;
+          }
+          setState(() {});
+        });
+  }
+
+  void _onZoomChanged() {
+    if (!mounted) return;
+    _updateJpegRequest();
+    if (widget.isSelectedViewerPage == false) return;
+    final transform = _imageZoomController.transform;
+    final isZooming = _imageZoomController.isZoomed;
+    final state = InheritedDetailPageState.maybeOf(context);
+    state?.isZoomedNotifier.value = isZooming;
+    state?.zoomTransformNotifier.value = isZooming
+        ? ZoomTransform(scale: transform.scale, offset: transform.offset)
+        : ZoomTransform.identity;
+  }
+
+  void _onInteractionLockChanged(bool isLocked) {
+    widget.shouldDisableScroll?.call(isLocked);
+    if (_interactionLocked == isLocked || !mounted) return;
+    setState(() => _interactionLocked = isLocked);
+  }
+
+  @override
+  void didUpdateWidget(covariant ZoomableImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isSelectedViewerPage == true &&
+        widget.isSelectedViewerPage == false &&
+        isViewerJpeg(_photo)) {
+      unawaited(_imageZoomController.reset(animated: false));
+      _updateJpegRequest();
+    }
+    if (oldWidget.onImagePageReadinessRegistration !=
+        widget.onImagePageReadinessRegistration) {
+      oldWidget.onImagePageReadinessRegistration?.call(
+        _photo,
+        _imageFrameReady,
+        isAttached: false,
+      );
+      widget.onImagePageReadinessRegistration?.call(
+        _photo,
+        _imageFrameReady,
+        isAttached: true,
+      );
+    }
+  }
+
+  void _onVerticalDragStart(DragStartDetails details) {
+    final size = MediaQuery.sizeOf(context);
+    final insets = MediaQuery.systemGestureInsetsOf(context);
+    final p = _downPosition ?? details.globalPosition;
+    _ignoreDrag =
+        p.dy > size.height - insets.bottom ||
+        p.dx < insets.left ||
+        p.dx > size.width - insets.right;
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails details) {
+    if (_ignoreDrag || _imageZoomController.isZoomed) return;
+    if (details.delta.dy > dragSensitivity) {
+      unawaited(Navigator.maybePop(context));
+    } else if (details.delta.dy < -dragSensitivity) {
+      if (_sheetOpen) return;
+      _sheetOpen = true;
+      showDetailsSheet(
+        context,
+        widget.photo,
+      ).whenComplete(() => _sheetOpen = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.onImagePageReadinessRegistration?.call(
+      _photo,
+      _imageFrameReady,
+      isAttached: false,
+    );
+    _imageFrameReady.dispose();
+    _pinchTimer?.cancel();
+    _imageZoomController
+      ..removeListener(_onZoomChanged)
+      ..dispose();
+    _resetZoomSubscription.cancel();
+    _retryFailedLoadSubscription.cancel();
+    final imageProvider = _imageProvider;
+    if (imageProvider is _RustRgbaImageProvider) {
+      imageProvider.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isSelectedViewerPage != null && isViewerJpeg(_photo)) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+          _physicalViewport =
+              constraints.biggest * pixelRatio * widget.jpegPreviewScale;
+          _updateJpegRequest();
+          return _buildViewer(context);
+        },
+      );
+    }
+    return _buildViewer(context);
+  }
+
+  Widget _buildViewer(BuildContext context) {
+    if (_photo.isRemoteOnlyFile) {
+      _loadNetworkImage();
+    } else {
+      _loadLocalImage(context);
+    }
+    final content = ImageZoomViewer(
+      imageProvider: _imageProvider,
+      controller: _imageZoomController,
+      sourceImageSize: _jpegSourceSize,
+      imageSizeHint: _photo.width > 0 && _photo.height > 0
+          ? Size(_photo.width.toDouble(), _photo.height.toDouble())
+          : null,
+      heroTag: widget.tagPrefix! + _photo.tag,
+      backgroundDecoration: widget.backgroundDecoration,
+      initialFit: widget.shouldCover ? BoxFit.cover : BoxFit.contain,
+      // Collage already owns its transform with an outer InteractiveViewer.
+      gesturesEnabled: !widget.shouldCover,
+      useHeroImageAsPlaceholder: !_showingThumbnailFallback,
+      onInteractionLockChanged: _onInteractionLockChanged,
+      onImageFrameReady: () => _imageFrameReady.value = true,
+      loadingBuilder: (context, event) {
+        if (_showingThumbnailFallback) {
+          return ThumbnailWidget(
+            _photo,
+            rawThumbnail: true,
+            thumbnailSize: thumbnailLargeSize,
+            fit: BoxFit.contain,
+          );
+        }
+        return Center(
+          child: widget.isFromMemories
+              ? const _DelayedLoadingIndicator()
+              : const EnteLoadingWidget(color: Colors.white),
+        );
+      },
+    );
+
+    final GestureDragUpdateCallback? verticalDragCallback =
+        _interactionLocked ||
+            widget.isGuestView ||
+            !widget.enableVerticalSwipeActions
+        ? null
+        : _onVerticalDragUpdate;
+    return Listener(
+      onPointerDown: verticalDragCallback == null
+          ? null
+          : (event) => _downPosition = event.position,
+      child: GestureDetector(
+        onVerticalDragStart: verticalDragCallback == null
+            ? null
+            : _onVerticalDragStart,
+        onVerticalDragUpdate: verticalDragCallback,
+        child: content,
+      ),
+    );
+  }
+
+  // Cached images can call this during build. Defer the parent callback until
+  // the build is complete.
+  void _notifyReadyOnce() {
+    if (_firedOnReady) return;
+    _firedOnReady = true;
+    scheduleMicrotask(() {
+      if (!mounted) return;
+      widget.onFinalFileLoad?.call(memoryDuration: 5);
+    });
+  }
+
+  void _loadNetworkImage() {
+    if (!_loadedSmallThumbnail && !_loadedFinalImage) {
+      final cachedThumbnail = ThumbnailInMemoryLruCache.get(_photo);
+      if (cachedThumbnail != null) {
+        _imageProvider = Image.memory(cachedThumbnail).image;
+        _loadedSmallThumbnail = true;
+        _notifyReadyOnce();
+      } else {
+        getThumbnailFromServer(_photo)
+            .then((file) {
+              final imageProvider = Image.memory(file).image;
+              if (mounted) {
+                precacheImage(imageProvider, context)
+                    .then((value) {
+                      if (mounted && !_loadedFinalImage) {
+                        setState(() {
+                          _imageProvider = imageProvider;
+                          _loadedSmallThumbnail = true;
+                        });
+                        _notifyReadyOnce();
+                      }
+                    })
+                    .catchError((e) {
+                      _logger.severe(
+                        "Could not load image " + _photo.toString(),
+                      );
+                      _loadedSmallThumbnail = true;
+                    });
+              }
+            })
+            .catchError((e, s) {
+              _logger.warning(
+                "Failed to fetch thumbnail from server for ${_photo.tag}",
+                e,
+                s,
+              );
+            });
+      }
+    }
+    if (!_loadedFinalImage &&
+        !_loadingFinalImage &&
+        !_finalImageDecryptionFailed) {
+      _loadingFinalImage = true;
+      getFileFromServer(_photo, throwOnDecryptionFailure: true)
+          .then((file) {
+            if (file != null) {
+              _onFileLoaded(file);
+            } else {
+              // Most network failures return null; retry them like exceptions.
+              _onFinalImageFetchFailed();
+            }
+          })
+          .catchError((e, s) {
+            _logger.warning(
+              "Failed to fetch final image from server for ${_photo.tag}",
+              e,
+              s,
+            );
+            if (e is DownloadDecryptionError) {
+              _onFinalImageDecryptionFailed();
+            } else {
+              _onFinalImageFetchFailed();
+            }
+          });
+    }
+  }
+
+  void _loadLocalImage(BuildContext context) {
+    if (!_loadedSmallThumbnail &&
+        !_loadedLargeThumbnail &&
+        !_loadedFinalImage) {
+      final cachedThumbnail = ThumbnailInMemoryLruCache.get(
+        _photo,
+        thumbnailSmallSize,
+      );
+      if (cachedThumbnail != null) {
+        _imageProvider = Image.memory(cachedThumbnail).image;
+        _loadedSmallThumbnail = true;
+        _notifyReadyOnce();
+      }
+    }
+
+    if (!_loadingLargeThumbnail &&
+        !_loadedLargeThumbnail &&
+        !_loadedFinalImage) {
+      _loadingLargeThumbnail = true;
+      getThumbnailFromLocal(
+        _photo,
+        size: thumbnailLargeSize,
+        quality: 100,
+      ).then((cachedThumbnail) {
+        if (cachedThumbnail != null) {
+          if (!context.mounted) return;
+          _onLargeThumbnailLoaded(Image.memory(cachedThumbnail).image, context);
+        }
+      });
+    }
+
+    if (!_loadingFinalImage && !_loadedFinalImage && !_photo.isDeviceTrash) {
+      _loadingFinalImage = true;
+      final selectedFiles = SelectionState.maybeOf(context)?.selectedFiles;
+      getFile(
+        _photo,
+        isOrigin:
+            Platform.isIOS &&
+            _isGIF(), // since on iOS GIFs playback only when origin-files are loaded
+      ).then((file) {
+        if (file != null && file.existsSync()) {
+          _onFileLoaded(file);
+        } else {
+          _logger.info("File was deleted " + _photo.toString());
+          if (_photo.uploadedFileID != null) {
+            if (selectedFiles?.dedupeByUploadID ?? false) {
+              if (!mounted) return;
+              selectedFiles!.mutateFile(_photo, () => _photo.localID = null);
+            } else {
+              _photo.localID = null;
+            }
+            FilesDB.instance.update(_photo);
+            _loadNetworkImage();
+          } else {
+            FilesDB.instance.deleteLocalFile(_photo);
+            Bus.instance.fire(
+              LocalPhotosUpdatedEvent(
+                [_photo],
+                type: EventType.deletedFromDevice,
+                source: "zoomPreview",
+              ),
+            );
+          }
+        }
+      });
+    }
+  }
+
+  void _onLargeThumbnailLoaded(
+    ImageProvider imageProvider,
+    BuildContext context,
+  ) {
+    if (mounted && !_loadedFinalImage) {
+      precacheImage(imageProvider, context).then((value) {
+        if (mounted && !_loadedFinalImage) {
+          setState(() {
+            _imageProvider = imageProvider;
+            _loadedLargeThumbnail = true;
+          });
+          _notifyReadyOnce();
+        }
+      });
+    }
+  }
+
+  void _onFileLoaded(File file) {
+    if (widget.isSelectedViewerPage != null && isViewerJpeg(_photo)) {
+      if (!mounted) return;
+      _jpegFile = file;
+      _updateJpegRequest();
+      return;
+    }
+    // Android's HEIC decoder can produce a glitched image without throwing.
+    if (_isAndroidHeic(file)) {
+      unawaited(_loadAndroidHeic(file));
+      return;
+    }
+
+    _loadWithPlatformDecoder(file);
+  }
+
+  void _updateJpegRequest() {
+    if (widget.isFromMemories && widget.isSelectedViewerPage == false) {
+      _pinchTimer?.cancel();
+      _pinchTimer = null;
+      _requestedJpegImage = null;
+      return;
+    }
+    final file = _jpegFile;
+    final viewport = _physicalViewport;
+    if (file == null ||
+        viewport == null ||
+        !viewport.isFinite ||
+        viewport.isEmpty) {
+      return;
+    }
+    final fit = _jpegFit;
+    if (fit == null ||
+        fit.width != viewport.width.ceil() ||
+        fit.height != viewport.height.ceil()) {
+      _jpegFit = ViewerJpegImage.fit(file, viewport);
+    }
+    final source = _jpegSourceSize;
+    final canUseDetail =
+        widget.isSelectedViewerPage == true &&
+        _imageZoomController.transform.scale > 1.001 &&
+        source != null &&
+        (source.width > _jpegFit!.width || source.height > _jpegFit!.height);
+    final detailRequested = _requestedJpegImage == _jpegDetail;
+    final pinchSteady = _isPinchSteady(
+      needsDetail: canUseDetail && !detailRequested,
+    );
+    final zoomSettled =
+        !widget.isFromMemories && !_imageZoomController.isZoomInProgress;
+    final wantsDetail =
+        canUseDetail && (detailRequested || pinchSteady || zoomSettled);
+    final desired = wantsDetail ? _jpegDetail! : _jpegFit!;
+    if (desired == _requestedJpegImage) return;
+    _requestedJpegImage = desired;
+    if (desired != _imageProvider) {
+      unawaited(_displayJpeg(desired, file));
+    }
+  }
+
+  bool _isPinchSteady({required bool needsDetail}) {
+    if (!needsDetail ||
+        !_imageZoomController.hasActivePointers ||
+        _imageZoomController.stage != ImageZoomStage.gesture) {
+      _pinchTimer?.cancel();
+      _pinchTimer = null;
+      return false;
+    }
+    final scale = _imageZoomController.transform.scale;
+    if (_pinchTimer == null || (scale / _pinchAnchorScale - 1).abs() > 0.05) {
+      _pinchAnchorScale = scale;
+      _pinchTimer?.cancel();
+      _pinchTimer = Timer(
+        const Duration(milliseconds: 250),
+        _updateJpegRequest,
+      );
+    }
+    return !_pinchTimer!.isActive;
+  }
+
+  Future<void> _displayJpeg(ImageProvider provider, File file) async {
+    Size? sourceSize;
+    try {
+      if (provider is ViewerJpegImage) {
+        sourceSize = await provider.prepare(
+          createLocalImageConfiguration(context),
+        );
+      } else {
+        final error = await _precacheImageError(provider);
+        if (error != null) throw error;
+      }
+    } catch (error, stack) {
+      if (!mounted || provider != _requestedJpegImage) return;
+      _logger.warning("Could not decode viewer JPEG", error, stack);
+      if (!_loadedFinalImage) {
+        _jpegFile = null;
+        unawaited(_loadInSupportedFormat(file, error));
+      }
+      return;
+    }
+    if (!mounted || provider != _requestedJpegImage) return;
+    if (sourceSize != null && _jpegSourceSize != sourceSize) {
+      _jpegSourceSize = sourceSize;
+      _jpegDetail = _jpegDetailProvider(file, sourceSize);
+    }
+    if (!_loadedFinalImage) {
+      await _updateViewWithFinalImage(provider, file);
+      if (mounted) _updateJpegRequest();
+    } else {
+      setState(() => _imageProvider = provider);
+    }
+  }
+
+  ImageProvider _jpegDetailProvider(File file, Size sourceSize) {
+    final pixels = sourceSize.width * sourceSize.height;
+    final original = FileImage(file);
+    if (pixels <= _maxImagePixels) return original;
+    final scale = sqrt(min(50000000, _maxImagePixels) / pixels);
+    return ResizeImage(
+      original,
+      width: max(1, (sourceSize.width * scale).floor()),
+      height: max(1, (sourceSize.height * scale).floor()),
+      policy: ResizeImagePolicy.fit,
+    );
+  }
+
+  Future<void> _loadAndroidHeic(File file) async {
+    if (_shouldUseRustHeicDecoder(file)) {
+      await _loadHeicWithRust(file);
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    // Android's HEIC decoder ignores EXIF orientation. Rotate through
+    // FlutterImageCompress when needed.
+    if (await _heicNeedsExifRotation(file)) {
+      await _loadInSupportedFormat(file, "HEIC requires EXIF rotation");
+      return;
+    }
+
+    _loadWithPlatformDecoder(file);
+  }
+
+  Future<bool> _heicNeedsExifRotation(File file) async {
+    try {
+      final exif = await readExifAsync(file);
+      final orientation = exif['Image Orientation']?.values.firstAsInt() ?? 1;
+      return orientation > 1;
+    } catch (e, s) {
+      _logger.warning(
+        "Failed to read EXIF orientation for ${_photo.displayName}",
+        e,
+        s,
+      );
+      return false;
+    }
+  }
+
+  void _loadWithPlatformDecoder(File file) {
+    ImageProvider imageProvider;
+    if (isTooLargeImage) {
+      _logger.info(
+        "Handling very large image (${_photo.width}x${_photo.height}) by decreasing resolution to ${_maxImagePixels ~/ 1000000}MP to prevent crash",
+      );
+      final aspectRatio = _photo.width / _photo.height;
+      final maxPixels = min(50000000, _maxImagePixels);
+      final targetHeight = sqrt(maxPixels / aspectRatio);
+      final targetWidth = aspectRatio * targetHeight;
+
+      imageProvider = Image.file(
+        file,
+        gaplessPlayback: true,
+        cacheWidth: targetWidth.round(),
+        cacheHeight: targetHeight.round(),
+      ).image;
+    } else {
+      imageProvider = Image.file(file, gaplessPlayback: true).image;
+    }
+
+    if (mounted) {
+      precacheImage(
+        imageProvider,
+        context,
+        onError: (exception, s) async {
+          _logger.warning(
+            "Failed to load image ${_photo.displayName} with error: $exception, attempting fallback",
+          );
+          unawaited(_loadInSupportedFormat(file, exception));
+        },
+      ).then((value) {
+        if (mounted && !_loadedFinalImage && !_convertToSupportedFormat) {
+          _updateViewWithFinalImage(imageProvider, file);
+        }
+      });
+    }
+  }
+
+  void _onFinalImageFetchFailed() {
+    _loadingFinalImage = false;
+    if (_pendingFinalImageRetry && mounted && !_loadedFinalImage) {
+      _pendingFinalImageRetry = false;
+      setState(() {});
+    }
+  }
+
+  void _onFinalImageDecryptionFailed() {
+    _loadingFinalImage = false;
+    _finalImageDecryptionFailed = true;
+    if (!mounted) return;
+    unawaited(showDownloadDecryptionFailedDialog(context: context));
+  }
+
+  Future<void> _loadHeicWithRust(File file) async {
+    final imageProvider = await _tryDecodeHeicWithRust(file);
+    if (imageProvider != null) {
+      await _tryDisplayRustDecodedImage(
+        file,
+        imageProvider,
+        fallbackToSupportedFormatOnFailure: true,
+      );
+      return;
+    }
+
+    unawaited(
+      _loadInSupportedFormat(
+        file,
+        "Rust HEIC decode failed",
+        skipRustDecoder: true,
+      ),
+    );
+  }
+
+  Future<void> _updateViewWithFinalImage(
+    ImageProvider imageProvider,
+    File file,
+  ) async {
+    setState(() {
+      _imageProvider = imageProvider;
+      _loadedFinalImage = true;
+      _logger.info("Final image loaded");
+    });
+    _notifyReadyOnce();
+    widget.onFinalImageLoaded?.call(file);
+  }
+
+  bool _isGIF() => _photo.displayName.toLowerCase().endsWith(".gif");
+
+  bool _isAndroidHeic(File file) => Platform.isAndroid && _isHeic(file);
+
+  bool _shouldUseRustHeicDecoder(File file) =>
+      _isAndroidHeic(file) && flagService.useRustForHeicDecoder;
+
+  Future<_RustRgbaImageProvider?> _tryDecodeHeicWithRust(File file) async {
+    if (!_shouldUseRustHeicDecoder(file)) {
+      return null;
+    }
+
+    try {
+      _logger.info("Using Rust HEIC decoder for ${_photo.generatedID}");
+      final rgbaImage = await rust_image.decodeToRgba(
+        imagePath: file.path,
+        maxSide: _rustDecodeMaxSide,
+      );
+      _logger.info("Rust HEIC decode succeeded for ${_photo.generatedID}");
+      return _RustRgbaImageProvider(rgbaImage);
+    } on rust_image.RustImageDecodeError_TooLarge catch (e) {
+      _logger.warning(
+        "Rust HEIC decode refused ${_photo.generatedID} as too large: ${e.message}",
+      );
+      return null;
+    } catch (e) {
+      _logger.warning("Rust HEIC decode failed for ${_photo.generatedID}: $e");
+      return _tryFullDecodeHeicWithRust(file);
+    }
+  }
+
+  Future<_RustRgbaImageProvider?> _tryFullDecodeHeicWithRust(File file) async {
+    if (!mounted) return null;
+    if (!_photo.hasDimensions || isTooLargeImage) {
+      _logger.info(
+        "Skipping full Rust HEIC decode for ${_photo.generatedID} (${_photo.width}x${_photo.height})",
+      );
+      return null;
+    }
+
+    try {
+      _logger.info("Using full Rust HEIC decoder for ${_photo.generatedID}");
+      final rgbaImage = await rust_image.decodeFullToRgba(imagePath: file.path);
+      _logger.info("Full Rust HEIC decode succeeded for ${_photo.generatedID}");
+      return _RustRgbaImageProvider(rgbaImage);
+    } catch (e) {
+      _logger.warning(
+        "Full Rust HEIC decode failed for ${_photo.generatedID}: $e",
+      );
+      return null;
+    }
+  }
+
+  Future<bool> _tryDisplayRustDecodedImage(
+    File file,
+    _RustRgbaImageProvider imageProvider, {
+    required bool fallbackToSupportedFormatOnFailure,
+  }) async {
+    if (!mounted) {
+      imageProvider.dispose();
+      return false;
+    }
+
+    final displayError = await _precacheImageError(imageProvider);
+    if (displayError == null) {
+      if (mounted && !_loadedFinalImage) {
+        await _updateViewWithFinalImage(imageProvider, file);
+      } else {
+        imageProvider.dispose();
+      }
+      return true;
+    }
+    imageProvider.dispose();
+
+    _logger.warning(
+      "Flutter failed to decode Rust RGBA pixels for ${_photo.generatedID}: $displayError",
+    );
+    if (fallbackToSupportedFormatOnFailure) {
+      unawaited(
+        _loadInSupportedFormat(file, displayError, skipRustDecoder: true),
+      );
+    }
+    return false;
+  }
+
+  Future<Object?> _precacheImageError(
+    ImageProvider<Object> imageProvider,
+  ) async {
+    Object? error;
+    try {
+      await precacheImage(
+        imageProvider,
+        context,
+        onError: (exception, _) {
+          error = exception;
+        },
+      );
+    } catch (e) {
+      error = e;
+    }
+    return error;
+  }
+
+  void _showThumbnailFallback() {
+    if (!mounted) return;
+    setState(() {
+      _showingThumbnailFallback = true;
+    });
+    InheritedDetailPageState.maybeOf(
+      context,
+    )?.showingThumbnailFallbackNotifier.value = detailPageFileIdentifier(
+      _photo,
+    );
+    _notifyReadyOnce();
+  }
+
+  bool _isHeic(File file) {
+    final ext = file.path.toLowerCase().split('.').last;
+    return ext == 'heic' || ext == 'heif';
+  }
+
+  bool _isRawFile() {
+    final extension = _photo.displayName.toLowerCase().split('.').last;
+    return isRawImageExtension(extension);
+  }
+
+  Future<void> _loadInSupportedFormat(
+    File file,
+    Object unsupportedErr, {
+    bool skipRustDecoder = false,
+  }) async {
+    // FlutterImageCompress crashes on RAW files. Show the thumbnail instead.
+    if (_isRawFile()) {
+      _logger.info(
+        "Skipping compression for RAW file ${_photo.displayName}, using thumbnail fallback",
+      );
+      _convertToSupportedFormat = true;
+      _showThumbnailFallback();
+      return;
+    }
+
+    _logger.info(
+      "Compressing ${_photo.displayName} to viewable format due to $unsupportedErr",
+    );
+    _convertToSupportedFormat = true;
+
+    if (!skipRustDecoder) {
+      final imageProvider = await _tryDecodeHeicWithRust(file);
+      final didDisplayRustImage =
+          imageProvider != null &&
+          await _tryDisplayRustDecodedImage(
+            file,
+            imageProvider,
+            fallbackToSupportedFormatOnFailure: false,
+          );
+      if (didDisplayRustImage) {
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    Uint8List? compressedFile;
+    if (isTooLargeImage) {
+      _logger.info(
+        "Compressing very large image (${_photo.width}x${_photo.height}) more aggressively down to ${_maxImagePixels ~/ 1000000}MP",
+      );
+      final aspectRatio = _photo.width / _photo.height;
+      final maxPixels = min(50000000, _maxImagePixels);
+      final targetHeight = sqrt(maxPixels / aspectRatio);
+      final targetWidth = aspectRatio * targetHeight;
+
+      compressedFile = await FlutterImageCompress.compressWithFile(
+        file.path,
+        minWidth: targetWidth.round(),
+        minHeight: targetHeight.round(),
+        quality: 85,
+      );
+    } else {
+      compressedFile = await FlutterImageCompress.compressWithFile(
+        file.path,
+        minHeight: 8000,
+        minWidth: 8000,
+      );
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (compressedFile == null) {
+      _logger.severe(
+        "Failed to compress image ${_photo.displayName} to viewable format",
+      );
+      _showThumbnailFallback();
+      return;
+    }
+
+    final imageProvider = MemoryImage(compressedFile);
+    final displayError = await _precacheImageError(imageProvider);
+    if (!mounted) {
+      return;
+    }
+    if (displayError != null) {
+      _logger.severe(
+        "Flutter failed to decode compressed image ${_photo.displayName}: $displayError",
+      );
+      _showThumbnailFallback();
+      return;
+    }
+    await _updateViewWithFinalImage(imageProvider, file);
+  }
+}
+
+class _RustRgbaImageProvider extends ImageProvider<_RustRgbaImageProvider> {
+  _RustRgbaImageProvider(this._rgbaImage);
+
+  rust_image.RustRgbaImage? _rgbaImage;
+  Future<ui.Image>? _image;
+
+  @override
+  Future<_RustRgbaImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_RustRgbaImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _RustRgbaImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(
+      (_image ??= _decode()).then((image) => ImageInfo(image: image.clone())),
+    );
+  }
+
+  void dispose() {
+    _rgbaImage?.dispose();
+    _rgbaImage = null;
+    _image?.then((image) => image.dispose()).ignore();
+    _image = null;
+  }
+
+  Future<ui.Image> _decode() async {
+    final rgbaImage = _rgbaImage;
+    if (rgbaImage == null) {
+      throw StateError("Rust RGBA image was disposed");
+    }
+    _rgbaImage = null;
+    final width = rgbaImage.width();
+    final height = rgbaImage.height();
+    final ui.ImmutableBuffer buffer;
+    try {
+      buffer = await ui.ImmutableBuffer.fromUint8List(
+        Pointer<Uint8>.fromAddress(
+          rgbaImage.pixelsAddress(),
+        ).asTypedList(width * height * 4),
+      );
+    } finally {
+      rgbaImage.dispose();
+    }
+    final descriptor = ui.ImageDescriptor.raw(
+      buffer,
+      width: width,
+      height: height,
+      pixelFormat: ui.PixelFormat.rgba8888,
+    );
+    buffer.dispose();
+    try {
+      final codec = await descriptor.instantiateCodec();
+      try {
+        final frame = await codec.getNextFrame();
+        return frame.image;
+      } finally {
+        codec.dispose();
+      }
+    } finally {
+      descriptor.dispose();
+    }
+  }
+}
+
+// Delay the spinner so prefetched memory images do not flash it between slides.
+class _DelayedLoadingIndicator extends StatefulWidget {
+  const _DelayedLoadingIndicator();
+
+  @override
+  State<_DelayedLoadingIndicator> createState() =>
+      _DelayedLoadingIndicatorState();
+}
+
+class _DelayedLoadingIndicatorState extends State<_DelayedLoadingIndicator> {
+  static const Duration _delay = Duration(milliseconds: 400);
+  Timer? _timer;
+  bool _showSpinner = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(_delay, () {
+      if (mounted) setState(() => _showSpinner = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_showSpinner) return const SizedBox.expand();
+    return const EnteLoadingWidget(color: Colors.white);
+  }
+}

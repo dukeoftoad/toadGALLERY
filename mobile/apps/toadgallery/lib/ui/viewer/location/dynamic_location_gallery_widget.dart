@@ -1,0 +1,139 @@
+import "dart:developer" as dev;
+import "dart:math";
+
+import "package:flutter/material.dart";
+import "package:toadgallery/core/constants.dart";
+import "package:toadgallery/db/files_db.dart";
+import "package:toadgallery/models/file_load_result.dart";
+import "package:toadgallery/service_locator.dart";
+import "package:toadgallery/services/collections_service.dart";
+import "package:toadgallery/services/filter/db_filters.dart";
+import "package:toadgallery/services/location_service.dart";
+import "package:toadgallery/settings/local_settings.dart";
+import 'package:toadgallery/states/location_state.dart';
+import "package:toadgallery/ui/viewer/gallery/gallery.dart";
+import "package:toadgallery/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
+
+class DynamicLocationGalleryWidget extends StatefulWidget {
+  final ValueNotifier<int?> memoriesCountNotifier;
+  final String tagPrefix;
+  const DynamicLocationGalleryWidget(
+    this.memoriesCountNotifier,
+    this.tagPrefix, {
+    super.key,
+  });
+
+  @override
+  State<DynamicLocationGalleryWidget> createState() =>
+      _DynamicLocationGalleryWidgetState();
+}
+
+class _DynamicLocationGalleryWidgetState
+    extends State<DynamicLocationGalleryWidget> {
+  late final Future<FileLoadResult> fileLoadResult;
+  double heightOfGallery = 0;
+
+  @override
+  void initState() {
+    final collectionsToHide = CollectionsService.instance
+        .archivedOrHiddenCollectionIds();
+    fileLoadResult = FilesDB.instance
+        .fetchAllUploadedAndSharedFilesWithLocation(
+          galleryLoadStartTime,
+          galleryLoadEndTime,
+          limit: null,
+          asc: false,
+          filterOptions: DBFilterOptions(
+            ignoredCollectionIDs: collectionsToHide,
+            hideIgnoredForUpload: true,
+          ),
+        );
+
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const galleryFilesLimit = 1000;
+    final selectedRadius = InheritedLocationTagData.of(context).selectedRadius;
+    final centerPoint = InheritedLocationTagData.of(context).centerPoint;
+    Future<FileLoadResult> filterFiles() async {
+      final FileLoadResult result = await fileLoadResult;
+      final stopWatch = Stopwatch()..start();
+      final copyOfFiles = filesInsideLocationTag(
+        result.files,
+        centerPoint,
+        selectedRadius,
+      );
+      dev.log(
+        "Time taken to get all files in a location tag: ${stopWatch.elapsedMilliseconds} ms",
+      );
+      stopWatch.stop();
+      widget.memoriesCountNotifier.value = copyOfFiles.length;
+      final limitedResults = copyOfFiles.take(galleryFilesLimit).toList();
+
+      return Future.value(FileLoadResult(limitedResults, result.hasMore));
+    }
+
+    return FutureBuilder(
+      key: ValueKey(
+        "${InheritedLocationTagData.of(context).centerPoint}$selectedRadius",
+      ),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return LayoutBuilder(
+            builder: (context, constrains) {
+              return SizedBox(
+                height: _galleryHeight(
+                  min(
+                    (widget.memoriesCountNotifier.value ?? 0),
+                    galleryFilesLimit,
+                  ),
+                  constrains.maxWidth,
+                ),
+                child: GalleryFilesState(
+                  child: Gallery(
+                    loadingWidget: const SizedBox.shrink(),
+                    disableScroll: true,
+                    asyncLoader:
+                        (
+                          creationStartTime,
+                          creationEndTime, {
+                          limit,
+                          asc,
+                        }) async {
+                          return snapshot.data as FileLoadResult;
+                        },
+                    tagPrefix: widget.tagPrefix,
+                    enableFileGrouping: false,
+                    layoutTypeOverride: GalleryLayoutType.grid,
+                    showSelectAll: false,
+                  ),
+                ),
+              );
+            },
+          );
+        } else {
+          return const SizedBox.shrink();
+        }
+      },
+      future: filterFiles(),
+    );
+  }
+
+  double _galleryHeight(int fileCount, double widthOfGrid) {
+    final photoGridSize = localSettings.getPhotoGridSize();
+    final totalWhiteSpaceBetweenPhotos =
+        galleryGridSpacing * (photoGridSize - 1);
+
+    final thumbnailHeight =
+        ((widthOfGrid - totalWhiteSpaceBetweenPhotos) / photoGridSize);
+
+    final numberOfRows = (fileCount / photoGridSize).ceil();
+
+    final galleryHeight =
+        (thumbnailHeight * numberOfRows) +
+        (galleryGridSpacing * (numberOfRows - 1));
+    return galleryHeight + 120;
+  }
+}

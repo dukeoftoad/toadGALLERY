@@ -1,0 +1,1599 @@
+use std::{io::IsTerminal, num::NonZeroUsize, path::PathBuf};
+
+use clap::{Arg, ArgAction, Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
+use ente_location::Coordinate;
+use serde::{Deserialize, Serialize};
+
+#[derive(Parser)]
+#[command(
+    name = "ente",
+    version,
+    about = "Ente client for terminals and agents",
+    after_help = "Documentation: https://ente.com/help/cli/"
+)]
+pub struct Cli {
+    #[command(flatten, next_help_heading = "Global options")]
+    pub options: Options,
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+pub fn command() -> clap::Command {
+    let command = Cli::command().disable_help_subcommand(true);
+    let help = help_command(&command)
+        .name("help")
+        .about("Print help for a command or topic")
+        .disable_help_flag(false)
+        .arg(
+            Arg::new("all")
+                .long("all")
+                .action(ArgAction::SetTrue)
+                .help("Print help for all commands"),
+        )
+        .subcommand(clap::Command::new("migration").about("Show changes from earlier CLI versions"))
+        .subcommand(clap::Command::new("help").about("Show help options and topics"));
+    command
+        // Restore nested help after Clap propagates the root's setting.
+        .mut_subcommands(|child| child.defer(|child| child.disable_help_subcommand(false)))
+        .subcommand(help)
+}
+
+fn help_command(command: &clap::Command) -> clap::Command {
+    clap::Command::new(command.get_name().to_owned())
+        .about(command.get_about().cloned().unwrap_or_default())
+        .aliases(command.get_all_aliases().map(str::to_owned))
+        .hide(command.is_hide_set())
+        .display_order(command.get_display_order())
+        .disable_help_subcommand(true)
+        .disable_help_flag(true)
+        .subcommands(command.get_subcommands().map(help_command))
+}
+
+#[derive(Args)]
+pub struct Options {
+    #[arg(long, global = true, help = "Print the result as JSON")]
+    pub json: bool,
+    #[arg(long, global = true, help = "Use local data without network access")]
+    pub offline: bool,
+    #[arg(long, global = true, help = "Disable interactive prompts")]
+    pub no_input: bool,
+}
+
+impl Options {
+    pub fn can_prompt(&self) -> bool {
+        !self.no_input
+            && std::io::stderr().is_terminal()
+            && (cfg!(unix) || std::io::stdin().is_terminal())
+    }
+}
+
+pub const DEFAULT_LIST_LIMIT: u32 = 100;
+
+#[derive(Args)]
+pub struct ListArgs {
+    #[arg(
+        long,
+        default_value_t = DEFAULT_LIST_LIMIT,
+        value_parser = clap::value_parser!(u32).range(1..),
+        help = "Maximum number of results shown"
+    )]
+    pub limit: u32,
+    #[arg(long, conflicts_with = "limit", help = "List every result")]
+    pub all: bool,
+}
+
+impl ListArgs {
+    pub fn limit(&self) -> Option<u32> {
+        (!self.all).then_some(self.limit)
+    }
+}
+
+#[derive(Args)]
+pub struct AccountSelector {
+    #[arg(
+        long,
+        global = true,
+        value_name = "NAME",
+        help = "Use this account instead of the selected one"
+    )]
+    pub account: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    #[command(about = "Manage Ente Photos")]
+    Photos {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[command(subcommand)]
+        command: PhotosCommand,
+    },
+    #[command(about = "Manage Ente Locker")]
+    Locker {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[command(subcommand)]
+        command: LockerCommand,
+    },
+    #[command(about = "Manage Ente Auth")]
+    Auth {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
+    #[command(about = "Share text through one-time encrypted links")]
+    Paste {
+        #[command(subcommand)]
+        command: PasteCommand,
+    },
+    #[command(
+        about = "Send feedback about the CLI to Ente",
+        after_long_help = "Send MESSAGE, read it from --input PATH, or pipe feedback on stdin.
+--input - explicitly reads stdin. Messages must be nonblank and at most
+2,000 characters.
+
+Sends your message, CLI version and OS to Ente's private feedback inbox.
+Requires network access; no login needed.
+Prints a receipt ID. With --json: {\"id\": \"...\"}.
+
+Examples:
+  ente feedback \"Export restarted after reconnecting\"
+  ente feedback --input feedback.txt --json"
+    )]
+    Feedback(FeedbackArgs),
+    #[command(about = "Manage Ente accounts", alias = "accounts")]
+    Account {
+        #[command(subcommand)]
+        command: AccountCommand,
+    },
+    #[command(
+        about = "Generate a vault key for unattended use",
+        after_help = "Environment:
+  ENTE_CLI_HOME       Directory for saved accounts and encrypted databases.
+  ENTE_CLI_VAULT_KEY  Base64 key from `vault key generate`; bypasses the OS keychain.
+
+Default locations:
+  macOS:   ~/Library/Application Support/ente-cli
+  Linux:   $XDG_DATA_HOME/ente-cli (defaults to ~/.local/share/ente-cli)
+  Windows: %LOCALAPPDATA%\\ente-cli
+
+Keep the same home and key across unattended invocations."
+    )]
+    Vault {
+        #[command(subcommand)]
+        command: VaultCommand,
+    },
+    #[command(
+        about = "Print a shell completion script",
+        after_help = "Enable completion in the current shell, or add the commands to its startup file:
+  Bash (~/.bashrc):
+    eval \"$(ente completion bash)\"
+  Zsh (~/.zshrc):
+    autoload -Uz compinit; compinit
+    source <(ente completion zsh)
+  PowerShell ($PROFILE):
+    ente completion powershell | Out-String | Invoke-Expression
+  Elvish (~/.config/elvish/rc.elv):
+    eval (ente completion elvish | slurp)
+
+Fish loads a saved script on demand. Write it once, and again after upgrading:
+  mkdir -p ~/.config/fish/completions
+  ente completion fish > ~/.config/fish/completions/ente.fish
+
+Prints the script to stdout, including when --json is set."
+    )]
+    Completion {
+        #[arg(help = "Shell to generate the script for")]
+        shell: Shell,
+    },
+    #[command(about = "Administer an Ente server", after_long_help = ADMIN_HELP)]
+    Admin {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[arg(
+            long,
+            global = true,
+            value_enum,
+            help = "Saved app login; defaults to the only app, otherwise Photos"
+        )]
+        app: Option<App>,
+        #[command(subcommand)]
+        command: AdminCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum PasteCommand {
+    #[command(
+        about = "Create a one-time encrypted paste",
+        after_long_help = "Supply TEXT or --input PATH; --input - reads stdin verbatim.
+With neither, reads piped stdin.
+Text cannot be blank. Limit: 4,000 characters; some emoji count as more than one.
+Pastes expire after 24 hours.
+With --password, uses ENTE_CLI_PASSWORD when set; otherwise prompts for a paste password and confirmation.
+With --password --no-input, ENTE_CLI_PASSWORD is required.
+Prints the paste URL. With --json: {\"url\": \"...\"}. Requires network access.
+
+Example:
+  ente paste create --input notes.txt"
+    )]
+    Create {
+        #[arg(
+            conflicts_with = "input",
+            help = "Literal paste text; defaults to piped stdin"
+        )]
+        text: Option<String>,
+        #[arg(
+            long,
+            value_name = "PATH|-",
+            help = "Read plain UTF-8 text from a file, or stdin with -"
+        )]
+        input: Option<PathBuf>,
+        #[arg(long, help = "Require a password to decrypt the paste")]
+        password: bool,
+        #[arg(long, help = "Ente API server; defaults to api.ente.com")]
+        host: Option<String>,
+        #[arg(
+            long,
+            default_value = "https://paste.ente.com",
+            value_name = "URL",
+            help = "Website used in the returned link"
+        )]
+        paste_origin: url::Url,
+    },
+    #[command(
+        about = "Read a paste and delete it from the server",
+        after_long_help = "Supply a URL including its #key fragment, or TOKEN --key KEY.
+Protected pastes use ENTE_CLI_PASSWORD when set; otherwise prompt for the paste password.
+Deletes the server copy before decryption, even if the password or key is wrong.
+A wrong ENTE_CLI_PASSWORD fails immediately; prompted retries work only while this command stays running.
+Prints the text without adding a newline. Terminal controls are escaped except tabs and newlines.
+With --json: {\"text\": \"...\"}. --raw affects plain terminal output only. Requires network access."
+    )]
+    Consume {
+        #[arg(value_name = "URL|TOKEN", help = "Paste URL or access token")]
+        link_or_token: String,
+        #[arg(long, help = "Decryption key when passing an access token")]
+        key: Option<String>,
+        #[arg(long, help = "Print text verbatim even on a terminal")]
+        raw: bool,
+        #[arg(long, help = "Ente API server; defaults to api.ente.com")]
+        host: Option<String>,
+    },
+}
+
+#[derive(Args)]
+pub struct FeedbackArgs {
+    #[arg(
+        conflicts_with = "input",
+        help = "Feedback text; defaults to piped stdin"
+    )]
+    pub message: Option<String>,
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        help = "Read plain UTF-8 text from a file, or stdin with -"
+    )]
+    pub input: Option<PathBuf>,
+    #[arg(
+        long,
+        hide = true,
+        default_value = "https://feedback.ente.com",
+        help = "Feedback server"
+    )]
+    pub host: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthCommand {
+    #[command(about = "Make an authenticated API request", after_help = API_HELP)]
+    Api(ApiArgs),
+    #[command(about = "Find saved Auth codes and show their current values")]
+    Code {
+        #[command(subcommand)]
+        command: CodeCommand,
+    },
+    #[command(about = "Export your Auth codes; encrypted by default")]
+    #[command(
+        after_long_help = "Refreshes Auth data first; --offline uses previously synced data.
+Encrypted export uses ENTE_CLI_PASSWORD when set; otherwise prompts for an export password.
+With --no-input, encrypted export requires ENTE_CLI_PASSWORD.
+DIR receives dated backups. --output writes a new file, or backup bytes to stdout with -.
+JSON summary fields: output, codes, failures.total. --json does not change backup contents.
+Backups written to stdout have no summary.
+
+Examples:
+  ente auth export ~/Backups/Auth
+  ente auth export --plaintext --output codes.txt"
+    )]
+    Export(AuthExportArgs),
+    #[command(about = "Decrypt an Auth export without an account")]
+    #[command(after_long_help = "Reads a backup without network access.
+Uses ENTE_CLI_PASSWORD as the export password when set; otherwise prompts.
+With --no-input, ENTE_CLI_PASSWORD is required.
+Writes the decrypted backup to stdout, or a new --output file. --json only formats the file summary.")]
+    Decrypt {
+        #[arg(value_name = "PATH", help = "Encrypted Auth backup to decrypt")]
+        input: PathBuf,
+        #[arg(
+            long,
+            value_name = "PATH|-",
+            help = "Write to a new file; defaults to stdout"
+        )]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CodeCommand {
+    #[command(about = "List saved codes without their secrets or current values")]
+    #[command(
+        after_long_help = "Refreshes Auth data first; --offline uses previously synced data.
+Search matches an ID, a displayed name, or words across issuer and account name, ignoring case.
+Codes in Trash are not listed.
+JSON fields: id, name, issuer, accountName, type (totp, hotp or steam)."
+    )]
+    List {
+        #[arg(
+            long,
+            value_name = "TEXT",
+            help = "Find codes by ID, displayed name or search words",
+            value_parser = nonempty_query
+        )]
+        search: Option<String>,
+        #[command(flatten)]
+        list: ListArgs,
+    },
+    #[command(about = "Show one current TOTP or Steam code and its expiry")]
+    #[command(
+        after_long_help = "Refreshes Auth data first; --offline uses previously synced data.
+An ID selects exactly. Otherwise match a name shown by list, or search words across issuer and account name.
+Matching ignores case, and every search word must occur in either field.
+Several matches fail and list candidates; narrow the search or use an ID.
+Quote queries containing spaces.
+A code in Trash must be restored in Ente Auth first.
+JSON fields: id, name, issuer, accountName, type, otp, validUntil (UTC).
+HOTP values are not supported yet.
+Codes use your computer's clock. Make sure its date and time are correct.
+
+Examples:
+  ente auth code view github
+  ente auth code view \"GitHub (alice@example.com)\""
+    )]
+    View {
+        #[arg(
+            help = "Code ID, displayed name or search words",
+            value_parser = nonempty_query
+        )]
+        code: String,
+    },
+}
+
+fn nonempty_query(query: &str) -> Result<String, String> {
+    if query.trim().is_empty() {
+        Err("supply a code ID or search text".into())
+    } else {
+        Ok(query.to_owned())
+    }
+}
+
+#[derive(Args)]
+pub struct AuthExportArgs {
+    #[arg(
+        value_name = "DIR",
+        required_unless_present = "output",
+        conflicts_with = "output",
+        help = "Directory for dated backups"
+    )]
+    pub directory: Option<PathBuf>,
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        help = "Write to a new file, or stdout with -"
+    )]
+    pub output: Option<PathBuf>,
+    #[arg(long, help = "Export unencrypted otpauth:// links, one per line")]
+    pub plaintext: bool,
+}
+
+#[derive(Subcommand)]
+pub enum PhotosCommand {
+    #[command(about = "Make an authenticated API request", after_help = API_HELP)]
+    Api(ApiArgs),
+    #[command(about = "Maintain an independent copy of your Photos library")]
+    #[command(
+        after_long_help = "Refreshes metadata and downloads originals to DESTINATION; requires network access.
+Progress goes to stderr; the result goes to stdout. Use --json for a structured result.
+JSON fields: output, complete, files, copies, changes, failures.
+files counts distinct photos and videos; copies counts album copies (expected, completed, pending).
+files and copies are null when the full export size could not be determined.
+changes contains exported, metadataUpdated, renamed and movedToTrash counts; failures contains total and conflicts.
+
+Examples:
+  ente photos export ~/Pictures/Ente
+  ente photos export ~/Pictures/Ente --album Holidays --account personal"
+    )]
+    Export(PhotosExportArgs),
+    #[command(about = "Show storage usage, plan status and file count")]
+    #[command(
+        after_long_help = "Reads your account details from the server; requires network access.
+In a family, the plan and total are the family admin's, and a member limit set by the admin caps your free space.
+JSON fields: email, planExpiresAt (UTC), planActive, totalBytes, usedBytes, freeBytes, planBytes, bonusBytes, files, family.
+planActive is false once the plan has expired; an expired personal plan still counts in totalBytes, as in the apps.
+files is null when the server has no count.
+family is null outside a family; otherwise it contains usedBytes, storageBytes and members.
+Each member has email, status, admin, usedBytes and storageLimitBytes (null without a cap)."
+    )]
+    Usage,
+    #[command(
+        about = "Find and remove exact duplicate photos and videos",
+        visible_alias = "duplicates"
+    )]
+    Duplicate {
+        #[command(subcommand)]
+        command: DuplicateCommand,
+    },
+    #[command(about = "Manage albums")]
+    Album {
+        #[command(subcommand)]
+        command: AlbumCommand,
+    },
+    #[command(about = "Manage files")]
+    File {
+        #[arg(
+            long,
+            global = true,
+            value_name = "ALBUM",
+            help = "Limit to an album ID or exact name"
+        )]
+        album: Option<String>,
+        #[command(subcommand)]
+        command: FileCommand,
+    },
+    #[command(about = "See the people in your photos", visible_alias = "people")]
+    Person {
+        #[arg(
+            long,
+            global = true,
+            value_name = "ALBUM",
+            help = "Limit to an album ID or exact name"
+        )]
+        album: Option<String>,
+        #[command(subcommand)]
+        command: PersonCommand,
+    },
+    #[command(about = "See where your files were taken")]
+    Place {
+        #[arg(
+            long,
+            global = true,
+            value_name = "ALBUM",
+            help = "Limit to an album ID or exact name"
+        )]
+        album: Option<String>,
+        #[command(subcommand)]
+        command: PlaceCommand,
+    },
+}
+
+#[derive(Args)]
+pub struct PhotosExportArgs {
+    #[arg(
+        long,
+        value_name = "ALBUM",
+        help = "Include an album ID or exact name; repeat for multiple albums"
+    )]
+    pub album: Vec<String>,
+    #[arg(long, value_name = "ALBUM", help = "Exclude an album ID or exact name")]
+    pub exclude_album: Vec<String>,
+    #[arg(
+        long,
+        help = "Exclude albums owned by other accounts",
+        long_help = "Exclude albums owned by other accounts, including albums explicitly included with --album. Albums you own remain included when shared with others. Existing files in excluded albums are left unchanged. For removed albums, uses their last known ownership; if unknown, reports the export as incomplete. Applies only to this invocation."
+    )]
+    pub exclude_shared: bool,
+    #[arg(
+        long,
+        help = "Exclude hidden albums, including the Hidden album",
+        long_help = "Exclude albums hidden for this account, including the Hidden album and albums explicitly included with --album. Archived albums and individually hidden files in included albums remain included. Existing files in excluded albums are left unchanged. For removed albums, uses whether they were last seen as hidden; if unknown, reports the export as incomplete. Applies only to this invocation."
+    )]
+    pub exclude_hidden: bool,
+    #[arg(
+        long,
+        help = "Take over an export from an earlier CLI or Ente Desktop, or reconnect one",
+        long_help = "Take over an export made by an earlier CLI version or Ente Desktop, or reconnect an export after moving it or losing this CLI's local data. Taking over an earlier export requires filters to select exactly its recorded albums. Reconnecting checks the whole export before applying filters."
+    )]
+    pub adopt: bool,
+    #[arg(
+        long,
+        help = "Share originals across albums using hard links",
+        long_help = "Share originals across albums using hard links. Replace unchanged copies in selected albums with links, reusing originals elsewhere in this export, including unselected albums and Trash. Linked files share contents, timestamps and permissions. Later runs without this flag keep existing links. Requires a filesystem that supports hard links. Otherwise, omit this flag to use copies."
+    )]
+    pub hardlinks: bool,
+    #[arg(
+        long,
+        short = 'j',
+        value_name = "N",
+        default_value = "16",
+        help = "Maximum number of files processed concurrently"
+    )]
+    pub jobs: NonZeroUsize,
+    #[arg(value_name = "DESTINATION", help = "Directory for the Photos export")]
+    pub destination: PathBuf,
+}
+
+#[derive(Subcommand)]
+pub enum LockerCommand {
+    #[command(about = "Make an authenticated API request", after_help = API_HELP)]
+    Api(ApiArgs),
+}
+
+#[derive(Args)]
+pub struct LoginArgs {
+    #[arg(
+        long = "account",
+        value_name = "NAME",
+        help = "Local account name; creates an entry if it does not exist"
+    )]
+    pub name: Option<String>,
+    #[arg(long, help = "Email address to log in with")]
+    pub email: Option<String>,
+    #[arg(long, value_enum, help = "App to log in to")]
+    pub app: App,
+    #[arg(
+        long,
+        help = "Ente server; defaults to the saved account's server or api.ente.com"
+    )]
+    pub host: Option<String>,
+    #[arg(
+        long,
+        help = "Read login credentials as JSON from this file, or from stdin with -"
+    )]
+    pub input: Option<PathBuf>,
+}
+
+#[derive(Args)]
+pub struct CreateArgs {
+    #[arg(
+        long = "account",
+        value_name = "NAME",
+        help = "Local name for the new account; defaults to its email"
+    )]
+    pub name: Option<String>,
+    #[arg(long, help = "Email address for the new account")]
+    pub email: Option<String>,
+    #[arg(long, value_enum, default_value = "photos", help = "App to log in to")]
+    pub app: App,
+    #[arg(long, help = "Ente server; defaults to api.ente.com")]
+    pub host: Option<String>,
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        help = "Read creation credentials as JSON from a file or stdin"
+    )]
+    pub input: Option<PathBuf>,
+    #[arg(long, help = "Accept Ente's terms and privacy policy")]
+    pub accept_terms: bool,
+}
+
+#[derive(Clone, Copy, ValueEnum, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VerificationPurpose {
+    Create,
+    Login,
+    Change,
+}
+
+const API_HELP: &str = "The response body is written unchanged, including when --json is set.";
+
+#[derive(Args)]
+pub struct ApiArgs {
+    #[arg(help = "API path or URL at the selected account's server")]
+    pub path: String,
+    #[arg(long, default_value = "GET", help = "HTTP method")]
+    pub method: String,
+    #[arg(
+        long,
+        value_name = "NAME=VALUE",
+        help = "Append a query parameter; repeat for multiple values"
+    )]
+    pub query: Vec<String>,
+    #[arg(
+        long,
+        help = "Read a JSON object of headers from this file, or from stdin with -"
+    )]
+    pub headers: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Read the request body from this file, or from stdin with -"
+    )]
+    pub body: Option<PathBuf>,
+}
+
+const ALBUM_HELP: &str = "Refreshes album metadata first; --offline reads previously synced data.
+With --json, list returns an array and view returns one object.
+Fields: id, name, type, visibility, ownerId (strings); updatedAt (RFC3339 timestamp string).";
+
+#[derive(Subcommand)]
+pub enum AlbumCommand {
+    #[command(about = "List your albums, including shared and hidden ones")]
+    #[command(after_long_help = ALBUM_HELP)]
+    List(ListArgs),
+    #[command(about = "Show an album")]
+    #[command(after_long_help = ALBUM_HELP)]
+    View {
+        #[arg(help = "Album ID or exact name")]
+        album: String,
+    },
+}
+
+const FILE_HELP: &str = "Refreshes file metadata first; --offline reads previously synced data.
+Use --album to limit the albums read. With --json, list returns an array and view returns one object.
+Fields: id, name, type, ownerId (strings); albumIds (string array);
+createdAt, updatedAt (RFC3339 timestamp strings).
+Nullable fields: modifiedAt (RFC3339 string); location ({latitude, longitude}, numbers);
+caption, hash, dateTime, offsetTime, visibility (strings); durationSeconds, width, height, sizeBytes (integers).
+dateTime and offsetTime retain the stored metadata strings. sizeBytes is the stored size reported by the server.
+hash comes from Ente's stored metadata. For Live Photos, it can contain the image and video hashes separated by a colon.";
+
+#[derive(Subcommand)]
+pub enum FileCommand {
+    #[command(about = "List files, including shared and hidden ones")]
+    #[command(after_long_help = FILE_HELP)]
+    List {
+        #[command(flatten)]
+        query: FileQuery,
+        #[command(flatten)]
+        list: ListArgs,
+    },
+    #[command(about = "Show a file's metadata")]
+    #[command(after_long_help = FILE_HELP)]
+    View {
+        #[arg(help = "File ID or exact name")]
+        file: String,
+    },
+    #[command(about = "Download an original; Live Photos are saved as ZIP archives")]
+    #[command(
+        after_long_help = "Refreshes metadata and downloads to a new --output file; requires network access."
+    )]
+    Download {
+        #[arg(help = "File ID or exact name")]
+        file: String,
+        #[arg(long, value_name = "PATH", help = "Write to this new file")]
+        output: PathBuf,
+    },
+}
+
+const DUPLICATES_HELP: &str = "Uses the same duplicate detection and removal rules as Ente Photos.
+Scans files you own in non-hidden albums, including Favorites and archived albums.
+Matches stored hashes; a file in several albums is counted once. Files without a hash or known group size are omitted.
+Group IDs are the smallest file ID in each group, not row numbers.
+Keeps a copy with a caption first, then one with an edited name or date, then the first copy in album-name order.
+The retained copy is added to the other copies' albums before extra copies move to trash.
+List refreshes metadata first; --offline reads a previous sync. Groups are ordered by reclaimable size.
+Remove always refreshes online. Pass group IDs or --all, or omit both to select with space and enter.
+Without --dry-run, removal asks for confirmation; --yes approves it and --no-input only disables prompts.
+List JSON: an array of groups with id, sizeBytes, reclaimableBytes, retainedId and files.
+Each file has id, name and albums (id and name). All IDs are strings; byte counts are integers.
+sizeBytes is the stored encrypted size of one copy; reclaimableBytes is the total for the extra copies in the group.
+Remove JSON: dryRun, groupIds, retainedIds, trashIds and reclaimableBytes.
+Removal reclaimableBytes is the total for all selected groups.
+With --dry-run, trashIds are planned; otherwise they were moved to trash. Preview and progress go to stderr.
+
+Examples:
+  ente photos duplicate list
+  ente photos duplicate remove
+  ente photos duplicate remove 1580559962386999 --dry-run
+  ente photos duplicate remove 1580559962386999 --yes --no-input --json";
+
+#[derive(Subcommand)]
+pub enum DuplicateCommand {
+    #[command(about = "List duplicate groups and the copies to keep or trash", after_long_help = DUPLICATES_HELP)]
+    List(ListArgs),
+    #[command(about = "Select duplicate groups and move extra copies to trash", after_long_help = DUPLICATES_HELP)]
+    Remove {
+        #[arg(
+            value_name = "GROUP",
+            conflicts_with = "all",
+            help = "Group IDs from duplicates list; omit to select interactively"
+        )]
+        groups: Vec<i64>,
+        #[arg(long, help = "Select every current duplicate group")]
+        all: bool,
+        #[arg(long, help = "Show the selected removal plan without changing files")]
+        dry_run: bool,
+        #[arg(long, help = "Approve removal without a confirmation prompt")]
+        yes: bool,
+    },
+}
+
+#[derive(Args)]
+pub struct FileQuery {
+    #[arg(
+        long = "type",
+        value_enum,
+        value_name = "TYPE",
+        help = "Include files of this type; repeat for multiple types"
+    )]
+    pub types: Vec<FileType>,
+    #[arg(
+        long,
+        value_name = "WHEN",
+        value_parser = crate::admin::parse_date,
+        help = "Include files created at or after this instant",
+        long_help = "Include files created at or after this instant. Accepts YYYY-MM-DD (00:00 UTC at the start of that date) or RFC3339 with a timezone. Compares createdAt, which includes edits to a file's date."
+    )]
+    pub since: Option<i64>,
+    #[arg(
+        long,
+        value_name = "WHEN",
+        value_parser = crate::admin::parse_date,
+        help = "Include files created before this instant",
+        long_help = "Include files created before this instant. Accepts YYYY-MM-DD (00:00 UTC at the start of that date) or RFC3339 with a timezone. Compares createdAt, which includes edits to a file's date."
+    )]
+    pub before: Option<i64>,
+    #[arg(
+        long,
+        value_name = "TEXT",
+        value_parser = nonempty_search,
+        help = "Find files by words in their name or caption",
+        long_help = "Find files where every word of TEXT occurs in either the name or the caption, ignoring case. Quote text containing spaces."
+    )]
+    pub search: Option<String>,
+    #[arg(long, help = "Include only files without a location")]
+    pub no_location: bool,
+    #[arg(
+        long,
+        value_name = "TEXT",
+        value_parser = nonempty_search,
+        help = "Include files taken in a city whose name contains TEXT",
+        long_help = "Include files taken in a city whose name contains TEXT, ignoring case and accent marks. If one of the cities `place list` shows for the same --album is named exactly TEXT, only cities with that name match. Type letters such as ł or ø as `place list` shows them. Downloads location data on first use; see `place list --help`."
+    )]
+    pub place: Option<String>,
+    #[arg(
+        long,
+        value_name = "COUNTRY",
+        value_parser = nonempty_search,
+        help = "Include files taken in a country, given by code or name",
+        long_help = "Include files taken in the country with this two-letter code, such as PT, or this full English name. UK also selects the United Kingdom (GB); an unknown two-letter code is an error. Other text includes every country whose English name contains it. Names ignore case and accent marks, and are the ones `place list --countries` shows. Downloads location data on first use; see `place list --help`."
+    )]
+    pub country: Option<String>,
+    #[arg(
+        long,
+        value_name = "PERSON",
+        help = "Include files of a person, given by ID or exact name",
+        long_help = "Include files of the person with this ID or exact name, as `person list` shows them; hidden people can be selected too. Requires machine learning to be on for your account; see `person list --help`."
+    )]
+    pub person: Option<String>,
+    #[arg(
+        long,
+        value_name = "LAT,LON",
+        requires = "radius",
+        allow_hyphen_values = true,
+        value_parser = parse_coordinate,
+        help = "Include files taken within --radius of this point",
+        long_help = "Include files whose location lies within --radius of LAT,LON, given in decimal degrees such as 48.8566,2.3522. Uses the same check as location tags in the Ente apps. Files without a location are left out."
+    )]
+    pub near: Option<Coordinate>,
+    #[arg(
+        long,
+        value_name = "KM",
+        requires = "near",
+        value_parser = parse_radius,
+        help = "Distance from --near in kilometres, e.g. 10"
+    )]
+    pub radius: Option<f64>,
+    #[arg(
+        long,
+        value_name = "SIZE",
+        value_parser = min_file_size,
+        help = "Include files of at least this size, e.g. 100MB",
+        long_help = "Include files whose sizeBytes is at least SIZE. Accepts KB, MB and GB, case-insensitive, using powers of 1024; fractions are allowed, such as 1.5GB. Files with an unknown size are left out."
+    )]
+    pub min_size: Option<u64>,
+    #[arg(
+        long,
+        value_name = "SIZE",
+        value_parser = max_file_size,
+        help = "Include files of at most this size, e.g. 1.5GB",
+        long_help = "Include files whose sizeBytes is at most SIZE. Accepts KB, MB and GB, case-insensitive, using powers of 1024; fractions are allowed, such as 1.5GB. Files with an unknown size are left out."
+    )]
+    pub max_size: Option<u64>,
+    #[arg(
+        long,
+        value_enum,
+        value_name = "ORDER",
+        help = "Sort by creation time or size instead of ID",
+        long_help = "Sort by createdAt, newest first, or by sizeBytes, largest first. Files with an unknown size sort as the smallest. Ties keep ID order."
+    )]
+    pub sort: Option<FileSort>,
+    #[arg(long, requires = "sort", help = "Reverse the --sort order")]
+    pub reverse: bool,
+}
+
+const PLACE_HELP: &str = "Refreshes file metadata first; --offline reads previously synced data.
+Groups files by their location and lists the most files first. Files without a location,
+or whose location matches no city (or with --countries, no country), are not counted.
+--country uses the groups --countries shows, which can differ from a city's country:
+photos in French Guiana count under France.
+On first use, downloads about 7 MB of location data and keeps it in the CLI home for all accounts.
+With --json, returns an array. City fields: name, country, countryCode (strings);
+latitude, longitude of the city (numbers); fileCount (integer). With --countries: name, code (strings); fileCount (integer).";
+
+#[derive(Subcommand)]
+pub enum PlaceCommand {
+    #[command(about = "List the cities or countries where your files were taken")]
+    #[command(after_long_help = PLACE_HELP)]
+    List {
+        #[arg(long, help = "List countries instead of cities")]
+        countries: bool,
+        #[command(flatten)]
+        list: ListArgs,
+    },
+}
+
+const PERSON_HELP: &str = "Refreshes people and file metadata first; --offline reads previously synced data.
+Lists the people saved in Ente Photos with the most files first, including hidden and ignored people.
+Requires machine learning to be on for your account in the Ente Photos app;
+when it is off, the people synced to this device are removed.
+A person's files are the photos and videos you assigned to them in Ente Photos, including files in hidden albums.
+People with none of their files in the selected albums are left out.
+With --json, returns an array. Fields: id, name (strings); hidden (boolean); fileCount (integer).
+
+Examples:
+  ente photos person list
+  ente photos file list --person \"Ada Lovelace\"";
+
+#[derive(Subcommand)]
+pub enum PersonCommand {
+    #[command(about = "List people and how many files each one is in")]
+    #[command(after_long_help = PERSON_HELP)]
+    List(ListArgs),
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum FileType {
+    Image,
+    Video,
+    #[value(name = "livephoto")]
+    LivePhoto,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum FileSort {
+    Created,
+    Size,
+}
+
+fn nonempty_search(text: &str) -> Result<String, String> {
+    if text.trim().is_empty() {
+        Err("supply search text".into())
+    } else {
+        Ok(text.to_owned())
+    }
+}
+
+fn parse_coordinate(input: &str) -> Result<Coordinate, String> {
+    const HINT: &str = "use LAT,LON in decimal degrees, such as 48.8566,2.3522";
+    let (latitude, longitude) = input.split_once(',').ok_or(HINT)?;
+    let degrees = |part: &str| part.trim().parse::<f64>().map_err(|_| HINT);
+    let coordinate = Coordinate::new(degrees(latitude)?, degrees(longitude)?);
+    if coordinate.is_valid() {
+        Ok(coordinate)
+    } else {
+        Err("latitude must be between -90 and 90 and longitude between -180 and 180".into())
+    }
+}
+
+fn parse_radius(input: &str) -> Result<f64, String> {
+    match input.parse::<f64>() {
+        Ok(radius) if radius.is_finite() && radius > 0.0 => Ok(radius),
+        _ => Err("use a distance in kilometres greater than zero, such as 10".into()),
+    }
+}
+
+fn min_file_size(input: &str) -> Result<u64, String> {
+    crate::admin::parse_file_size(input).map(|bytes| bytes.ceil() as u64)
+}
+
+fn max_file_size(input: &str) -> Result<u64, String> {
+    crate::admin::parse_file_size(input).map(|bytes| bytes as u64)
+}
+
+const ACCOUNT_HELP: &str = "Reads accounts stored on this device without network access.
+With --json, list returns an array and view returns one object.
+Fields: id, name, email, host (strings); apps (string array); selected (boolean).";
+
+#[derive(Subcommand)]
+pub enum AccountCommand {
+    #[command(
+        about = "Log an account into an app",
+        after_long_help = "An existing name requires matching credentials; a new name creates a local entry.
+Omit --account to use the selected account, or the only saved account.
+With no saved accounts, creates an entry named after the authenticated email.
+With several accounts and none selected, supply --account or use account switch.
+A new entry becomes selected; logging into an existing entry keeps the selection.
+
+Non-interactive login reads JSON from --input:
+  {\"email\": \"...\", \"password\": \"...\", \"otp\": \"123456\", \"totp\": \"654321\"}
+
+All fields are strings. Supply password and email; --email can supply the email instead.
+Supply otp (email code) or totp (authenticator code) only when required.
+Request an email code with account request-otp --email EMAIL --app APP --purpose login [--host URL].
+Use the same email, app and server as login.
+With --no-input, supply credentials through --input PATH or --input -.
+For unattended vault access, set ENTE_CLI_VAULT_KEY (see vault --help).
+
+Examples:
+  ente account login --app photos
+  ente account login --app auth --account personal"
+    )]
+    Login(LoginArgs),
+    #[command(
+        about = "Request an email verification code",
+        after_long_help = "Requests one email and returns; success means the server accepted the request.
+Use the same email, app and server when completing creation, login or an email change.
+Defaults to creation; use --purpose login for an existing account,
+or --purpose change with the new address for account change-email."
+    )]
+    RequestOtp {
+        #[arg(long, help = "Email address to verify")]
+        email: Option<String>,
+        #[arg(
+            long,
+            value_enum,
+            default_value = "photos",
+            help = "App requesting verification"
+        )]
+        app: App,
+        #[arg(long, help = "Ente server; defaults to api.ente.com")]
+        host: Option<String>,
+        #[arg(
+            long,
+            value_enum,
+            default_value = "create",
+            help = "Reason for verification"
+        )]
+        purpose: VerificationPurpose,
+    },
+    #[command(
+        about = "Create an Ente account",
+        after_long_help = "Creates and selects a new account, named after its email unless --account is supplied.
+Prompts for email, consent, verification code and password.
+Unattended creation requires --accept-terms and --input with email, password and otp strings.
+--email can supply the email instead.
+Request the code first with account request-otp --email EMAIL [--app APP] [--host URL], using the same app and server as creation.
+Repeating an unfinished creation resumes with its saved keys and the same password.
+Terms: https://ente.io/terms  Privacy: https://ente.io/privacy
+Print the recovery key later with account recovery-key."
+    )]
+    Create(CreateArgs),
+    #[command(about = "List accounts on this device")]
+    #[command(after_long_help = ACCOUNT_HELP)]
+    List,
+    #[command(about = "Show an account")]
+    #[command(after_long_help = ACCOUNT_HELP)]
+    View {
+        #[arg(
+            long = "account",
+            value_name = "NAME",
+            help = "Account name; defaults to the selected or only saved account"
+        )]
+        name: Option<String>,
+    },
+    #[command(about = "Print the saved API token for an account")]
+    #[command(
+        after_long_help = "Uses --account, otherwise the selected account, otherwise the only saved account.
+With several accounts and none selected, supply --account or use account switch.
+--app is required and selects that account's saved login.
+Reads the saved token from the local vault without contacting the server or refreshing it.
+This prints a secret and does not check whether the server still accepts it.
+Plain output is padded URL-safe Base64 followed by a newline.
+With --json, returns {\"token\":\"...\"}."
+    )]
+    Token {
+        #[arg(
+            long = "account",
+            value_name = "NAME",
+            help = "Account name; defaults to the selected or only saved account"
+        )]
+        name: Option<String>,
+        #[arg(long, value_enum, help = "App whose token to print")]
+        app: App,
+    },
+    #[command(about = "Make an account the selected one")]
+    Switch {
+        #[arg(help = "Account name")]
+        name: String,
+    },
+    #[command(
+        about = "Change an account's local name",
+        after_help = "With one name, renames the selected or only account. With two, renames OLD_NAME to NEW_NAME."
+    )]
+    Rename {
+        #[arg(
+            value_name = "NAME",
+            help = "New name, or current name when supplying two names"
+        )]
+        name: String,
+        #[arg(value_name = "NEW_NAME", help = "New local name")]
+        new_name: Option<String>,
+    },
+    #[command(
+        about = "Log out of an app, or every app when --app is omitted",
+        after_long_help = "Removes the local account and its cached data after its last app login is removed.
+Without --app, logs out of all this account's saved app logins on this device.
+--local removes the account and its cached data without contacting the server."
+    )]
+    Logout {
+        #[arg(
+            long = "account",
+            value_name = "NAME",
+            help = "Account name; defaults to the selected or only saved account"
+        )]
+        name: Option<String>,
+        #[arg(
+            long,
+            value_enum,
+            help = "App to log out of; defaults to every saved app"
+        )]
+        app: Option<App>,
+        #[arg(
+            long,
+            conflicts_with = "app",
+            help = "Forget the account on this device without logging out on the server"
+        )]
+        local: bool,
+    },
+    #[command(
+        about = "List and revoke active logins",
+        after_long_help = "Sessions are the logins the server accepts for one app; --app selects the app and its saved login."
+    )]
+    Session {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[arg(
+            long,
+            global = true,
+            value_enum,
+            help = "Saved app login; defaults to the only app, otherwise Photos"
+        )]
+        app: Option<App>,
+        #[command(subcommand)]
+        command: SessionCommand,
+    },
+    #[command(
+        about = "Manage authenticator protection for your Ente account",
+        after_long_help = "Protects account login, separate from codes stored in Ente Auth."
+    )]
+    Totp {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[arg(
+            long,
+            global = true,
+            value_enum,
+            help = "Saved app login; defaults to the only app, otherwise Photos"
+        )]
+        app: Option<App>,
+        #[command(subcommand)]
+        command: TotpCommand,
+    },
+    #[command(
+        about = "Manage your family plan",
+        after_long_help = FAMILY_HELP
+    )]
+    Family {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[arg(
+            long,
+            global = true,
+            value_enum,
+            help = "Saved app login; defaults to the only app, otherwise Photos"
+        )]
+        app: Option<App>,
+        #[command(subcommand)]
+        command: FamilyCommand,
+    },
+    #[command(
+        about = "Require an email code at login",
+        after_long_help = "Email verification asks for a code sent to your email each time you log in.
+Disabling it requires password login (SRP) to be set up for the account.
+Requires network access."
+    )]
+    EmailMfa {
+        #[command(flatten)]
+        selector: AccountSelector,
+        #[arg(
+            long,
+            global = true,
+            value_enum,
+            help = "Saved app login; defaults to the only app, otherwise Photos"
+        )]
+        app: Option<App>,
+        #[command(subcommand)]
+        command: EmailMfaCommand,
+    },
+    #[command(
+        about = "Change your Ente account's email",
+        after_long_help = "Prompts for the code sent to the new email.
+Unattended changes read JSON from --input containing an otp string.
+Request the code first with account request-otp --email NEW_EMAIL --purpose change --app APP --host URL,
+using the same app and server as the account.
+Updates the email saved on this device; the local account name is unchanged.
+Requires network access. With --json, returns the updated account."
+    )]
+    ChangeEmail(ChangeEmailArgs),
+    #[command(
+        about = "Print the saved 24-word recovery key",
+        after_long_help = "Prints a secret from the local vault without network access.
+With --json, returns {\"recoveryKey\":\"...\"}."
+    )]
+    RecoveryKey {
+        #[arg(
+            long = "account",
+            value_name = "NAME",
+            help = "Account name; defaults to the selected or only saved account"
+        )]
+        name: Option<String>,
+    },
+}
+
+const SESSION_HELP: &str = "Requires network access. The session of this CLI's saved login is marked current.
+Device, user agent and IP come from a recent request made with that session.
+List JSON returns an array: id, device, userAgent, ip (strings); current (boolean); createdAt, lastUsedAt (RFC3339).
+Revoke logs that session out on the server and asks for confirmation; --yes approves it and --no-input only disables prompts.
+The current session cannot be revoked; use account logout instead.
+Revoke JSON returns app and session, with the revoked session's list fields.
+
+Examples:
+  ente account session list --app photos
+  ente account session revoke th:UNhY4JhezH9gQYqvDMWrWH9CwlcKiECVqejMrND2VFw --yes --no-input --json";
+
+#[derive(Subcommand)]
+pub enum SessionCommand {
+    #[command(about = "List active sessions, most recently used first", after_long_help = SESSION_HELP)]
+    List,
+    #[command(about = "Log a session out on the server", after_long_help = SESSION_HELP)]
+    Revoke {
+        #[arg(value_name = "ID", help = "Session ID from account session list")]
+        id: String,
+        #[arg(long, help = "Approve revocation without a confirmation prompt")]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TotpCommand {
+    #[command(
+        about = "Print a new authenticator setup secret",
+        after_long_help = "Requires network access. The secret expires after ten minutes.
+Add it to your authenticator, then run account totp enable --input PATH|- with secret and totp strings."
+    )]
+    Setup,
+    #[command(
+        about = "Confirm and enable authenticator protection",
+        after_long_help = "Without --input, creates a setup secret and prompts for an authenticator code.
+With --input, reads JSON containing secret from account totp setup and totp from your authenticator.
+Requires network access. If confirmation is interrupted, run account totp status.
+Verifying an authenticator code requires your computer's date and time to be correct."
+    )]
+    Enable {
+        #[arg(
+            long,
+            value_name = "PATH|-",
+            help = "Read secret and totp strings as JSON from a file or stdin"
+        )]
+        input: Option<PathBuf>,
+    },
+    #[command(
+        about = "Show whether authenticator protection is enabled",
+        after_long_help = "Checks the current setting on the server; requires network access.
+JSON field: totpEnabled (boolean)."
+    )]
+    Status,
+    #[command(
+        about = "Disable authenticator protection",
+        after_long_help = "Login no longer asks for an authenticator code. Requires network access.
+Asks for confirmation; --no-input requires --yes.
+To protect login again, run account totp enable with a new secret."
+    )]
+    Disable {
+        #[arg(long, help = "Disable without prompting")]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum EmailMfaCommand {
+    #[command(
+        about = "Show whether email verification is enabled",
+        after_long_help = "Checks the current setting on the server.
+JSON fields: emailMfaEnabled, canDisableEmailMfa (booleans)."
+    )]
+    Status,
+    #[command(about = "Require an email code at every login")]
+    Enable,
+    #[command(
+        about = "Stop asking for an email code at login",
+        after_long_help = "Asks for confirmation; --no-input requires --yes."
+    )]
+    Disable {
+        #[arg(long, help = "Disable without prompting")]
+        yes: bool,
+    },
+}
+
+#[derive(Args)]
+pub struct ChangeEmailArgs {
+    #[command(flatten)]
+    pub selector: AccountSelector,
+    #[arg(
+        long,
+        value_enum,
+        help = "Saved app login; defaults to the only app, otherwise Photos"
+    )]
+    pub app: Option<App>,
+    #[arg(long, help = "New email address")]
+    pub email: Option<String>,
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        help = "Read the otp string as JSON from a file or stdin"
+    )]
+    pub input: Option<PathBuf>,
+}
+
+const FAMILY_HELP: &str = "A family shares the admin's paid plan with up to five other Ente accounts.
+All family commands require network access. MEMBER is an ID or email from family view.
+Every command except leave prints the family afterwards, like family view.
+Removing a member or leaving asks for confirmation; --yes approves it and --no-input only disables prompts.";
+
+const FAMILY_VIEW_HELP: &str =
+    "JSON: storageBytes, usedBytes, expiresAt (RFC3339) and members, or null outside a family.
+Each member has id, email, status (SELF for the admin, ACCEPTED or INVITED), admin,
+usedBytes and storageLimitBytes (null without a limit). Byte counts are integers.
+
+Examples:
+  ente account family create
+  ente account family member add bob@example.com
+  ente account family member set-storage bob@example.com 100GB
+  ente account family member remove bob@example.com --yes";
+
+#[derive(Subcommand)]
+pub enum FamilyCommand {
+    #[command(about = "Show the family's storage and members", after_long_help = FAMILY_VIEW_HELP)]
+    View,
+    #[command(
+        about = "Start a family on your paid plan",
+        after_long_help = "Makes this account the family admin. Running it again changes nothing."
+    )]
+    Create,
+    #[command(
+        about = "Leave the family you joined",
+        after_long_help = "Your account returns to its own plan. The admin cannot leave their family.
+JSON: {\"left\": true}."
+    )]
+    Leave {
+        #[arg(long, help = "Approve leaving without a confirmation prompt")]
+        yes: bool,
+    },
+    #[command(about = "Invite, remove and limit members")]
+    Member {
+        #[command(subcommand)]
+        command: FamilyMemberCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum FamilyMemberCommand {
+    #[command(
+        about = "Invite an Ente account to the family",
+        after_long_help = "Ente emails the invite; the member joins by accepting it.
+The account must already exist and must not have a paid plan or another family.
+Inviting a pending member again keeps the original invite."
+    )]
+    Add {
+        #[arg(help = "Email address of the account to invite")]
+        email: String,
+    },
+    #[command(
+        about = "Remove a member or cancel a pending invite",
+        after_long_help = "A removed member's account returns to its own plan; their data stays."
+    )]
+    Remove {
+        #[arg(help = "Member ID or email from family view")]
+        member: String,
+        #[arg(long, help = "Approve removal without a confirmation prompt")]
+        yes: bool,
+    },
+    #[command(
+        about = "Limit how much of the family storage a member can use",
+        after_long_help = "Sizes accept MB, GB and TB, case-insensitive, using powers of 1024; fractions are allowed.
+The limit cannot exceed the family storage or be below what the member already uses.
+--no-limit lets the member use any free family storage. Applies to members who have joined.
+
+Example:
+  ente account family member set-storage bob@example.com 1.5TB"
+    )]
+    SetStorage {
+        #[arg(help = "Member ID or email from family view")]
+        member: String,
+        #[arg(
+            value_name = "SIZE",
+            value_parser = crate::admin::parse_storage,
+            required_unless_present = "no_limit",
+            help = "Storage limit, e.g. 500GB or 1.5TB"
+        )]
+        size: Option<i64>,
+        #[arg(long, conflicts_with = "size", help = "Remove the member's limit")]
+        no_limit: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum VaultCommand {
+    #[command(about = "Work with the vault key")]
+    Key {
+        #[command(subcommand)]
+        command: KeyCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum KeyCommand {
+    #[command(about = "Print a new vault key for ENTE_CLI_VAULT_KEY")]
+    Generate,
+}
+
+const ADMIN_HELP: &str =
+    "Uses the selected account's server and saved login; the server grants administrator access.
+Log in with: ente account login --account NAME --app photos --host URL
+--account selects a saved account by name; otherwise uses the selected or sole account.
+--app selects its saved login; otherwise uses the only saved app, then Photos.
+With multiple apps and no Photos login, supply --app.
+Changes to users require confirmation; --yes approves them, --no-input only disables prompts.
+All admin commands require network access. --json prints results, not prompts or errors.";
+
+#[derive(Subcommand)]
+pub enum AdminCommand {
+    #[command(about = "Inspect and manage users")]
+    User {
+        #[command(subcommand)]
+        command: AdminUserCommand,
+    },
+    #[command(about = "Test server email")]
+    Email {
+        #[command(subcommand)]
+        command: AdminEmailCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AdminUserCommand {
+    #[command(
+        about = "List users",
+        after_long_help = "Lists users in creation order. Fetches all users matching --since before applying --limit.
+--since accepts YYYY-MM-DD (midnight UTC) or RFC3339 with a timezone.
+JSON returns an array: id and email (strings), createdAt (RFC3339).
+Requires a login less than ten minutes old.
+
+Example:
+  ente admin --account home user list --all --no-input --json"
+    )]
+    List {
+        #[command(flatten)]
+        list: ListArgs,
+        #[arg(long, value_name = "WHEN", value_parser = crate::admin::parse_date, help = "Include users created strictly after this instant")]
+        since: Option<i64>,
+    },
+    #[command(
+        about = "Show a user's ID and subscription",
+        after_long_help = "JSON returns id, email, createdAt and subscription.
+subscription contains productId, storageBytes and expiresAt, or null when unavailable.
+IDs are strings; timestamps are RFC3339; storageBytes is an integer.
+
+Example:
+  ente admin --account home user view alice@example.com"
+    )]
+    View {
+        #[arg(value_name = "USER", help = "User email or numeric ID")]
+        user: String,
+    },
+    #[command(
+        about = "Delete an account and schedule its data cleanup",
+        after_long_help = "Deletes the account registered to the supplied email when the server processes the request.
+Reports the deleted account's ID and whether the server cancelled the subscription.
+Requires a login less than ten minutes old."
+    )]
+    Delete {
+        #[arg(help = "Email address of the account to delete")]
+        email: String,
+        #[arg(long, help = "Approve this change without prompting")]
+        yes: bool,
+    },
+    #[command(
+        about = "Disable authenticator-code two-factor authentication",
+        after_long_help = "Does not change passkeys.
+Requires a login less than ten minutes old."
+    )]
+    DisableTotp(AdminTarget),
+    #[command(
+        about = "Remove all of a user's passkeys",
+        after_long_help = "Does not change authenticator-code two-factor authentication.
+Requires a login less than ten minutes old."
+    )]
+    RemovePasskeys(AdminTarget),
+    #[command(
+        about = "Change a free plan's storage or expiry",
+        after_long_help = "--no-limit sets 100 TB (100 × 1024^4 bytes) and expiry 100 calendar years from now.
+Alternatively supply --storage, --expires or both; omitted values stay unchanged.
+With neither, prompts to choose the preset or custom values. --no-input requires explicit values and --yes.
+Sizes accept MB, GB and TB, case-insensitive, using powers of 1024; fractions are allowed.
+Dates accept YYYY-MM-DD (00:00 UTC at the start of that date) or RFC3339 with a timezone.
+Shows old and new limits before confirmation. Paid plans are rejected.
+
+Example:
+  ente admin --account home user update-subscription alice@example.com --no-limit"
+    )]
+    UpdateSubscription(SubscriptionArgs),
+}
+
+#[derive(Args)]
+pub struct AdminTarget {
+    #[arg(value_name = "USER", help = "User email or numeric ID")]
+    pub user: String,
+    #[arg(long, help = "Approve this change without prompting")]
+    pub yes: bool,
+}
+
+#[derive(Args)]
+pub struct SubscriptionArgs {
+    #[command(flatten)]
+    pub target: AdminTarget,
+    #[arg(long, conflicts_with_all = ["storage", "expires"], help = "Set 100 TB of storage and another 100 years")]
+    pub no_limit: bool,
+    #[arg(long, value_name = "SIZE", value_parser = crate::admin::parse_storage, help = "Storage limit, e.g. 500GB or 1.5TB")]
+    pub storage: Option<i64>,
+    #[arg(long, value_name = "WHEN", value_parser = crate::admin::parse_date, help = "Expiry date or timestamp")]
+    pub expires: Option<i64>,
+}
+
+#[derive(Subcommand)]
+pub enum AdminEmailCommand {
+    #[command(
+        about = "Send a fixed test message through the server",
+        after_long_help = "Reports request acceptance, not delivery. An unconfigured server may accept without sending.
+The server's SMTP configuration can override the supplied sender."
+    )]
+    Test {
+        #[arg(long, help = "Recipient email")]
+        to: String,
+        #[arg(long, help = "Sender email")]
+        from: String,
+        #[arg(long, default_value = "Ente", help = "Sender name")]
+        from_name: String,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum App {
+    Photos,
+    Locker,
+    Auth,
+}
+
+impl App {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Photos => "photos",
+            Self::Locker => "locker",
+            Self::Auth => "auth",
+        }
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Photos => "Ente Photos",
+            Self::Locker => "Ente Locker",
+            Self::Auth => "Ente Auth",
+        }
+    }
+
+    pub fn client_package(self) -> &'static str {
+        match self {
+            Self::Photos => "io.ente.photos",
+            Self::Locker => "io.ente.locker",
+            Self::Auth => "io.ente.auth",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command;
+
+    fn commands(command: &clap::Command, path: &str) -> Vec<(String, clap::Command)> {
+        let path = format!("{path} {}", command.get_name()).trim().to_owned();
+        let mut all = vec![(path.clone(), command.clone())];
+        for child in command.get_subcommands() {
+            all.extend(commands(child, &path));
+        }
+        all
+    }
+
+    #[test]
+    fn account_selector() {
+        let mut root = command();
+        root.build();
+        for (path, command) in commands(&root, "") {
+            if command.has_subcommands() || path.contains(" help") {
+                continue;
+            }
+            let selector = command
+                .get_arguments()
+                .any(|arg| arg.get_id() == "account" && arg.is_global_set());
+            let expected = [
+                "ente photos ",
+                "ente locker ",
+                "ente auth ",
+                "ente admin ",
+                "ente account totp ",
+                "ente account family ",
+                "ente account session ",
+                "ente account email-mfa ",
+                "ente account change-email",
+            ]
+            .iter()
+            .any(|group| path.starts_with(group));
+            assert_eq!(selector, expected, "{path}: --account selector");
+        }
+    }
+
+    #[test]
+    fn help_shape() {
+        let mut root = command();
+        root.build();
+        for (path, command) in commands(&root, "") {
+            let about = command
+                .get_about()
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            assert!(
+                !about.is_empty() && !about.ends_with('.'),
+                "{path}: about {about:?}"
+            );
+            for arg in command.get_arguments() {
+                let help = arg
+                    .get_help()
+                    .or(arg.get_long_help())
+                    .map(ToString::to_string);
+                assert!(
+                    help.is_some_and(|help| !help.is_empty()),
+                    "{path}: {} has no help",
+                    arg.get_id()
+                );
+            }
+            let notes = [command.get_after_help(), command.get_after_long_help()]
+                .into_iter()
+                .flatten()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let Some(examples) = notes.split("Examples:\n").nth(1) else {
+                continue;
+            };
+            assert!(
+                !command.has_subcommands(),
+                "{path}: group help carries examples"
+            );
+            for line in examples.lines().take_while(|line| !line.is_empty()) {
+                assert!(line.starts_with("  ente "), "{path}: example {line:?}");
+            }
+        }
+    }
+}

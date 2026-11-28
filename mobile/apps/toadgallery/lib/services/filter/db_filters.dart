@@ -1,0 +1,93 @@
+import "package:toadgallery/core/configuration.dart";
+import 'package:toadgallery/models/file/file.dart';
+import "package:toadgallery/services/filter/collection_ignore.dart";
+import "package:toadgallery/services/filter/dedupe_by_upload_id.dart";
+import "package:toadgallery/services/filter/filter.dart";
+import "package:toadgallery/services/filter/only_uploaded_files_filter.dart";
+import "package:toadgallery/services/filter/shared.dart";
+import "package:toadgallery/services/filter/upload_ignore.dart";
+import "package:toadgallery/services/ignored_files_service.dart";
+
+class DBFilterOptions {
+  Set<int>? ignoredCollectionIDs;
+  bool dedupeUploadID;
+  bool hideIgnoredForUpload;
+  bool ignoreSavedFiles;
+  bool onlyUploadedFiles;
+
+  bool ignoreSharedItems = false;
+
+  DBFilterOptions({
+    this.ignoredCollectionIDs,
+    this.hideIgnoredForUpload = false,
+    this.dedupeUploadID = true,
+    this.ignoreSavedFiles = false,
+    this.onlyUploadedFiles = false,
+    this.ignoreSharedItems = false,
+  });
+
+  static DBFilterOptions dedupeOption = DBFilterOptions(dedupeUploadID: true);
+}
+
+Future<List<EnteFile>> applyDBFilters(
+  List<EnteFile> files,
+  DBFilterOptions? options,
+) async {
+  if (options == null) {
+    return files;
+  }
+  final List<Filter> filters = [];
+  if (options.ignoreSharedItems) {
+    filters.add(SkipSharedFileFilter());
+  }
+  if (options.hideIgnoredForUpload) {
+    final Map<String, String> idToReasonMap =
+        await IgnoredFilesService.instance.idToIgnoreReasonMap;
+    if (idToReasonMap.isNotEmpty) {
+      filters.add(UploadIgnoreFilter(idToReasonMap));
+    }
+  }
+  if (options.dedupeUploadID) {
+    filters.add(DedupeUploadIDFilter());
+  }
+
+  if ((options.ignoredCollectionIDs ?? <int>{}).isNotEmpty ||
+      options.ignoreSavedFiles) {
+    final collectionIgnoreFilter = CollectionsAndSavedFileFilter(
+      options.ignoredCollectionIDs ?? <int>{},
+      Configuration.instance.getUserID() ?? 0,
+      files,
+      options.ignoreSavedFiles,
+    );
+    filters.add(collectionIgnoreFilter);
+  }
+
+  if (options.onlyUploadedFiles) {
+    filters.add(OnlyUploadedFilesFilter());
+  }
+
+  final List<EnteFile> filterFiles = [];
+  for (final file in files) {
+    if (filters.every((f) => f.filter(file))) {
+      filterFiles.add(file);
+    }
+  }
+  if (options.dedupeUploadID) {
+    return _hidePendingLocalDuplicates(filterFiles);
+  }
+  return filterFiles;
+}
+
+List<EnteFile> _hidePendingLocalDuplicates(List<EnteFile> files) {
+  final uploadedLocalIDs = {
+    for (final file in files)
+      if (file.isUploaded && file.localID != null) file.localID!,
+  };
+  final seenPendingLocalIDs = <String>{};
+  return files.where((file) {
+    final localID = file.localID;
+    if (file.isUploaded || localID == null) return true;
+    return !uploadedLocalIDs.contains(localID) &&
+        seenPendingLocalIDs.add(localID);
+  }).toList();
+}

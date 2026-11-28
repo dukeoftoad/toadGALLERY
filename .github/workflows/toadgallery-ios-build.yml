@@ -1,0 +1,43 @@
+name: ToadGallery iOS Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build iOS (No Codesign)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain with iOS targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Build iOS release (unsigned)
+        working-directory: mobile/apps/toadgallery
+        run: flutter build ios --release --no-codesign
+
+      - name: Upload iOS Runner.app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: toadgallery-ios-app
+          path: mobile/apps/toadgallery/build/ios/iphoneos/Runner.app

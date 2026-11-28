@@ -1,5 +1,4 @@
 import "dart:math";
-import "package:toadgallery/ui/rewind/story/rewind_colours.dart";
 
 import "package:flutter/material.dart";
 import "package:toadgallery/models/file/file.dart";
@@ -7,6 +6,7 @@ import "package:toadgallery/src/rust/api/rewind_api.dart" as rust;
 import "package:toadgallery/ui/rewind/copy/rewind_copy.dart";
 import "package:toadgallery/ui/rewind/shell/rewind_page.dart";
 import "package:toadgallery/ui/rewind/shell/rewind_share.dart";
+import "package:toadgallery/ui/rewind/story/rewind_colours.dart";
 import "package:toadgallery/ui/rewind/story/rewind_face.dart";
 import "package:toadgallery/ui/rewind/theme/rewind_assets.dart";
 import "package:toadgallery/ui/rewind/theme/rewind_colors.dart";
@@ -20,7 +20,6 @@ import "package:toadgallery/ui/rewind/widgets/rewind_photo_frames.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_stage.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_text.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_wordmark.dart";
-
 const _summaryInk = Color(0xFF131313);
 const _summaryGreen = Color(0xFF0EBF29);
 const _enlarged = 1.04;

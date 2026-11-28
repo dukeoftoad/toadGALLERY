@@ -2,7 +2,6 @@ import "dart:async";
 
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import "package:toadgallery/core/configuration.dart";
 import "package:toadgallery/core/event_bus.dart";
 import "package:toadgallery/events/app_mode_changed_event.dart";
 import 'package:toadgallery/service_locator.dart';

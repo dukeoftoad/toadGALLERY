@@ -1,9 +1,9 @@
 import "dart:async";
 import "dart:convert";
 import "dart:developer";
-import "package:ente_contacts/contacts.dart" as contacts;
 
 import "package:computer/computer.dart";
+import "package:ente_contacts/contacts.dart" as contacts;
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";

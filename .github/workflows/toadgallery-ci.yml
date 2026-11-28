@@ -39,7 +39,9 @@ jobs:
           cache: true
 
       - name: Drop untranslated-messages-file guard for CI l10n
-        run: sed -i '/^untranslated-messages-file:/d' mobile/packages/strings/l10n.yaml
+        run: >-
+          sed -i.bak '/^untranslated-messages-file:/d' mobile/packages/strings/l10n.yaml
+          && rm -f mobile/packages/strings/l10n.yaml.bak
 
       - name: Install Dart/Flutter dependencies
         working-directory: mobile

@@ -68,4 +68,4 @@ jobs:
 
       - name: Check photos FRB crate
         working-directory: rust
-        run: cargo check -p ente_photos_frb
+        run: cargo check -p ente-photos-frb

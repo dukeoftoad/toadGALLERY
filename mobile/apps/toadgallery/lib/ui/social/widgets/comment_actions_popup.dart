@@ -41,7 +41,7 @@ class CommentActionsPopup extends StatelessWidget {
           children: [
             _ActionItem(
               icon: isLiked ? EnteIcons.likeFilled : EnteIcons.likeStroke,
-              iconColor: isLiked ? const Color(0xFF08C225) : null,
+              iconColor: isLiked ? const Color(0xFF2F4B3A) : null,
               label: l10n.like,
               onTap: onLikeTap,
               textStyle: textTheme.mini.copyWith(

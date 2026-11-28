@@ -234,7 +234,7 @@ class _ToadGalleryAppState extends State<ToadGalleryApp> with WidgetsBindingObse
         builder: (lightTheme, dartTheme) => MaterialApp(
           navigatorKey: AppNavigationService.instance.navigatorKey,
           navigatorObservers: [AppNavigationService.instance.routeObserver],
-          title: "ente",
+          title: "toadGALLERY",
           themeMode: ThemeMode.system,
           theme: lightTheme,
           darkTheme: dartTheme,

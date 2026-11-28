@@ -1,0 +1,3 @@
+- toadGALLERY 2.0 beta: the whole app wears the toadGALLERY design — warm cream surfaces, forest-green accents, sage highlights, pill-shaped controls and softer cards.
+- People, face grouping, visual (magic) search and on-device AI stay fully on board, now in the toadGALLERY look.
+- About page gets the toadGALLERY masthead: the toad mark and "A little home for your moments."

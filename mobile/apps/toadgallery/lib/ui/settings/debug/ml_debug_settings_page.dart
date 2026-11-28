@@ -954,7 +954,7 @@ class _MLDebugSettingsPageState extends State<MLDebugSettingsPage> {
     try {
       final snapshot = await exportRewindSnapshot();
       if (!context.mounted) return;
-      showShortToast(context, "Ente Rewind request: $snapshot");
+      showShortToast(context, "ToadGallery Rewind request: $snapshot");
     } catch (e, s) {
       logger.warning('Ente Rewind snapshot export failed', e, s);
       if (!context.mounted) return;

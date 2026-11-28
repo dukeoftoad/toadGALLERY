@@ -480,7 +480,7 @@ class _PersonGallerySuggestionState extends State<PersonGallerySuggestion>
 
     final colorScheme = getEnteColorScheme(context);
     final textTheme = getEnteTextTheme(context);
-    const primaryActionColor = Color(0xFF08C225);
+    const primaryActionColor = Color(0xFF2F4B3A);
     final cardRadius = BorderRadius.circular(20);
     final actionButtonRadius = BorderRadius.circular(14);
     const closeButtonSize = 24.0;

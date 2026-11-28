@@ -257,7 +257,7 @@ class _FeedTypeIconWithTimeline extends StatelessWidget {
         return const Icon(
           EnteIcons.likeFilled,
           size: 18,
-          color: Color(0xFF00B33C),
+          color: Color(0xFF2F4B3A),
         );
       case FeedItemType.comment:
         return Icon(
@@ -286,7 +286,7 @@ class _FeedTypeIconWithTimeline extends StatelessWidget {
               child: Icon(
                 EnteIcons.likeFilled,
                 size: 10,
-                color: Color(0xFF00B33C),
+                color: Color(0xFF2F4B3A),
               ),
             ),
           ],
@@ -306,7 +306,7 @@ class _FeedTypeIconWithTimeline extends StatelessWidget {
               child: Icon(
                 EnteIcons.likeFilled,
                 size: 10,
-                color: Color(0xFF00B33C),
+                color: Color(0xFF2F4B3A),
               ),
             ),
           ],

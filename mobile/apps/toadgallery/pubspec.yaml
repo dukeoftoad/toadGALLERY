@@ -1,7 +1,7 @@
 name: toadgallery
 description: ToadGallery — private on-device AI photo gallery with face recognition and magic search
 
-version: 1.3.72+2158
+version: 2.0.0+2200
 publish_to: none
 
 resolution: workspace

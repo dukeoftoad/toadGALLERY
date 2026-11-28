@@ -333,7 +333,7 @@
     }
   },
   "emailHint": "Indtast din email adresse",
-  "emailNoEnteAccount": "{email} har ikke en Ente-konto.\n\nSend dem en invitation for at dele elementer.",
+  "emailNoEnteAccount": "{email} har ikke en ToadGallery-konto.\n\nSend dem en invitation for at dele elementer.",
   "@emailNoEnteAccount": {
     "placeholders": {
       "email": {}
@@ -351,7 +351,7 @@
       }
     }
   },
-  "emailVerificationEnableWarning": "For at undgå at blive låst ude af din konto, sørg for at gemme en kopi af din email 2FA udenfor Ente Auth før du aktiverer email-verifikation.",
+  "emailVerificationEnableWarning": "For at undgå at blive låst ude af din konto, sørg for at gemme en kopi af din email 2FA udenfor ToadGallery Auth før du aktiverer email-verifikation.",
   "emailVerificationToggle": "Email-verifikation",
   "emailYourLogs": "Email dine logs",
   "@emailYourLogs": {
@@ -479,7 +479,7 @@
     "description": "Generating encryption keys title"
   },
   "getStarted": "Kom i gang",
-  "hearUsWhereOptionalTitle": "Hvordan hørte du om Ente? (valgfrit)",
+  "hearUsWhereOptionalTitle": "Hvordan hørte du om ToadGallery? (valgfrit)",
   "@hearUsWhereOptionalTitle": {
     "description": "Title asking how user heard about Ente"
   },
@@ -514,7 +514,7 @@
   "importBitwardenGuide": "Brug \"Export vault\" i Bitwarden Tools og importer den ukrypterede JSON fil.",
   "importCodeDelimiterInfo": "Koderne kan adskilles med enten et komma eller en ny linje",
   "importCodes": "Importer koder",
-  "importEnteEncGuide": "Vælg den krypterede JSON fil eksporteret fra Ente",
+  "importEnteEncGuide": "Vælg den krypterede JSON fil eksporteret fra ToadGallery",
   "importEnterSetupKey": "Indtast en oprettelsesnøgle",
   "importFailureDesc": "Kunne ikke afkode den valgte fil.",
   "importInstruction": "Vælg venligst en fil der indeholder en liste af dine koder i det følgende format",
@@ -538,7 +538,7 @@
       }
     }
   },
-  "importTypeEnteEncrypted": "Krypteret Ente eksport",
+  "importTypeEnteEncrypted": "Krypteret ToadGallery eksport",
   "incorrectCode": "Forkert kode",
   "@incorrectCode": {
     "description": "Error message when code is incorrect"
@@ -580,7 +580,7 @@
   "invalidQRCode": "Ugyldig QR kode",
   "invalidRecoveryKey": "Den indtastede gendannelsesnøgle er ikke gyldig. Sørg venligst for at den indeholder 24 ord, og tjek stavningen af hvert ord.\n\nHvis du indtastede en ældre gendannelseskode, sørg for at den er 64 tegn lang, og tjek hvert tegn.",
   "invite": "Inviter",
-  "inviteToEnte": "Inviter til Ente",
+  "inviteToEnte": "Inviter til ToadGallery",
   "ok": "OK",
   "@ok": {
     "description": "Generic OK button label"
@@ -964,7 +964,7 @@
   "sharedWith": "Delt med",
   "shareLink": "Del link",
   "shareThisLink": "Dette link giver alle, der modtager det, adgang til dit element. Du kan fjerne adgangen når som helst ved at slette linket.",
-  "shareWithNonenteUsers": "Del med ikke Ente brugere",
+  "shareWithNonenteUsers": "Del med ikke ToadGallery brugere",
   "sharing": "Deler...",
   "shouldHideCode": "Skjul koder",
   "showLargeIcons": "Vis store ikoner",

@@ -171,7 +171,7 @@
   "addToAlbum": "Tambah ke album",
   "addToCollection": "Tambahkan ke koleksi",
   "addToCollections": "Tambahkan ke koleksi",
-  "addToEnte": "Tambah ke Ente",
+  "addToEnte": "Tambah ke ToadGallery",
   "addToHiddenAlbum": "Tambah ke album tersembunyi",
   "addToPerson": "Tambahkan ke orang",
   "@addToPerson": {
@@ -251,8 +251,8 @@
   "allowDownloads": "Izinkan pengunduhan",
   "allowJoining": "Izinkan bergabung",
   "allowJoiningAlbum": "Izinkan bergabung ke album",
-  "allowJoiningDescription": "Penonton dengan akun Ente bisa bergabung ke album Anda dan tetap update",
-  "allowPermBody": "Ijinkan akses ke foto Anda dari Pengaturan agar Ente dapat menampilkan dan mencadangkan pustaka Anda.",
+  "allowJoiningDescription": "Penonton dengan akun ToadGallery bisa bergabung ke album Anda dan tetap update",
+  "allowPermBody": "Ijinkan akses ke foto Anda dari Pengaturan agar ToadGallery dapat menampilkan dan mencadangkan pustaka Anda.",
   "allowPermTitle": "Izinkan akses ke foto",
   "allPersonGroupingWillReset": "Semua pengelompokan untuk orang ini akan diatur ulang, dan semua saran untuk orang ini akan hilang",
   "allTabEmptyHint": "Belum ada apa pun. Ketuk + untuk menambahkan kode atau buka Sampah untuk memulihkannya.",
@@ -286,8 +286,8 @@
       }
     }
   },
-  "aNewVersionOfEnteIsAvailable": "Versi baru dari Ente telah tersedia.",
-  "aNewVersionOfEnteLockerIsAvailable": "Versi baru Ente Locker tersedia.",
+  "aNewVersionOfEnteIsAvailable": "Versi baru dari ToadGallery telah tersedia.",
+  "aNewVersionOfEnteLockerIsAvailable": "Versi baru ToadGallery Locker tersedia.",
   "anythingElse": "Ada lagi?\n",
   "@anythingElse": {
     "description": "Label for optional account deletion feedback"
@@ -295,7 +295,7 @@
   "appearance": "Tampilan",
   "appIcon": "Ikon aplikasi",
   "appleId": "ID Apple",
-  "applePhotosUnsupportedResource": "File ini tidak dapat disimpan ke Apple Photos. Anda masih bisa melihatnya di Ente",
+  "applePhotosUnsupportedResource": "File ini tidak dapat disimpan ke Apple Photos. Anda masih bisa melihatnya di ToadGallery",
   "@applePhotosUnsupportedResource": {
     "description": "Shown when iOS Photos rejects a file while saving to gallery because the media resource is invalid or unsupported"
   },
@@ -406,7 +406,7 @@
   "autoAddPeople": "Tambahkan orang secara otomatis",
   "autoAddToAlbum": "Tambahkan ke album secara otomatis",
   "autoCastDialogBody": "Perangkat Cast yang tersedia akan ditampilkan di sini.",
-  "autoCastiOSPermission": "Pastikan izin Jaringan Lokal untuk app Ente Foto aktif di Pengaturan.",
+  "autoCastiOSPermission": "Pastikan izin Jaringan Lokal untuk app ToadGallery Foto aktif di Pengaturan.",
   "autoLock": "Kunci otomatis",
   "@autoLock": {
     "description": "Auto lock setting title"
@@ -490,7 +490,7 @@
   "backupSettings": "Pengaturan pencadangan",
   "backupStatus": "Status pencadangan",
   "backupStatusDescription": "Item yang sudah dicadangkan akan terlihat di sini",
-  "backupToEnte": "Cadangkan ke Ente",
+  "backupToEnte": "Cadangkan ke ToadGallery",
   "backupVideos": "Cadangkan video",
   "beach": "Pantai dan laut",
   "birthday": "Hari ulang tahun",
@@ -651,7 +651,7 @@
   "codeChangeLimitReached": "Maaf, kamu telah mencapai batas perubahan kode.",
   "codeCopiedToClipboard": "Kode tersalin ke papan klip",
   "codeIssuerHint": "Penerbit",
-  "collabLinkSectionDescription": "Izinkan orang menambahkan foto tanpa akun Ente",
+  "collabLinkSectionDescription": "Izinkan orang menambahkan foto tanpa akun ToadGallery",
   "collaborator": "Kolaborator",
   "collageLayout": "Tata letak",
   "collageSaved": "Kolase tersimpan ke galeri",
@@ -742,7 +742,7 @@
       }
     }
   },
-  "confirmDeleteAccountAcrossApps": "Saya memahami bahwa tindakan ini akan menghapus data saya dari Ente Photos, Ente Auth, dan Ente Locker.",
+  "confirmDeleteAccountAcrossApps": "Saya memahami bahwa tindakan ini akan menghapus data saya dari toadGALLERY, ToadGallery Auth, dan ToadGallery Locker.",
   "@confirmDeleteAccountAcrossApps": {
     "description": "Checkbox label for final account deletion confirmation"
   },
@@ -834,7 +834,7 @@
   "createAccountTitle": "Buat akun",
   "createAlbum": "Buat album",
   "createAlbumActionHint": "Tekan dan tahan foto lalu klik + untuk membuat album baru",
-  "createAnEnteAccount": "Buat akun Ente",
+  "createAnEnteAccount": "Buat akun ToadGallery",
   "createAnotherKit": "Buat kit lain",
   "createBackupNow": "Cadangkan sekarang",
   "createCollaborativeLink": "Buat link kolaborasi",
@@ -947,12 +947,12 @@
   "@deletedComment": {
     "description": "Label for deleted comments"
   },
-  "deletedFromEnte": "Dihapus dari Ente",
+  "deletedFromEnte": "Dihapus dari ToadGallery",
   "deletedItemsStayHereForThirtyDays": "Item yang dihapus akan tetap di sini selama 30 hari",
   "deleteDuplicates": "Hapus duplikat",
   "deleteEmptyAlbums": "Hapus album kosong",
   "deleteEmptyAlbumsWithQuestionMark": "Hapus album yang kosong?",
-  "deleteEnteAccount": "Hapus akun Ente",
+  "deleteEnteAccount": "Hapus akun ToadGallery",
   "@deleteEnteAccount": {
     "description": "Final destructive button label for account deletion"
   },
@@ -960,7 +960,7 @@
   "deleteFromBoth": "Hapus dari keduanya",
   "deleteFromDevice": "Hapus dari perangkat ini",
   "deleteFromDeviceQuestion": "Hapus dari perangkat?",
-  "deleteFromEnte": "Hapus dari Ente",
+  "deleteFromEnte": "Hapus dari ToadGallery",
   "deleteHiddenFilesFromDevice": "Hapus file tersembunyi dari perangkat",
   "deleteHiddenFilesFromDeviceDescription": "Hapus salinan lokal file tersembunyi dari perangkat Anda",
   "deleteItemCount": "{count, plural, one{Hapus {count} item} other{Hapus {count} item}}",
@@ -1258,7 +1258,7 @@
     "description": "Title shown when editing an existing secret"
   },
   "editsSaved": "Perubahan tersimpan",
-  "editsToLocationWillOnlyBeSeenWithinEnte": "Perubahan lokasi hanya akan terlihat di Ente",
+  "editsToLocationWillOnlyBeSeenWithinEnte": "Perubahan lokasi hanya akan terlihat di ToadGallery",
   "editStorageLimit": "Edit batas penyimpanan",
   "editTag": "Ubah tanda",
   "editTime": "Edit waktu",
@@ -1317,7 +1317,7 @@
       }
     }
   },
-  "emailVerificationEnableWarning": "Untuk menghindari terkunci dari akun Anda, pastikan untuk menyimpan salinan 2FA email Anda di luar Ente Auth sebelum mengaktifkan verifikasi email.",
+  "emailVerificationEnableWarning": "Untuk menghindari terkunci dari akun Anda, pastikan untuk menyimpan salinan 2FA email Anda di luar ToadGallery Auth sebelum mengaktifkan verifikasi email.",
   "emailVerificationToggle": "Verifikasi email",
   "emailYourLogs": "Kirim log Anda melalui email",
   "@emailYourLogs": {
@@ -1351,16 +1351,16 @@
   "@endpointUpdatedMessage": {
     "description": "Success message when endpoint is updated"
   },
-  "ente": "Ente",
-  "enteAuth": "Ente Auth",
+  "ente": "toadGALLERY",
+  "enteAuth": "ToadGallery Auth",
   "@enteAuth": {
     "description": "Product name"
   },
-  "enteLocker": "Ente Locker",
+  "enteLocker": "ToadGallery Locker",
   "@enteLocker": {
     "description": "Product name"
   },
-  "entePhotos": "Ente Photos",
+  "entePhotos": "toadGALLERY",
   "@entePhotos": {
     "description": "Product name"
   },
@@ -1830,7 +1830,7 @@
   },
   "forgotPasswordPrompt": "Lupa kata sandi?",
   "forgotRecoveryKey": "Lupa kunci pemulihan?",
-  "free10GB": "10 GB gratis di <bold-green>Ente</bold-green> Photos",
+  "free10GB": "10 GB gratis di <bold-green>ToadGallery</bold-green> Photos",
   "freeStorageOffer": "Potongan 10% di <bold-green>ente</bold-green> photos",
   "freeStorageOfferDescription": "Gunakan kode \"AUTH\" untuk mendapatkan potongan 10% untuk tahun pertama",
   "free": "Gratis",
@@ -1887,7 +1887,7 @@
   "grantGalleryPermissionDesc": "Berikan izin untuk mengakses dan mengatur foto dengan pengenalan wajah. Semua pemrosesan dilakukan di perangkat Anda.",
   "grantGalleryPermissionTitle": "Mari temukan foto favorit Anda",
   "grantPermission": "Berikan izin",
-  "grantPermissionDesc": "Silakan izinkan Ente mengakses pustaka foto Anda agar kami dapat mengaturnya dengan pengenalan wajah. Semua pemrosesan dilakukan di perangkat Anda.",
+  "grantPermissionDesc": "Silakan izinkan ToadGallery mengakses pustaka foto Anda agar kami dapat mengaturnya dengan pengenalan wajah. Semua pemrosesan dilakukan di perangkat Anda.",
   "greenery": "Nuansa hijau",
   "grid": "Kisi",
   "photosInOriginalProportions": "Foto dengan proporsi asli",
@@ -1902,11 +1902,11 @@
   "guestView": "Tampilan tamu",
   "guestViewEnablePreSteps": "Untuk mengaktifkan tampilan tamu, atur kode sandi perangkat atau kunci layar di pengaturan sistem.",
   "happyBirthday": "Selamat ulang tahun! 🥳",
-  "hearUsWhereOptionalTitle": "Dari mana Anda menemukan Ente? (opsional)",
+  "hearUsWhereOptionalTitle": "Dari mana Anda menemukan ToadGallery? (opsional)",
   "@hearUsWhereOptionalTitle": {
     "description": "Title asking how user heard about Ente"
   },
-  "hearUsWhereTitle": "Dari mana Anda mengetahui Ente?",
+  "hearUsWhereTitle": "Dari mana Anda mengetahui ToadGallery?",
   "help": "Bantuan",
   "helpAndSupport": "Bantuan & dukungan",
   "hidden": "Tersembunyi",
@@ -2008,7 +2008,7 @@
   "importBitwardenGuide": "Gunakan opsi \"Export vault\" di Bitwarden dan impor file JSON yang tidak terenkripsi.",
   "importCodeDelimiterInfo": "Kode dapat dipisahkan dengan koma atau baris baru",
   "importCodes": "Impor kode",
-  "importEnteEncGuide": "Pilih file enkripsi JSON yang telah diekspor dari Ente",
+  "importEnteEncGuide": "Pilih file enkripsi JSON yang telah diekspor dari ToadGallery",
   "importEnterSetupKey": "Masukkan kunci penyiapan",
   "importFailureDesc": "Berkas yang dipilih tidak dapat diurai",
   "importFileTooLarge": "File yang dipilih terlalu besar. Ukuran maksimum: {size}.",
@@ -2057,7 +2057,7 @@
     }
   },
   "importSuccessTitle": "Yey! :>",
-  "importTypeEnteEncrypted": "Eksporan Ente terenkripsi",
+  "importTypeEnteEncrypted": "Eksporan ToadGallery terenkripsi",
   "incorrectCode": "Kode salah",
   "@incorrectCode": {
     "description": "Error message when code is incorrect"
@@ -2120,7 +2120,7 @@
       }
     }
   },
-  "inviteToEnte": "Undang ke Ente",
+  "inviteToEnte": "Undang ke ToadGallery",
   "ok": "Oke",
   "@ok": {
     "description": "Generic OK button label"
@@ -2503,7 +2503,7 @@
   "@loginTerms": {
     "description": "Terms agreement text for login"
   },
-  "loginToEnte": "Masuk ke Ente",
+  "loginToEnte": "Masuk ke ToadGallery",
   "loginToExistingAccount": "Masuk ke akun yang sudah ada",
   "loginWithAuthAccount": "Masuk dengan akun Auth anda",
   "loginWithTOTP": "Masuk menggunakan TOTP",
@@ -2552,7 +2552,7 @@
   "mapsPrivacyNotice": "Koordinat perkiraan akan dikirim ke pihak ketiga yang menjaga privasi seperti OpenStreetMap untuk menampilkan peta dan lokasi.",
   "markingAsImportant": "Menandai sebagai penting...",
   "me": "Saya",
-  "mediaManagementHintMessage": "Aktifkan pengelolaan media untuk Ente di pengaturan agar permintaan konfirmasi berhenti muncul.",
+  "mediaManagementHintMessage": "Aktifkan pengelolaan media untuk ToadGallery di pengaturan agar permintaan konfirmasi berhenti muncul.",
   "@mediaManagementHintMessage": {
     "description": "Message explaining that enabling Android media management permission avoids repeated delete confirmations."
   },
@@ -2560,7 +2560,7 @@
   "@mediaManagementHintTitle": {
     "description": "Title of a sheet prompting Android users to enable media management permission."
   },
-  "meetEnteLocker": "Kenalan dengan Ente Locker",
+  "meetEnteLocker": "Kenalan dengan ToadGallery Locker",
   "@meetEnteLocker": {
     "description": "Button in the Photos changelog that opens the Ente Locker website"
   },
@@ -2649,7 +2649,7 @@
   "mixedGrouping": "Pengelompokan campuran?",
   "mlConsent": "Aktifkan pemelajaran mesin",
   "mlConsentConfirmation": "Saya memahami, dan bersedia mengaktifkan pemelajaran mesin",
-  "mlConsentDescription": "Jika kamu mengaktifkan pemelajaran mesin, Ente akan memproses informasi seperti geometri wajah dari file yang ada, termasuk file yang dibagikan kepadamu.\n\nIni dijalankan pada perangkatmu, dan setiap informasi biometrik yang dibuat akan terenkripsi ujung ke ujung.",
+  "mlConsentDescription": "Jika kamu mengaktifkan pemelajaran mesin, ToadGallery akan memproses informasi seperti geometri wajah dari file yang ada, termasuk file yang dibagikan kepadamu.\n\nIni dijalankan pada perangkatmu, dan setiap informasi biometrik yang dibuat akan terenkripsi ujung ke ujung.",
   "mlConsentPrivacyDetails": "Silakan <policy>klik di sini</policy> untuk detail lebih lanjut tentang fitur ini dalam kebijakan privasi kami",
   "@mlConsentPrivacyDetails": {
     "description": "Machine learning consent screen sentence; only the text inside the policy tags is tappable and opens the privacy policy"
@@ -2755,11 +2755,11 @@
       }
     }
   },
-  "networkConnectionRefusedErr": "Tidak dapat terhubung dengan Ente, silakan coba lagi setelah beberapa saat. Jika masalah berlanjut, harap hubungi dukungan.",
+  "networkConnectionRefusedErr": "Tidak dapat terhubung dengan ToadGallery, silakan coba lagi setelah beberapa saat. Jika masalah berlanjut, harap hubungi dukungan.",
   "@networkConnectionRefusedErr": {
     "description": "Error message shown when the app cannot connect to Ente due to connection refused"
   },
-  "networkHostLookUpErr": "Tidak dapat terhubung dengan Ente, harap periksa pengaturan jaringan kamu dan hubungi dukungan jika masalah berlanjut.",
+  "networkHostLookUpErr": "Tidak dapat terhubung dengan ToadGallery, harap periksa pengaturan jaringan kamu dan hubungi dukungan jika masalah berlanjut.",
   "@networkHostLookUpErr": {
     "description": "Error message shown when the app cannot connect to Ente due to network host lookup failure"
   },
@@ -2914,7 +2914,7 @@
   "offlineHomeSignupBannerAction": "Cadangkan sekarang",
   "offlineHomeSignupBannerDescription": "Cadangan terenkripsi di 3 lokasi untuk menjaga keamanan kenangan Anda.",
   "offlineHomeSignupBannerTitle": "Jaga kenangan Anda selamanya",
-  "offlineKeyUnavailableMessage": "Ente Auth tidak dapat mengakses kunci untuk kode offline Anda.",
+  "offlineKeyUnavailableMessage": "ToadGallery Auth tidak dapat mengakses kunci untuk kode offline Anda.",
   "offlineModeWarning": "Anda telah memilih pilihan 'Gunakan tanpa pencadangan'. Mohon lakukan pencadangan secara manual demi memastikan bahwa kode-kode Anda aman.",
   "offlineNameFaceBannerSubtitle": "Daftar untuk menandai mereka dan menemukan foto mereka dengan mudah nanti.",
   "offlineNameFaceBannerTitle": "Berikan nama untuk wajah ini",
@@ -2927,7 +2927,7 @@
     "description": "The text displayed above folders/albums stored on device",
     "type": "text"
   },
-  "oneAccountAcrossEnteApps": "Anda memiliki satu akun untuk Ente Photos, Ente Auth, dan Ente Locker.",
+  "oneAccountAcrossEnteApps": "Anda memiliki satu akun untuk toadGALLERY, ToadGallery Auth, dan ToadGallery Locker.",
   "@oneAccountAcrossEnteApps": {
     "description": "Explains that account deletion affects all Ente apps"
   },
@@ -3071,7 +3071,7 @@
       }
     }
   },
-  "permanentlyDeleteYourEnteAccount": "Hapus akun Ente Anda secara permanen?",
+  "permanentlyDeleteYourEnteAccount": "Hapus akun ToadGallery Anda secara permanen?",
   "@permanentlyDeleteYourEnteAccount": {
     "description": "Heading for final account deletion confirmation"
   },
@@ -3094,7 +3094,7 @@
   },
   "pets": "Hewan peliharaan",
   "photoGridSize": "Ukuran kotak foto",
-  "photoLibraryAddPermissionRequired": "Ente memerlukan izin untuk menyimpan foto dan video ke Apple Photos. Anda dapat mengizinkan akses di Pengaturan.",
+  "photoLibraryAddPermissionRequired": "ToadGallery memerlukan izin untuk menyimpan foto dan video ke Apple Photos. Anda dapat mengizinkan akses di Pengaturan.",
   "photoLibraryAddPermissionRestricted": "Akses ke Pustaka Foto dibatasi di perangkat ini.",
   "photoOrder": "Urutan foto",
   "photoViewerFilmstripLabel": "Pemilih foto",
@@ -3598,7 +3598,7 @@
   "resendInvite": "Kirim ulang undangan",
   "reset": "Atur ulang",
   "resetIgnoredFiles": "Atur ulang file yang diabaikan",
-  "resetIgnoredFilesDescription": "Atur ulang file yang diabaikan ini agar Ente dapat mencoba mengunggahnya lagi.",
+  "resetIgnoredFilesDescription": "Atur ulang file yang diabaikan ini agar ToadGallery dapat mencoba mengunggahnya lagi.",
   "resetPasswordTitle": "Atur ulang kata sandi",
   "@resetPasswordTitle": {
     "description": "Reset password title"
@@ -3750,7 +3750,7 @@
     "description": "Description text asking user if they want to save to storage or share with other apps"
   },
   "savePerson": "Simpan orang",
-  "saveToEnte": "Simpan ke Ente",
+  "saveToEnte": "Simpan ke ToadGallery",
   "saveToLocker": "Simpan ke Locker",
   "saveYourRecoveryKeyIfYouHaventAlready": "Jika belum, simpan kunci pemulihan kamu",
   "saving": "Menyimpan...",
@@ -3912,7 +3912,7 @@
   "securityDesc": "Enkripsi, kunci pemulihan, kunci aplikasi, dan perlindungan akun",
   "seeAllCollections": "Semua koleksi",
   "seePublicAlbumLinksInApp": "Lihat tautan album publik di aplikasi",
-  "selectAlbumsToBackUpToEnte": "Pilih album yang akan dicadangkan ke Ente",
+  "selectAlbumsToBackUpToEnte": "Pilih album yang akan dicadangkan ke ToadGallery",
   "selectAlbumToLikePhoto": "Pilih album untuk menyukai foto ini",
   "@selectAlbumToLikePhoto": {
     "description": "Instruction for liking photo"
@@ -3962,7 +3962,7 @@
       }
     }
   },
-  "selectedFilesAreNotOnEnte": "File terpilih tidak tersimpan di Ente",
+  "selectedFilesAreNotOnEnte": "File terpilih tidak tersimpan di ToadGallery",
   "selectedFilesBackedUpToEnte": "Item ini akan dihapus dari semua album. Anda dapat memulihkannya dari Sampah.",
   "@selectedFilesBackedUpToEnte": {
     "description": "Delete confirmation message for selected items that are backed up to Ente."
@@ -4122,7 +4122,7 @@
   "share": "Bagikan",
   "shareALink": "Bagikan link",
   "shareAnAlbum": "Bagikan album",
-  "shareCodeEarnStorage": "Dapatkan penyimpanan dua kali lipat di Ente",
+  "shareCodeEarnStorage": "Dapatkan penyimpanan dua kali lipat di ToadGallery",
   "shareCodes": "Bagikan kode",
   "shareCodesDuration": "Pilih durasi untuk berbagi kode.",
   "shareCollection": "Bagikan koleksi",
@@ -4185,17 +4185,17 @@
       "verificationID": {}
     }
   },
-  "shareTextRecommendUsingEnte": "Unduh Ente agar kita dapat berbagi file dengan kualitas asli dengan mudah\n\nhttps://ente.com",
-  "shareTextRecommendUsingEnteForFamily": "Unduh Ente agar saya dapat menambahkan Anda ke paket keluarga saya\n\nhttps://ente.com",
-  "shareTextRecommendUsingEnteForPhotos": "Unduh Ente agar kita dapat berbagi foto dan video dengan kualitas asli dengan mudah\n\nhttps://ente.com",
-  "shareTextReferralInvite": "Dapatkan 20 GB gratis dengan Ente Photos! Unduh aplikasinya di https://ente.com/invite dan gunakan kode {referralCode}.",
+  "shareTextRecommendUsingEnte": "Unduh ToadGallery agar kita dapat berbagi file dengan kualitas asli dengan mudah\n\nhttps://ente.com",
+  "shareTextRecommendUsingEnteForFamily": "Unduh ToadGallery agar saya dapat menambahkan Anda ke paket keluarga saya\n\nhttps://ente.com",
+  "shareTextRecommendUsingEnteForPhotos": "Unduh ToadGallery agar kita dapat berbagi foto dan video dengan kualitas asli dengan mudah\n\nhttps://ente.com",
+  "shareTextReferralInvite": "Dapatkan 20 GB gratis dengan toadGALLERY! Unduh aplikasinya di https://ente.com/invite dan gunakan kode {referralCode}.",
   "@shareTextReferralInvite": {
     "placeholders": {
       "referralCode": {}
     }
   },
   "shareThisLink": "Tautan ini memungkinkan siapa pun yang menerimanya mengakses item Anda. Anda dapat mencabut akses kapan saja dengan menghapus tautan.",
-  "shareWithNonenteUsers": "Bagikan ke pengguna non-Ente",
+  "shareWithNonenteUsers": "Bagikan ke pengguna non-ToadGallery",
   "shareYourFeedbackHere": "Bagikan masukan Anda di sini",
   "@shareYourFeedbackHere": {
     "description": "Placeholder for optional account deletion feedback"
@@ -4226,7 +4226,7 @@
   "showQRAuthMessage": "Autentikasikan untuk menampilkan kode Respons Cepat (QR)",
   "showTextOnWidget": "Tampilkan teks di widget",
   "shuffle": "Acak",
-  "sigInBackupReminder": "Ente akan mencadangkan kode secara otomatis setelah Anda masuk.\n\nKami tetap menyarankan Anda mengekspor kode sebagai cadangan tambahan.",
+  "sigInBackupReminder": "ToadGallery akan mencadangkan kode secara otomatis setelah Anda masuk.\n\nKami tetap menyarankan Anda mengekspor kode sebagai cadangan tambahan.",
   "signInToBackup": "Masuk untuk mencadangkan kode-kode Anda",
   "signOutFromOtherDevices": "Keluar dari perangkat lain",
   "@signOutFromOtherDevices": {
@@ -4387,7 +4387,7 @@
   "@strongStrength": {
     "description": "Strong password strength label"
   },
-  "subAlreadyLinkedErrMessage": "{id} Anda sudah ditautkan ke akun Ente lain.\nJika Anda ingin menggunakan {id} dengan akun ini, silakan hubungi dukungan kami.",
+  "subAlreadyLinkedErrMessage": "{id} Anda sudah ditautkan ke akun ToadGallery lain.\nJika Anda ingin menggunakan {id} dengan akun ini, silakan hubungi dukungan kami.",
   "@subAlreadyLinkedErrMessage": {
     "placeholders": {
       "id": {}
@@ -4488,7 +4488,7 @@
   "@thisEmailIsAlreadyInUse": {
     "description": "Error message when email is already in use"
   },
-  "thisHelpsUsImproveEnte": "Ini membantu kami meningkatkan Ente",
+  "thisHelpsUsImproveEnte": "Ini membantu kami meningkatkan ToadGallery",
   "@thisHelpsUsImproveEnte": {
     "description": "Subtitle under account deletion reason prompt"
   },
@@ -4606,7 +4606,7 @@
     }
   },
   "trustedContacts": "Kontak tepercaya",
-  "trustedContactsEmptyDescription": "Tunjuk pengguna Ente lain sebagai kontak tepercaya untuk memulihkan akun Anda",
+  "trustedContactsEmptyDescription": "Tunjuk pengguna ToadGallery lain sebagai kontak tepercaya untuk memulihkan akun Anda",
   "trustedContactStatusAccepted": "Diterima",
   "@trustedContactStatusAccepted": {
     "description": "Short status label shown for an accepted trusted contact"
@@ -4771,7 +4771,7 @@
   "@uploadStorageLimitErrorTitle": {
     "description": "Title shown when uploads fail due to running out of storage"
   },
-  "uploadSubscriptionExpiredErrorBody": "Langganan Ente Photos Anda telah berakhir. Perpanjang langganan untuk melanjutkan pengunggahan.",
+  "uploadSubscriptionExpiredErrorBody": "Langganan toadGALLERY Anda telah berakhir. Perpanjang langganan untuk melanjutkan pengunggahan.",
   "@uploadSubscriptionExpiredErrorBody": {
     "description": "Body shown when uploads fail because the Photos subscription is expired"
   },
@@ -5175,7 +5175,7 @@
       }
     }
   },
-  "noEnteAccountWithThisEmail": "Tidak ada akun Ente dengan email ini.",
+  "noEnteAccountWithThisEmail": "Tidak ada akun ToadGallery dengan email ini.",
   "shareALinkInline": "Bagikan tautan.",
   "personAlreadyHasAccess": "Orang ini sudah memiliki akses.",
   "removePersonTitle": "Hapus {name}?",
@@ -5211,5 +5211,5 @@
     }
   },
   "notEnoughStorageTitle": "Penyimpanan tidak cukup",
-  "notEnoughStorageBody": "Ruang kosong di Ente tidak cukup untuk menambahkan foto baru. Kosongkan ruang atau tingkatkan paket agar dapat terus menambahkan foto."
+  "notEnoughStorageBody": "Ruang kosong di ToadGallery tidak cukup untuk menambahkan foto baru. Kosongkan ruang atau tingkatkan paket agar dapat terus menambahkan foto."
 }

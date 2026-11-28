@@ -79,7 +79,7 @@
   "addTag": "Dodaj etykietę",
   "addToAlbum": "Dodaj do albumu",
   "addToCollection": "Dodaj do kolekcji",
-  "addToEnte": "Dodaj do Ente",
+  "addToEnte": "Dodaj do ToadGallery",
   "addToHiddenAlbum": "Dodaj do ukrytego albumu",
   "addToPerson": "Dodaj do osoby",
   "@addToPerson": {
@@ -120,7 +120,7 @@
   "allowAppToOpenSharedAlbumLinks": "Zezwalaj aplikacji na otwieranie udostępnianych linków do albumu",
   "allowDownloads": "Zezwól na pobieranie",
   "allowJoiningAlbum": "Zezwól na dołączanie do albumu",
-  "allowPermBody": "Prosimy zezwolić na dostęp do swoich zdjęć w Ustawieniach, aby Ente mogło wyświetlać i tworzyć kopię zapasową Twojej biblioteki.",
+  "allowPermBody": "Prosimy zezwolić na dostęp do swoich zdjęć w Ustawieniach, aby ToadGallery mogło wyświetlać i tworzyć kopię zapasową Twojej biblioteki.",
   "allowPermTitle": "Zezwól na dostęp do zdjęć",
   "allPersonGroupingWillReset": "Wszystkie grupy dla tej osoby zostaną zresetowane i stracisz wszystkie sugestie dla tej osoby",
   "allTabEmptyHint": "Nic tu nie ma. Stuknij +, aby dodać kod lub otwórz kosz, aby go odzyskać.",
@@ -223,7 +223,7 @@
   "autoAddPeople": "Automatycznie dodaj osoby",
   "autoAddToAlbum": "Automatycznie dodaj do albumu",
   "autoCastDialogBody": "Tutaj zobaczysz dostępne urządzenia Cast.",
-  "autoCastiOSPermission": "Upewnij się, że uprawnienia sieci lokalnej są włączone dla aplikacji Zdjęcia Ente w Ustawieniach.",
+  "autoCastiOSPermission": "Upewnij się, że uprawnienia sieci lokalnej są włączone dla aplikacji Zdjęcia ToadGallery w Ustawieniach.",
   "autoLock": "Automatyczna blokada",
   "@autoLock": {
     "description": "Auto lock setting title"
@@ -269,7 +269,7 @@
   "backupSettings": "Ustawienia kopii zapasowej",
   "backupStatus": "Status kopii zapasowej",
   "backupStatusDescription": "Elementy, których kopia zapasowa została utworzona, zostaną wyświetlone w tym miejscu",
-  "backupToEnte": "Kopia zapasowa do Ente",
+  "backupToEnte": "Kopia zapasowa do ToadGallery",
   "backupVideos": "Utwórz kopię zapasową wideo",
   "beach": "Piasek i morze",
   "birthday": "Urodziny",
@@ -363,7 +363,7 @@
   "codeChangeLimitReached": "Przepraszamy, osiągnięto limit zmian kodu.",
   "codeCopiedToClipboard": "Kod został skopiowany do schowka",
   "codeIssuerHint": "Wydawca",
-  "collabLinkSectionDescription": "Pozwól innym dodawać zdjęcia bez konta Ente",
+  "collabLinkSectionDescription": "Pozwól innym dodawać zdjęcia bez konta ToadGallery",
   "collaborator": "Współuczestnik",
   "collageLayout": "Układ",
   "collageSaved": "Kolaż zapisano w galerii",
@@ -450,7 +450,7 @@
   "create": "Utwórz",
   "createAccountTitle": "Utwórz konto",
   "createAlbumActionHint": "Przytrzymaj, aby wybrać zdjęcia i kliknij +, aby utworzyć album",
-  "createAnEnteAccount": "Utwórz konto Ente",
+  "createAnEnteAccount": "Utwórz konto ToadGallery",
   "createBackupNow": "Utwórz kopię zapasową",
   "createCollaborativeLink": "Utwórz link współpracy",
   "createCollage": "Utwórz kolaż",
@@ -538,7 +538,7 @@
   "deleteFromBoth": "Usuń z obu",
   "deleteFromDevice": "Usuń z urządzenia",
   "deleteFromDeviceQuestion": "Usunąć z urządzenia?",
-  "deleteFromEnte": "Usuń z Ente",
+  "deleteFromEnte": "Usuń z ToadGallery",
   "deleteItemCount": "{count, plural, one{Usuń {count} element} few{Usuń {count} elementy} other{Usuń {count} elementów}}",
   "@deleteItemCount": {
     "placeholders": {
@@ -718,7 +718,7 @@
     "description": "Title shown when editing an existing secret"
   },
   "editsSaved": "Edycje zapisane",
-  "editsToLocationWillOnlyBeSeenWithinEnte": "Edycje lokalizacji będą widoczne tylko w Ente",
+  "editsToLocationWillOnlyBeSeenWithinEnte": "Edycje lokalizacji będą widoczne tylko w ToadGallery",
   "editStorageLimit": "Edytuj limit miejsca",
   "editTag": "Edytuj etykietę",
   "editTime": "Edytuj czas",
@@ -773,7 +773,7 @@
       }
     }
   },
-  "emailVerificationEnableWarning": "Aby uniknąć zablokowania się z konta, upewnij się, że przed włączeniem weryfikacji e-mail przechowujesz kopię 2FA dla swojego adresu e-mail poza Ente Auth.",
+  "emailVerificationEnableWarning": "Aby uniknąć zablokowania się z konta, upewnij się, że przed włączeniem weryfikacji e-mail przechowujesz kopię 2FA dla swojego adresu e-mail poza ToadGallery Auth.",
   "emailVerificationToggle": "Weryfikacja e-mail",
   "emailYourLogs": "Wyślij mailem logi",
   "@emailYourLogs": {
@@ -798,7 +798,7 @@
   "enableMaps": "Włącz mapy",
   "encrypted": "Zaszyfrowane",
   "encryptingBackup": "Szyfrowanie kopii zapasowej...",
-  "ente": "Ente",
+  "ente": "toadGALLERY",
   "enterAlbumName": "Wprowadź nazwę albumu",
   "enterAnEmailAddress": "Podaj adres e-mail",
   "enterAValidEmailAddress": "Podaj poprawny adres e-mail",
@@ -1009,13 +1009,13 @@
   "googlePlayId": "Identyfikator Google Play",
   "grantFullAccessPrompt": "Zezwól na dostęp do wszystkich zdjęć w aplikacji Ustawienia",
   "grantPermission": "Przyznaj uprawnienie",
-  "grantPermissionDesc": "Zezwól proszę Ente na dostęp do twojej biblioteki, w celu uporządkowania jej z rozpoznawaniem twarzy. Cały proces odbywa się na twoim urządzeniu.",
+  "grantPermissionDesc": "Zezwól proszę ToadGallery na dostęp do twojej biblioteki, w celu uporządkowania jej z rozpoznawaniem twarzy. Cały proces odbywa się na twoim urządzeniu.",
   "greenery": "Zielone życie",
   "groupBy": "Grupuj według",
   "guestView": "Widok gościa",
   "guestViewEnablePreSteps": "Aby włączyć widok gościa, należy skonfigurować hasło urządzenia lub blokadę ekranu w ustawieniach Twojego systemu.",
   "happyBirthday": "Wszystkiego najlepszego! 🥳",
-  "hearUsWhereOptionalTitle": "Jak usłyszałeś/aś o Ente? (opcjonalnie)",
+  "hearUsWhereOptionalTitle": "Jak usłyszałeś/aś o ToadGallery? (opcjonalnie)",
   "@hearUsWhereOptionalTitle": {
     "description": "Title asking how user heard about Ente"
   },
@@ -1067,7 +1067,7 @@
   "importBitwardenGuide": "Użyj opcji \"Eksportuj sejf\" w Narzędziach Bitwarden i zaimportuj niezaszyfrowany plik JSON.",
   "importCodeDelimiterInfo": "Kody mogą być oddzielone przecinkiem lub nową linią",
   "importCodes": "Importuj kody",
-  "importEnteEncGuide": "Wybierz zaszyfrowany plik JSON wyeksportowany z Ente",
+  "importEnteEncGuide": "Wybierz zaszyfrowany plik JSON wyeksportowany z ToadGallery",
   "importEnterSetupKey": "Wprowadź klucz",
   "importFailureDesc": "Nie udało się przetworzyć wybranego pliku.",
   "importFromGallery": "Importuj z galerii",
@@ -1106,7 +1106,7 @@
     }
   },
   "importSuccessTitle": "Hura!",
-  "importTypeEnteEncrypted": "Zaszyfrowany eksport Ente",
+  "importTypeEnteEncrypted": "Zaszyfrowany eksport ToadGallery",
   "incorrectCode": "Nieprawidłowy kod",
   "@incorrectCode": {
     "description": "Error message when code is incorrect"
@@ -1163,7 +1163,7 @@
       }
     }
   },
-  "inviteToEnte": "Zaproś do Ente",
+  "inviteToEnte": "Zaproś do ToadGallery",
   "ok": "OK",
   "@ok": {
     "description": "Generic OK button label"
@@ -1306,7 +1306,7 @@
   "@loginTerms": {
     "description": "Terms agreement text for login"
   },
-  "loginToEnte": "Zaloguj się do Ente",
+  "loginToEnte": "Zaloguj się do ToadGallery",
   "loginToExistingAccount": "Zaloguj się do istniejącego konta",
   "loginWithAuthAccount": "Zaloguj się przy użyciu konta Auth",
   "loginWithTOTP": "Zaloguj się za pomocą TOTP",
@@ -1396,7 +1396,7 @@
   "mixedGrouping": "Grupowanie mieszane?",
   "mlConsent": "Włącz nauczanie maszynowe",
   "mlConsentConfirmation": "Rozumiem i chcę włączyć nauczanie maszynowe",
-  "mlConsentDescription": "Jeśli włączysz nauczanie maszynowe, Ente wyodrębni informacje takie jak geometria twarzy z plików, w tym tych udostępnionych z Tobą.\n\nTo się stanie na Twoim urządzeniu i wygenerowane informacje biometryczne zostaną zaszyfrowane end-to-end.",
+  "mlConsentDescription": "Jeśli włączysz nauczanie maszynowe, ToadGallery wyodrębni informacje takie jak geometria twarzy z plików, w tym tych udostępnionych z Tobą.\n\nTo się stanie na Twoim urządzeniu i wygenerowane informacje biometryczne zostaną zaszyfrowane end-to-end.",
   "mlIndexingDescription": "Pamiętaj, że nauczanie maszynowe spowoduje większą przepustowość i zużycie baterii do momentu przetworzenia wszystkich elementów. Rozważ użycie wersji aplikacji na komputer dla szybszego procesowania, wszystkie wyniki zostaną automatycznie zsynchronizowane.",
   "mlProgressBannerDescription": "Twoje zdjęcia są przetwarzane na urządzeniu w celu wykrycia twarzy, obiektów i innych.",
   "mlProgressBannerStatus": "{indexed} z {total} przetworzonych zdjęć",
@@ -1447,11 +1447,11 @@
   "moveToHiddenAlbum": "Przenieś do ukrytego albumu",
   "movingFilesToAlbum": "Przenoszenie plików do albumów...",
   "name": "Nazwa",
-  "networkConnectionRefusedErr": "Nie można połączyć się z Ente, spróbuj ponownie po pewnym czasie. Jeśli błąd będzie się powtarzał, skontaktuj się z pomocą techniczną.",
+  "networkConnectionRefusedErr": "Nie można połączyć się z ToadGallery, spróbuj ponownie po pewnym czasie. Jeśli błąd będzie się powtarzał, skontaktuj się z pomocą techniczną.",
   "@networkConnectionRefusedErr": {
     "description": "Error message shown when the app cannot connect to Ente due to connection refused"
   },
-  "networkHostLookUpErr": "Nie można połączyć się z Ente, sprawdź ustawienia sieci i skontaktuj się z pomocą techniczną, jeśli błąd będzie się powtarzał.",
+  "networkHostLookUpErr": "Nie można połączyć się z ToadGallery, sprawdź ustawienia sieci i skontaktuj się z pomocą techniczną, jeśli błąd będzie się powtarzał.",
   "@networkHostLookUpErr": {
     "description": "Error message shown when the app cannot connect to Ente due to network host lookup failure"
   },
@@ -2099,7 +2099,7 @@
   "security": "Bezpieczeństwo",
   "seeAllCollections": "Zobacz wszystkie kolekcje",
   "seePublicAlbumLinksInApp": "Zobacz publiczne linki do albumów w aplikacji",
-  "selectAlbumsToBackUpToEnte": "Wybierz albumy do utworzenia kopii zapasowej do Ente",
+  "selectAlbumsToBackUpToEnte": "Wybierz albumy do utworzenia kopii zapasowej do ToadGallery",
   "selectAll": "Zaznacz wszystko",
   "selectAllShort": "Wszystko",
   "@selectAllShort": {
@@ -2127,7 +2127,7 @@
       }
     }
   },
-  "selectedFilesAreNotOnEnte": "Wybrane pliki nie są w Ente",
+  "selectedFilesAreNotOnEnte": "Wybrane pliki nie są w ToadGallery",
   "selectedItemsWillBeRemovedFromThisPerson": "Wybrane elementy zostaną usunięte z tej osoby, ale nie zostaną usunięte z Twojej biblioteki.",
   "selectedPhotos": "Wybrano {count}",
   "@selectedPhotos": {
@@ -2254,10 +2254,10 @@
       "verificationID": {}
     }
   },
-  "shareTextRecommendUsingEnteForFamily": "Pobierz Ente, abym mógł dodać cię do mojego planu rodzinnego\n\nhttps://ente.com",
-  "shareTextRecommendUsingEnteForPhotos": "Pobierz Ente, abyśmy mogli łatwo udostępniać zdjęcia i wideo w oryginalnej jakości\n\nhttps://ente.com",
+  "shareTextRecommendUsingEnteForFamily": "Pobierz ToadGallery, abym mógł dodać cię do mojego planu rodzinnego\n\nhttps://ente.com",
+  "shareTextRecommendUsingEnteForPhotos": "Pobierz ToadGallery, abyśmy mogli łatwo udostępniać zdjęcia i wideo w oryginalnej jakości\n\nhttps://ente.com",
   "shareThisLink": "Ten link pozwala każdemu, kto go otrzyma, uzyskać dostęp do Twojego elementu. Możesz w każdej chwili usunąć dostęp, usuwając link.",
-  "shareWithNonenteUsers": "Udostępnij użytkownikom bez konta Ente",
+  "shareWithNonenteUsers": "Udostępnij użytkownikom bez konta ToadGallery",
   "shareYourSubscription": "Podziel się swoją subskrypcją z bliskimi",
   "sharing": "Udostępnianie...",
   "shiftDatesAndTime": "Zmień daty i czas",
@@ -2268,7 +2268,7 @@
   "showMoreFaces": "Pokaż więcej twarzy",
   "showPerson": "Pokaż osobę",
   "showQRAuthMessage": "Uwierzytelnij się, aby pokazać kod QR",
-  "sigInBackupReminder": "Ente automatycznie wykona kopię zapasową kodów po zalogowaniu.\n\nNadal zalecamy eksport kodów jako dodatkową kopię zapasową.",
+  "sigInBackupReminder": "ToadGallery automatycznie wykona kopię zapasową kodów po zalogowaniu.\n\nNadal zalecamy eksport kodów jako dodatkową kopię zapasową.",
   "signInToBackup": "Zaloguj się, aby wykonać kopię zapasową swoich kodów",
   "signOutFromOtherDevices": "Wyloguj z pozostałych urządzeń",
   "@signOutFromOtherDevices": {

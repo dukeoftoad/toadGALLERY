@@ -187,7 +187,7 @@ class _BackupItemCardState extends State<BackupItemCard> {
                   BackupItemStatus.uploaded => const SizedBox(
                     width: 24,
                     height: 24,
-                    child: Icon(Icons.check, color: Color(0xFF00B33C)),
+                    child: Icon(Icons.check, color: Color(0xFF2F4B3A)),
                   ),
                   BackupItemStatus.inQueue => SizedBox(
                     width: 24,

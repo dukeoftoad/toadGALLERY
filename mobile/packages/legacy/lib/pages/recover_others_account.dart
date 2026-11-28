@@ -29,7 +29,7 @@ class _RecoverOthersAccountState extends State<RecoverOthersAccount> {
   final _logger = Logger((_RecoverOthersAccountState).toString());
   final _passwordController1 = TextEditingController(),
       _passwordController2 = TextEditingController();
-  final Color _validFieldValueColor = const Color.fromRGBO(45, 194, 98, 0.2);
+  final Color _validFieldValueColor = const Color.fromRGBO(47, 75, 58, 0.2);
   String _passwordInInputBox = '';
   String _passwordInInputConfirmationBox = '';
   double _passwordStrength = 0.0;

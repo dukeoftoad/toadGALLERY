@@ -168,7 +168,7 @@
   "addTo": "다음으로 추가",
   "addToAlbum": "앨범에 추가",
   "addToCollection": "컬렉션에 추가",
-  "addToEnte": "Ente에 추가",
+  "addToEnte": "ToadGallery에 추가",
   "addToHiddenAlbum": "숨김 앨범에 추가",
   "addToPerson": "사람에 추가",
   "@addToPerson": {
@@ -231,8 +231,8 @@
   "allowDownloads": "다운로드 허용",
   "allowJoining": "참여 허용",
   "allowJoiningAlbum": "앨범에 참여 허용",
-  "allowJoiningDescription": "Ente 계정이 있는 사용자는 귀하의 앨범에 참여하여 최신 소식을 확인할 수 있습니다",
-  "allowPermBody": "Ente가 라이브러리를 표시하고 백업할 수 있도록 설정에서 사진 접근을 허용해 주세요.",
+  "allowJoiningDescription": "ToadGallery 계정이 있는 사용자는 귀하의 앨범에 참여하여 최신 소식을 확인할 수 있습니다",
+  "allowPermBody": "ToadGallery가 라이브러리를 표시하고 백업할 수 있도록 설정에서 사진 접근을 허용해 주세요.",
   "allowPermTitle": "사진에 대한 접근 허용",
   "allPersonGroupingWillReset": "이 사람에 대한 모든 grouping 이 초기화되며, 이 사람과 관련하여 제공된 모든 추천 항목도 사라집니다",
   "allTabEmptyHint": "아직 텅 비었습니다. + 눌러 코드를 추가하거나 휴지통을 열어 하나를 복원하세요.",
@@ -266,8 +266,8 @@
       }
     }
   },
-  "aNewVersionOfEnteIsAvailable": "Ente의 새 버전이 출시되었습니다.",
-  "aNewVersionOfEnteLockerIsAvailable": "A new version of Ente Locker is available.",
+  "aNewVersionOfEnteIsAvailable": "ToadGallery의 새 버전이 출시되었습니다.",
+  "aNewVersionOfEnteLockerIsAvailable": "A new version of ToadGallery Locker is available.",
   "anythingElse": "더 필요한 게 있으신가요?",
   "@anythingElse": {
     "description": "Label for optional account deletion feedback"
@@ -275,7 +275,7 @@
   "appearance": "외관",
   "appIcon": "아이콘",
   "appleId": "애플 ID",
-  "applePhotosUnsupportedResource": "이 파일을 Apple 사진 앱에 저장할 수 없습니다. Ente에서는 계속해서 확인할 수 있습니다.",
+  "applePhotosUnsupportedResource": "이 파일을 Apple 사진 앱에 저장할 수 없습니다. ToadGallery에서는 계속해서 확인할 수 있습니다.",
   "@applePhotosUnsupportedResource": {
     "description": "Shown when iOS Photos rejects a file while saving to gallery because the media resource is invalid or unsupported"
   },
@@ -386,7 +386,7 @@
   "autoAddPeople": "사람에 자동 추가",
   "autoAddToAlbum": "앨범에 자동 추가",
   "autoCastDialogBody": "여기에서 사용 가능한 Cast 기기를 확인할 수 있습니다.",
-  "autoCastiOSPermission": "설정에서 Ente Photos의 Local 네트워크 권한이 있는지 확인하세요.",
+  "autoCastiOSPermission": "설정에서 toadGALLERY의 Local 네트워크 권한이 있는지 확인하세요.",
   "autoLock": "자동 잠금",
   "@autoLock": {
     "description": "Auto lock setting title"
@@ -444,7 +444,7 @@
   "backupModeScreenWillDim": "배터리를 절약하기 위해 화면이 자동으로 어두워집니다",
   "backupModeSettingsDescription": "백업을 완료하려면 화면을 계속 열어 두세요",
   "backupModeStart": "백업 모드 시작",
-  "backupModeStayInEnte": "Ente를 계속 실행해 주세요. 화면을 전환하면 백업이 일시 중지됩니다.",
+  "backupModeStayInEnte": "ToadGallery를 계속 실행해 주세요. 화면을 전환하면 백업이 일시 중지됩니다.",
   "backupModeTapToWakeScreen": "화면을 깨우려면 누르세요",
   "backupOnlyNewPhotos": "새로운 사진만 백업",
   "backupOnlyNewPhotosAllFoldersSelected": "현재 모든 폴더가 백업 대상으로 선택되어 있습니다.\n\n지금 바로 진행하거나 선택된 폴더를 업데이트할 수 있습니다.",
@@ -466,7 +466,7 @@
   "backupSettings": "백업 설정",
   "backupStatus": "백업 상태",
   "backupStatusDescription": "백업한 항목이 여기에 표시됩니다",
-  "backupToEnte": "Ente에 백업",
+  "backupToEnte": "ToadGallery에 백업",
   "backupVideos": "동영상 백업",
   "beach": "모래와 바다",
   "birthday": "생일",
@@ -623,7 +623,7 @@
   "codeChangeLimitReached": "죄송합니다. 코드 변경 횟수 한도에 도달했습니다.",
   "codeCopiedToClipboard": "코드가 클립보드에 복사되었습니다",
   "codeIssuerHint": "발행인",
-  "collabLinkSectionDescription": "Ente 계정이 없는 사람도 사진을 추가 할 수 있게 허용",
+  "collabLinkSectionDescription": "ToadGallery 계정이 없는 사람도 사진을 추가 할 수 있게 허용",
   "collaborator": "공동 작업자",
   "collageLayout": "레이아웃",
   "collageSaved": "콜라주가 갤러리에 저장되었습니다",
@@ -714,7 +714,7 @@
       }
     }
   },
-  "confirmDeleteAccountAcrossApps": "Ente Photos, Ente Auth, Ente Locker 전체에서 내 데이터가 삭제된다는 것을 이해합니다.",
+  "confirmDeleteAccountAcrossApps": "toadGALLERY, ToadGallery Auth, ToadGallery Locker 전체에서 내 데이터가 삭제된다는 것을 이해합니다.",
   "@confirmDeleteAccountAcrossApps": {
     "description": "Checkbox label for final account deletion confirmation"
   },
@@ -806,7 +806,7 @@
   "createAccountTitle": "계정 생성",
   "createAlbum": "앨범 만들기",
   "createAlbumActionHint": "길게 눌러 사진을 선택한 후 +를 눌러 앨범을 만드세요",
-  "createAnEnteAccount": "Ente 계정 만들기",
+  "createAnEnteAccount": "ToadGallery 계정 만들기",
   "createAnotherKit": "다른 키트 만들기",
   "createBackupNow": "지금 백업 생성",
   "createCollaborativeLink": "협업 링크 만들기",
@@ -919,12 +919,12 @@
   "@deletedComment": {
     "description": "Label for deleted comments"
   },
-  "deletedFromEnte": "Ente에서 삭제",
+  "deletedFromEnte": "ToadGallery에서 삭제",
   "deletedItemsStayHereForThirtyDays": "삭제 된 파일은 여기 30일 간 보관 됩니다",
   "deleteDuplicates": "중복 제거",
   "deleteEmptyAlbums": "빈 앨범 삭제",
   "deleteEmptyAlbumsWithQuestionMark": "빈 앨범을 삭제하시겠습니까?",
-  "deleteEnteAccount": "Ente 계정 삭제",
+  "deleteEnteAccount": "ToadGallery 계정 삭제",
   "@deleteEnteAccount": {
     "description": "Final destructive button label for account deletion"
   },
@@ -932,7 +932,7 @@
   "deleteFromBoth": "양 쪽 모두 삭제",
   "deleteFromDevice": "장비에서 삭제",
   "deleteFromDeviceQuestion": "장비에서 삭제 하시겠습니까?",
-  "deleteFromEnte": "Ente에서 삭제",
+  "deleteFromEnte": "ToadGallery에서 삭제",
   "deleteHiddenFilesFromDevice": "장비에서 숨긴 파일 삭제",
   "deleteHiddenFilesFromDeviceDescription": "기기에서 숨긴 파일의 로컬 사본 삭제",
   "deleteItemCount": "{count, plural, one{항목 {count}개 삭제} other{항목 {count}개 삭제}}",
@@ -1224,7 +1224,7 @@
     "description": "Title shown when editing an existing secret"
   },
   "editsSaved": "편집 내용이 저장되었습니다",
-  "editsToLocationWillOnlyBeSeenWithinEnte": "위치 편집 내용은 Ente 안에서만 표시됩니다",
+  "editsToLocationWillOnlyBeSeenWithinEnte": "위치 편집 내용은 ToadGallery 안에서만 표시됩니다",
   "editStorageLimit": "저장 공간 한도 편집",
   "editTag": "태그 수정하기",
   "editTime": "시간 편집",
@@ -1250,7 +1250,7 @@
     }
   },
   "emailHint": "이메일을 입력하세요",
-  "emailNeedsEnteAccountForFamily": "{email}님은 Ente 계정이 없습니다.\n\n초대를 보낸 후, 상대방이 Ente 계정을 만들면 가족에 추가하세요.",
+  "emailNeedsEnteAccountForFamily": "{email}님은 ToadGallery 계정이 없습니다.\n\n초대를 보낸 후, 상대방이 ToadGallery 계정을 만들면 가족에 추가하세요.",
   "@emailNeedsEnteAccountForFamily": {
     "placeholders": {
       "email": {
@@ -1259,13 +1259,13 @@
       }
     }
   },
-  "emailNoEnteAccount": "{email}는 Ente 계정이 없습니다.\n\n항목을 공유하려면 초대장을 보내세요.",
+  "emailNoEnteAccount": "{email}는 ToadGallery 계정이 없습니다.\n\n항목을 공유하려면 초대장을 보내세요.",
   "@emailNoEnteAccount": {
     "placeholders": {
       "email": {}
     }
   },
-  "emailNoEnteAccountPhotos": "{email}님은 Ente 계정이 없습니다.\n\n사진을 공유하려면 초대를 보내세요.",
+  "emailNoEnteAccountPhotos": "{email}님은 ToadGallery 계정이 없습니다.\n\n사진을 공유하려면 초대를 보내세요.",
   "@emailNoEnteAccountPhotos": {
     "placeholders": {
       "email": {}
@@ -1283,7 +1283,7 @@
       }
     }
   },
-  "emailVerificationEnableWarning": "계정이 잠겨 손을 쓸 수 없는 상황에 대비하여, 이메일 검증을 활성화하기 전에 이메일 계정의 2단계 인증 정보를 Ente Auth 외부에 별도로 보관해두세요.",
+  "emailVerificationEnableWarning": "계정이 잠겨 손을 쓸 수 없는 상황에 대비하여, 이메일 검증을 활성화하기 전에 이메일 계정의 2단계 인증 정보를 ToadGallery Auth 외부에 별도로 보관해두세요.",
   "emailVerificationToggle": "이메일 검증",
   "emailYourLogs": "로그를 이메일로 보내기",
   "@emailYourLogs": {
@@ -1317,16 +1317,16 @@
   "@endpointUpdatedMessage": {
     "description": "Success message when endpoint is updated"
   },
-  "ente": "Ente",
-  "enteAuth": "Ente Auth",
+  "ente": "toadGALLERY",
+  "enteAuth": "ToadGallery Auth",
   "@enteAuth": {
     "description": "Product name"
   },
-  "enteLocker": "Ente Locker",
+  "enteLocker": "ToadGallery Locker",
   "@enteLocker": {
     "description": "Product name"
   },
-  "entePhotos": "Ente Photos",
+  "entePhotos": "toadGALLERY",
   "@entePhotos": {
     "description": "Product name"
   },
@@ -1687,7 +1687,7 @@
       }
     }
   },
-  "filesInAlbumSafelyOnEnte": "{count, plural, one{앨범의 이 항목은 Ente에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.} other{앨범의 항목 {formattedNumber}개가 모두 Ente에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.}}",
+  "filesInAlbumSafelyOnEnte": "{count, plural, one{앨범의 이 항목은 ToadGallery에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.} other{앨범의 항목 {formattedNumber}개가 모두 ToadGallery에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.}}",
   "@filesInAlbumSafelyOnEnte": {
     "description": "Explains that device copies for files in an album can be deleted because the files are stored on Ente",
     "placeholders": {
@@ -1731,7 +1731,7 @@
       }
     }
   },
-  "filesSafelyOnEnte": "{count, plural, one{이 항목은 Ente에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.} other{항목 {formattedNumber}개가 모두 Ente에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.}}",
+  "filesSafelyOnEnte": "{count, plural, one{이 항목은 ToadGallery에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.} other{항목 {formattedNumber}개가 모두 ToadGallery에 백업되어 있으므로, 기기에 있는 사본을 삭제해도 잃지 않고 공간을 확보할 수 있습니다.}}",
   "@filesSafelyOnEnte": {
     "description": "Explains that device copies can be deleted because the files are stored on Ente",
     "placeholders": {
@@ -1834,7 +1834,7 @@
   "grantGalleryPermissionDesc": "얼굴 인식으로 사진에 접근하고 정리할 수 있도록 권한을 허용해 주세요. 모든 처리는 기기에서 이루어집니다.",
   "grantGalleryPermissionTitle": "좋아하는 사진을 찾아봐요",
   "grantPermission": "권한 허용",
-  "grantPermissionDesc": "얼굴 인식으로 라이브러리를 정리할 수 있도록 Ente가 라이브러리에 접근하도록 허용해 주세요. 모든 처리는 기기에서 이루어집니다.",
+  "grantPermissionDesc": "얼굴 인식으로 라이브러리를 정리할 수 있도록 ToadGallery가 라이브러리에 접근하도록 허용해 주세요. 모든 처리는 기기에서 이루어집니다.",
   "greenery": "초록빛 일상",
   "grid": "격자",
   "groupBy": "그룹 기준",
@@ -1846,11 +1846,11 @@
   "guestView": "게스트 보기",
   "guestViewEnablePreSteps": "게스트 보기를 사용하려면 시스템 설정에서 기기 암호나 화면 잠금을 설정해 주세요.",
   "happyBirthday": "생일 축하합니다! 🥳",
-  "hearUsWhereOptionalTitle": "Ente에 대해 어떻게 알게 되셨나요? (선택 사항)",
+  "hearUsWhereOptionalTitle": "ToadGallery에 대해 어떻게 알게 되셨나요? (선택 사항)",
   "@hearUsWhereOptionalTitle": {
     "description": "Title asking how user heard about Ente"
   },
-  "hearUsWhereTitle": "Ente를 어떻게 알게 되셨나요?",
+  "hearUsWhereTitle": "ToadGallery를 어떻게 알게 되셨나요?",
   "help": "도움말",
   "helpAndSupport": "도움말 및 지원",
   "hidden": "숨김",
@@ -1952,7 +1952,7 @@
   "importBitwardenGuide": "Bitwarden의 도구에서 \"보관함 내보내기\"를 선택하여 암호화되지 않은 JSON 파일을 불러오세요.",
   "importCodeDelimiterInfo": "코드는 쉼표 혹은 줄 단위로 구분할 수 있습니다",
   "importCodes": "코드 가져오기",
-  "importEnteEncGuide": "Ente에서 내보낸 암호화된 JSON 파일 선택하기",
+  "importEnteEncGuide": "ToadGallery에서 내보낸 암호화된 JSON 파일 선택하기",
   "importEnterSetupKey": "설정 키 입력",
   "importFailureDesc": "선택하신 파일을 분석할 수 없습니다.",
   "importFileTooLarge": "선택한 파일이 너무 큽니다. 최대 크기: {size}.",
@@ -2001,7 +2001,7 @@
     }
   },
   "importSuccessTitle": "야호!",
-  "importTypeEnteEncrypted": "Ente로 암호화된 내보내기",
+  "importTypeEnteEncrypted": "ToadGallery로 암호화된 내보내기",
   "incorrectCode": "잘못된 코드",
   "@incorrectCode": {
     "description": "Error message when code is incorrect"
@@ -2064,7 +2064,7 @@
       }
     }
   },
-  "inviteToEnte": "Ente에 초대",
+  "inviteToEnte": "ToadGallery에 초대",
   "ok": "확인",
   "@ok": {
     "description": "Generic OK button label"
@@ -2446,7 +2446,7 @@
   "@loginTerms": {
     "description": "Terms agreement text for login"
   },
-  "loginToEnte": "Ente에 로그인",
+  "loginToEnte": "ToadGallery에 로그인",
   "loginToExistingAccount": "기존 계정으로 로그인",
   "loginWithAuthAccount": "Auth 계정으로 로그인",
   "loginWithTOTP": "TOTP로 로그인 하기",
@@ -2495,7 +2495,7 @@
   "mapsPrivacyNotice": "지도와 위치를 표시하기 위해 대략적인 좌표가 OpenStreetMap과 같이 개인정보를 중시하는 제3자에게 전송됩니다.",
   "markingAsImportant": "중요로 표시 중...",
   "me": "나",
-  "mediaManagementHintMessage": "설정에서 Ente의 미디어 관리 권한을 켜면 확인 메시지가 더 이상 표시되지 않습니다.",
+  "mediaManagementHintMessage": "설정에서 ToadGallery의 미디어 관리 권한을 켜면 확인 메시지가 더 이상 표시되지 않습니다.",
   "@mediaManagementHintMessage": {
     "description": "Message explaining that enabling Android media management permission avoids repeated delete confirmations."
   },
@@ -2503,7 +2503,7 @@
   "@mediaManagementHintTitle": {
     "description": "Title of a sheet prompting Android users to enable media management permission."
   },
-  "meetEnteLocker": "Ente Locker를 만나 보세요",
+  "meetEnteLocker": "ToadGallery Locker를 만나 보세요",
   "@meetEnteLocker": {
     "description": "Button in the Photos changelog that opens the Ente Locker website"
   },
@@ -2592,7 +2592,7 @@
   "mixedGrouping": "여러 사람이 섞인 그룹입니까?",
   "mlConsent": "머신 러닝 활성화",
   "mlConsentConfirmation": "이해했으며, 머신 러닝을 활성화하겠습니다",
-  "mlConsentDescription": "머신 러닝을 활성화하면 Ente가 회원님과 공유된 파일을 포함한 파일에서 얼굴 형태 등의 정보를 추출합니다.\n\n이 작업은 기기에서 이루어지며, 생성된 생체 정보는 모두 종단간 암호화됩니다.",
+  "mlConsentDescription": "머신 러닝을 활성화하면 ToadGallery가 회원님과 공유된 파일을 포함한 파일에서 얼굴 형태 등의 정보를 추출합니다.\n\n이 작업은 기기에서 이루어지며, 생성된 생체 정보는 모두 종단간 암호화됩니다.",
   "mlCouldNotProcessItems": "{count, plural, one{항목 {count}개를 처리할 수 없습니다} other{항목 {count}개를 처리할 수 없습니다}}",
   "@mlCouldNotProcessItems": {
     "description": "Title shown when machine learning could not process one or more items",
@@ -2644,7 +2644,7 @@
   "moon": "달빛 아래에서",
   "more": "더보기",
   "moreDetails": "자세히 보기",
-  "moreFrom": "Ente의 다른 앱",
+  "moreFrom": "ToadGallery의 다른 앱",
   "@moreFrom": {
     "description": "Heading shown above links to other Ente apps"
   },
@@ -2693,11 +2693,11 @@
       }
     }
   },
-  "networkConnectionRefusedErr": "Ente에 접속할 수 없습니다, 잠시 후에 다시 시도해주세요. 에러가 반복되는 경우, 저희 지원 팀에 문의해주세요.",
+  "networkConnectionRefusedErr": "ToadGallery에 접속할 수 없습니다, 잠시 후에 다시 시도해주세요. 에러가 반복되는 경우, 저희 지원 팀에 문의해주세요.",
   "@networkConnectionRefusedErr": {
     "description": "Error message shown when the app cannot connect to Ente due to connection refused"
   },
-  "networkHostLookUpErr": "Ente에 접속할 수 없습니다, 네트워크 설정을 확인해주시고 에러가 반복되는 경우 저희 지원 팀에 문의해주세요.",
+  "networkHostLookUpErr": "ToadGallery에 접속할 수 없습니다, 네트워크 설정을 확인해주시고 에러가 반복되는 경우 저희 지원 팀에 문의해주세요.",
   "@networkHostLookUpErr": {
     "description": "Error message shown when the app cannot connect to Ente due to network host lookup failure"
   },
@@ -2851,7 +2851,7 @@
   "offlineHomeSignupBannerAction": "지금 백업",
   "offlineHomeSignupBannerDescription": "3곳에 암호화된 백업을 보관하여 추억을 안전하게 지킵니다.",
   "offlineHomeSignupBannerTitle": "추억을 영원히 지키세요",
-  "offlineKeyUnavailableMessage": "Ente Auth가 오프라인 코드의 키에 접근할 수 없습니다.",
+  "offlineKeyUnavailableMessage": "ToadGallery Auth가 오프라인 코드의 키에 접근할 수 없습니다.",
   "offlineModeWarning": "백업 없이 진행하는 것을 선택하셨습니다. 코드의 안전성을 위해 별도의 백업 대책을 마련해주세요.",
   "offlineNameFaceBannerSubtitle": "가입하면 태그를 지정하고 해당 인물의 사진을 나중에 쉽게 찾을 수 있습니다.",
   "offlineNameFaceBannerTitle": "이 얼굴에 이름을 붙여 주세요",
@@ -2864,7 +2864,7 @@
     "description": "The text displayed above folders/albums stored on device",
     "type": "text"
   },
-  "oneAccountAcrossEnteApps": "하나의 계정으로 Ente Photos, Ente Auth, Ente Locker를 모두 사용할 수 있습니다.",
+  "oneAccountAcrossEnteApps": "하나의 계정으로 toadGALLERY, ToadGallery Auth, ToadGallery Locker를 모두 사용할 수 있습니다.",
   "@oneAccountAcrossEnteApps": {
     "description": "Explains that account deletion affects all Ente apps"
   },
@@ -3005,7 +3005,7 @@
       }
     }
   },
-  "permanentlyDeleteYourEnteAccount": "Ente 계정을 영구 삭제하시겠습니까?",
+  "permanentlyDeleteYourEnteAccount": "ToadGallery 계정을 영구 삭제하시겠습니까?",
   "@permanentlyDeleteYourEnteAccount": {
     "description": "Heading for final account deletion confirmation"
   },
@@ -3028,7 +3028,7 @@
   },
   "pets": "털복숭이 친구들",
   "photoGridSize": "사진 Grid 크기",
-  "photoLibraryAddPermissionRequired": "Ente가 사진과 동영상을 Apple 사진 앱에 저장하려면 권한이 필요합니다. 설정에서 접근을 허용할 수 있습니다.",
+  "photoLibraryAddPermissionRequired": "ToadGallery가 사진과 동영상을 Apple 사진 앱에 저장하려면 권한이 필요합니다. 설정에서 접근을 허용할 수 있습니다.",
   "photoLibraryAddPermissionRestricted": "이 기기에서는 사진 보관함 접근이 제한되어 있습니다.",
   "photoOrder": "사진 순서",
   "photoViewerFilmstripLabel": "사진 선택기",
@@ -3196,7 +3196,7 @@
     }
   },
   "publicLink": "공개 링크",
-  "publicLinkAccessDescription": "링크가 있는 사람은 누구나 Ente 계정 없이 앨범을 열 수 있습니다.",
+  "publicLinkAccessDescription": "링크가 있는 사람은 누구나 ToadGallery 계정 없이 앨범을 열 수 있습니다.",
   "publicLinkCollectDescription": "이 링크가 있는 사람은 누구나 앨범에 사진을 추가할 수 있습니다.",
   "publicLinkEnabled": "공개 링크 활성화됨",
   "publicLinkViewDescription": "이 링크가 있는 사람은 누구나 앨범에 접근할 수 있습니다.",
@@ -3531,7 +3531,7 @@
   "resendInvite": "초대 재전송",
   "reset": "초기화",
   "resetIgnoredFiles": "무시된 파일 초기화",
-  "resetIgnoredFilesDescription": "무시된 파일을 초기화하여 Ente가 다시 업로드를 시도하도록 합니다.",
+  "resetIgnoredFilesDescription": "무시된 파일을 초기화하여 ToadGallery가 다시 업로드를 시도하도록 합니다.",
   "resetPasswordTitle": "암호 초기화",
   "@resetPasswordTitle": {
     "description": "Reset password title"
@@ -3683,7 +3683,7 @@
     "description": "Description text asking user if they want to save to storage or share with other apps"
   },
   "savePerson": "인물 저장",
-  "saveToEnte": "Ente에 저장",
+  "saveToEnte": "ToadGallery에 저장",
   "saveToLocker": "Locker에 저장",
   "saveYourRecoveryKeyIfYouHaventAlready": "아직 저장하지 않았다면 복구 키를 저장하세요",
   "saving": "저장 중...",
@@ -3844,7 +3844,7 @@
   "securityDesc": "암호화, 복구 키, 앱 잠금 및 계정 보호",
   "seeAllCollections": "모든 컬렉션 보기",
   "seePublicAlbumLinksInApp": "앱에서 공개 앨범 링크 보기",
-  "selectAlbumsToBackUpToEnte": "Ente에 백업할 앨범 선택",
+  "selectAlbumsToBackUpToEnte": "ToadGallery에 백업할 앨범 선택",
   "selectAlbumToLikePhoto": "이 사진에 좋아요를 누를 앨범을 선택하세요",
   "@selectAlbumToLikePhoto": {
     "description": "Instruction for liking photo"
@@ -3880,7 +3880,7 @@
       }
     }
   },
-  "selectedFilesAreNotOnEnte": "선택한 파일이 Ente에 없습니다",
+  "selectedFilesAreNotOnEnte": "선택한 파일이 ToadGallery에 없습니다",
   "selectedFilesBackedUpToEnte": "이 항목들이 모든 앨범에서 삭제됩니다. 휴지통에서 복구할 수 있습니다.",
   "@selectedFilesBackedUpToEnte": {
     "description": "Delete confirmation message for selected items that are backed up to Ente."
@@ -4032,7 +4032,7 @@
   "share": "공유",
   "shareALink": "링크 공유",
   "shareAnAlbum": "앨범 공유",
-  "shareCodeEarnStorage": "Ente에서 저장 공간을 두 배로 늘리세요",
+  "shareCodeEarnStorage": "ToadGallery에서 저장 공간을 두 배로 늘리세요",
   "shareCodes": "코드 공유하기",
   "shareCodesDuration": "코드 공유를 허용할 시간을 선택해주세요.",
   "shareCollection": "컬렉션 공유",
@@ -4081,17 +4081,17 @@
       "verificationID": {}
     }
   },
-  "shareTextRecommendUsingEnte": "원본 화질 그대로 파일을 쉽게 공유할 수 있게 Ente를 다운로드해 줘\n\nhttps://ente.com",
-  "shareTextRecommendUsingEnteForFamily": "내 가족 요금제에 추가할 수 있게 Ente를 다운로드해 줘\n\nhttps://ente.com",
-  "shareTextRecommendUsingEnteForPhotos": "원본 화질 그대로 사진과 동영상을 쉽게 공유할 수 있게 Ente를 다운로드해 줘\n\nhttps://ente.com",
-  "shareTextReferralInvite": "Ente Photos에서 20GB를 무료로 받으세요! https://ente.com/invite 에서 앱을 다운로드하고 코드 {referralCode}을 입력하세요.",
+  "shareTextRecommendUsingEnte": "원본 화질 그대로 파일을 쉽게 공유할 수 있게 ToadGallery를 다운로드해 줘\n\nhttps://ente.com",
+  "shareTextRecommendUsingEnteForFamily": "내 가족 요금제에 추가할 수 있게 ToadGallery를 다운로드해 줘\n\nhttps://ente.com",
+  "shareTextRecommendUsingEnteForPhotos": "원본 화질 그대로 사진과 동영상을 쉽게 공유할 수 있게 ToadGallery를 다운로드해 줘\n\nhttps://ente.com",
+  "shareTextReferralInvite": "toadGALLERY에서 20GB를 무료로 받으세요! https://ente.com/invite 에서 앱을 다운로드하고 코드 {referralCode}을 입력하세요.",
   "@shareTextReferralInvite": {
     "placeholders": {
       "referralCode": {}
     }
   },
   "shareThisLink": "이 링크를 통해 누구나 항목에 접근할 수 있습니다. 언제든지 링크를 삭제하여 접근을 제거할 수 있습니다.",
-  "shareWithNonenteUsers": "Ente를 사용하지 않는 사람과 공유",
+  "shareWithNonenteUsers": "ToadGallery를 사용하지 않는 사람과 공유",
   "shareYourFeedbackHere": "여기에 의견을 남겨 주세요",
   "@shareYourFeedbackHere": {
     "description": "Placeholder for optional account deletion feedback"
@@ -4122,7 +4122,7 @@
   "showQRAuthMessage": "QR 코드를 보기 위해 인증 절차를 거쳐주세요",
   "showTextOnWidget": "위젯에 텍스트 표시",
   "shuffle": "무작위 재생",
-  "sigInBackupReminder": "Ente는 로그인 후에 자동으로 코드를 백업합니다.\n\n그래도 별도의 백업으로 코드를 내보낼 것을 권장합니다.",
+  "sigInBackupReminder": "ToadGallery는 로그인 후에 자동으로 코드를 백업합니다.\n\n그래도 별도의 백업으로 코드를 내보낼 것을 권장합니다.",
   "signInToBackup": "코드를 백업하시려면 로그인해주세요",
   "signOutFromOtherDevices": "다른 기기들에서 로그아웃하기",
   "@signOutFromOtherDevices": {
@@ -4156,7 +4156,7 @@
   "@singleFileDeleteFromDevice": {
     "description": "Delete confirmation message for a single item that exists only on the device."
   },
-  "singleFileInBothLocalAndRemote": "이 항목은 기기와 Ente 모두에 있습니다.",
+  "singleFileInBothLocalAndRemote": "이 항목은 기기와 ToadGallery 모두에 있습니다.",
   "@singleFileInBothLocalAndRemote": {
     "description": "Delete confirmation message for a single item that exists both on the device and in Ente."
   },
@@ -4175,7 +4175,7 @@
   "socialNotifications": "좋아요 및 댓글",
   "socialNotificationsExplanation": "회원님의 사진에 달린 좋아요와 참여 중인 앨범의 댓글",
   "someoneSharingAlbumsWithYouShouldSeeTheSameId": "앨범을 공유하는 사람은 자신의 기기에서 동일한 ID를 볼 수 있어야 합니다.",
-  "someSelectedFilesBackedUpToEnte": "이 항목들은 기기와 Ente에 모두 있습니다.",
+  "someSelectedFilesBackedUpToEnte": "이 항목들은 기기와 ToadGallery에 모두 있습니다.",
   "@someSelectedFilesBackedUpToEnte": {
     "description": "Delete confirmation message for selected items that exist both on the device and in Ente."
   },
@@ -4281,7 +4281,7 @@
   "@strongStrength": {
     "description": "Strong password strength label"
   },
-  "subAlreadyLinkedErrMessage": "회원님의 {id} 계정은 이미 다른 Ente 계정에 연결되어 있습니다.\n이 계정에서 {id} 계정을 사용하려면 지원팀에 문의해 주세요.",
+  "subAlreadyLinkedErrMessage": "회원님의 {id} 계정은 이미 다른 ToadGallery 계정에 연결되어 있습니다.\n이 계정에서 {id} 계정을 사용하려면 지원팀에 문의해 주세요.",
   "@subAlreadyLinkedErrMessage": {
     "placeholders": {
       "id": {}
@@ -4382,7 +4382,7 @@
   "@thisEmailIsAlreadyInUse": {
     "description": "Error message when email is already in use"
   },
-  "thisHelpsUsImproveEnte": "Ente를 개선하는 데 도움이 됩니다",
+  "thisHelpsUsImproveEnte": "ToadGallery를 개선하는 데 도움이 됩니다",
   "@thisHelpsUsImproveEnte": {
     "description": "Subtitle under account deletion reason prompt"
   },
@@ -4500,7 +4500,7 @@
     }
   },
   "trustedContacts": "신뢰할 수 있는 연락처",
-  "trustedContactsEmptyDescription": "다른 Ente 사용자를 신뢰할 수 있는 연락처로 지정하여 계정을 복구할 수 있도록 하세요",
+  "trustedContactsEmptyDescription": "다른 ToadGallery 사용자를 신뢰할 수 있는 연락처로 지정하여 계정을 복구할 수 있도록 하세요",
   "trustedContactStatusAccepted": "수락됨",
   "@trustedContactStatusAccepted": {
     "description": "Short status label shown for an accepted trusted contact"
@@ -4662,7 +4662,7 @@
   "@uploadStorageLimitErrorTitle": {
     "description": "Title shown when uploads fail due to running out of storage"
   },
-  "uploadSubscriptionExpiredErrorBody": "Ente Photos 구독이 만료되었습니다. 계속 업로드하려면 구독을 갱신하세요.",
+  "uploadSubscriptionExpiredErrorBody": "toadGALLERY 구독이 만료되었습니다. 계속 업로드하려면 구독을 갱신하세요.",
   "@uploadSubscriptionExpiredErrorBody": {
     "description": "Body shown when uploads fail because the Photos subscription is expired"
   },
@@ -5054,7 +5054,7 @@
       }
     }
   },
-  "noEnteAccountWithThisEmail": "이 이메일로 가입된 Ente 계정이 없습니다.",
+  "noEnteAccountWithThisEmail": "이 이메일로 가입된 ToadGallery 계정이 없습니다.",
   "shareALinkInline": "링크를 공유하세요.",
   "personAlreadyHasAccess": "이 사람은 이미 접근 권한이 있습니다.",
   "removePersonTitle": "{name}님을 제거하시겠습니까?",
@@ -5090,5 +5090,5 @@
     }
   },
   "notEnoughStorageTitle": "저장 공간 부족",
-  "notEnoughStorageBody": "Ente에 새 사진을 추가할 공간이 부족합니다. 계속 추가하려면 공간을 확보하거나 업그레이드하세요."
+  "notEnoughStorageBody": "ToadGallery에 새 사진을 추가할 공간이 부족합니다. 계속 추가하려면 공간을 확보하거나 업그레이드하세요."
 }

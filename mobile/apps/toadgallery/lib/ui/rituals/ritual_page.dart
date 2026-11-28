@@ -1084,7 +1084,7 @@ class _MonthGrid extends StatelessWidget {
         if (completed) {
           return const Center(
             child: _CompletedDayPill(
-              background: Color(0xFF1DB954),
+              background: Color(0xFF3D5A47),
               iconColor: Colors.white,
             ),
           );

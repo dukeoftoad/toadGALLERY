@@ -111,7 +111,7 @@ class _SparkleBadge extends StatelessWidget {
       size: const Size.square(targetSize + strokeWidth),
       painter: _SparklePainter(
         strokeColor: backgroundColor,
-        fillColor: const Color(0xFF08C225),
+        fillColor: const Color(0xFF2F4B3A),
         strokeWidth: strokeWidth,
       ),
     );

@@ -1365,7 +1365,7 @@ class _ConfirmChip extends StatelessWidget {
         width: 48,
         height: 48,
         decoration: const BoxDecoration(
-          color: Color(0xFF08C225),
+          color: Color(0xFF2F4B3A),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
@@ -1391,7 +1391,7 @@ class _ConfirmChip extends StatelessWidget {
                   color: Colors.white,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: const Color(0xFF08C225),
+                    color: const Color(0xFF2F4B3A),
                     width: 1.5,
                   ),
                 ),
@@ -1399,7 +1399,7 @@ class _ConfirmChip extends StatelessWidget {
                   child: Text(
                     "$count",
                     style: const TextStyle(
-                      color: Color(0xFF08C225),
+                      color: Color(0xFF2F4B3A),
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),

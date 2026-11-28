@@ -213,7 +213,7 @@ class _StorageCardWidgetState extends State<StorageCardWidget> {
                     )
                   : const SizedBox.shrink(),
               StorageProgressWidget(
-                color: const Color(0xFF08C225),
+                color: const Color(0xFF2F4B3A),
                 fractionOfStorage: (userDetails.usage / totalStorageInBytes),
               ),
             ],
@@ -230,7 +230,7 @@ class _StorageCardWidgetState extends State<StorageCardWidget> {
                           height: 7,
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Color(0xFF08C225),
+                            color: Color(0xFF2F4B3A),
                           ),
                         ),
                         const SizedBox(width: 4),

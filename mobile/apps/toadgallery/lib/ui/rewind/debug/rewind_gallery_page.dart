@@ -77,7 +77,7 @@ class _RewindGalleryPageState extends State<RewindGalleryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Ente Rewind gallery")),
+      appBar: AppBar(title: const Text("ToadGallery Rewind gallery")),
       body: FutureBuilder<bool>(
         future: _assetsReady,
         builder: (context, ready) => switch (ready.data) {

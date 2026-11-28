@@ -97,7 +97,7 @@ class CoverPage extends RewindPage {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 stops: [0.58, 1],
-                colors: [Color(0x0008C225), RewindColors.green],
+                colors: [Color(0x002F4B3A), RewindColors.green],
               ),
             ),
           ),

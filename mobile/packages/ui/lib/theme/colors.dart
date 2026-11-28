@@ -27,14 +27,14 @@ class EnteColorScheme extends ThemeExtension<EnteColorScheme> {
         ],
       ),
       EnteApp.photos => (
-        primary700: const Color.fromRGBO(8, 194, 37, 1),
-        primary500: const Color.fromRGBO(8, 194, 37, 1),
-        primary400: const Color.fromRGBO(6, 157, 30, 1),
-        primary300: const Color.fromRGBO(5, 124, 24, 1),
-        gradientButtonBgColor: const Color.fromRGBO(8, 194, 37, 1),
+        primary700: const Color.fromRGBO(47, 75, 58, 1),
+        primary500: const Color.fromRGBO(47, 75, 58, 1),
+        primary400: const Color.fromRGBO(36, 60, 46, 1),
+        primary300: const Color.fromRGBO(28, 48, 38, 1),
+        gradientButtonBgColor: const Color.fromRGBO(47, 75, 58, 1),
         gradientButtonBgColors: const [
-          Color.fromRGBO(8, 194, 37, 1),
-          Color.fromRGBO(6, 157, 30, 1),
+          Color.fromRGBO(47, 75, 58, 1),
+          Color.fromRGBO(36, 60, 46, 1),
         ],
       ),
     };
@@ -657,9 +657,9 @@ const List<Color> _defaultGradientButtonBgColors = [
 const Color _defaultIconButtonColor = Color.fromRGBO(0, 122, 255, 1);
 
 const Color _warning700 = Color.fromRGBO(245, 52, 52, 1);
-const Color _warning500 = Color.fromRGBO(255, 101, 101, 1);
-const Color _warning800 = Color(0xFFF53434);
-const Color warning500 = Color.fromRGBO(255, 101, 101, 1);
+const Color _warning500 = Color.fromRGBO(197, 101, 70, 1);
+const Color _warning800 = Color(0xFFA64829);
+const Color warning500 = Color.fromRGBO(197, 101, 70, 1);
 // ignore: unused_element
 const Color _warning400 = Color.fromRGBO(255, 111, 111, 1);
 
@@ -670,7 +670,7 @@ const Color _defaultPrimaryColor = Color(0xFF9610D6);
 const Color _defaultFabForegroundColor = Color.fromRGBO(255, 255, 255, 1);
 const Color _defaultFabBackgroundColor = Color.fromRGBO(40, 40, 40, 1);
 
-const Color _defaultBoxSelectColor = Color.fromRGBO(67, 186, 108, 1);
+const Color _defaultBoxSelectColor = Color.fromRGBO(47, 75, 58, 1);
 const Color _defaultBoxUnSelectColor = Color.fromRGBO(240, 240, 240, 1);
 
 const Color _defaultAlternativeColor = Color.fromARGB(255, 152, 77, 244);
@@ -691,7 +691,7 @@ const Color _defaultIconColor = Color.fromRGBO(0, 0, 0, 0.75);
 
 const Color _defaultBgColorForQuestions = Color.fromRGBO(255, 255, 255, 1);
 
-const Color _defaultGreenText = Color.fromARGB(255, 40, 190, 113);
+const Color _defaultGreenText = Color.fromARGB(255, 61, 98, 76);
 
 const Color _defaultCupertinoPickerTopColor = Color.fromARGB(
   255,

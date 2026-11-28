@@ -37,7 +37,7 @@ class _TwoFactorSetupPageState extends State<TwoFactorSetupPage>
     height: 45,
     width: 45,
     decoration: BoxDecoration(
-      border: Border.all(color: const Color.fromRGBO(45, 194, 98, 1.0)),
+      border: Border.all(color: const Color.fromRGBO(47, 75, 58, 1.0)),
       borderRadius: BorderRadius.circular(15.0),
     ),
   );
@@ -213,7 +213,7 @@ class _TwoFactorSetupPageState extends State<TwoFactorSetupPage>
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10.0),
                 border: Border.all(
-                  color: const Color.fromRGBO(45, 194, 98, 0.5),
+                  color: const Color.fromRGBO(47, 75, 58, 0.5),
                 ),
               ),
             ),
@@ -222,7 +222,7 @@ class _TwoFactorSetupPageState extends State<TwoFactorSetupPage>
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10.0),
                 border: Border.all(
-                  color: const Color.fromRGBO(45, 194, 98, 0.5),
+                  color: const Color.fromRGBO(47, 75, 58, 0.5),
                 ),
               ),
             ),

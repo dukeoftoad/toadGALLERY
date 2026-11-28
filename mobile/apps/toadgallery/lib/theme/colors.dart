@@ -246,67 +246,67 @@ const EnteColorScheme darkScheme = EnteColorScheme(
   redLightDark,
 );
 
-const Color backgroundColorLight = Color.fromRGBO(245, 248, 245, 1);
-const Color backgroundColorDark = Color.fromRGBO(13, 21, 16, 1);
+const Color backgroundColorLight = Color.fromRGBO(246, 243, 232, 1);
+const Color backgroundColorDark = Color.fromRGBO(15, 25, 19, 1);
 
-const Color backgroundElevatedLight = Color.fromRGBO(252, 254, 252, 1);
-const Color backgroundElevated2Light = Color.fromRGBO(235, 243, 236, 1);
+const Color backgroundElevatedLight = Color.fromRGBO(253, 252, 246, 1);
+const Color backgroundElevated2Light = Color.fromRGBO(233, 237, 218, 1);
 
-const Color backgroundElevatedDark = Color.fromRGBO(20, 31, 24, 1);
-const Color backgroundElevated2Dark = Color.fromRGBO(28, 43, 33, 1);
+const Color backgroundElevatedDark = Color.fromRGBO(24, 35, 27, 1);
+const Color backgroundElevated2Dark = Color.fromRGBO(34, 49, 41, 1);
 
-const Color backdropBaseLight = Color.fromRGBO(255, 255, 255, 0.92);
-const Color backdropMutedLight = Color.fromRGBO(255, 255, 255, 0.75);
-const Color backdropFaintLight = Color.fromRGBO(255, 255, 255, 0.30);
+const Color backdropBaseLight = Color.fromRGBO(253, 252, 246, 0.94);
+const Color backdropMutedLight = Color.fromRGBO(253, 252, 246, 0.80);
+const Color backdropFaintLight = Color.fromRGBO(253, 252, 246, 0.30);
 
 const Color backdropBaseDark = Color.fromRGBO(0, 0, 0, 0.90);
 const Color backdropMutedDark = Color.fromRGBO(0, 0, 0, 0.65);
 const Color backdropFaintDark = Color.fromRGBO(0, 0, 0, 0.20);
 
-const Color textBaseLight = Color.fromRGBO(0, 0, 0, 1);
-const Color textMutedLight = Color.fromRGBO(0, 0, 0, 0.6);
-const Color textFaintLight = Color.fromRGBO(0, 0, 0, 0.5);
-const Color blurTextBaseLight = Color.fromRGBO(0, 0, 0, 0.65);
+const Color textBaseLight = Color.fromRGBO(30, 41, 33, 1);
+const Color textMutedLight = Color.fromRGBO(30, 41, 33, 0.64);
+const Color textFaintLight = Color.fromRGBO(30, 41, 33, 0.52);
+const Color blurTextBaseLight = Color.fromRGBO(30, 41, 33, 0.70);
 
-const Color textBaseDark = Color.fromRGBO(255, 255, 255, 1);
-const Color textMutedDark = Color.fromRGBO(255, 255, 255, 0.7);
-const Color textFaintDark = Color.fromRGBO(255, 255, 255, 0.5);
-const Color blurTextBaseDark = Color.fromRGBO(255, 255, 255, 0.95);
+const Color textBaseDark = Color.fromRGBO(244, 241, 230, 1);
+const Color textMutedDark = Color.fromRGBO(244, 241, 230, 0.72);
+const Color textFaintDark = Color.fromRGBO(244, 241, 230, 0.55);
+const Color blurTextBaseDark = Color.fromRGBO(244, 241, 230, 0.95);
 
-const Color fillBaseLight = Color.fromRGBO(22, 54, 34, 1);
-const Color fillBasePressedLight = Color.fromRGBO(16, 40, 25, 0.92);
-const Color fillStrongLight = Color.fromRGBO(0, 0, 0, 0.24);
-const Color fillMutedLight = Color.fromRGBO(0, 0, 0, 0.12);
-const Color fillFaintLight = Color.fromRGBO(0, 0, 0, 0.04);
-const Color fillFaintPressedLight = Color.fromRGBO(0, 0, 0, 0.08);
-const Color fillBaseGreyLight = Color.fromRGBO(242, 242, 242, 1);
+const Color fillBaseLight = Color.fromRGBO(47, 75, 58, 1);
+const Color fillBasePressedLight = Color.fromRGBO(36, 60, 46, 0.94);
+const Color fillStrongLight = Color.fromRGBO(30, 41, 33, 0.24);
+const Color fillMutedLight = Color.fromRGBO(30, 41, 33, 0.10);
+const Color fillFaintLight = Color.fromRGBO(47, 75, 58, 0.06);
+const Color fillFaintPressedLight = Color.fromRGBO(47, 75, 58, 0.12);
+const Color fillBaseGreyLight = Color.fromRGBO(238, 235, 222, 1);
 
-const Color fillBaseDark = Color.fromRGBO(255, 255, 255, 1);
-const Color fillBasePressedDark = Color.fromRGBO(255, 255, 255, 0.9);
-const Color fillStrongDark = Color.fromRGBO(255, 255, 255, 0.32);
-const Color fillMutedDark = Color.fromRGBO(255, 255, 255, 0.16);
-const Color fillFaintDark = Color.fromRGBO(255, 255, 255, 0.12);
-const Color fillFaintPressedDark = Color.fromRGBO(255, 255, 255, 0.06);
-const Color fillBaseGreyDark = Color.fromRGBO(66, 66, 66, 1);
+const Color fillBaseDark = Color.fromRGBO(244, 241, 230, 1);
+const Color fillBasePressedDark = Color.fromRGBO(244, 241, 230, 0.9);
+const Color fillStrongDark = Color.fromRGBO(244, 241, 230, 0.32);
+const Color fillMutedDark = Color.fromRGBO(244, 241, 230, 0.16);
+const Color fillFaintDark = Color.fromRGBO(244, 241, 230, 0.12);
+const Color fillFaintPressedDark = Color.fromRGBO(244, 241, 230, 0.06);
+const Color fillBaseGreyDark = Color.fromRGBO(44, 58, 48, 1);
 
-const Color strokeBaseLight = Color.fromRGBO(0, 0, 0, 1);
-const Color strokeMutedLight = Color.fromRGBO(0, 0, 0, 0.24);
-const Color strokeFaintLight = Color.fromRGBO(0, 0, 0, 0.12);
-const Color strokeFainterLight = Color.fromRGBO(0, 0, 0, 0.06);
-const Color blurStrokeBaseLight = Color.fromRGBO(0, 0, 0, 0.65);
+const Color strokeBaseLight = Color.fromRGBO(30, 41, 33, 1);
+const Color strokeMutedLight = Color.fromRGBO(30, 41, 33, 0.24);
+const Color strokeFaintLight = Color.fromRGBO(30, 41, 33, 0.12);
+const Color strokeFainterLight = Color.fromRGBO(30, 41, 33, 0.06);
+const Color blurStrokeBaseLight = Color.fromRGBO(30, 41, 33, 0.65);
 const Color blurStrokeFaintLight = Color.fromRGBO(0, 0, 0, 0.08);
 const Color blurStrokePressedLight = Color.fromRGBO(0, 0, 0, 0.50);
 
-const Color strokeBaseDark = Color.fromRGBO(255, 255, 255, 1);
-const Color strokeMutedDark = Color.fromRGBO(255, 255, 255, 0.24);
-const Color strokeFaintDark = Color.fromRGBO(255, 255, 255, 0.16);
-const Color strokeFainterDark = Color.fromRGBO(255, 255, 255, 0.08);
-const Color blurStrokeBaseDark = Color.fromRGBO(255, 255, 255, 0.90);
+const Color strokeBaseDark = Color.fromRGBO(244, 241, 230, 1);
+const Color strokeMutedDark = Color.fromRGBO(244, 241, 230, 0.24);
+const Color strokeFaintDark = Color.fromRGBO(244, 241, 230, 0.16);
+const Color strokeFainterDark = Color.fromRGBO(244, 241, 230, 0.08);
+const Color blurStrokeBaseDark = Color.fromRGBO(244, 241, 230, 0.90);
 const Color blurStrokeFaintDark = Color.fromRGBO(255, 255, 255, 0.06);
 const Color blurStrokePressedDark = Color.fromRGBO(255, 255, 255, 0.50);
 
-const Color tabIconLight = Color.fromRGBO(0, 0, 0, 0.85);
-const Color tabIconDark = Color.fromRGBO(255, 255, 255, 0.80);
+const Color tabIconLight = Color.fromRGBO(30, 41, 33, 0.88);
+const Color tabIconDark = Color.fromRGBO(244, 241, 230, 0.80);
 
 const Color menuItemIconStrokeLight = Color(0xFF979797);
 const Color menuItemIconStrokeDark = Color.fromRGBO(255, 255, 255, 1);
@@ -318,58 +318,58 @@ const Color strokeSolidFaintLight = Color.fromRGBO(221, 221, 221, 1);
 // Keep light for scanability.
 const Color qrBoxColor = Color.fromRGBO(245, 245, 247, 1);
 
-const Color _primary700 = Color.fromRGBO(22, 54, 34, 1);
-const Color _primary500 = Color.fromRGBO(31, 94, 59, 1);
-const Color _primary400 = Color.fromRGBO(38, 203, 95, 1);
-const Color _primary300 = Color.fromRGBO(1, 222, 77, 1);
+const Color _primary700 = Color.fromRGBO(34, 56, 40, 1);
+const Color _primary500 = Color.fromRGBO(47, 75, 58, 1);
+const Color _primary400 = Color.fromRGBO(61, 98, 76, 1);
+const Color _primary300 = Color.fromRGBO(84, 124, 99, 1);
 
-const Color _warning700 = Color.fromRGBO(234, 63, 63, 1);
-const Color _warning500 = Color.fromRGBO(255, 101, 101, 1);
-const Color warning500 = Color.fromRGBO(255, 101, 101, 1);
-const Color _warning400 = Color.fromRGBO(255, 111, 111, 1);
-const Color _warning800 = Color(0xFFF53434);
+const Color _warning700 = Color.fromRGBO(180, 84, 56, 1);
+const Color _warning500 = Color.fromRGBO(197, 101, 70, 1);
+const Color warning500 = Color.fromRGBO(197, 101, 70, 1);
+const Color _warning400 = Color.fromRGBO(217, 138, 108, 1);
+const Color _warning800 = Color(0xFFA64829);
 
-const Color _caution500 = Color.fromRGBO(255, 194, 71, 1);
+const Color _caution500 = Color.fromRGBO(217, 164, 65, 1);
 
 const Color _golden700 = Color(0xFFFDB816);
 const Color _golden500 = Color(0xFFFFC336);
 
-const Color green = Color.fromRGBO(8, 194, 37, 1);
-const Color greenLightLight = Color.fromRGBO(224, 240, 226, 1);
-const Color greenLightDark = Color.fromRGBO(24, 42, 30, 1);
-const Color greenDark = Color.fromRGBO(6, 157, 30, 1);
-const Color greenDarker = Color.fromRGBO(5, 124, 24, 1);
-const Color greenStrokeLight = Color.fromRGBO(176, 214, 182, 1);
-const Color greenStrokeDark = Color.fromRGBO(42, 82, 54, 1);
+const Color green = Color.fromRGBO(47, 75, 58, 1);
+const Color greenLightLight = Color.fromRGBO(223, 232, 210, 1);
+const Color greenLightDark = Color.fromRGBO(34, 49, 41, 1);
+const Color greenDark = Color.fromRGBO(36, 60, 46, 1);
+const Color greenDarker = Color.fromRGBO(28, 48, 38, 1);
+const Color greenStrokeLight = Color.fromRGBO(169, 194, 149, 1);
+const Color greenStrokeDark = Color.fromRGBO(61, 90, 71, 1);
 
-const Color red = Color.fromRGBO(246, 58, 58, 1);
-const Color redLightLight = Color.fromRGBO(250, 235, 235, 1);
-const Color redLightDark = Color.fromRGBO(33, 33, 33, 1);
-const Color redDark = Color.fromRGBO(221, 52, 52, 1);
-const Color redDarker = Color.fromRGBO(197, 46, 46, 1);
+const Color red = Color.fromRGBO(176, 80, 60, 1);
+const Color redLightLight = Color.fromRGBO(246, 227, 220, 1);
+const Color redLightDark = Color.fromRGBO(42, 29, 25, 1);
+const Color redDark = Color.fromRGBO(156, 69, 52, 1);
+const Color redDarker = Color.fromRGBO(138, 61, 45, 1);
 
 const Color fillLight = Color.fromRGBO(255, 255, 255, 1);
 const Color fillDark = Color.fromRGBO(33, 33, 33, 1);
 
-const Color fillDarkLight = Color.fromRGBO(245, 245, 245, 1);
-const Color fillDarkDark = Color.fromRGBO(10, 10, 10, 1);
+const Color fillDarkLight = Color.fromRGBO(233, 237, 218, 1);
+const Color fillDarkDark = Color.fromRGBO(20, 29, 23, 1);
 
-const Color fillDarkerLight = Color.fromRGBO(233, 233, 233, 1);
-const Color fillDarkerDark = Color.fromRGBO(20, 20, 20, 1);
+const Color fillDarkerLight = Color.fromRGBO(219, 215, 197, 1);
+const Color fillDarkerDark = Color.fromRGBO(28, 40, 31, 1);
 
-const Color fillDarkestLight = Color.fromRGBO(210, 210, 210, 1);
-const Color fillDarkestDark = Color.fromRGBO(41, 41, 41, 1);
+const Color fillDarkestLight = Color.fromRGBO(200, 195, 176, 1);
+const Color fillDarkestDark = Color.fromRGBO(44, 58, 48, 1);
 
-const Color fillReverseLight = Color.fromRGBO(22, 54, 34, 1);
+const Color fillReverseLight = Color.fromRGBO(47, 75, 58, 1);
 const Color fillReverseDark = Color.fromRGBO(255, 255, 255, 1);
 
 const Color contentLight = Color.fromRGBO(0, 0, 0, 1);
 const Color contentDark = Color.fromRGBO(255, 255, 255, 1);
 
-const Color contentDarkLight = Color.fromRGBO(26, 26, 26, 1);
+const Color contentDarkLight = Color.fromRGBO(47, 62, 52, 1);
 const Color contentDarkDark = Color.fromRGBO(229, 229, 229, 1);
 
-const Color contentDarkerLight = Color.fromRGBO(21, 21, 21, 1);
+const Color contentDarkerLight = Color.fromRGBO(37, 50, 41, 1);
 const Color contentDarkerDark = Color.fromRGBO(204, 204, 204, 1);
 
 const Color contentLightLight = Color.fromRGBO(102, 102, 102, 1);
@@ -384,8 +384,8 @@ const Color contentLightestDark = Color.fromRGBO(10, 10, 10, 1);
 const Color contentReverseLight = Color.fromRGBO(255, 255, 255, 1);
 const Color contentReverseDark = Color.fromRGBO(0, 0, 0, 1);
 
-const Color strokeLight = Color.fromRGBO(235, 235, 235, 1);
-const Color strokeDark = Color.fromRGBO(20, 20, 20, 1);
+const Color strokeLight = Color.fromRGBO(229, 225, 210, 1);
+const Color strokeDark = Color.fromRGBO(26, 38, 29, 1);
 
-const Color strokeDarkLight = Color.fromRGBO(224, 224, 224, 1);
-const Color strokeDarkDark = Color.fromRGBO(62, 62, 62, 1);
+const Color strokeDarkLight = Color.fromRGBO(217, 213, 196, 1);
+const Color strokeDarkDark = Color.fromRGBO(52, 68, 56, 1);

@@ -88,8 +88,8 @@ class _Tile extends StatelessWidget {
 
   static const _blueBorder = Color(0xFF1DA9FF);
   static const _blueFill = Color(0x231DA9FF);
-  static const _greenBorder = Color(0xFF1DB954);
-  static const _greenFill = Color(0x191DB954);
+  static const _greenBorder = Color(0xFF3D5A47);
+  static const _greenFill = Color(0x192F4B3A);
   static const _futureBorder = Color(0xFFD3D3D3);
   static const _futureFill = Color(0x1AD3D3D3);
 
@@ -285,7 +285,7 @@ class _PhotoTile extends StatelessWidget {
                 child: Text(
                   "$count",
                   style: textTheme.tinyBold.copyWith(
-                    color: const Color(0xFF1DB954),
+                    color: const Color(0xFF3D5A47),
                   ),
                   textHeightBehavior: _tightTextHeightBehavior,
                 ),

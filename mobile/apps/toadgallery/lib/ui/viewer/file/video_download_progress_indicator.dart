@@ -25,7 +25,7 @@ class VideoDownloadProgressIndicator extends StatelessWidget {
             backgroundColor: Colors.transparent,
             value: progress,
             valueColor: const AlwaysStoppedAnimation<Color>(
-              Color.fromRGBO(45, 194, 98, 1.0),
+              Color.fromRGBO(47, 75, 58, 1.0),
             ),
             strokeWidth: 2,
             strokeCap: StrokeCap.round,

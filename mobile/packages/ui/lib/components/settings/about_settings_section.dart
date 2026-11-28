@@ -20,7 +20,7 @@ class AboutSettingsSection extends StatelessWidget {
         title: strings.weAreOpenSource,
         icon: HugeIcons.strokeRoundedGithub,
         showOnlyLoadingState: true,
-        onTap: () => _openUrl('https://github.com/ente/ente'),
+        onTap: () => _openUrl('https://github.com/dukeoftoad/toadGALLERY'),
       ),
       SettingsItem(
         title: strings.blog,

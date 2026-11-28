@@ -18,7 +18,7 @@ import "package:toadgallery/ui/viewer/file/thumbnail_widget.dart";
 
 final _logger = Logger("LikeCollectionSelectorSheet");
 
-const _greenHeartColor = Color(0xFF08C225);
+const _greenHeartColor = Color(0xFF2F4B3A);
 
 class _CollectionLikeState {
   final Collection collection;
@@ -436,8 +436,8 @@ class _AlbumListItem extends StatelessWidget {
     final textTheme = getEnteTextTheme(context);
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     final heartContainerBg = isDarkTheme
-        ? const Color(0x1A08C225)
-        : const Color(0x0F08C225);
+        ? const Color(0x1A2F4B3A)
+        : const Color(0x0F2F4B3A);
 
     return GestureDetector(
       onTap: onTap,

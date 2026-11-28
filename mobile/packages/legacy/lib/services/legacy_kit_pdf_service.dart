@@ -26,7 +26,7 @@ class LegacyKitPdfService {
   static const String _emphasisSlot = "\uFFFC";
 
   static const PdfPageFormat _sheetPageFormat = PdfPageFormat(676, 900);
-  static const PdfColor _green = PdfColor.fromInt(0xFF08C225);
+  static const PdfColor _green = PdfColor.fromInt(0xFF2F4B3A);
   static const PdfColor _dark = PdfColor.fromInt(0xFF212121);
   static const PdfColor _black = PdfColor.fromInt(0xFF000000);
   static const PdfColor _white = PdfColor.fromInt(0xFFFFFFFF);

@@ -76,7 +76,7 @@ final lightThemeData = ThemeData(
         return null;
       }
       if (states.contains(WidgetState.selected)) {
-        return const Color.fromRGBO(102, 187, 106, 1);
+        return const Color.fromRGBO(47, 75, 58, 1);
       }
       return null;
     }),
@@ -89,7 +89,7 @@ final lightThemeData = ThemeData(
         return null;
       }
       if (states.contains(WidgetState.selected)) {
-        return const Color.fromRGBO(102, 187, 106, 1);
+        return const Color.fromRGBO(47, 75, 58, 1);
       }
       return null;
     }),
@@ -100,7 +100,7 @@ final lightThemeData = ThemeData(
         return null;
       }
       if (states.contains(WidgetState.selected)) {
-        return const Color.fromRGBO(102, 187, 106, 1);
+        return const Color.fromRGBO(47, 75, 58, 1);
       }
       return null;
     }),
@@ -124,7 +124,7 @@ final darkThemeData = ThemeData(
   ),
   hintColor: const Color.fromRGBO(158, 158, 158, 1),
   buttonTheme: const ButtonThemeData().copyWith(
-    buttonColor: const Color.fromRGBO(45, 194, 98, 1.0),
+    buttonColor: const Color.fromRGBO(47, 75, 58, 1.0),
     height: 56,
   ),
   textTheme: _buildTextTheme(const Color.fromRGBO(255, 255, 255, 1)),
@@ -184,7 +184,7 @@ final darkThemeData = ThemeData(
         return null;
       }
       if (states.contains(WidgetState.selected)) {
-        return const Color.fromRGBO(102, 187, 106, 1);
+        return const Color.fromRGBO(47, 75, 58, 1);
       }
       return null;
     }),
@@ -197,7 +197,7 @@ final darkThemeData = ThemeData(
         return null;
       }
       if (states.contains(WidgetState.selected)) {
-        return const Color.fromRGBO(102, 187, 106, 1);
+        return const Color.fromRGBO(47, 75, 58, 1);
       }
       return null;
     }),
@@ -208,7 +208,7 @@ final darkThemeData = ThemeData(
         return null;
       }
       if (states.contains(WidgetState.selected)) {
-        return const Color.fromRGBO(102, 187, 106, 1);
+        return const Color.fromRGBO(47, 75, 58, 1);
       }
       return null;
     }),
@@ -299,7 +299,7 @@ extension CustomColorScheme on ColorScheme {
       brightness != Brightness.light ? textBaseLight : textBaseDark;
 
   Color get boxSelectColor => brightness == Brightness.light
-      ? const Color.fromRGBO(67, 186, 108, 1)
+      ? const Color.fromRGBO(47, 75, 58, 1)
       : const Color.fromRGBO(16, 32, 32, 1);
 
   Color get boxUnSelectColor => brightness == Brightness.light
@@ -338,7 +338,7 @@ extension CustomColorScheme on ColorScheme {
       ? const Color.fromRGBO(255, 255, 255, 1)
       : const Color.fromRGBO(10, 15, 15, 1.0);
 
-  Color get greenText => const Color.fromARGB(255, 40, 190, 113);
+  Color get greenText => const Color.fromARGB(255, 61, 98, 76);
 
   Color get cupertinoPickerTopColor => brightness == Brightness.light
       ? const Color.fromARGB(255, 238, 238, 238)

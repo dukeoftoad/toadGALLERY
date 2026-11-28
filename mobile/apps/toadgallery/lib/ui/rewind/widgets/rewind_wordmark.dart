@@ -16,7 +16,7 @@ class RewindWordmark extends StatelessWidget {
   Widget build(BuildContext context) {
     final file = RewindAssets.file(RewindAssets.wordmark);
     return Semantics(
-      label: "ente",
+      label: "toadGALLERY",
       child: SvgPicture(
         _loaders.putIfAbsent(file.path, () => SvgFileLoader(file)),
         width: width,

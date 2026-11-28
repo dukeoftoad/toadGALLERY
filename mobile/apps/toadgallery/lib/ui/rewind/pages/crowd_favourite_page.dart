@@ -18,7 +18,7 @@ import "package:toadgallery/ui/rewind/widgets/rewind_reveal_layer.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_stage.dart";
 import "package:toadgallery/ui/rewind/widgets/rewind_text.dart";
 
-const _likeGreen = Color(0xFF08C225);
+const _likeGreen = Color(0xFF2F4B3A);
 const _photoRect = Rect.fromLTWH(30, 100, 330, 428);
 const _photoTurn = 3.0;
 const _frame = 6.0;

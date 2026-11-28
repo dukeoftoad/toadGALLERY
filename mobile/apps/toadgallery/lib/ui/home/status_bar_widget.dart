@@ -340,7 +340,7 @@ class _SyncStatusWidgetState extends State<SyncStatusWidget> {
 class RefreshIndicatorWidget extends StatelessWidget {
   static const _inProgressIcon = CircularProgressIndicator(
     strokeWidth: 2,
-    valueColor: AlwaysStoppedAnimation<Color>(Color.fromRGBO(45, 194, 98, 1.0)),
+    valueColor: AlwaysStoppedAnimation<Color>(Color.fromRGBO(47, 75, 58, 1.0)),
   );
 
   final String text;
